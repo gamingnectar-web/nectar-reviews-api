@@ -70,3 +70,23 @@ app.patch('/api/admin/reviews/:id/status', async (req, res) => {
 // START SERVER
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server listening on port ${PORT}`));
+
+// 5. Public Route: Submit a new review
+app.post('/api/reviews', async (req, res) => {
+    try {
+        const newReview = new Review({
+            itemId: String(req.body.itemId),
+            userId: req.body.userId,
+            rating: req.body.rating,
+            headline: req.body.headline,
+            comment: req.body.comment,
+            status: 'pending' // Always default to pending for safety!
+        });
+
+        const savedReview = await newReview.save();
+        res.status(201).json(savedReview);
+    } catch (error) {
+        console.error("Submission Error:", error);
+        res.status(400).json({ error: "Failed to submit review" });
+    }
+});
