@@ -7,11 +7,12 @@ const path = require('path');
 const app = express();
 
 // ==========================================
-// MIDDLEWARE & DATABASE
+// MIDDLEWARE & SECURITY
 // ==========================================
 app.use(cors()); 
 app.use(express.json());
 
+// Allows Shopify to frame the Admin Dashboard
 app.use((req, res, next) => {
     res.setHeader(
         "Content-Security-Policy",
@@ -44,7 +45,7 @@ const reviewSchema = new mongoose.Schema({
 const Review = mongoose.model('Review', reviewSchema);
 
 // ==========================================
-// SHOPIFY VERIFICATION LOGIC
+// SHOPIFY VERIFICATION LOGIC (Sanitized)
 // ==========================================
 async function verifyShopifyOrder(orderId, email, productId) {
     const STORE_URL = process.env.SHOPIFY_STORE_URL; 
@@ -55,10 +56,15 @@ async function verifyShopifyOrder(orderId, email, productId) {
         return false;
     }
 
+    // SANITIZATION: Strip everything but numbers, then add a single #
+    // This fixes cases like "##1002", "Order 1002", or just "1002"
+    const cleanNumber = orderId.replace(/\D/g, ""); 
+    const formattedOrderName = `#${cleanNumber}`;
+
     const authString = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
 
     try {
-        const response = await fetch(`https://${STORE_URL}/admin/api/2024-01/orders.json?name=${encodeURIComponent(orderId)}&status=any`, {
+        const response = await fetch(`https://${STORE_URL}/admin/api/2024-01/orders.json?name=${encodeURIComponent(formattedOrderName)}&status=any`, {
             headers: { 
                 'Authorization': `Basic ${authString}`,
                 'Content-Type': 'application/json'
@@ -66,18 +72,26 @@ async function verifyShopifyOrder(orderId, email, productId) {
         });
         
         const data = await response.json();
-        if (!data.orders || data.orders.length === 0) return false; 
-
-        const order = data.orders[0];
-
-        if (!order.email || order.email.toLowerCase() !== email.toLowerCase()) {
+        
+        if (!data.orders || data.orders.length === 0) {
+            console.log(`🔎 No Shopify order found for name: ${formattedOrderName}`);
             return false;
         }
 
+        const order = data.orders[0];
+
+        // Case-insensitive email check
+        if (!order.email || order.email.toLowerCase() !== email.toLowerCase()) {
+            console.log(`❌ Email mismatch: ${order.email} vs ${email}`);
+            return false;
+        }
+
+        // Check if product exists in line items
         const boughtProduct = order.line_items.some(item => String(item.product_id) === String(productId));
+        
         return boughtProduct;
     } catch (error) {
-        console.error("Shopify API Error:", error);
+        console.error("🚨 Shopify API Error:", error);
         return false;
     }
 }
@@ -98,6 +112,7 @@ app.post('/api/reviews', async (req, res) => {
     try {
         let isVerified = req.body.verifiedPurchase; 
 
+        // If not already verified via Liquid, check the Shopify API
         if (!isVerified && req.body.orderId && req.body.email) {
             isVerified = await verifyShopifyOrder(req.body.orderId, req.body.email, req.body.itemId);
         }
