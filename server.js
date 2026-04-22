@@ -108,12 +108,18 @@ app.delete('/api/reviews/:id', async (req, res) => {
 // 3. ADMIN DASHBOARD UI
 // ==========================================
 
-// Tell Express to serve files from the 'public' folder
-app.use(express.static('public'));
+// We don't need express.static right now if everything is in the main folder.
 
 app.get('/admin', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+    // This tells it to look right next to server.js for the file
+    res.sendFile(path.join(__dirname, 'admin.html'));
 });
+
+// ==========================================
+// START SERVER (Always at the very bottom!)
+// ==========================================
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🚀 Server listening on port ${PORT}`));
 
 // ==========================================
 // START SERVER (Always at the very bottom!)
