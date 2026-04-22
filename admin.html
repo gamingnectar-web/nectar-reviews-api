@@ -3,18 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <title>Review Admin Dashboard</title>
-    <script src="https://unpkg.com/@shopify/app-bridge-core"></script>
+    <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root { --bg: #f8fafc; --card: #ffffff; --border: #e2e8f0; --primary: #0f172a; --text: #1e293b; --text-light: #64748b; --star: #fbbf24; --green: #059669;}
-        
-        /* Force Poppins font on body and all interactive elements */
-        body, button, input, select, textarea { 
-            font-family: 'Poppins', sans-serif !important; 
-        }
-        
+        body, button, input, select, textarea { font-family: 'Poppins', sans-serif !important; }
         body { background: var(--bg); padding: 40px 20px; color: var(--text); margin: 0; -webkit-font-smoothing: antialiased; }
         .container { max-width: 1250px; margin: auto; }
         
@@ -35,12 +30,11 @@
         
         .metric-card h1 { font-size: 3.5rem; margin: 0; color: var(--primary); line-height: 1; letter-spacing: -0.04em;}
         .metric-card p { color: var(--text-light); font-weight: 600; margin: 10px 0 0 0; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.5px;}
-        .metric-sub { font-size: 0.85rem; color: #94a3b8; margin-top: 15px; font-weight: 500;}
 
         .review-card { background: var(--card); border: 1px solid var(--border); padding: 35px; margin-bottom: 25px; border-radius: 16px; display: flex; justify-content: space-between; gap: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); transition: box-shadow 0.2s;}
         .review-card:hover { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
         .card-main { flex: 1; }
-        .card-side { text-align: right; border-left: 1px solid var(--border); padding-left: 40px; min-width: 220px; display: flex; flex-direction: column; justify-content: space-between;}
+        .card-side { text-align: right; border-left: 1px solid var(--border); padding-left: 40px; min-width: 240px; display: flex; flex-direction: column; justify-content: space-between;}
         
         .pid { font-size: 0.85rem; color: var(--text-light); font-weight: 600; letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px;}
         .stars { color: var(--star); font-size: 1.25rem; letter-spacing: 2px; margin-bottom: 12px;}
@@ -60,6 +54,9 @@
         .user-info { font-size: 0.95rem; color: var(--text-light); margin-top: 25px; line-height: 1.6; }
         .user-info strong { color: var(--text); font-weight: 600;}
         
+        .verify-toggle { display: flex; align-items: center; justify-content: flex-end; gap: 8px; font-size: 0.9rem; font-weight: 600; margin-top: 10px; cursor: pointer; }
+        .verify-toggle input { width: 16px; height: 16px; accent-color: var(--green); cursor: pointer;}
+        
         .pub-preview-wrapper { background: var(--card); padding: 50px; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); }
     </style>
 </head>
@@ -76,31 +73,24 @@
             <div class="metric-card">
                 <h1 id="count-total">0</h1>
                 <p>Total Processed</p>
-                <div class="metric-sub">All submissions logged</div>
             </div>
             <div class="metric-card live">
                 <h1 id="count-live">0</h1>
                 <p>Live on Store</p>
-                <div class="metric-sub">Approved by admin</div>
             </div>
             <div class="metric-card rejected">
                 <h1 id="count-rejected">0</h1>
                 <p>Rejected</p>
-                <div class="metric-sub">Hidden from public</div>
             </div>
             <div class="metric-card conversion">
                 <h1 id="count-conversion">0%</h1>
                 <p>Completion Rate</p>
-                <div class="metric-sub">Based on <strong id="sim-requests">1,250</strong> requests sent</div>
             </div>
         </div>
     </div>
     
     <div id="manage" class="view"><div id="mgmt-list">Loading...</div></div>
-    
-    <div id="preview" class="view">
-        <div class="pub-preview-wrapper" id="pub-list"></div>
-    </div>
+    <div id="preview" class="view"><div class="pub-preview-wrapper" id="pub-list"></div></div>
 </div>
 
 <script>
@@ -119,12 +109,10 @@
         try {
             const res = await fetch(API + '/admin/reviews');
             data = await res.json();
-            
             updateMetrics();
             renderMgmt();
         } catch (e) {
-            console.error("Failed to load reviews:", e);
-            document.getElementById('mgmt-list').innerHTML = '<p style="text-align:center; color: #e11d48;">Failed to load reviews. Check console.</p>';
+            document.getElementById('mgmt-list').innerHTML = '<p style="text-align:center; color: #e11d48;">Failed to load reviews.</p>';
         }
     }
 
@@ -132,23 +120,17 @@
         const total = data.length;
         const live = data.filter(r => r.status === 'accepted').length;
         const rejected = data.filter(r => r.status === 'rejected').length;
-        
         document.getElementById('count-total').innerText = total;
         document.getElementById('count-live').innerText = live;
         document.getElementById('count-rejected').innerText = rejected;
-        
-        const conversion = total === 0 ? "0" : ((total / SIMULATED_REQUESTS_SENT) * 100).toFixed(1);
-        document.getElementById('count-conversion').innerText = conversion + '%';
-        document.getElementById('sim-requests').innerText = SIMULATED_REQUESTS_SENT.toLocaleString();
+        document.getElementById('count-conversion').innerText = total === 0 ? "0%" : ((total / SIMULATED_REQUESTS_SENT) * 100).toFixed(1) + '%';
     }
 
     function renderMgmt() {
         document.getElementById('mgmt-list').innerHTML = data.map(r => `
             <div class="review-card">
                 <div class="card-main">
-                    <div class="pid">
-                        Product: ${r.itemId} 
-                    </div>
+                    <div class="pid">Product: ${r.itemId}</div>
                     <div class="stars">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
                     <div class="headline">${r.headline || 'No Headline'}</div>
                     <div class="comment">${r.comment}</div>
@@ -162,7 +144,7 @@
                 <div class="card-side">
                     <div>
                         <div class="badge ${r.status}">${r.status}</div><br>
-                        <select class="status-select" onchange="update('${r._id}', this.value)">
+                        <select class="status-select" onchange="updateStatus('${r._id}', this.value)">
                             <option value="pending" ${r.status==='pending'?'selected':''}>Pending</option>
                             <option value="accepted" ${r.status==='accepted'?'selected':''}>Accept</option>
                             <option value="rejected" ${r.status==='rejected'?'selected':''}>Reject</option>
@@ -171,22 +153,19 @@
                     </div>
                     <div class="user-info">
                         ${new Date(r.createdAt).toLocaleDateString('en-GB')}<br>
-                        
-                        <strong>${r.userId}</strong> 
-                        ${r.isAnonymous ? '<span style="color:#d97706; font-size: 0.85em; font-weight: 700; margin-left: 5px;">🔒 ANON</span>' : ''}<br>
-                        
-                        ${r.verifiedPurchase 
-                            ? '<span style="color:var(--green); font-size:0.85em; font-weight:700;">✓ Verified Buyer</span>' 
-                            : '<span style="color:#94a3b8; font-size:0.85em; font-weight:600;">Unverified</span>'}<br>
-                            
+                        <strong>${r.userId}</strong> ${r.isAnonymous ? '<span style="color:#d97706; font-size: 0.85em; font-weight: 700; margin-left: 5px;">🔒 ANON</span>' : ''}<br>
+                        <span style="color:#64748b; font-size:0.85em;">${r.email || 'No email provided'}</span><br>
                         ${r.orderId ? `<span style="color:#64748b; font-size:0.8em; font-weight: 600;">Order #${r.orderId}</span>` : ''}
+                        
+                        <label class="verify-toggle">
+                            <input type="checkbox" onchange="toggleVerify('${r._id}', this.checked)" ${r.verifiedPurchase ? 'checked' : ''}> 
+                            <span style="color: ${r.verifiedPurchase ? 'var(--green)' : 'var(--text-light)'}">Verified Purchase</span>
+                        </label>
                     </div>
                 </div>
             </div>`).join('');
             
-        if(data.length === 0) {
-            document.getElementById('mgmt-list').innerHTML = '<p style="text-align:center; color: var(--text-light);">No reviews found in the database yet.</p>';
-        }
+        if(data.length === 0) document.getElementById('mgmt-list').innerHTML = '<p style="text-align:center;">No reviews found.</p>';
     }
 
     function renderPub() {
@@ -197,24 +176,24 @@
                     <div style="font-weight:700; font-size:1.15rem; color:var(--primary);">${r.isAnonymous ? (r.userId ? r.userId.split(' ').map(w=>w[0]+'***').join(' ') : 'Verified Customer') : r.userId}</div>
                     ${r.verifiedPurchase ? '<div style="color:var(--green); font-size:0.85em; font-weight:600;">✓ Verified buyer</div>' : ''}
                 </div>
-                <div style="color:var(--star); font-size:1.2rem; margin: 10px 0; letter-spacing: 1px;">${'★'.repeat(r.rating)}</div>
-                <div style="font-weight:700; font-size:1.35rem; margin-bottom:12px; color:var(--primary);">${r.headline || ''}</div>
+                <div style="color:var(--star); font-size:1.2rem; margin: 10px 0;">${'★'.repeat(r.rating)}</div>
+                <div style="font-weight:700; font-size:1.35rem; margin-bottom:12px;">${r.headline || ''}</div>
                 <div style="font-size:1.05rem; color:#475569; line-height:1.7;">${r.comment}</div>
             </div>`).join('');
-        if(acc.length === 0) document.getElementById('pub-list').innerHTML = "<p style='color: #64748b; text-align:center; font-size:1.1rem;'>No accepted reviews to show.</p>";
     }
 
-    async function update(id, status) {
-        await fetch(`${API}/reviews/${id}`, { 
-            method: 'PATCH', 
-            headers: {'Content-Type':'application/json'}, 
-            body: JSON.stringify({status})
-        });
+    async function updateStatus(id, status) {
+        await fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({status}) });
+        load();
+    }
+
+    async function toggleVerify(id, isVerified) {
+        await fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ verifiedPurchase: isVerified }) });
         load();
     }
 
     async function deleteReview(id) {
-        if(confirm('Are you sure you want to delete this review permanently?')) {
+        if(confirm('Delete permanently?')) {
             await fetch(`${API}/reviews/${id}`, { method: 'DELETE' });
             load();
         }
