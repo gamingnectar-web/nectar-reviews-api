@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const path = require('path'); // <-- Added this so it can find your HTML file!
 
 const app = express();
 
@@ -33,12 +34,10 @@ const Review = mongoose.model('Review', reviewSchema);
 // 1. PUBLIC ROUTES (For the Shopify Store)
 // ==========================================
 
-// Health Check
 app.get('/', (req, res) => {
     res.send('🚀 Nectar API is Live and Running!');
 });
 
-// Fetch approved reviews for a specific product
 app.get('/api/reviews/:itemId', async (req, res) => {
     try { 
         const reviews = await Review.find({ 
@@ -50,7 +49,6 @@ app.get('/api/reviews/:itemId', async (req, res) => {
     catch (error) { res.status(500).json({ error: "Fetch error" }); }
 });
 
-// Submit a new review (Defaults to 'pending')
 app.post('/api/reviews', async (req, res) => {
     try {
         const newReview = new Review({
@@ -61,7 +59,6 @@ app.post('/api/reviews', async (req, res) => {
             comment: req.body.comment,
             status: 'pending'
         });
-
         const savedReview = await newReview.save();
         res.status(201).json(savedReview);
     } catch (error) {
@@ -74,13 +71,11 @@ app.post('/api/reviews', async (req, res) => {
 // 2. ADMIN ROUTES (For managing reviews)
 // ==========================================
 
-// Get ALL reviews (pending and accepted)
 app.get('/api/admin/reviews', async (req, res) => {
     try { res.status(200).json(await Review.find().sort({ createdAt: -1 })); } 
     catch (error) { res.status(500).json({ error: "Admin fetch error" }); }
 });
 
-// Update a review's status (Approve it)
 app.patch('/api/reviews/:id', async (req, res) => {
     try {
         const updated = await Review.findByIdAndUpdate(
@@ -94,7 +89,6 @@ app.patch('/api/reviews/:id', async (req, res) => {
     }
 });
 
-// Delete a review
 app.delete('/api/reviews/:id', async (req, res) => {
     try {
         await Review.findByIdAndDelete(req.params.id);
@@ -108,15 +102,13 @@ app.delete('/api/reviews/:id', async (req, res) => {
 // 3. ADMIN DASHBOARD UI
 // ==========================================
 
-// We don't need express.static right now if everything is in the main folder.
-
 app.get('/admin', (req, res) => {
-    // This tells it to look right next to server.js for the file
+    // This tells the server to look right next to server.js for admin.html
     res.sendFile(path.join(__dirname, 'admin.html'));
 });
 
 // ==========================================
-// START SERVER (Always at the very bottom!)
+// START SERVER
 // ==========================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server listening on port ${PORT}`));
