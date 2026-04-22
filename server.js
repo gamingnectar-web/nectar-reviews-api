@@ -120,9 +120,3 @@ app.get('/admin', (req, res) => {
 // ==========================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server listening on port ${PORT}`));
-
-// ==========================================
-// START SERVER (Always at the very bottom!)
-// ==========================================
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server listening on port ${PORT}`));
