@@ -3,10 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <title>Review Admin Dashboard</title>
+    
+    <meta name="shopify-api-key" content="PASTE_YOUR_CLIENT_ID_HERE" />
     <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
     <style>
         :root { --bg: #f8fafc; --card: #ffffff; --border: #e2e8f0; --primary: #0f172a; --text: #1e293b; --text-light: #64748b; --star: #fbbf24; --green: #059669;}
         body, button, input, select, textarea { font-family: 'Poppins', sans-serif !important; }
@@ -94,6 +98,7 @@
 </div>
 
 <script>
+    // 3. FIXED: Using the relative API path so it works perfectly on Render and doesn't trigger Mixed Content errors!
     const API = '/api';
     let data = [];
     const SIMULATED_REQUESTS_SENT = 1250; 
