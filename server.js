@@ -18,7 +18,7 @@ mongoose.connect(process.env.MONGODB_URI)
   .catch((err) => console.error('❌ MongoDB Connection Error:', err));
 
 // ==========================================
-// DATABASE SCHEMAS (FORCED COLLECTIONS)
+// DATABASE SCHEMAS
 // ==========================================
 const reviewSchema = new mongoose.Schema({
     itemId: { type: String, required: true },
@@ -28,13 +28,14 @@ const reviewSchema = new mongoose.Schema({
     rating: { type: Number, required: true, min: 1, max: 5 },
     headline: { type: String }, 
     comment: { type: String },
+    reply: { type: String, default: '' }, // NEW: Store Owner Reply
     attributes: { type: Map, of: Number }, 
     status: { type: String, enum: ['pending', 'accepted', 'rejected', 'hold'], default: 'pending' },
     verifiedPurchase: { type: Boolean, default: false },
+    verificationNote: { type: String, default: '' }, // NEW: Reason why it verified or failed
     orderId: { type: String }, 
     createdAt: { type: Date, default: Date.now }
 });
-// FORCE the collection name to exactly 'reviews'
 const Review = mongoose.model('Review', reviewSchema, 'reviews'); 
 
 const settingsSchema = new mongoose.Schema({
@@ -42,7 +43,6 @@ const settingsSchema = new mongoose.Schema({
     autoApproveVerified: { type: Boolean, default: false },
     autoApproveMinStars: { type: Number, default: 4 }
 });
-// FORCE the collection name to exactly 'settings'
 const Settings = mongoose.model('Settings', settingsSchema, 'settings');
 
 async function initSettings() {
@@ -56,14 +56,16 @@ async function initSettings() {
 initSettings();
 
 // ==========================================
-// VERIFICATION LOGIC
+// TRIPLE-CHECKED VERIFICATION LOGIC
 // ==========================================
 async function verifyShopifyOrder(orderId, email, productId) {
     const STORE_URL = process.env.SHOPIFY_STORE_URL; 
     const CLIENT_ID = process.env.SHOPIFY_API_KEY; 
     const CLIENT_SECRET = process.env.SHOPIFY_API_SECRET; 
 
-    if (!STORE_URL || !CLIENT_ID || !CLIENT_SECRET || !email || !orderId) return false;
+    if (!STORE_URL || !CLIENT_ID || !CLIENT_SECRET || !email || !orderId) {
+        return { verified: false, note: "Missing credentials, email, or order ID." };
+    }
 
     const rawNumber = orderId.replace(/\D/g, ""); 
     const searchTerms = [`#${rawNumber}`, rawNumber]; 
@@ -77,17 +79,29 @@ async function verifyShopifyOrder(orderId, email, productId) {
             const data = await response.json();
 
             if (data.orders && data.orders.length > 0) {
+                // Check 1: Does the email match?
                 const order = data.orders.find(o => o.email && o.email.toLowerCase() === email.toLowerCase());
+                
                 if (order) {
+                    // Check 2: Did they actually buy this specific product?
                     const boughtProduct = order.line_items.some(item => 
                         String(item.product_id) === String(productId) || String(item.variant_id) === String(productId)
                     );
-                    if (boughtProduct) return true;
+                    
+                    if (boughtProduct) {
+                        return { verified: true, note: "Successfully verified against Shopify order." };
+                    } else {
+                        return { verified: false, note: "Order found and email matched, but this specific product was not in the order." };
+                    }
+                } else {
+                    return { verified: false, note: "Order ID exists, but the email provided does not match the buyer's email." };
                 }
             }
-        } catch (error) { console.error("Shopify API Error:", error); }
+        } catch (error) { 
+            console.error("Shopify API Error:", error); 
+        }
     }
-    return false;
+    return { verified: false, note: "No Shopify order could be found with this Order ID." };
 }
 
 // ==========================================
@@ -103,8 +117,15 @@ app.get('/api/reviews/:itemId', async (req, res) => {
 app.post('/api/reviews', async (req, res) => {
     try {
         let isVerified = req.body.verifiedPurchase; 
+        let vNote = "Verified automatically by Shopify Liquid.";
+
+        // Run the rigorous backend check if needed
         if (!isVerified && req.body.orderId && req.body.email) {
-            isVerified = await verifyShopifyOrder(req.body.orderId, req.body.email, req.body.itemId);
+            const checkResult = await verifyShopifyOrder(req.body.orderId, req.body.email, req.body.itemId);
+            isVerified = checkResult.verified;
+            vNote = checkResult.note;
+        } else if (!isVerified && !req.body.orderId) {
+            vNote = "No Order ID provided by customer.";
         }
 
         const config = await Settings.findOne({ widgetId: 'default' });
@@ -126,6 +147,7 @@ app.post('/api/reviews', async (req, res) => {
             comment: req.body.comment,
             attributes: req.body.attributes,
             verifiedPurchase: isVerified, 
+            verificationNote: vNote,
             orderId: req.body.orderId, 
             status: finalStatus 
         });
@@ -147,7 +169,7 @@ app.patch('/api/reviews/:id', async (req, res) => {
     try {
         const updateData = {};
         if (req.body.status !== undefined) updateData.status = req.body.status;
-        if (req.body.verifiedPurchase !== undefined) updateData.verifiedPurchase = req.body.verifiedPurchase;
+        if (req.body.reply !== undefined) updateData.reply = req.body.reply;
         res.json(await Review.findByIdAndUpdate(req.params.id, updateData, { new: true }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
