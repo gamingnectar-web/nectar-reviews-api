@@ -6,9 +6,6 @@ const path = require('path');
 
 const app = express();
 
-// ==========================================
-// MIDDLEWARE & SECURITY
-// ==========================================
 app.use(cors()); 
 app.use(express.json());
 app.use((req, res, next) => {
@@ -21,7 +18,7 @@ mongoose.connect(process.env.MONGODB_URI)
   .catch((err) => console.error('❌ MongoDB Connection Error:', err));
 
 // ==========================================
-// DATABASE SCHEMAS
+// DATABASE SCHEMAS (FORCED COLLECTIONS)
 // ==========================================
 const reviewSchema = new mongoose.Schema({
     itemId: { type: String, required: true },
@@ -37,23 +34,23 @@ const reviewSchema = new mongoose.Schema({
     orderId: { type: String }, 
     createdAt: { type: Date, default: Date.now }
 });
-const Review = mongoose.model('Review', reviewSchema);
+// FORCE the collection name to exactly 'reviews'
+const Review = mongoose.model('Review', reviewSchema, 'reviews'); 
 
-// Settings Schema (Updated to use widgetId to bypass MongoDB ghost index errors)
 const settingsSchema = new mongoose.Schema({
     widgetId: { type: String, default: 'default' }, 
     autoApproveVerified: { type: Boolean, default: false },
     autoApproveMinStars: { type: Number, default: 4 }
 });
-const Settings = mongoose.model('Settings', settingsSchema);
+// FORCE the collection name to exactly 'settings'
+const Settings = mongoose.model('Settings', settingsSchema, 'settings');
 
-// Ensure default settings exist on server start
 async function initSettings() {
     try {
         const exists = await Settings.findOne({ widgetId: 'default' });
         if (!exists) await new Settings({ widgetId: 'default' }).save();
     } catch (e) {
-        console.log("Settings init bypassed due to existing index");
+        console.log("Settings init bypassed");
     }
 }
 initSettings();
@@ -110,7 +107,6 @@ app.post('/api/reviews', async (req, res) => {
             isVerified = await verifyShopifyOrder(req.body.orderId, req.body.email, req.body.itemId);
         }
 
-        // Apply Admin Auto-Approve Rules
         const config = await Settings.findOne({ widgetId: 'default' });
         let finalStatus = 'pending';
         
@@ -140,7 +136,7 @@ app.post('/api/reviews', async (req, res) => {
 });
 
 // ==========================================
-// ADMIN & SETTINGS ROUTES
+// ADMIN ROUTES
 // ==========================================
 app.get('/api/admin/reviews', async (req, res) => {
     try { res.status(200).json(await Review.find().sort({ createdAt: -1 })); } 
@@ -163,7 +159,6 @@ app.delete('/api/reviews/:id', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Admin Settings Endpoints
 app.get('/api/admin/settings', async (req, res) => {
     try { res.status(200).json(await Settings.findOne({ widgetId: 'default' })); } 
     catch (err) { res.status(500).json({ error: err.message }); }
