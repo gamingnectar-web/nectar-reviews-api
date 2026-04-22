@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Review Admin Dashboard</title>
     
-    <meta name="shopify-api-key" content="PASTE_YOUR_CLIENT_ID_HERE" />
+    <meta name="shopify-api-key" content="9b0bf096b37faf6dc0b19037b2d9d62a" />
     <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -98,8 +98,7 @@
 </div>
 
 <script>
-    // 3. FIXED: Using the relative API path so it works perfectly on Render and doesn't trigger Mixed Content errors!
-    const API = '/api';
+    const API = '/api'; // Using relative path so Render handles it automatically!
     let data = [];
     const SIMULATED_REQUESTS_SENT = 1250; 
 
