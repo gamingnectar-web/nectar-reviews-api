@@ -2,20 +2,23 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const path = require('path'); // <-- Added this so it can find your HTML file!
+const path = require('path');
 
 const app = express();
 
-// MIDDLEWARE
+// ==========================================
+// MIDDLEWARE & DATABASE
+// ==========================================
 app.use(cors()); 
 app.use(express.json());
 
-// DATABASE CONNECTION
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ Connected to MongoDB Atlas'))
   .catch((err) => console.error('❌ MongoDB Connection Error:', err));
 
-// SCHEMA
+// ==========================================
+// DATABASE SCHEMA
+// ==========================================
 const reviewSchema = new mongoose.Schema({
     itemId: { type: String, required: true },
     userId: { type: String, required: true }, 
@@ -31,13 +34,57 @@ const reviewSchema = new mongoose.Schema({
 const Review = mongoose.model('Review', reviewSchema);
 
 // ==========================================
+// SHOPIFY VERIFICATION LOGIC (Client ID + Secret)
+// ==========================================
+async function verifyShopifyOrder(orderId, productId) {
+    const STORE_URL = process.env.SHOPIFY_STORE_URL; 
+    const CLIENT_ID = process.env.SHOPIFY_API_KEY; 
+    const CLIENT_SECRET = process.env.SHOPIFY_API_SECRET; 
+
+    // Safety check to prevent server crashes if variables are missing
+    if (!STORE_URL || !CLIENT_ID || !CLIENT_SECRET) {
+        console.error("⚠️ Shopify credentials missing from environment variables!");
+        return false;
+    }
+
+    // Shopify allows 'Basic Authentication' using your ID and Secret
+    const authString = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
+
+    try {
+        // Query Shopify for that specific order ID
+        const response = await fetch(`https://${STORE_URL}/admin/api/2024-01/orders.json?name=${orderId}&status=any`, {
+            headers: { 
+                'Authorization': `Basic ${authString}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        // If the order doesn't exist, verification fails
+        if (!data.orders || data.orders.length === 0) return false; 
+
+        // Look through the items in that order to see if they bought this exact product
+        const order = data.orders[0];
+        const boughtProduct = order.line_items.some(item => String(item.product_id) === String(productId));
+        
+        return boughtProduct;
+    } catch (error) {
+        console.error("Shopify API Error:", error);
+        return false;
+    }
+}
+
+// ==========================================
 // 1. PUBLIC ROUTES (For the Shopify Store)
 // ==========================================
 
+// Health Check
 app.get('/', (req, res) => {
     res.send('🚀 Nectar API is Live and Running!');
 });
 
+// Fetch approved reviews for a specific product
 app.get('/api/reviews/:itemId', async (req, res) => {
     try { 
         const reviews = await Review.find({ 
@@ -49,16 +96,28 @@ app.get('/api/reviews/:itemId', async (req, res) => {
     catch (error) { res.status(500).json({ error: "Fetch error" }); }
 });
 
+// Submit a new review
 app.post('/api/reviews', async (req, res) => {
     try {
+        let isVerified = req.body.verifiedPurchase; // Trusts Shopify Liquid if they are logged in
+
+        // If they aren't logged in, but provided an Order ID, interrogate Shopify API
+        if (!isVerified && req.body.orderId) {
+            isVerified = await verifyShopifyOrder(req.body.orderId, req.body.itemId);
+        }
+
         const newReview = new Review({
             itemId: String(req.body.itemId),
             userId: req.body.userId,
+            isAnonymous: req.body.isAnonymous,
             rating: req.body.rating,
             headline: req.body.headline,
             comment: req.body.comment,
-            status: 'pending'
+            attributes: req.body.attributes,
+            verifiedPurchase: isVerified, // Saves the TRUE status after backend check
+            status: 'pending' // Always defaults to pending
         });
+
         const savedReview = await newReview.save();
         res.status(201).json(savedReview);
     } catch (error) {
@@ -103,7 +162,6 @@ app.delete('/api/reviews/:id', async (req, res) => {
 // ==========================================
 
 app.get('/admin', (req, res) => {
-    // This tells the server to look right next to server.js for admin.html
     res.sendFile(path.join(__dirname, 'admin.html'));
 });
 
