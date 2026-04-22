@@ -6,6 +6,9 @@ const path = require('path');
 
 const app = express();
 
+// ==========================================
+// MIDDLEWARE & SECURITY
+// ==========================================
 app.use(cors()); 
 app.use(express.json());
 app.use((req, res, next) => {
@@ -36,9 +39,9 @@ const reviewSchema = new mongoose.Schema({
 });
 const Review = mongoose.model('Review', reviewSchema);
 
-// NEW: Settings Schema to save your Admin controls
+// Settings Schema (Updated to use widgetId to bypass MongoDB ghost index errors)
 const settingsSchema = new mongoose.Schema({
-    shopId: { type: String, default: 'default' },
+    widgetId: { type: String, default: 'default' }, 
     autoApproveVerified: { type: Boolean, default: false },
     autoApproveMinStars: { type: Number, default: 4 }
 });
@@ -46,8 +49,12 @@ const Settings = mongoose.model('Settings', settingsSchema);
 
 // Ensure default settings exist on server start
 async function initSettings() {
-    const exists = await Settings.findOne({ shopId: 'default' });
-    if (!exists) await new Settings({ shopId: 'default' }).save();
+    try {
+        const exists = await Settings.findOne({ widgetId: 'default' });
+        if (!exists) await new Settings({ widgetId: 'default' }).save();
+    } catch (e) {
+        console.log("Settings init bypassed due to existing index");
+    }
 }
 initSettings();
 
@@ -103,11 +110,11 @@ app.post('/api/reviews', async (req, res) => {
             isVerified = await verifyShopifyOrder(req.body.orderId, req.body.email, req.body.itemId);
         }
 
-        // NEW: Check your Admin Settings for Auto-Approval rules
-        const config = await Settings.findOne({ shopId: 'default' });
+        // Apply Admin Auto-Approve Rules
+        const config = await Settings.findOne({ widgetId: 'default' });
         let finalStatus = 'pending';
         
-        if (config.autoApproveVerified && isVerified) {
+        if (config && config.autoApproveVerified && isVerified) {
             if (req.body.rating >= config.autoApproveMinStars) {
                 finalStatus = 'accepted';
             }
@@ -124,7 +131,7 @@ app.post('/api/reviews', async (req, res) => {
             attributes: req.body.attributes,
             verifiedPurchase: isVerified, 
             orderId: req.body.orderId, 
-            status: finalStatus // Applied here!
+            status: finalStatus 
         });
 
         const savedReview = await newReview.save();
@@ -156,15 +163,14 @@ app.delete('/api/reviews/:id', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// NEW: Get Settings
+// Admin Settings Endpoints
 app.get('/api/admin/settings', async (req, res) => {
-    try { res.status(200).json(await Settings.findOne({ shopId: 'default' })); } 
+    try { res.status(200).json(await Settings.findOne({ widgetId: 'default' })); } 
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// NEW: Update Settings
 app.patch('/api/admin/settings', async (req, res) => {
-    try { res.status(200).json(await Settings.findOneAndUpdate({ shopId: 'default' }, req.body, { new: true })); } 
+    try { res.status(200).json(await Settings.findOneAndUpdate({ widgetId: 'default' }, req.body, { new: true, upsert: true })); } 
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
