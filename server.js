@@ -29,6 +29,7 @@ const reviewSchema = new mongoose.Schema({
     attributes: { type: Map, of: Number }, 
     status: { type: String, enum: ['pending', 'accepted', 'rejected', 'hold'], default: 'pending' },
     verifiedPurchase: { type: Boolean, default: false },
+    orderId: { type: String }, 
     createdAt: { type: Date, default: Date.now }
 });
 const Review = mongoose.model('Review', reviewSchema);
@@ -41,17 +42,14 @@ async function verifyShopifyOrder(orderId, productId) {
     const CLIENT_ID = process.env.SHOPIFY_API_KEY; 
     const CLIENT_SECRET = process.env.SHOPIFY_API_SECRET; 
 
-    // Safety check to prevent server crashes if variables are missing
     if (!STORE_URL || !CLIENT_ID || !CLIENT_SECRET) {
         console.error("⚠️ Shopify credentials missing from environment variables!");
         return false;
     }
 
-    // Shopify allows 'Basic Authentication' using your ID and Secret
     const authString = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
 
     try {
-        // Query Shopify for that specific order ID
         const response = await fetch(`https://${STORE_URL}/admin/api/2024-01/orders.json?name=${orderId}&status=any`, {
             headers: { 
                 'Authorization': `Basic ${authString}`,
@@ -61,10 +59,8 @@ async function verifyShopifyOrder(orderId, productId) {
         
         const data = await response.json();
         
-        // If the order doesn't exist, verification fails
         if (!data.orders || data.orders.length === 0) return false; 
 
-        // Look through the items in that order to see if they bought this exact product
         const order = data.orders[0];
         const boughtProduct = order.line_items.some(item => String(item.product_id) === String(productId));
         
@@ -79,12 +75,10 @@ async function verifyShopifyOrder(orderId, productId) {
 // 1. PUBLIC ROUTES (For the Shopify Store)
 // ==========================================
 
-// Health Check
 app.get('/', (req, res) => {
     res.send('🚀 Nectar API is Live and Running!');
 });
 
-// Fetch approved reviews for a specific product
 app.get('/api/reviews/:itemId', async (req, res) => {
     try { 
         const reviews = await Review.find({ 
@@ -96,12 +90,10 @@ app.get('/api/reviews/:itemId', async (req, res) => {
     catch (error) { res.status(500).json({ error: "Fetch error" }); }
 });
 
-// Submit a new review
 app.post('/api/reviews', async (req, res) => {
     try {
-        let isVerified = req.body.verifiedPurchase; // Trusts Shopify Liquid if they are logged in
+        let isVerified = req.body.verifiedPurchase; 
 
-        // If they aren't logged in, but provided an Order ID, interrogate Shopify API
         if (!isVerified && req.body.orderId) {
             isVerified = await verifyShopifyOrder(req.body.orderId, req.body.itemId);
         }
@@ -114,8 +106,9 @@ app.post('/api/reviews', async (req, res) => {
             headline: req.body.headline,
             comment: req.body.comment,
             attributes: req.body.attributes,
-            verifiedPurchase: isVerified, // Saves the TRUE status after backend check
-            status: 'pending' // Always defaults to pending
+            verifiedPurchase: isVerified, 
+            orderId: req.body.orderId, 
+            status: 'pending' 
         });
 
         const savedReview = await newReview.save();
