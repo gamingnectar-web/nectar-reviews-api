@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Review Admin Dashboard</title>
-    <meta name="shopify-api-key" content="9b0bf096b37faf6dc0b19037b2d9d62a" />
+    <meta name="shopify-api-key" content="PASTE_YOUR_CLIENT_ID_HERE" />
     <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style>
-        :root { --bg: #f8fafc; --card: #ffffff; --border: #e2e8f0; --primary: #0f172a; --text: #1e293b; --text-light: #64748b; --star: #fbbf24; --green: #059669;}
+        :root { --bg: #f8fafc; --card: #ffffff; --border: #e2e8f0; --primary: #0f172a; --text: #1e293b; --text-light: #64748b; --star: #fbbf24; --green: #059669; --red: #e11d48; --orange: #ea580c; --grey: #94a3b8;}
         body, button, input, select, textarea { font-family: 'Poppins', sans-serif !important; }
         body { background: var(--bg); padding: 40px 20px; color: var(--text); margin: 0; -webkit-font-smoothing: antialiased; }
         .container { max-width: 1250px; margin: auto; }
@@ -33,45 +33,59 @@
         .metric-card h1 { font-size: 3.5rem; margin: 0; color: var(--primary); line-height: 1; letter-spacing: -0.04em;}
         .metric-card p { color: var(--text-light); font-weight: 600; margin: 10px 0 0 0; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.5px;}
 
-        .review-card { background: var(--card); border: 1px solid var(--border); padding: 35px; margin-bottom: 25px; border-radius: 16px; display: flex; justify-content: space-between; gap: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); transition: box-shadow 0.2s;}
+        /* COLOR CODED REVIEW CARDS */
+        .review-card { background: var(--card); border: 2px solid var(--border); padding: 35px; margin-bottom: 25px; border-radius: 16px; display: flex; justify-content: space-between; gap: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); transition: all 0.2s;}
         .review-card:hover { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
+        
+        .status-border-pending { border-color: var(--border); }
+        .status-border-accepted { border-color: var(--green); }
+        .status-border-rejected { border-color: var(--red); }
+        .status-border-hold { border-color: var(--orange); }
+
         .card-main { flex: 1; }
-        .card-side { text-align: right; border-left: 1px solid var(--border); padding-left: 40px; min-width: 240px; display: flex; flex-direction: column; justify-content: space-between;}
+        .card-side { text-align: right; border-left: 1px solid var(--border); padding-left: 40px; min-width: 260px; display: flex; flex-direction: column; justify-content: space-between;}
+        
         .pid { font-size: 0.85rem; color: var(--text-light); font-weight: 600; letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px;}
         .stars { color: var(--star); font-size: 1.25rem; letter-spacing: 2px; margin-bottom: 12px;}
         .headline { font-weight: 700; font-size: 1.3rem; margin-bottom: 10px; color: var(--primary); letter-spacing: -0.01em;}
         .comment { font-size: 1rem; color: #475569; line-height: 1.7; }
         
-        .badge { font-size: 0.8rem; padding: 6px 14px; border-radius: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block;}
-        .pending { background: #fef3c7; color: #b45309; }
-        .accepted { background: #d1fae5; color: #047857; }
-        .rejected { background: #ffe4e6; color: #be123c; }
+        /* NEW STATUS DROPDOWN TOP RIGHT */
+        .action-box { margin-bottom: 25px; display: flex; flex-direction: column; align-items: flex-end; gap: 10px;}
+        .status-select { padding: 10px 14px; font-weight: 700; font-size: 0.95rem; border-radius: 8px; border: 2px solid var(--border); background: #f8fafc; cursor: pointer; outline: none; transition: all 0.2s; width: 100%;}
         
-        .status-select { margin-top: 15px; padding: 10px 14px; font-weight: 600; font-size: 0.9rem; border-radius: 8px; border: 1px solid var(--border); background: #f8fafc; cursor: pointer; outline: none; transition: all 0.2s; width: 100%;}
-        .delete-btn { margin-top: 12px; background: none; border: none; color: #e11d48; font-weight: 600; cursor: pointer; font-size: 0.9rem; transition: opacity 0.2s; }
-        .user-info { font-size: 0.95rem; color: var(--text-light); margin-top: 25px; line-height: 1.6; }
-        .user-info strong { color: var(--text); font-weight: 600;}
-        .verify-toggle { display: flex; align-items: center; justify-content: flex-end; gap: 8px; font-size: 0.9rem; font-weight: 600; margin-top: 10px; cursor: pointer; }
-        .verify-toggle input { width: 16px; height: 16px; accent-color: var(--green); cursor: pointer;}
+        /* SLEEK VERIFIED BADGES */
+        .v-badge { font-size: 0.8rem; padding: 6px 12px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; letter-spacing: 0.5px;}
+        .v-badge-yes { background: #d1fae5; color: #047857; border: 1px solid #a7f3d0;}
+        .v-badge-no { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; cursor: help;}
+        .v-badge-no:hover { background: #e2e8f0; }
+        
+        .user-info { font-size: 0.95rem; color: var(--text-light); line-height: 1.7; text-align: right;}
+        .user-info strong { color: var(--text); font-weight: 600; font-size: 1.05rem;}
+        
+        /* REPLY BOX */
+        .reply-container { margin-top: 20px; padding-top: 20px; border-top: 1px dashed var(--border); text-align: right;}
+        .reply-input { width: 100%; min-height: 60px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; resize: vertical; margin-bottom: 8px; font-family: inherit;}
+        .reply-btn { background: var(--primary); color: white; border: none; padding: 6px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.85rem;}
+        
+        .delete-btn { background: none; border: none; color: #e11d48; font-weight: 600; cursor: pointer; font-size: 0.85rem; transition: opacity 0.2s; margin-top: 15px;}
         
         .pub-preview-wrapper { background: var(--card); padding: 50px; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); }
+        .error-box { background: #fee2e2; border: 1px solid #ef4444; padding: 20px; border-radius: 8px; color: #991b1b; text-align: center; margin-bottom: 20px; display: none; font-weight: 600;}
 
-        .settings-panel { background: var(--card); padding: 40px; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); max-width: 800px;}
+        /* Settings */
+        .settings-panel { background: var(--card); padding: 40px; border-radius: 16px; border: 1px solid var(--border); max-width: 800px;}
         .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 25px 0; border-bottom: 1px solid var(--border);}
         .setting-row:last-child { border-bottom: none; }
         .setting-info h3 { margin: 0 0 5px 0; color: var(--primary); font-size: 1.1rem;}
         .setting-info p { margin: 0; color: var(--text-light); font-size: 0.9rem; max-width: 450px;}
-        
         .switch { position: relative; display: inline-block; width: 50px; height: 28px; }
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .3s; border-radius: 34px; }
         .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .3s; border-radius: 50%; }
         input:checked + .slider { background-color: var(--green); }
         input:checked + .slider:before { transform: translateX(22px); }
-
         .number-select { padding: 8px 12px; font-weight: 600; border-radius: 8px; border: 1px solid var(--border); background: #f8fafc; font-family: inherit; font-size: 1rem; cursor: pointer;}
-        
-        .error-box { background: #fee2e2; border: 1px solid #ef4444; padding: 20px; border-radius: 8px; color: #991b1b; text-align: center; margin-bottom: 20px; display: none; font-weight: 600;}
     </style>
 </head>
 <body>
@@ -149,17 +163,10 @@
     async function load() {
         try {
             document.getElementById('error-alert').style.display = 'none';
-
-            // ADDED: Cache-busting parameter to guarantee fresh data
             const res = await fetch(API + '/admin/reviews?t=' + Date.now());
             if (!res.ok) throw new Error(`Server status: ${res.status}`);
             
             data = await res.json();
-            
-            if (!Array.isArray(data)) {
-                throw new Error("Server did not return an array. Check database connection.");
-            }
-
             updateMetrics();
             renderMgmt();
 
@@ -182,61 +189,70 @@
 
     async function saveSettings() {
         try {
-            const payload = {
-                autoApproveVerified: document.getElementById('set-auto-approve').checked,
-                autoApproveMinStars: parseInt(document.getElementById('set-min-stars').value)
-            };
-            const res = await fetch(API + '/admin/settings', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            
-            if (!res.ok) throw new Error("Could not save settings.");
+            const payload = { autoApproveVerified: document.getElementById('set-auto-approve').checked, autoApproveMinStars: parseInt(document.getElementById('set-min-stars').value) };
+            await fetch(API + '/admin/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             if(window.shopify) { window.shopify.toast.show('Settings saved'); }
-        } catch(e) {
-            alert("Error saving settings. Check connection.");
-        }
+        } catch(e) { alert("Error saving settings."); }
     }
 
     function updateMetrics() {
         const total = data.length;
-        const live = data.filter(r => r.status === 'accepted').length;
-        const rejected = data.filter(r => r.status === 'rejected').length;
         document.getElementById('count-total').innerText = total;
-        document.getElementById('count-live').innerText = live;
-        document.getElementById('count-rejected').innerText = rejected;
+        document.getElementById('count-live').innerText = data.filter(r => r.status === 'accepted').length;
+        document.getElementById('count-rejected').innerText = data.filter(r => r.status === 'rejected').length;
         document.getElementById('count-conversion').innerText = total === 0 ? "0%" : ((total / SIMULATED_REQUESTS_SENT) * 100).toFixed(1) + '%';
     }
 
     function renderMgmt() {
-        document.getElementById('mgmt-list').innerHTML = data.map(r => `
-            <div class="review-card">
+        document.getElementById('mgmt-list').innerHTML = data.map(r => {
+            
+            // Generate the sleek Verified Badge with Hover diagnostics
+            let verifyHtml = '';
+            if (r.verifiedPurchase) {
+                verifyHtml = `<div class="v-badge v-badge-yes" title="${r.verificationNote || 'Verified Purchase'}">✓ Verified Buyer</div>`;
+            } else if (r.orderId) {
+                // If they provided an order ID but it failed, show the warning and the exact reason on hover!
+                verifyHtml = `<div class="v-badge v-badge-no" title="Diagnostic: ${r.verificationNote || 'Could not verify.'}">⚠️ Unverified (Hover for reason)</div>`;
+            } else {
+                verifyHtml = `<div class="v-badge v-badge-no" title="User did not provide an Order ID.">Unverified (No Order ID)</div>`;
+            }
+
+            return `
+            <div class="review-card status-border-${r.status}">
                 <div class="card-main">
-                    <div class="pid">Product: ${r.itemId}</div>
+                    <div class="pid">Product ID: ${r.itemId}</div>
                     <div class="stars">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
                     <div class="headline">${r.headline || 'No Headline'}</div>
                     <div class="comment">${r.comment}</div>
                 </div>
                 <div class="card-side">
-                    <div>
-                        <div class="badge ${r.status}">${r.status}</div><br>
-                        <select class="status-select" onchange="updateStatus('${r._id}', this.value)">
-                            <option value="pending" ${r.status==='pending'?'selected':''}>Pending</option>
-                            <option value="accepted" ${r.status==='accepted'?'selected':''}>Accept</option>
-                            <option value="rejected" ${r.status==='rejected'?'selected':''}>Reject</option>
+                    <div class="action-box">
+                        <select class="status-select" onchange="updateStatus('${r._id}', this.value)" style="border-color: var(--${r.status === 'accepted' ? 'green' : r.status === 'rejected' ? 'red' : r.status === 'hold' ? 'orange' : 'border'})">
+                            <option value="pending" ${r.status==='pending'?'selected':''}>⏳ Pending</option>
+                            <option value="accepted" ${r.status==='accepted'?'selected':''}>✅ Accept</option>
+                            <option value="hold" ${r.status==='hold'?'selected':''}>⏸️ On Hold</option>
+                            <option value="rejected" ${r.status==='rejected'?'selected':''}>❌ Reject</option>
                         </select>
-                        <button class="delete-btn" onclick="deleteReview('${r._id}')">Delete</button>
                     </div>
+                    
                     <div class="user-info">
                         <strong>${r.userId}</strong><br>
-                        <label class="verify-toggle">
-                            <input type="checkbox" onchange="toggleVerify('${r._id}', this.checked)" ${r.verifiedPurchase ? 'checked' : ''}> 
-                            <span style="color: ${r.verifiedPurchase ? 'var(--green)' : 'var(--text-light)'}">Verified</span>
-                        </label>
+                        ${r.email || 'No email provided'}<br>
+                        ${r.orderId ? `Order #${r.orderId}<br>` : ''}
+                        <div style="margin-top: 8px;">${verifyHtml}</div>
+                    </div>
+                    
+                    <div class="reply-container">
+                        <textarea id="reply-${r._id}" class="reply-input" placeholder="Write a public reply...">${r.reply || ''}</textarea>
+                        <button class="reply-btn" onclick="saveReply('${r._id}')">Save Reply</button>
+                    </div>
+
+                    <div style="text-align: right;">
+                        <button class="delete-btn" onclick="deleteReview('${r._id}')">Delete Forever</button>
                     </div>
                 </div>
-            </div>`).join('');
+            </div>`;
+        }).join('');
             
         if(data.length === 0) document.getElementById('mgmt-list').innerHTML = '<p style="text-align:center;">No reviews found.</p>';
     }
@@ -249,6 +265,7 @@
                 <div style="color:var(--star); font-size:1.2rem; margin: 10px 0;">${'★'.repeat(r.rating)}</div>
                 <div style="font-weight:700; font-size:1.35rem; margin-bottom:12px;">${r.headline || ''}</div>
                 <div style="font-size:1.05rem; color:#475569; line-height:1.7;">${r.comment}</div>
+                ${r.reply ? `<div style="margin-top: 15px; background: #f8fafc; padding: 15px; border-left: 4px solid var(--primary); border-radius: 4px; font-size: 0.95rem;"><strong>Store Reply:</strong><br>${r.reply}</div>` : ''}
             </div>`).join('');
     }
 
@@ -257,8 +274,10 @@
         load();
     }
 
-    async function toggleVerify(id, isVerified) {
-        await fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ verifiedPurchase: isVerified }) });
+    async function saveReply(id) {
+        const replyText = document.getElementById(`reply-${id}`).value;
+        await fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({reply: replyText}) });
+        if(window.shopify) { window.shopify.toast.show('Reply saved & published'); }
         load();
     }
 
