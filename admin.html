@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Review Admin Dashboard</title>
-    
-    <meta name="shopify-api-key" content="PASTE_YOUR_CLIENT_ID_HERE" />
+    <meta name="shopify-api-key" content="9b0bf096b37faf6dc0b19037b2d9d62a" />
     <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -57,14 +56,12 @@
         
         .pub-preview-wrapper { background: var(--card); padding: 50px; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); }
 
-        /* Settings Panel CSS */
         .settings-panel { background: var(--card); padding: 40px; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); max-width: 800px;}
         .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 25px 0; border-bottom: 1px solid var(--border);}
         .setting-row:last-child { border-bottom: none; }
         .setting-info h3 { margin: 0 0 5px 0; color: var(--primary); font-size: 1.1rem;}
         .setting-info p { margin: 0; color: var(--text-light); font-size: 0.9rem; max-width: 450px;}
         
-        /* Toggle switch */
         .switch { position: relative; display: inline-block; width: 50px; height: 28px; }
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .3s; border-radius: 34px; }
@@ -73,10 +70,14 @@
         input:checked + .slider:before { transform: translateX(22px); }
 
         .number-select { padding: 8px 12px; font-weight: 600; border-radius: 8px; border: 1px solid var(--border); background: #f8fafc; font-family: inherit; font-size: 1rem; cursor: pointer;}
+        
+        .error-box { background: #fee2e2; border: 1px solid #ef4444; padding: 20px; border-radius: 8px; color: #991b1b; text-align: center; margin-bottom: 20px; display: none; font-weight: 600;}
     </style>
 </head>
 <body>
 <div class="container">
+    <div id="error-alert" class="error-box"></div>
+
     <div class="tabs">
         <button class="tab-btn active" onclick="tab('dashboard')">Dashboard</button>
         <button class="tab-btn" onclick="tab('manage')">Manage Reviews</button>
@@ -119,7 +120,7 @@
             <div class="setting-row">
                 <div class="setting-info">
                     <h3>Minimum Rating for Auto-Approval</h3>
-                    <p>Only auto-approve reviews that meet this star rating. Lower ratings will still go to 'Pending' for your review.</p>
+                    <p>Only auto-approve reviews that meet this star rating.</p>
                 </div>
                 <select id="set-min-stars" class="number-select" onchange="saveSettings()">
                     <option value="5">5 Stars only</option>
@@ -147,37 +148,55 @@
 
     async function load() {
         try {
-            // Load Reviews
-            const res = await fetch(API + '/admin/reviews');
+            document.getElementById('error-alert').style.display = 'none';
+
+            // ADDED: Cache-busting parameter to guarantee fresh data
+            const res = await fetch(API + '/admin/reviews?t=' + Date.now());
+            if (!res.ok) throw new Error(`Server status: ${res.status}`);
+            
             data = await res.json();
+            
+            if (!Array.isArray(data)) {
+                throw new Error("Server did not return an array. Check database connection.");
+            }
+
             updateMetrics();
             renderMgmt();
 
-            // Load Settings
-            const setRes = await fetch(API + '/admin/settings');
-            const settings = await setRes.json();
-            if(settings) {
-                document.getElementById('set-auto-approve').checked = settings.autoApproveVerified;
-                document.getElementById('set-min-stars').value = settings.autoApproveMinStars;
+            const setRes = await fetch(API + '/admin/settings?t=' + Date.now());
+            if(setRes.ok) {
+                const settings = await setRes.json();
+                if(settings) {
+                    document.getElementById('set-auto-approve').checked = settings.autoApproveVerified || false;
+                    document.getElementById('set-min-stars').value = settings.autoApproveMinStars || 4;
+                }
             }
         } catch (e) {
-            document.getElementById('mgmt-list').innerHTML = '<p style="text-align:center; color: #e11d48;">Failed to load data.</p>';
+            console.error(e);
+            const alertBox = document.getElementById('error-alert');
+            alertBox.style.display = 'block';
+            alertBox.innerHTML = `⚠️ Error loading dashboard: ${e.message}`;
+            document.getElementById('mgmt-list').innerHTML = '<p style="text-align:center;">Data failed to load.</p>';
         }
     }
 
-    // Save Settings
     async function saveSettings() {
-        const payload = {
-            autoApproveVerified: document.getElementById('set-auto-approve').checked,
-            autoApproveMinStars: parseInt(document.getElementById('set-min-stars').value)
-        };
-        await fetch(API + '/admin/settings', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        
-        if(window.shopify) { window.shopify.toast.show('Settings saved'); }
+        try {
+            const payload = {
+                autoApproveVerified: document.getElementById('set-auto-approve').checked,
+                autoApproveMinStars: parseInt(document.getElementById('set-min-stars').value)
+            };
+            const res = await fetch(API + '/admin/settings', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            if (!res.ok) throw new Error("Could not save settings.");
+            if(window.shopify) { window.shopify.toast.show('Settings saved'); }
+        } catch(e) {
+            alert("Error saving settings. Check connection.");
+        }
     }
 
     function updateMetrics() {
@@ -198,12 +217,6 @@
                     <div class="stars">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
                     <div class="headline">${r.headline || 'No Headline'}</div>
                     <div class="comment">${r.comment}</div>
-                    
-                    ${r.attributes && Object.keys(r.attributes).length > 0 ? 
-                        `<div style="margin-top: 15px; font-size: 0.85rem; color: var(--text-light); background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid var(--border);">
-                            <strong>Profile:</strong> ${Object.entries(r.attributes).map(([k, v]) => `${k}: ${v}/10`).join(' • ')}
-                        </div>` : ''
-                    }
                 </div>
                 <div class="card-side">
                     <div>
@@ -216,11 +229,7 @@
                         <button class="delete-btn" onclick="deleteReview('${r._id}')">Delete</button>
                     </div>
                     <div class="user-info">
-                        ${new Date(r.createdAt).toLocaleDateString('en-GB')}<br>
-                        <strong>${r.userId}</strong> ${r.isAnonymous ? '🔒 ANON' : ''}<br>
-                        <span style="color:#64748b; font-size:0.85em;">${r.email || 'No email'}</span><br>
-                        ${r.orderId ? `<span style="color:#64748b; font-size:0.8em; font-weight: 600;">Order #${r.orderId}</span>` : ''}
-                        
+                        <strong>${r.userId}</strong><br>
                         <label class="verify-toggle">
                             <input type="checkbox" onchange="toggleVerify('${r._id}', this.checked)" ${r.verifiedPurchase ? 'checked' : ''}> 
                             <span style="color: ${r.verifiedPurchase ? 'var(--green)' : 'var(--text-light)'}">Verified</span>
@@ -236,10 +245,7 @@
         const acc = data.filter(r => r.status === 'accepted');
         document.getElementById('pub-list').innerHTML = acc.map(r => `
             <div style="padding: 35px 0; border-bottom: 1px solid var(--border);">
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <div style="font-weight:700; font-size:1.15rem; color:var(--primary);">${r.isAnonymous ? (r.userId ? r.userId.split(' ').map(w=>w[0]+'***').join(' ') : 'Verified Customer') : r.userId}</div>
-                    ${r.verifiedPurchase ? '<div style="color:var(--green); font-size:0.85em; font-weight:600;">✓ Verified</div>' : ''}
-                </div>
+                <div style="font-weight:700; font-size:1.15rem; color:var(--primary);">${r.userId}</div>
                 <div style="color:var(--star); font-size:1.2rem; margin: 10px 0;">${'★'.repeat(r.rating)}</div>
                 <div style="font-weight:700; font-size:1.35rem; margin-bottom:12px;">${r.headline || ''}</div>
                 <div style="font-size:1.05rem; color:#475569; line-height:1.7;">${r.comment}</div>
