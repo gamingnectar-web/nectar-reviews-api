@@ -96,7 +96,6 @@
 </div>
 
 <script>
-    // 1. FIXED: Uses relative path so it works on Render automatically
     const API = '/api';
     let data = [];
     const SIMULATED_REQUESTS_SENT = 1250; 
@@ -185,7 +184,6 @@
         if(acc.length === 0) document.getElementById('pub-list').innerHTML = "<p style='color: #64748b; text-align:center; font-size:1.1rem;'>No accepted reviews to show.</p>";
     }
 
-    // 2. FIXED: Matches the app.patch route in server.js
     async function update(id, status) {
         await fetch(`${API}/reviews/${id}`, { 
             method: 'PATCH', 
@@ -195,7 +193,6 @@
         load();
     }
 
-    // 3. NEW: Added delete functionality to match your server route
     async function deleteReview(id) {
         if(confirm('Are you sure you want to delete this review permanently?')) {
             await fetch(`${API}/reviews/${id}`, { method: 'DELETE' });
