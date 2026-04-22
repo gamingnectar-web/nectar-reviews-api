@@ -108,74 +108,11 @@ app.delete('/api/reviews/:id', async (req, res) => {
 // 3. ADMIN DASHBOARD UI
 // ==========================================
 
+// Tell Express to serve files from the 'public' folder
+app.use(express.static('public'));
+
 app.get('/admin', (req, res) => {
-    res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Nectar Admin</title>
-            <style>
-                body { font-family: sans-serif; padding: 40px; background: #f4f6f8; }
-                .review-card { background: white; padding: 20px; margin-bottom: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
-                .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; display: inline-block; margin-top: 5px; }
-                .pending { background: #ffe8c3; color: #8a6d3b; }
-                .accepted { background: #d3f9d8; color: #1e4620; }
-                button { cursor: pointer; padding: 8px 16px; margin-left: 10px; border: none; border-radius: 4px; font-weight: bold; }
-                .approve-btn { background: #008060; color: white; }
-                .delete-btn { background: #e53935; color: white; }
-            </style>
-        </head>
-        <body>
-            <h1>Nectar Review Management</h1>
-            <div id="admin-feed">Loading reviews...</div>
-
-            <script>
-                async function loadAdminReviews() {
-                    const res = await fetch('/api/admin/reviews');
-                    const reviews = await res.json();
-                    const container = document.getElementById('admin-feed');
-                    
-                    if (reviews.length === 0) {
-                        container.innerHTML = '<p>No reviews found.</p>';
-                        return;
-                    }
-
-                    container.innerHTML = reviews.map(r => \`
-                        <div class="review-card">
-                            <div>
-                                <strong>\${r.headline || 'No Headline'}</strong> (\${r.rating} Stars)<br>
-                                <small>\${r.comment}</small><br>
-                                <span class="badge \${r.status}">\${r.status.toUpperCase()}</span>
-                            </div>
-                            <div>
-                                \${r.status === 'pending' ? \`<button class="approve-btn" onclick="updateStatus('\${r._id}', 'accepted')">Approve</button>\` : ''}
-                                <button class="delete-btn" onclick="deleteReview('\${r._id}')">Delete</button>
-                            </div>
-                        </div>
-                    \`).join('');
-                }
-
-                async function updateStatus(id, status) {
-                    await fetch('/api/reviews/' + id, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ status })
-                    });
-                    loadAdminReviews();
-                }
-
-                async function deleteReview(id) {
-                    if(confirm('Are you sure you want to delete this?')) {
-                        await fetch('/api/reviews/' + id, { method: 'DELETE' });
-                        loadAdminReviews();
-                    }
-                }
-
-                loadAdminReviews();
-            </script>
-        </body>
-        </html>
-    `);
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 // ==========================================
