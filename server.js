@@ -11,13 +11,8 @@ const app = express();
 // ==========================================
 app.use(cors()); 
 app.use(express.json());
-
-// Allows Shopify to frame the Admin Dashboard
 app.use((req, res, next) => {
-    res.setHeader(
-        "Content-Security-Policy",
-        "frame-ancestors https://*.myshopify.com https://admin.shopify.com;"
-    );
+    res.setHeader("Content-Security-Policy", "frame-ancestors https://*.myshopify.com https://admin.shopify.com;");
     next();
 });
 
@@ -45,61 +40,64 @@ const reviewSchema = new mongoose.Schema({
 const Review = mongoose.model('Review', reviewSchema);
 
 // ==========================================
-// SHOPIFY VERIFICATION LOGIC (Sanitized)
+// REFINED VERIFICATION LOGIC
 // ==========================================
 async function verifyShopifyOrder(orderId, email, productId) {
     const STORE_URL = process.env.SHOPIFY_STORE_URL; 
     const CLIENT_ID = process.env.SHOPIFY_API_KEY; 
     const CLIENT_SECRET = process.env.SHOPIFY_API_SECRET; 
 
-    if (!STORE_URL || !CLIENT_ID || !CLIENT_SECRET || !email || !orderId) {
-        return false;
-    }
+    if (!STORE_URL || !CLIENT_ID || !CLIENT_SECRET || !email || !orderId) return false;
 
-    // SANITIZATION: Strip everything but numbers, then add a single #
-    // This fixes cases like "##1002", "Order 1002", or just "1002"
-    const cleanNumber = orderId.replace(/\D/g, ""); 
-    const formattedOrderName = `#${cleanNumber}`;
+    // Remove all symbols to get the raw number (e.g., "#1002" -> "1002")
+    const rawNumber = orderId.replace(/\D/g, ""); 
+    
+    // We search for both versions because Draft Orders can be finicky in the API
+    const searchTerms = [`#${rawNumber}`, rawNumber]; 
 
     const authString = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
 
-    try {
-        const response = await fetch(`https://${STORE_URL}/admin/api/2024-01/orders.json?name=${encodeURIComponent(formattedOrderName)}&status=any`, {
-            headers: { 
-                'Authorization': `Basic ${authString}`,
-                'Content-Type': 'application/json'
+    for (const term of searchTerms) {
+        try {
+            console.log(`🔍 Attempting verification for Order: ${term}`);
+            const response = await fetch(`https://${STORE_URL}/admin/api/2024-01/orders.json?name=${encodeURIComponent(term)}&status=any`, {
+                headers: { 
+                    'Authorization': `Basic ${authString}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            const data = await response.json();
+
+            if (data.orders && data.orders.length > 0) {
+                // Find the exact order that matches the email provided
+                const order = data.orders.find(o => o.email && o.email.toLowerCase() === email.toLowerCase());
+
+                if (order) {
+                    // Check if the specific Product ID exists in the line items
+                    const boughtProduct = order.line_items.some(item => 
+                        String(item.product_id) === String(productId) || 
+                        String(item.variant_id) === String(productId)
+                    );
+                    
+                    if (boughtProduct) {
+                        console.log("✅ Match found! Review verified.");
+                        return true;
+                    }
+                }
             }
-        });
-        
-        const data = await response.json();
-        
-        if (!data.orders || data.orders.length === 0) {
-            console.log(`🔎 No Shopify order found for name: ${formattedOrderName}`);
-            return false;
+        } catch (error) {
+            console.error("🚨 Shopify API Error:", error);
         }
-
-        const order = data.orders[0];
-
-        // Case-insensitive email check
-        if (!order.email || order.email.toLowerCase() !== email.toLowerCase()) {
-            console.log(`❌ Email mismatch: ${order.email} vs ${email}`);
-            return false;
-        }
-
-        // Check if product exists in line items
-        const boughtProduct = order.line_items.some(item => String(item.product_id) === String(productId));
-        
-        return boughtProduct;
-    } catch (error) {
-        console.error("🚨 Shopify API Error:", error);
-        return false;
     }
+    console.log("❌ No matching order/product found.");
+    return false;
 }
 
 // ==========================================
-// PUBLIC ROUTES
+// ROUTES
 // ==========================================
-app.get('/', (req, res) => res.send('🚀 Nectar API is Live!'));
+app.get('/', (req, res) => res.send('🚀 Nectar API Live'));
 
 app.get('/api/reviews/:itemId', async (req, res) => {
     try { 
@@ -112,7 +110,7 @@ app.post('/api/reviews', async (req, res) => {
     try {
         let isVerified = req.body.verifiedPurchase; 
 
-        // If not already verified via Liquid, check the Shopify API
+        // Double-check verification via Backend if Liquid check didn't pass
         if (!isVerified && req.body.orderId && req.body.email) {
             isVerified = await verifyShopifyOrder(req.body.orderId, req.body.email, req.body.itemId);
         }
@@ -134,14 +132,10 @@ app.post('/api/reviews', async (req, res) => {
         const savedReview = await newReview.save();
         res.status(201).json(savedReview);
     } catch (error) {
-        console.error("Submission Error:", error);
-        res.status(400).json({ error: "Failed to submit review" });
+        res.status(400).json({ error: "Failed to submit" });
     }
 });
 
-// ==========================================
-// ADMIN ROUTES
-// ==========================================
 app.get('/api/admin/reviews', async (req, res) => {
     try { res.status(200).json(await Review.find().sort({ createdAt: -1 })); } 
     catch (error) { res.status(500).json({ error: "Admin fetch error" }); }
@@ -152,24 +146,19 @@ app.patch('/api/reviews/:id', async (req, res) => {
         const updateData = {};
         if (req.body.status !== undefined) updateData.status = req.body.status;
         if (req.body.verifiedPurchase !== undefined) updateData.verifiedPurchase = req.body.verifiedPurchase;
-
         const updated = await Review.findByIdAndUpdate(req.params.id, updateData, { new: true });
         res.json(updated);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.delete('/api/reviews/:id', async (req, res) => {
     try {
         await Review.findByIdAndDelete(req.params.id);
         res.json({ message: "Deleted" });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'admin.html')));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server listening on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Port ${PORT}`));
