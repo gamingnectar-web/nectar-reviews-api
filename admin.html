@@ -448,11 +448,32 @@
             ? `<a href="https://admin.shopify.com/customers?query=${encodeURIComponent(r.email)}" target="_blank" class="customer-link" title="Open Customer Account">${r.userId}</a>` 
             : `<strong style="font-size: 1.05rem;">${r.userId}</strong>`;
 
+        // 1. Render the Flavor Profile Bars (Added this back in!)
+        let attrHTML = '';
+        if (r.attributes && Object.keys(r.attributes).length > 0) {
+            attrHTML = `<div style="margin-top: 20px; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid var(--border); display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px;">`;
+            for (const [key, val] of Object.entries(r.attributes)) {
+                attrHTML += `
+                    <div>
+                        <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-light); margin-bottom: 4px;">${key}</div>
+                        <div style="width: 100%; height: 6px; background: #e2e8f0; border-radius: 3px; position: relative;">
+                            <div style="width: ${(val/10)*100}%; height: 100%; background: var(--primary); border-radius: 3px;"></div>
+                        </div>
+                        <div style="font-size: 10px; font-weight: 600; text-align: right; margin-top: 4px;">${val}/10</div>
+                    </div>
+                `;
+            }
+            attrHTML += `</div>`;
+        }
+
+        // 2. Render the Product Tags cleanly separated at the bottom
         const tagsHtml = r.productTags && r.productTags.length > 0 
-            ? `<div style="margin-top: 10px;">${r.productTags.map(t => `<span style="font-size: 0.75rem; background: #e2e8f0; padding: 2px 8px; border-radius: 12px; margin-right: 5px;">${t}</span>`).join('')}</div>`
+            ? `<div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed var(--border);">
+                 <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-light); text-transform: uppercase; margin-right: 8px;">Product Tags:</span> 
+                 ${r.productTags.map(t => `<span style="font-size: 0.75rem; background: #e2e8f0; padding: 2px 8px; border-radius: 12px; margin-right: 5px; display: inline-block; margin-bottom: 5px;">${t}</span>`).join('')}
+               </div>`
             : '';
 
-        // Dynamic Pill Styling based on if a reply exists
         const replyStateClass = r.reply ? 'has-reply' : 'no-reply';
         const replyText = r.reply ? '💬 Edit Reply' : '💬 Reply to Customer';
         const isReplyOpen = openReplyBoxes.has(r._id) ? 'block' : 'none';
@@ -476,6 +497,8 @@
                 <div class="stars" style="margin-top:15px;">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
                 <div class="headline">${r.headline || 'No Headline'}</div>
                 <div class="comment">${r.comment}</div>
+                
+                ${attrHTML}
                 ${tagsHtml}
                 
                 <div class="reply-container">
