@@ -60,9 +60,15 @@ const settingsSchema = new mongoose.Schema({
         titleSize: { type: Number, default: 26 },
         textSize: { type: Number, default: 15 },
         borderRadius: { type: Number, default: 12 },
-        // NEW: Empty State Customization
-        emptyStateMode: { type: String, default: 'stars_text' }, // 'hidden', 'text_only', 'stars_text'
+        emptyStateMode: { type: String, default: 'stars_text' },
         emptyStateText: { type: String, default: 'No reviews yet. Be the first to leave one!' }
+    },
+    // NEW: On-Card Widget Styles
+    cardStyles: {
+        starSize: { type: Number, default: 14 },
+        fontSize: { type: Number, default: 13 },
+        showCount: { type: Boolean, default: true },
+        alignment: { type: String, default: 'flex-start' } // 'flex-start', 'center', 'flex-end'
     }
 });
 const Settings = mongoose.model('Settings', settingsSchema, 'settings');
