@@ -24,56 +24,64 @@
         .view { display: none; }
         .view.active { display: block; }
         
-        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 25px; margin-bottom: 40px; }
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 25px; margin-bottom: 40px; }
         .metric-card { background: var(--card); padding: 35px 30px; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); display: flex; flex-direction: column; justify-content: center; position: relative; overflow: hidden;}
         .metric-card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: #cbd5e1; }
         .metric-card.live::before { background: var(--green); }
         .metric-card.rejected::before { background: #e11d48; }
-        .metric-card.conversion::before { background: #3b82f6; }
         .metric-card h1 { font-size: 3.5rem; margin: 0; color: var(--primary); line-height: 1; letter-spacing: -0.04em;}
         .metric-card p { color: var(--text-light); font-weight: 600; margin: 10px 0 0 0; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.5px;}
 
         /* COLOR CODED REVIEW CARDS */
         .review-card { background: var(--card); border: 2px solid var(--border); padding: 35px; margin-bottom: 25px; border-radius: 16px; display: flex; justify-content: space-between; gap: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); transition: all 0.2s;}
         .review-card:hover { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
-        
         .status-border-pending { border-color: var(--border); }
         .status-border-accepted { border-color: var(--green); }
         .status-border-rejected { border-color: var(--red); }
         .status-border-hold { border-color: var(--orange); }
 
         .card-main { flex: 1; }
-        .card-side { text-align: right; border-left: 1px solid var(--border); padding-left: 40px; min-width: 260px; display: flex; flex-direction: column; justify-content: space-between;}
+        .card-side { text-align: right; border-left: 1px solid var(--border); padding-left: 40px; min-width: 240px; display: flex; flex-direction: column; justify-content: space-between;}
         
-        .pid { font-size: 0.85rem; color: var(--text-light); font-weight: 600; letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px;}
+        .pid { font-size: 0.85rem; color: var(--text-light); font-weight: 600; letter-spacing: 0.5px; margin-bottom: 12px; }
         .stars { color: var(--star); font-size: 1.25rem; letter-spacing: 2px; margin-bottom: 12px;}
         .headline { font-weight: 700; font-size: 1.3rem; margin-bottom: 10px; color: var(--primary); letter-spacing: -0.01em;}
         .comment { font-size: 1rem; color: #475569; line-height: 1.7; }
         
-        /* NEW STATUS DROPDOWN TOP RIGHT */
-        .action-box { margin-bottom: 25px; display: flex; flex-direction: column; align-items: flex-end; gap: 10px;}
-        .status-select { padding: 10px 14px; font-weight: 700; font-size: 0.95rem; border-radius: 8px; border: 2px solid var(--border); background: #f8fafc; cursor: pointer; outline: none; transition: all 0.2s; width: 100%;}
-        
+        /* USER BOX LINK */
+        .customer-link { display: inline-block; padding: 4px 12px; border: 1px solid var(--text); border-radius: 6px; color: var(--text); font-weight: 700; text-decoration: none; font-size: 1.05rem; transition: 0.2s;}
+        .customer-link:hover { background: var(--text); color: white; }
+
+        /* ROUND STATUS BUTTONS */
+        .status-group { display: flex; gap: 8px; }
+        .s-btn { width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer; background: white; font-size: 16px; transition: 0.2s; color: var(--grey);}
+        .s-btn:hover { transform: scale(1.05); }
+        .s-btn.acc { border-color: var(--green); }
+        .s-btn.acc.active { background: var(--green); color: white; }
+        .s-btn.hld { border-color: var(--orange); }
+        .s-btn.hld.active { background: var(--orange); color: white; }
+        .s-btn.rej { border-color: var(--red); }
+        .s-btn.rej.active { background: var(--red); color: white; }
+
         /* SLEEK VERIFIED BADGES */
         .v-badge { font-size: 0.8rem; padding: 6px 12px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; letter-spacing: 0.5px;}
         .v-badge-yes { background: #d1fae5; color: #047857; border: 1px solid #a7f3d0;}
-        .v-badge-no { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; cursor: help;}
-        .v-badge-no:hover { background: #e2e8f0; }
+        .v-badge-no { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; cursor: help;}
         
-        .user-info { font-size: 0.95rem; color: var(--text-light); line-height: 1.7; text-align: right;}
-        .user-info strong { color: var(--text); font-weight: 600; font-size: 1.05rem;}
+        /* REPLY BOX (Under Comment) */
+        .reply-toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--primary); font-weight: 600; cursor: pointer; margin-top: 15px; border: none; background: none; font-size: 0.95rem; padding: 0;}
+        .reply-toggle:hover { text-decoration: underline; }
+        .reply-panel { margin-top: 15px; background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid var(--border); display: none;}
+        .reply-input { width: 100%; min-height: 80px; padding: 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem; resize: vertical; margin-bottom: 10px; font-family: inherit;}
+        .reply-btn { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.9rem;}
         
-        /* REPLY BOX */
-        .reply-container { margin-top: 20px; padding-top: 20px; border-top: 1px dashed var(--border); text-align: right;}
-        .reply-input { width: 100%; min-height: 60px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; resize: vertical; margin-bottom: 8px; font-family: inherit;}
-        .reply-btn { background: var(--primary); color: white; border: none; padding: 6px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.85rem;}
-        
-        .delete-btn { background: none; border: none; color: #e11d48; font-weight: 600; cursor: pointer; font-size: 0.85rem; transition: opacity 0.2s; margin-top: 15px;}
+        .delete-btn { background: none; border: none; color: var(--red); font-weight: 600; cursor: pointer; font-size: 0.9rem; text-decoration: underline;}
+        .restore-btn { background: none; border: none; color: var(--green); font-weight: 600; cursor: pointer; font-size: 0.9rem; text-decoration: underline;}
         
         .pub-preview-wrapper { background: var(--card); padding: 50px; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); }
         .error-box { background: #fee2e2; border: 1px solid #ef4444; padding: 20px; border-radius: 8px; color: #991b1b; text-align: center; margin-bottom: 20px; display: none; font-weight: 600;}
 
-        /* Settings */
+        /* Settings Panel */
         .settings-panel { background: var(--card); padding: 40px; border-radius: 16px; border: 1px solid var(--border); max-width: 800px;}
         .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 25px 0; border-bottom: 1px solid var(--border);}
         .setting-row:last-child { border-bottom: none; }
@@ -95,6 +103,7 @@
     <div class="tabs">
         <button class="tab-btn active" onclick="tab('dashboard')">Dashboard</button>
         <button class="tab-btn" onclick="tab('manage')">Manage Reviews</button>
+        <button class="tab-btn" onclick="tab('trash')">Trash 🗑️</button> 
         <button class="tab-btn" onclick="tab('preview')">Public Preview</button>
         <button class="tab-btn" onclick="tab('settings')">Rules & Settings</button> 
     </div>
@@ -108,15 +117,18 @@
                 <h1 id="count-live">0</h1><p>Live on Store</p>
             </div>
             <div class="metric-card rejected">
-                <h1 id="count-rejected">0</h1><p>Rejected</p>
-            </div>
-            <div class="metric-card conversion">
-                <h1 id="count-conversion">0%</h1><p>Completion Rate</p>
+                <h1 id="count-rejected">0</h1><p>Rejected / Trashed</p>
             </div>
         </div>
     </div>
     
     <div id="manage" class="view"><div id="mgmt-list">Loading...</div></div>
+    
+    <div id="trash" class="view">
+        <p style="color: var(--text-light); margin-bottom: 20px; font-weight: 500;">Items in trash will be permanently deleted after 28 days.</p>
+        <div id="trash-list">Loading...</div>
+    </div>
+
     <div id="preview" class="view"><div class="pub-preview-wrapper" id="pub-list"></div></div>
     
     <div id="settings" class="view">
@@ -151,7 +163,6 @@
 <script>
     const API = '/api';
     let data = [];
-    const SIMULATED_REQUESTS_SENT = 1250; 
 
     function tab(name) {
         document.querySelectorAll('.view, .tab-btn').forEach(el => el.classList.remove('active'));
@@ -168,7 +179,7 @@
             
             data = await res.json();
             updateMetrics();
-            renderMgmt();
+            renderLists();
 
             const setRes = await fetch(API + '/admin/settings?t=' + Date.now());
             if(setRes.ok) {
@@ -180,10 +191,8 @@
             }
         } catch (e) {
             console.error(e);
-            const alertBox = document.getElementById('error-alert');
-            alertBox.style.display = 'block';
-            alertBox.innerHTML = `⚠️ Error loading dashboard: ${e.message}`;
-            document.getElementById('mgmt-list').innerHTML = '<p style="text-align:center;">Data failed to load.</p>';
+            document.getElementById('error-alert').style.display = 'block';
+            document.getElementById('error-alert').innerHTML = `⚠️ Error loading data: ${e.message}`;
         }
     }
 
@@ -196,69 +205,78 @@
     }
 
     function updateMetrics() {
-        const total = data.length;
-        document.getElementById('count-total').innerText = total;
-        document.getElementById('count-live').innerText = data.filter(r => r.status === 'accepted').length;
-        document.getElementById('count-rejected').innerText = data.filter(r => r.status === 'rejected').length;
-        document.getElementById('count-conversion').innerText = total === 0 ? "0%" : ((total / SIMULATED_REQUESTS_SENT) * 100).toFixed(1) + '%';
+        const active = data.filter(r => !r.isDeleted);
+        document.getElementById('count-total').innerText = active.length;
+        document.getElementById('count-live').innerText = active.filter(r => r.status === 'accepted').length;
+        document.getElementById('count-rejected').innerText = active.filter(r => r.status === 'rejected').length + data.filter(r => r.isDeleted).length;
     }
 
-    function renderMgmt() {
-        document.getElementById('mgmt-list').innerHTML = data.map(r => {
-            
-            // Generate the sleek Verified Badge with Hover diagnostics
-            let verifyHtml = '';
-            if (r.verifiedPurchase) {
-                verifyHtml = `<div class="v-badge v-badge-yes" title="${r.verificationNote || 'Verified Purchase'}">✓ Verified Buyer</div>`;
-            } else if (r.orderId) {
-                // If they provided an order ID but it failed, show the warning and the exact reason on hover!
-                verifyHtml = `<div class="v-badge v-badge-no" title="Diagnostic: ${r.verificationNote || 'Could not verify.'}">⚠️ Unverified (Hover for reason)</div>`;
-            } else {
-                verifyHtml = `<div class="v-badge v-badge-no" title="User did not provide an Order ID.">Unverified (No Order ID)</div>`;
-            }
+    function renderLists() {
+        const activeData = data.filter(r => !r.isDeleted);
+        const trashData = data.filter(r => r.isDeleted);
 
-            return `
-            <div class="review-card status-border-${r.status}">
-                <div class="card-main">
+        document.getElementById('mgmt-list').innerHTML = activeData.length ? activeData.map(r => buildCard(r, false)).join('') : '<p style="text-align:center;">No active reviews.</p>';
+        document.getElementById('trash-list').innerHTML = trashData.length ? trashData.map(r => buildCard(r, true)).join('') : '<p style="text-align:center;">Trash is empty.</p>';
+    }
+
+    function buildCard(r, isTrash) {
+        let verifyHtml = '';
+        if (r.verifiedPurchase) {
+            verifyHtml = `<div class="v-badge v-badge-yes" title="${r.verificationNote || 'Verified'}">✓ Verified Buyer</div>`;
+        } else {
+            verifyHtml = `<div class="v-badge v-badge-no" title="${r.verificationNote || 'Unverified'}">⚠️ Unverified (Hover)</div>`;
+        }
+
+        const customerBox = r.email 
+            ? `<a href="https://admin.shopify.com/customers?query=${encodeURIComponent(r.email)}" target="_blank" class="customer-link" title="Open Customer Account">${r.userId}</a>` 
+            : `<strong style="font-size: 1.05rem;">${r.userId}</strong>`;
+
+        return `
+        <div class="review-card status-border-${r.status}">
+            <div class="card-main">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        ${customerBox}
+                        <div style="font-size: 0.85rem; color: var(--text-light); margin-top: 5px;">${r.email || 'No email provided'}</div>
+                    </div>
+                    
+                    <div class="status-group">
+                        <button onclick="updateStatus('${r._id}', 'accepted')" class="s-btn acc ${r.status==='accepted'?'active':''}" title="Accept">✓</button>
+                        <button onclick="updateStatus('${r._id}', 'hold')" class="s-btn hld ${r.status==='hold'?'active':''}" title="Hold">⏸</button>
+                        <button onclick="updateStatus('${r._id}', 'rejected')" class="s-btn rej ${r.status==='rejected'?'active':''}" title="Reject">✕</button>
+                    </div>
+                </div>
+
+                <div class="stars" style="margin-top:15px;">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
+                <div class="headline">${r.headline || 'No Headline'}</div>
+                <div class="comment">${r.comment}</div>
+                
+                <button class="reply-toggle" onclick="document.getElementById('reply-box-${r._id}').style.display = 'block'">💬 Reply to Customer</button>
+                <div id="reply-box-${r._id}" class="reply-panel" style="display: ${r.reply ? 'block' : 'none'};">
+                    <textarea id="reply-text-${r._id}" class="reply-input" placeholder="Type your public reply...">${r.reply || ''}</textarea>
+                    <button class="reply-btn" onclick="saveReply('${r._id}')">Publish Reply</button>
+                </div>
+            </div>
+            
+            <div class="card-side">
+                <div>
                     <div class="pid">Product ID: ${r.itemId}</div>
-                    <div class="stars">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
-                    <div class="headline">${r.headline || 'No Headline'}</div>
-                    <div class="comment">${r.comment}</div>
+                    ${r.orderId ? `<div style="font-size: 0.9rem; margin-bottom: 10px; color: var(--text-light); font-weight: 600;">Order #${r.orderId}</div>` : ''}
+                    ${verifyHtml}
                 </div>
-                <div class="card-side">
-                    <div class="action-box">
-                        <select class="status-select" onchange="updateStatus('${r._id}', this.value)" style="border-color: var(--${r.status === 'accepted' ? 'green' : r.status === 'rejected' ? 'red' : r.status === 'hold' ? 'orange' : 'border'})">
-                            <option value="pending" ${r.status==='pending'?'selected':''}>⏳ Pending</option>
-                            <option value="accepted" ${r.status==='accepted'?'selected':''}>✅ Accept</option>
-                            <option value="hold" ${r.status==='hold'?'selected':''}>⏸️ On Hold</option>
-                            <option value="rejected" ${r.status==='rejected'?'selected':''}>❌ Reject</option>
-                        </select>
-                    </div>
-                    
-                    <div class="user-info">
-                        <strong>${r.userId}</strong><br>
-                        ${r.email || 'No email provided'}<br>
-                        ${r.orderId ? `Order #${r.orderId}<br>` : ''}
-                        <div style="margin-top: 8px;">${verifyHtml}</div>
-                    </div>
-                    
-                    <div class="reply-container">
-                        <textarea id="reply-${r._id}" class="reply-input" placeholder="Write a public reply...">${r.reply || ''}</textarea>
-                        <button class="reply-btn" onclick="saveReply('${r._id}')">Save Reply</button>
-                    </div>
 
-                    <div style="text-align: right;">
-                        <button class="delete-btn" onclick="deleteReview('${r._id}')">Delete Forever</button>
-                    </div>
+                <div style="padding-top: 20px;">
+                    ${isTrash ? 
+                        `<button class="restore-btn" onclick="toggleTrash('${r._id}', false)">↺ Restore Review</button>` : 
+                        `<button class="delete-btn" onclick="toggleTrash('${r._id}', true)">🗑️ Move to Trash</button>`
+                    }
                 </div>
-            </div>`;
-        }).join('');
-            
-        if(data.length === 0) document.getElementById('mgmt-list').innerHTML = '<p style="text-align:center;">No reviews found.</p>';
+            </div>
+        </div>`;
     }
 
     function renderPub() {
-        const acc = data.filter(r => r.status === 'accepted');
+        const acc = data.filter(r => r.status === 'accepted' && !r.isDeleted);
         document.getElementById('pub-list').innerHTML = acc.map(r => `
             <div style="padding: 35px 0; border-bottom: 1px solid var(--border);">
                 <div style="font-weight:700; font-size:1.15rem; color:var(--primary);">${r.userId}</div>
@@ -275,17 +293,17 @@
     }
 
     async function saveReply(id) {
-        const replyText = document.getElementById(`reply-${id}`).value;
-        await fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({reply: replyText}) });
-        if(window.shopify) { window.shopify.toast.show('Reply saved & published'); }
+        const text = document.getElementById(`reply-text-${id}`).value;
+        await fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({reply: text}) });
+        if(window.shopify) { window.shopify.toast.show('Reply published'); }
         load();
     }
 
-    async function deleteReview(id) {
-        if(confirm('Delete permanently?')) {
-            await fetch(`${API}/reviews/${id}`, { method: 'DELETE' });
-            load();
-        }
+    async function toggleTrash(id, isDeleted) {
+        if(isDeleted && !confirm('Move to trash? It will be deleted forever in 28 days.')) return;
+        await fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({isDeleted}) });
+        if(window.shopify) { window.shopify.toast.show(isDeleted ? 'Moved to Trash' : 'Restored'); }
+        load();
     }
 
     load();
