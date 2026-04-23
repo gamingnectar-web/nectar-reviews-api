@@ -3,7 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
-const crypto = require('crypto'); // Cryptographic engine for Magic Links
+const crypto = require('crypto'); 
 
 const app = express();
 
@@ -34,7 +34,7 @@ const reviewSchema = new mongoose.Schema({
     comment: { type: String },
     reply: { type: String, default: '' },
     attributes: { type: Map, of: Number }, 
-    productTags: { type: [String], default: [] }, // Captures Vendor & Tags
+    productTags: { type: [String], default: [] }, 
     status: { type: String, enum: ['pending', 'accepted', 'rejected', 'hold'], default: 'pending' },
     verifiedPurchase: { type: Boolean, default: false },
     verificationNote: { type: String, default: '' }, 
@@ -45,7 +45,6 @@ const reviewSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 });
 
-// 28-Day Auto-Delete (TTL Index)
 reviewSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 2419200 });
 const Review = mongoose.model('Review', reviewSchema, 'reviews'); 
 
@@ -53,7 +52,14 @@ const settingsSchema = new mongoose.Schema({
     widgetId: { type: String, default: 'default' }, 
     autoApproveVerified: { type: Boolean, default: false },
     autoApproveMinStars: { type: Number, default: 4 },
-    filters: { type: Array, default: [] }
+    filters: { type: Array, default: [] },
+    widgetStyles: {
+        primaryColor: { type: String, default: '#000000' },
+        starColor: { type: String, default: '#fbbf24' },
+        titleSize: { type: Number, default: 26 },
+        textSize: { type: Number, default: 15 },
+        borderRadius: { type: Number, default: 12 }
+    }
 });
 const Settings = mongoose.model('Settings', settingsSchema, 'settings');
 
@@ -111,7 +117,14 @@ async function verifyShopifyOrder(orderId, email, productId) {
 // ==========================================
 app.get('/', (req, res) => res.send('🚀 Nectar API Live'));
 
-// THE FIX: Uses $ne to ensure old test reviews still load properly
+// Widget Styles Route
+app.get('/api/widget/styles', async (req, res) => {
+    try {
+        const config = await Settings.findOne({ widgetId: 'default' });
+        res.status(200).json(config ? config.widgetStyles : {});
+    } catch (e) { res.status(500).json({}); }
+});
+
 app.get('/api/reviews/:itemId', async (req, res) => {
     try { 
         const reviews = await Review.find({ 
@@ -125,7 +138,6 @@ app.get('/api/reviews/:itemId', async (req, res) => {
     } catch (error) { res.status(500).json({ error: "Fetch error" }); }
 });
 
-// SINGLE REVIEW POST
 app.post('/api/reviews', async (req, res) => {
     try {
         let isVerified = req.body.verifiedPurchase; 
@@ -133,20 +145,17 @@ app.post('/api/reviews', async (req, res) => {
         let finalStatus = 'pending';
         let flaggedSpam = false;
 
-        // 1. Verify if needed
         if (!isVerified && req.body.orderId && req.body.email) {
             const checkResult = await verifyShopifyOrder(req.body.orderId, req.body.email, req.body.itemId);
             isVerified = checkResult.verified;
             vNote = checkResult.note;
         } else if (!isVerified && !req.body.orderId) vNote = "No Order ID provided.";
 
-        // 2. Spam Trap (More than 2 unverified from same email in 24h)
         if (!isVerified && req.body.email) {
             const recentUnverified = await Review.countDocuments({ email: req.body.email, verifiedPurchase: false, createdAt: { $gte: new Date(Date.now() - 24*60*60*1000) }});
             if (recentUnverified >= 2) { flaggedSpam = true; finalStatus = 'rejected'; vNote = "SPAM FLAG: Too many unverified reviews."; }
         }
 
-        // 3. Auto-Approve Rules
         const config = await Settings.findOne({ widgetId: 'default' });
         if (!flaggedSpam && config && config.autoApproveVerified && isVerified) {
             if (req.body.rating >= config.autoApproveMinStars) finalStatus = 'accepted';
@@ -167,13 +176,10 @@ app.post('/api/reviews', async (req, res) => {
 // ==========================================
 // MAGIC LINK BULK ROUTES
 // ==========================================
-// Fetch Order Items securely via Magic Link
 app.get('/api/magic-link/order', async (req, res) => {
     const { orderId, email, token } = req.query;
-    
     if (!orderId || !email || !token) return res.status(400).json({ error: "Missing parameters" });
     
-    // Cryptographic lock check
     const expectedToken = generateMagicToken(orderId, email);
     if (token !== expectedToken) return res.status(403).json({ error: "Invalid or expired secure link." });
 
@@ -196,7 +202,7 @@ app.get('/api/magic-link/order', async (req, res) => {
                     productId: item.product_id,
                     variantId: item.variant_id,
                     name: item.title,
-                    image: null // Frontend fetches imagery
+                    image: null 
                 })).filter(item => item.productId); 
 
                 return res.status(200).json({ products, customerName: order.customer?.first_name || "Customer" });
@@ -206,10 +212,8 @@ app.get('/api/magic-link/order', async (req, res) => {
     } catch (err) { return res.status(500).json({ error: "Failed to fetch order details" }); }
 });
 
-// Submit Bulk Reviews securely via Magic Link
 app.post('/api/reviews/bulk', async (req, res) => {
     const { orderId, email, token, reviews } = req.body; 
-
     if (token !== generateMagicToken(orderId, email)) return res.status(403).json({ error: "Invalid secure link." });
 
     try {
@@ -223,28 +227,18 @@ app.post('/api/reviews/bulk', async (req, res) => {
             }
 
             const newReview = new Review({
-                itemId: String(rev.itemId),
-                userId: rev.userId,
-                email: email,
-                isAnonymous: rev.isAnonymous,
-                rating: rev.rating,
-                headline: rev.headline,
-                comment: rev.comment,
-                attributes: rev.attributes || {},
-                productTags: rev.productTags || [],
-                verifiedPurchase: true, // AUTO-VERIFIED BY MAGIC LINK
-                verificationNote: "Auto-Verified via Email Magic Link",
-                orderId: orderId,
-                status: finalStatus
+                itemId: String(rev.itemId), userId: rev.userId, email: email,
+                isAnonymous: rev.isAnonymous, rating: rev.rating, headline: rev.headline,
+                comment: rev.comment, attributes: rev.attributes || {}, productTags: rev.productTags || [],
+                verifiedPurchase: true, verificationNote: "Auto-Verified via Email Magic Link",
+                orderId: orderId, status: finalStatus
             });
             savedReviews.push(await newReview.save());
         }
-
         res.status(201).json({ message: "Successfully saved bulk reviews", count: savedReviews.length });
     } catch (error) { res.status(400).json({ error: "Failed to submit bulk reviews" }); }
 });
 
-// Helper route to generate a link for testing (Admin only)
 app.get('/api/admin/generate-link', (req, res) => {
     const { orderId, email } = req.query;
     if(!orderId || !email) return res.status(400).send("Need orderId and email");
