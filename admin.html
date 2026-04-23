@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Nectar Reviews Admin</title>
+    <title>Reviews Admin</title>
     <meta name="shopify-api-key" content="9b0bf096b37faf6dc0b19037b2d9d62a" />
     <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
 
@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
-        :root { --bg: #f4f6f8; --card: #ffffff; --border: #ebebeb; --primary: #303030; --text: #202223; --text-light: #6d7175; --star: #ffc700; --green: #008060; --red: #d82c0d; --orange: #e2a500; --sidebar-bg: #ebebeb;}
+        :root { --bg: #f4f6f8; --card: #ffffff; --border: #ebebeb; --primary: #1a1a1a; --text: #202223; --text-light: #6d7175; --star: #ffc700; --green: #008060; --red: #d82c0d; --orange: #e2a500; --sidebar-bg: #ebebeb; --blue: #005bd3;}
         body, button, input, select, textarea { font-family: 'Inter', sans-serif !important; }
         body { background: var(--bg); color: var(--text); margin: 0; display: flex; min-height: 100vh;}
         
@@ -21,124 +21,110 @@
         .tab-btn:hover { background: rgba(0,0,0,0.05); }
         .tab-btn.active { background: #ffffff; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
         
-        .main-content { flex: 1; padding: 40px; overflow-y: auto; width: 100%;}
+        .main-content { flex: 1; padding: 40px; overflow-y: auto; width: 100%; box-sizing: border-box;}
         .view { display: none; }
         .view.active { display: block; }
         
-        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 25px; margin-bottom: 40px; }
-        .metric-card { background: var(--card); padding: 35px 30px; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: center; position: relative; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);}
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 25px; margin-bottom: 40px; }
+        .metric-card { background: var(--card); padding: 35px 30px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05);}
         .metric-card h1 { font-size: 3rem; margin: 0; color: var(--primary); line-height: 1; }
         .metric-card p { color: var(--text-light); font-weight: 600; margin: 10px 0 0 0; font-size: 0.85rem; text-transform: uppercase; }
 
-        .review-card { background: var(--card); border: 1px solid var(--border); padding: 30px; margin-bottom: 20px; border-radius: 12px; display: flex; justify-content: space-between; gap: 40px; border-left: 4px solid #c1c2c3; }
-        .status-border-accepted { border-left-color: var(--green); }
-
         .settings-panel { background: var(--card); padding: 40px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); width: 100%; box-sizing: border-box;}
         .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; border-bottom: 1px solid var(--border); gap: 15px;}
-        .setting-info h3 { margin: 0 0 5px 0; color: var(--primary); font-size: 1rem;}
-        .setting-info p { margin: 0; color: var(--text-light); font-size: 0.85rem; max-width: 500px;}
+        .setting-row:last-child { border-bottom: none; }
         
-        .search-input, .filter-select { padding: 10px 14px; border-radius: 8px; border: 1px solid #c9cccf; font-size: 0.95rem; background: #ffffff;}
-        .post-btn { background: var(--primary); color: white; border: none; padding: 12px 24px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: 0.2s;}
-        .post-btn:hover { background: #000; }
+        .code-block { background: #1a1a1a; color: #f4f6f8; padding: 20px; border-radius: 8px; font-family: 'Courier New', Courier, monospace; font-size: 0.9rem; position: relative; margin: 15px 0; overflow-x: auto; white-space: pre;}
+        .copy-btn { position: absolute; top: 10px; right: 10px; background: var(--blue); color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;}
         
         .sub-tab-btn { background: none; border: none; padding: 10px 5px; font-weight: 600; cursor: pointer; color: var(--text-light); font-size: 0.95rem; border-bottom: 3px solid transparent; }
         .sub-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
 
-        /* Automation Hero Box */
-        .automation-box { background: #e0f2fe; border: 1px solid #bae6fd; padding: 25px; border-radius: 12px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center;}
-        .automation-box h4 { margin: 0 0 5px 0; color: #004494; }
-        .automation-box p { margin: 0; font-size: 0.9rem; color: #005bd3; }
+        .alert-box { background: #e0f2fe; border: 1px solid #bae6fd; padding: 20px; border-radius: 8px; margin-bottom: 25px; color: #004494; font-size: 0.95rem;}
+        .post-btn { background: var(--primary); color: white; border: none; padding: 12px 24px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: 0.2s;}
     </style>
 </head>
 <body>
 
 <div class="app-sidebar">
-    <div class="sidebar-title">Dashboard</div>
+    <div class="sidebar-title">StarStream Admin</div>
     <button class="tab-btn active" onclick="tab('dashboard')">Overview</button>
     <button class="tab-btn" onclick="tab('manage')">Manage Reviews</button>
-    <button class="tab-btn" onclick="tab('bin')">Bin & Spam</button> 
+    
     <div class="sidebar-title" style="margin-top: 20px;">Configuration</div>
     <button class="tab-btn" onclick="tab('settings')">Rules & Sliders</button> 
-    <button class="tab-btn" onclick="tab('designer')">Widget Customizer 🎨</button>
+    <button class="tab-btn" onclick="tab('designer')">Widget Customizer</button>
+    
+    <div class="sidebar-title" style="margin-top: 20px;">Support</div>
+    <button class="tab-btn" onclick="tab('manual-install')">Manual Installation</button>
 </div>
 
 <div class="main-content">
     
     <div id="dashboard" class="view active">
-        <h2>Store Overview</h2>
+        <h2>Store Performance</h2>
         <div class="metrics-grid">
-            <div class="metric-card"><h1>0</h1><p>Total Processed</p></div>
-            <div class="metric-card"><h1>0</h1><p>Live on Store</p></div>
+            <div class="metric-card"><h1 id="count-total">0</h1><p>Reviews Captured</p></div>
+            <div class="metric-card"><h1 id="count-live">0</h1><p>Live on Storefront</p></div>
         </div>
     </div>
 
-    <div id="manage" class="view"><h2>Review Management</h2><div id="mgmt-list">Loading...</div></div>
-
     <div id="settings" class="view">
-        <h2>Rules & Dynamic Sliders</h2>
+        <h2>Automation Rules</h2>
         <div class="settings-panel">
-            <p>Your existing rule logic goes here...</p>
-        </div>
+            <p>Define your auto-approval settings and custom sliders here...</p>
+            </div>
     </div>
 
     <div id="designer" class="view">
-        <h2>Widget Customizer</h2>
-        
+        <h2>Appearance Designer</h2>
         <div style="display: flex; gap: 25px; border-bottom: 2px solid var(--border); margin-bottom: 30px;">
             <button class="sub-tab-btn active" onclick="subTab('designer-full')">Full Widget</button>
             <button class="sub-tab-btn" onclick="subTab('designer-card')">On Product Card</button>
-            <button class="sub-tab-btn" onclick="subTab('designer-badge')">Small Badge</button>
+            <button class="sub-tab-btn" onclick="subTab('designer-badge')">Badge Overlay</button>
         </div>
-
         <div id="designer-full" class="sub-view active">
             <div class="settings-panel">
-                <div class="setting-row"><h3>Brand Color</h3><input type="color" id="style-primary"></div>
-                <button class="post-btn" onclick="saveAllStyles()">Save Changes</button>
-            </div>
-        </div>
-
-        <div id="designer-card" class="sub-view" style="display: none;">
-            
-            <div class="automation-box">
-                <div>
-                    <h4>One-Click Installation</h4>
-                    <p>Clicking this will open your theme editor so you can place the stars on your collection page.</p>
-                </div>
-                <button class="post-btn" style="background: #005bd3;" onclick="openThemeEditor('collection')">Open Theme Editor</button>
-            </div>
-
-            <div class="settings-panel">
-                <div class="setting-row">
-                    <div class="setting-info"><h3>Star Size (px)</h3><p>Adjust how large the stars appear on product cards.</p></div>
-                    <input type="number" id="card-star-size" class="search-input" style="width: 80px;">
-                </div>
-                <div class="setting-row">
-                    <div class="setting-info"><h3>Font Size (px)</h3><p>The size of the 5.0 and (count) text.</p></div>
-                    <input type="number" id="card-font-size" class="search-input" style="width: 80px;">
-                </div>
-                <div class="setting-row">
-                    <div class="setting-info"><h3>Show Review Count</h3><p>E.g. (12)</p></div>
-                    <label class="switch"><input type="checkbox" id="card-show-count"><span class="slider"></span></label>
-                </div>
-                <div class="setting-row" style="border-bottom: none;">
-                    <div class="setting-info"><h3>Alignment</h3></div>
-                    <select id="card-alignment" class="filter-select">
-                        <option value="flex-start">Left</option>
-                        <option value="center">Center</option>
-                        <option value="flex-end">Right</option>
-                    </select>
-                </div>
-                <button class="post-btn" style="width: 100%; margin-top: 20px;" onclick="saveAllStyles()">Save Card Design</button>
+                <button class="post-btn" onclick="saveAllStyles()">Save Brand Identity</button>
             </div>
         </div>
     </div>
+
+    <div id="manual-install" class="view">
+        <h2>Manual Installation Guide</h2>
+        <div class="alert-box">
+            <strong>Custom Theme?</strong> If you aren't using a standard Shopify 2.0 theme, or want to hard-code StarStream into your specific Liquid files, use the snippets below.
+        </div>
+
+        <div class="settings-panel">
+            <h3>1. Main Product Page Widget</h3>
+            <p>Paste this code inside your <code>main-product.liquid</code> file, exactly where you want the reviews to appear (usually below the description).</p>
+            <div class="code-block" id="code-product">
+&lt;div class="starstream-widget" 
+     data-product-id="&#123;&#123; product.id &#125;&#125;" 
+     data-shop="&#123;&#123; shop.domain &#125;&#125;"&gt;
+&lt;/div&gt;
+&lt;script src="https://nectar-reviews-api.onrender.com/client-widget.js"&gt;&lt;/script&gt;</div>
+            <button class="post-btn" style="background: var(--blue);" onclick="copyCode('code-product')">Copy Snippet</button>
+        </div>
+
+        <div class="settings-panel">
+            <h3>2. Collection Page Stars (Product Card)</h3>
+            <p>Paste this inside your <code>card-product.liquid</code> file (under the price or title) to show star ratings in lists.</p>
+            <div class="code-block" id="code-card">
+&lt;div class="starstream-card-stars" 
+     data-product-id="&#123;&#123; product.id &#125;&#125;" 
+     data-shop="&#123;&#123; shop.domain &#125;&#125;"&gt;
+&lt;/div&gt;</div>
+            <button class="post-btn" style="background: var(--blue);" onclick="copyCode('code-card')">Copy Snippet</button>
+        </div>
+    </div>
+
 </div>
 
 <script>
-    const API = '/api';
     const urlParams = new URLSearchParams(window.location.search);
-    const SHOP_DOMAIN = urlParams.get('shop') || 'your-dev-store.myshopify.com';
+    const SHOP_DOMAIN = urlParams.get('shop') || 'demo-store.myshopify.com';
 
     function tab(name) {
         document.querySelectorAll('.view, .tab-btn').forEach(el => el.classList.remove('active'));
@@ -153,43 +139,14 @@
         event.currentTarget.classList.add('active');
     }
 
-    // SAAS AUTOMATION: Deep Link to Theme Editor
-    function openThemeEditor(pageType) {
-        // This opens the default theme editor. 
-        // /editor?addAppBlock=[App ID]/[Block Handle]&page=[Page URL]
-        const editorUrl = `https://admin.shopify.com/store/${SHOP_DOMAIN.replace('.myshopify.com', '')}/themes/current/editor?context=apps`;
-        window.open(editorUrl, '_blank');
+    function copyCode(id) {
+        const text = document.getElementById(id).innerText;
+        navigator.clipboard.writeText(text);
+        if(window.shopify) window.shopify.toast.show('Snippet Copied!');
+        else alert('Copied to clipboard!');
     }
 
-    async function load() {
-        const res = await fetch(`${API}/admin/settings?shopDomain=${SHOP_DOMAIN}`);
-        if(res.ok) {
-            const s = await res.json();
-            // Load Card Styles
-            if(s.cardStyles) {
-                document.getElementById('card-star-size').value = s.cardStyles.starSize || 14;
-                document.getElementById('card-font-size').value = s.cardStyles.fontSize || 13;
-                document.getElementById('card-show-count').checked = s.cardStyles.showCount !== false;
-                document.getElementById('card-alignment').value = s.cardStyles.alignment || 'flex-start';
-            }
-        }
-    }
-
-    async function saveAllStyles() {
-        const payload = {
-            shopDomain: SHOP_DOMAIN,
-            cardStyles: {
-                starSize: parseInt(document.getElementById('card-star-size').value),
-                fontSize: parseInt(document.getElementById('card-font-size').value),
-                showCount: document.getElementById('card-show-count').checked,
-                alignment: document.getElementById('card-alignment').value
-            }
-        };
-        await fetch(API + '/admin/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        alert("Published to Store!");
-    }
-
-    load();
+    // (Include your existing Load/Save functions here, rebranded to StarStream)
 </script>
 </body>
 </html>
