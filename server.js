@@ -49,7 +49,7 @@ reviewSchema.index({ shopDomain: 1, itemId: 1 });
 const Review = mongoose.model('Review', reviewSchema, 'reviews'); 
 
 const settingsSchema = new mongoose.Schema({
-    shopDomain: { type: String, required: true, unique: true }, // NEW: One settings doc per store
+    shopDomain: { type: String, required: true, unique: true }, 
     autoApproveVerified: { type: Boolean, default: false },
     autoApproveMinStars: { type: Number, default: 4 },
     filters: { type: Array, default: [] },
@@ -59,7 +59,10 @@ const settingsSchema = new mongoose.Schema({
         starColor: { type: String, default: '#fbbf24' },
         titleSize: { type: Number, default: 26 },
         textSize: { type: Number, default: 15 },
-        borderRadius: { type: Number, default: 12 }
+        borderRadius: { type: Number, default: 12 },
+        // NEW: Empty State Customization
+        emptyStateMode: { type: String, default: 'stars_text' }, // 'hidden', 'text_only', 'stars_text'
+        emptyStateText: { type: String, default: 'No reviews yet. Be the first to leave one!' }
     }
 });
 const Settings = mongoose.model('Settings', settingsSchema, 'settings');
