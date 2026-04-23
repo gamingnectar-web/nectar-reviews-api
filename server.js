@@ -3,6 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
+const crypto = require('crypto'); // NEW: Cryptographic engine for Magic Links
 
 const app = express();
 
@@ -30,7 +31,7 @@ const reviewSchema = new mongoose.Schema({
     comment: { type: String },
     reply: { type: String, default: '' },
     attributes: { type: Map, of: Number }, 
-    productTags: { type: [String], default: [] }, // NEW: Stores Tags & Metafields from Shopify
+    productTags: { type: [String], default: [] }, 
     status: { type: String, enum: ['pending', 'accepted', 'rejected', 'hold'], default: 'pending' },
     verifiedPurchase: { type: Boolean, default: false },
     verificationNote: { type: String, default: '' }, 
@@ -48,7 +49,7 @@ const settingsSchema = new mongoose.Schema({
     widgetId: { type: String, default: 'default' }, 
     autoApproveVerified: { type: Boolean, default: false },
     autoApproveMinStars: { type: Number, default: 4 },
-    filters: { type: Array, default: [] } // NEW: Dynamic Filter Rules
+    filters: { type: Array, default: [] }
 });
 const Settings = mongoose.model('Settings', settingsSchema, 'settings');
 
@@ -61,8 +62,15 @@ async function initSettings() {
 initSettings();
 
 // ==========================================
-// VERIFICATION LOGIC
+// MAGIC LINK & VERIFICATION LOGIC
 // ==========================================
+// Uses your Shopify Secret to create an unbreakable hash.
+function generateMagicToken(orderId, email) {
+    const secret = process.env.SHOPIFY_API_SECRET || 'fallback-nectar-secret';
+    const data = `${String(orderId).trim().toLowerCase()}:${String(email).trim().toLowerCase()}`;
+    return crypto.createHmac('sha256', secret).update(data).digest('hex');
+}
+
 async function verifyShopifyOrder(orderId, email, productId) {
     const STORE_URL = process.env.SHOPIFY_STORE_URL; 
     const CLIENT_ID = process.env.SHOPIFY_API_KEY; 
@@ -105,6 +113,7 @@ app.get('/api/reviews/:itemId', async (req, res) => {
     catch (error) { res.status(500).json({ error: "Fetch error" }); }
 });
 
+// SINGLE REVIEW POST
 app.post('/api/reviews', async (req, res) => {
     try {
         let isVerified = req.body.verifiedPurchase; 
@@ -129,26 +138,111 @@ app.post('/api/reviews', async (req, res) => {
         }
 
         const newReview = new Review({
-            itemId: String(req.body.itemId),
-            userId: req.body.userId,
-            email: req.body.email,
-            isAnonymous: req.body.isAnonymous,
-            rating: req.body.rating,
-            headline: req.body.headline,
-            comment: req.body.comment,
-            attributes: req.body.attributes,
-            productTags: req.body.productTags, // Captures Tags!
-            verifiedPurchase: isVerified, 
-            verificationNote: vNote,
-            orderId: req.body.orderId, 
-            status: finalStatus,
-            isSpam: flaggedSpam,
-            isDeleted: flaggedSpam,
-            deletedAt: flaggedSpam ? new Date() : null
+            itemId: String(req.body.itemId), userId: req.body.userId, email: req.body.email,
+            isAnonymous: req.body.isAnonymous, rating: req.body.rating, headline: req.body.headline,
+            comment: req.body.comment, attributes: req.body.attributes, productTags: req.body.productTags,
+            verifiedPurchase: isVerified, verificationNote: vNote, orderId: req.body.orderId, 
+            status: finalStatus, isSpam: flaggedSpam, isDeleted: flaggedSpam, deletedAt: flaggedSpam ? new Date() : null
         });
 
         res.status(201).json(await newReview.save());
     } catch (error) { res.status(400).json({ error: "Failed to submit" }); }
+});
+
+// ==========================================
+// MAGIC LINK BULK ROUTES (NEW!)
+// ==========================================
+
+// 1. Fetch Order Items securely via Magic Link
+app.get('/api/magic-link/order', async (req, res) => {
+    const { orderId, email, token } = req.query;
+    
+    if (!orderId || !email || !token) return res.status(400).json({ error: "Missing parameters" });
+    
+    // Cryptographic lock check
+    const expectedToken = generateMagicToken(orderId, email);
+    if (token !== expectedToken) return res.status(403).json({ error: "Invalid or expired secure link." });
+
+    // If the lock opens, fetch the order from Shopify
+    const STORE_URL = process.env.SHOPIFY_STORE_URL; 
+    const CLIENT_ID = process.env.SHOPIFY_API_KEY; 
+    const CLIENT_SECRET = process.env.SHOPIFY_API_SECRET; 
+    const authString = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
+    const rawNumber = orderId.replace(/\D/g, ""); 
+
+    try {
+        const response = await fetch(`https://${STORE_URL}/admin/api/2024-01/orders.json?name=${encodeURIComponent(rawNumber)}&status=any`, {
+            headers: { 'Authorization': `Basic ${authString}`, 'Content-Type': 'application/json' }
+        });
+        const data = await response.json();
+        
+        if (data.orders && data.orders.length > 0) {
+            const order = data.orders.find(o => String(o.order_number) === rawNumber || o.name.includes(rawNumber));
+            if (order && order.email.toLowerCase() === email.toLowerCase()) {
+                
+                // Return only the actual products (ignore shipping, tips, etc.)
+                const products = order.line_items.map(item => ({
+                    productId: item.product_id,
+                    variantId: item.variant_id,
+                    name: item.title,
+                    image: null // We will fetch images on the frontend
+                })).filter(item => item.productId); // Must have a product ID
+
+                return res.status(200).json({ products, customerName: order.customer?.first_name || "Customer" });
+            }
+        }
+        return res.status(404).json({ error: "Order not found" });
+    } catch (err) {
+        return res.status(500).json({ error: "Failed to fetch order details" });
+    }
+});
+
+// 2. Submit Bulk Reviews securely via Magic Link
+app.post('/api/reviews/bulk', async (req, res) => {
+    const { orderId, email, token, reviews } = req.body; // 'reviews' is an array of review objects
+
+    if (token !== generateMagicToken(orderId, email)) return res.status(403).json({ error: "Invalid secure link." });
+
+    try {
+        const config = await Settings.findOne({ widgetId: 'default' });
+        const savedReviews = [];
+
+        for (const rev of reviews) {
+            let finalStatus = 'pending';
+            // Auto-approve logic because the Magic Link guarantees it's verified!
+            if (config && config.autoApproveVerified && rev.rating >= config.autoApproveMinStars) {
+                finalStatus = 'accepted';
+            }
+
+            const newReview = new Review({
+                itemId: String(rev.itemId),
+                userId: rev.userId,
+                email: email,
+                isAnonymous: rev.isAnonymous,
+                rating: rev.rating,
+                headline: rev.headline,
+                comment: rev.comment,
+                attributes: rev.attributes || {},
+                verifiedPurchase: true, // AUTO-VERIFIED BY MAGIC LINK
+                verificationNote: "Auto-Verified via Email Magic Link",
+                orderId: orderId,
+                status: finalStatus
+            });
+            savedReviews.push(await newReview.save());
+        }
+
+        res.status(201).json({ message: "Successfully saved bulk reviews", count: savedReviews.length });
+    } catch (error) {
+        res.status(400).json({ error: "Failed to submit bulk reviews" });
+    }
+});
+
+// Helper route to generate a link for testing (Admin only)
+app.get('/api/admin/generate-link', (req, res) => {
+    const { orderId, email } = req.query;
+    if(!orderId || !email) return res.status(400).send("Need orderId and email");
+    const token = generateMagicToken(orderId, email);
+    res.send(`?order=${orderId}&email=${email}&token=${token}`);
 });
 
 // ==========================================
