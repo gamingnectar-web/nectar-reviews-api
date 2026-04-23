@@ -263,6 +263,11 @@
     let savedProfiles = [];
     let openReplyBoxes = new Set();
 
+    // NEW: Multi-Tenant Detection
+    // Gets the shop domain from the URL (e.g. ?shop=cool-boards.myshopify.com) provided by Shopify App Bridge
+    const urlParams = new URLSearchParams(window.location.search);
+    const SHOP_DOMAIN = urlParams.get('shop') || 'your-dev-store.myshopify.com'; // Change fallback for testing outside Shopify
+
     function tab(name) {
         document.querySelectorAll('.view, .tab-btn').forEach(el => el.classList.remove('active'));
         document.getElementById(name).classList.add('active');
@@ -273,13 +278,15 @@
     async function load() {
         try {
             document.getElementById('error-alert').style.display = 'none';
-            const res = await fetch(API + '/admin/reviews?t=' + Date.now());
+            // Passing shopDomain to the backend
+            const res = await fetch(`${API}/admin/reviews?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
             if (!res.ok) throw new Error(`Server status: ${res.status}`);
             
             data = await res.json();
             updateMetrics();
 
-            const setRes = await fetch(API + '/admin/settings?t=' + Date.now());
+            // Passing shopDomain to the backend
+            const setRes = await fetch(`${API}/admin/settings?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
             if(setRes.ok) {
                 const settings = await setRes.json();
                 if(settings) {
@@ -311,25 +318,26 @@
         }
     }
 
-    function updateLivePreview() {
-        const prim = document.getElementById('style-primary').value;
-        const star = document.getElementById('style-star').value;
-        const tSize = document.getElementById('style-title-size').value + 'px';
-        const txtSize = document.getElementById('style-text-size').value + 'px';
-        const rad = document.getElementById('style-radius').value + 'px';
+    // ... [Keep updateLivePreview, renderRules, addFilterRule, removeRule, renderProfiles, addAttributeProfile, removeProfile functions exactly the same] ...
 
-        document.getElementById('prev-btn').style.background = prim;
-        document.getElementById('prev-btn').style.borderRadius = rad;
-        document.getElementById('prev-title').style.fontSize = tSize;
-        document.getElementById('prev-stars').style.color = star;
-        document.getElementById('prev-text').style.fontSize = txtSize;
-        document.getElementById('prev-body').style.fontSize = txtSize;
-        document.getElementById('prev-card').style.borderRadius = rad;
+    async function saveSettings() {
+        try {
+            const payload = { 
+                shopDomain: SHOP_DOMAIN, // IMPORTANT: Sending the shop domain with settings updates
+                autoApproveVerified: document.getElementById('set-auto-approve').checked, 
+                autoApproveMinStars: parseInt(document.getElementById('set-min-stars').value),
+                filters: savedRules,
+                attributeProfiles: savedProfiles 
+            };
+            await fetch(API + '/admin/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if(window.shopify) { window.shopify.toast.show('Settings saved'); }
+        } catch(e) { alert("Error saving settings."); }
     }
 
     async function saveStyles() {
         try {
             const payload = { 
+                shopDomain: SHOP_DOMAIN, // IMPORTANT
                 widgetStyles: {
                     primaryColor: document.getElementById('style-primary').value,
                     starColor: document.getElementById('style-star').value,
@@ -343,276 +351,7 @@
         } catch(e) { alert("Error saving design."); }
     }
 
-    function renderRules() {
-        document.getElementById('active-rules-container').innerHTML = savedRules.map((rule, idx) => `
-            <div class="tag-pill">${rule.type}: ${rule.value} <span class="pill-remove" onclick="removeRule(${idx})">✕</span></div>
-        `).join('');
-    }
-
-    function addFilterRule() {
-        const type = document.getElementById('new-rule-type').value;
-        const val = document.getElementById('new-rule-value').value.trim();
-        if(val) {
-            savedRules.push({ type: type, value: val });
-            document.getElementById('new-rule-value').value = '';
-            renderRules();
-            saveSettings();
-        }
-    }
-
-    function removeRule(index) {
-        savedRules.splice(index, 1);
-        renderRules();
-        saveSettings();
-    }
-
-    // --- NEW: DYNAMIC SLIDER PROFILES ---
-    function renderProfiles() {
-        document.getElementById('active-profiles-container').innerHTML = savedProfiles.map((p, idx) => `
-            <div style="background: white; border: 1px solid var(--border); padding: 15px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <strong>Tag:</strong> <span style="background: #e2e8f0; padding: 2px 8px; border-radius: 4px; font-size: 0.85rem; margin-right: 15px;">${p.tag}</span>
-                    <strong>Sliders:</strong> <span style="color: var(--text-light); font-size: 0.9rem;">${p.sliders.join(', ')}</span>
-                </div>
-                <button class="action-pill bin-pill" style="margin:0;" onclick="removeProfile(${idx})">Delete</button>
-            </div>
-        `).join('');
-    }
-
-    function addAttributeProfile() {
-        const tag = document.getElementById('new-profile-tag').value.trim().toLowerCase();
-        const slidersStr = document.getElementById('new-profile-sliders').value.trim();
-        
-        if(tag && slidersStr) {
-            const slidersArray = slidersStr.split(',').map(s => s.trim()).filter(s => s);
-            savedProfiles.push({ tag: tag, sliders: slidersArray });
-            
-            document.getElementById('new-profile-tag').value = '';
-            document.getElementById('new-profile-sliders').value = '';
-            renderProfiles();
-            saveSettings();
-        }
-    }
-
-    function removeProfile(index) {
-        savedProfiles.splice(index, 1);
-        renderProfiles();
-        saveSettings();
-    }
-
-    async function saveSettings() {
-        try {
-            const payload = { 
-                autoApproveVerified: document.getElementById('set-auto-approve').checked, 
-                autoApproveMinStars: parseInt(document.getElementById('set-min-stars').value),
-                filters: savedRules,
-                attributeProfiles: savedProfiles // Save the dynamic sliders!
-            };
-            await fetch(API + '/admin/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            if(window.shopify) { window.shopify.toast.show('Settings saved'); }
-        } catch(e) { alert("Error saving settings."); }
-    }
-
-    function populateTagDropdown() {
-        const select = document.getElementById('tag-filter');
-        const uniqueTags = new Set();
-        data.forEach(r => {
-            if(r.productTags && Array.isArray(r.productTags)) r.productTags.forEach(tag => uniqueTags.add(tag));
-        });
-        let optionsHTML = '<option value="all">All Tags & Metafields</option>';
-        uniqueTags.forEach(tag => { optionsHTML += `<option value="${tag}">${tag}</option>`; });
-        select.innerHTML = optionsHTML;
-    }
-
-    function updateMetrics() {
-        const active = data.filter(r => !r.isDeleted);
-        document.getElementById('count-total').innerText = active.length;
-        document.getElementById('count-live').innerText = active.filter(r => r.status === 'accepted').length;
-        document.getElementById('count-rejected').innerText = data.filter(r => r.isDeleted).length;
-    }
-
-    function renderLists() {
-        const query = document.getElementById('search-bar').value.toLowerCase();
-        const statFilter = document.getElementById('status-filter').value;
-        const tagFilter = document.getElementById('tag-filter').value;
-        const binFilter = document.getElementById('bin-filter').value;
-
-        let activeData = data.filter(r => !r.isDeleted);
-        if (statFilter !== 'all') activeData = activeData.filter(r => r.status === statFilter);
-        if (tagFilter !== 'all') activeData = activeData.filter(r => r.productTags && r.productTags.includes(tagFilter));
-
-        if (query) {
-            activeData = activeData.filter(r => 
-                (r.userId && r.userId.toLowerCase().includes(query)) || 
-                (r.email && r.email.toLowerCase().includes(query)) ||
-                (r.itemId && r.itemId.toLowerCase().includes(query))
-            );
-        }
-
-        let trashData = data.filter(r => r.isDeleted);
-        if (binFilter === 'manual') trashData = trashData.filter(r => !r.isSpam);
-        if (binFilter === 'spam') trashData = trashData.filter(r => r.isSpam);
-
-        document.getElementById('mgmt-list').innerHTML = activeData.length ? activeData.map(r => buildCard(r, false)).join('') : '<p style="text-align:center;">No matching reviews.</p>';
-        document.getElementById('trash-list').innerHTML = trashData.length ? trashData.map(r => buildCard(r, true)).join('') : '<p style="text-align:center;">Bin is empty.</p>';
-    }
-
-    function toggleReplyBox(id) {
-        const box = document.getElementById(`reply-box-${id}`);
-        if (box.style.display === 'none' || box.style.display === '') {
-            box.style.display = 'block';
-            openReplyBoxes.add(id);
-        } else {
-            box.style.display = 'none';
-            openReplyBoxes.delete(id);
-        }
-    }
-
-    function buildCard(r, isTrash) {
-        let verifyHtml = r.verifiedPurchase 
-            ? `<div class="v-badge v-badge-yes" title="${r.verificationNote || 'Verified'}">✓ Verified Buyer</div>` 
-            : `<div class="v-badge v-badge-no" title="Diagnostic: ${r.verificationNote || 'Unverified'}">⚠️ Unverified (Hover)</div>`;
-
-        const customerBox = r.verifiedPurchase && r.email
-            ? `<a href="https://admin.shopify.com/customers?query=${encodeURIComponent(r.email)}" target="_blank" class="customer-link" title="Open Customer Account">${r.userId}</a>` 
-            : `<strong style="font-size: 1.05rem;">${r.userId}</strong>`;
-
-        let attrHTML = '';
-        if (r.attributes && Object.keys(r.attributes).length > 0) {
-            attrHTML = `<div style="margin-top: 20px; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid var(--border); display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px;">`;
-            for (const [key, val] of Object.entries(r.attributes)) {
-                attrHTML += `
-                    <div>
-                        <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-light); margin-bottom: 4px;">${key}</div>
-                        <div style="width: 100%; height: 6px; background: #e2e8f0; border-radius: 3px; position: relative;">
-                            <div style="width: ${(val/10)*100}%; height: 100%; background: var(--primary); border-radius: 3px;"></div>
-                        </div>
-                        <div style="font-size: 10px; font-weight: 600; text-align: right; margin-top: 4px;">${val}/10</div>
-                    </div>
-                `;
-            }
-            attrHTML += `</div>`;
-        }
-
-        const tagsHtml = r.productTags && r.productTags.length > 0 
-            ? `<div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed var(--border);">
-                 <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-light); text-transform: uppercase; margin-right: 8px;">Product Tags:</span> 
-                 ${r.productTags.map(t => `<span style="font-size: 0.75rem; background: #e2e8f0; padding: 2px 8px; border-radius: 12px; margin-right: 5px; display: inline-block; margin-bottom: 5px;">${t}</span>`).join('')}
-               </div>`
-            : '';
-
-        const replyStateClass = r.reply ? 'has-reply' : 'no-reply';
-        const replyText = r.reply ? '💬 Edit Reply' : '💬 Reply to Customer';
-        const isReplyOpen = openReplyBoxes.has(r._id) ? 'block' : 'none';
-
-        return `
-        <div class="review-card status-border-${r.status}">
-            <div class="card-main">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                    <div>
-                        ${customerBox} ${r.isSpam ? '<span style="color:var(--red); font-weight:bold; font-size:0.85rem; margin-left:8px;">[SPAM FLAGGED]</span>' : ''}
-                        <div style="font-size: 0.85rem; color: var(--text-light); margin-top: 5px;">${r.email || 'No email provided'}</div>
-                    </div>
-                    
-                    <div class="status-group">
-                        <button onclick="updateStatus('${r._id}', 'accepted')" class="s-btn acc ${r.status==='accepted'?'active':''}" title="Accept">✓</button>
-                        <button onclick="updateStatus('${r._id}', 'hold')" class="s-btn hld ${r.status==='hold'?'active':''}" title="Hold">⏸</button>
-                        <button onclick="updateStatus('${r._id}', 'rejected')" class="s-btn rej ${r.status==='rejected'?'active':''}" title="Reject">✕</button>
-                    </div>
-                </div>
-
-                <div class="stars" style="margin-top:15px;">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
-                <div class="headline">${r.headline || 'No Headline'}</div>
-                <div class="comment">${r.comment}</div>
-                
-                ${attrHTML}
-                ${tagsHtml}
-                
-                <div class="reply-container">
-                    <button class="reply-pill ${replyStateClass}" onclick="toggleReplyBox('${r._id}')">${replyText}</button>
-                    <div id="reply-box-${r._id}" class="reply-panel" style="display: ${isReplyOpen};">
-                        <textarea id="reply-text-${r._id}" class="reply-input" placeholder="Type your public reply...">${r.reply || ''}</textarea>
-                        <button class="reply-btn" onclick="saveReply('${r._id}')">Publish Reply</button>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="card-side">
-                <div>
-                    <div class="pid">Product ID: ${r.itemId}</div>
-                    ${r.orderId ? `<div style="font-size: 0.9rem; margin-bottom: 10px; color: var(--text-light); font-weight: 600;">Order #${r.orderId}</div>` : ''}
-                    <div style="display: flex; flex-direction: column; align-items: flex-end; margin-top: 8px;">
-                        ${verifyHtml}
-                        <button class="force-verify-btn" onclick="toggleVerify('${r._id}', ${!r.verifiedPurchase})">
-                            ${r.verifiedPurchase ? 'Remove Verification' : 'Force Verify'}
-                        </button>
-                    </div>
-                </div>
-
-                <div style="padding-top: 20px;">
-                    ${isTrash ? 
-                        `<button class="action-pill restore-pill" onclick="toggleBin('${r._id}', false)">↺ Restore</button>` : 
-                        `<button class="action-pill bin-pill" onclick="toggleBin('${r._id}', true)">🗑️ Move to Bin</button>`
-                    }
-                </div>
-            </div>
-        </div>`;
-    }
-
-    function renderPub() {
-        const acc = data.filter(r => r.status === 'accepted' && !r.isDeleted);
-        document.getElementById('pub-list').innerHTML = acc.map(r => `
-            <div style="padding: 35px 0; border-bottom: 1px solid var(--border);">
-                <div style="font-weight:700; font-size:1.15rem; color:var(--primary);">${r.userId}</div>
-                <div style="color:var(--star); font-size:1.2rem; margin: 10px 0;">${'★'.repeat(r.rating)}</div>
-                <div style="font-weight:700; font-size:1.35rem; margin-bottom:12px;">${r.headline || ''}</div>
-                <div style="font-size:1.05rem; color:#475569; line-height:1.7;">${r.comment}</div>
-                ${r.reply ? `<div style="margin-top: 15px; background: #f8fafc; padding: 15px; border-left: 4px solid var(--primary); border-radius: 4px; font-size: 0.95rem;"><strong>Store Reply:</strong><br>${r.reply}</div>` : ''}
-            </div>`).join('');
-    }
-
-    async function updateStatus(id, status) {
-        const review = data.find(r => r._id === id);
-        if(review) review.status = status;
-        renderLists();
-        updateMetrics();
-        fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({status}) });
-    }
-
-    async function saveReply(id) {
-        const text = document.getElementById(`reply-text-${id}`).value;
-        const review = data.find(r => r._id === id);
-        if(review) review.reply = text;
-        openReplyBoxes.delete(id);
-        renderLists();
-        fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({reply: text}) });
-        if(window.shopify) { window.shopify.toast.show('Reply published'); }
-    }
-
-    async function toggleBin(id, isDeleted) {
-        if(isDeleted && !confirm('Move to Bin? It will be deleted forever in 28 days.')) return;
-        const review = data.find(r => r._id === id);
-        if(review) review.isDeleted = isDeleted;
-        renderLists();
-        updateMetrics();
-        fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({isDeleted}) });
-        if(window.shopify) { window.shopify.toast.show(isDeleted ? 'Moved to Bin' : 'Restored'); }
-    }
-
-    async function toggleVerify(id, isVerified) {
-        const review = data.find(r => r._id === id);
-        if(review) {
-            review.verifiedPurchase = isVerified;
-            review.verificationNote = isVerified ? "Manually verified by Admin" : "Verification manually removed";
-        }
-        renderLists();
-        fetch(`${API}/reviews/${id}`, { 
-            method: 'PATCH', 
-            headers: {'Content-Type':'application/json'}, 
-            body: JSON.stringify({ verifiedPurchase: isVerified, verificationNote: isVerified ? "Manually verified by Admin" : "Verification manually removed" }) 
-        });
-        if(window.shopify) { window.shopify.toast.show(isVerified ? 'Marked as Verified' : 'Verification Removed'); }
-    }
+    // ... [Keep populateTagDropdown, updateMetrics, renderLists, toggleReplyBox, buildCard, renderPub, updateStatus, saveReply, toggleBin, toggleVerify exactly the same] ...
 
     load();
 </script>
