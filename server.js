@@ -1,282 +1,94 @@
-require('dotenv').config();
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const path = require('path');
-const crypto = require('crypto'); 
+function buildCard(r, isTrash) {
+        let verifyHtml = r.verifiedPurchase 
+            ? `<div class="v-badge v-badge-yes" title="${r.verificationNote || 'Verified'}">✓ Verified Buyer</div>` 
+            : `<div class="v-badge v-badge-no" title="Diagnostic: ${r.verificationNote || 'Unverified'}">⚠️ Unverified (Hover)</div>`;
 
-const app = express();
+        const customerBox = r.verifiedPurchase && r.email
+            ? `<a href="https://admin.shopify.com/customers?query=${encodeURIComponent(r.email)}" target="_blank" class="customer-link" title="Open Customer Account">${r.userId}</a>` 
+            : `<strong style="font-size: 1.05rem;">${r.userId}</strong>`;
 
-app.use(cors()); 
-app.use(express.json());
-app.use((req, res, next) => {
-    res.setHeader("Content-Security-Policy", "frame-ancestors https://*.myshopify.com https://admin.shopify.com;");
-    next();
-});
-
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('✅ Connected to MongoDB Atlas'))
-  .catch((err) => console.error('❌ MongoDB Connection Error:', err));
-
-const reviewSchema = new mongoose.Schema({
-    itemId: { type: String, required: true },
-    userId: { type: String, required: true }, 
-    email: { type: String }, 
-    isAnonymous: { type: Boolean, default: false }, 
-    rating: { type: Number, required: true, min: 1, max: 5 },
-    headline: { type: String }, 
-    comment: { type: String },
-    reply: { type: String, default: '' },
-    attributes: { type: Map, of: Number }, 
-    productTags: { type: [String], default: [] }, 
-    status: { type: String, enum: ['pending', 'accepted', 'rejected', 'hold'], default: 'pending' },
-    verifiedPurchase: { type: Boolean, default: false },
-    verificationNote: { type: String, default: '' }, 
-    orderId: { type: String }, 
-    isDeleted: { type: Boolean, default: false },
-    isSpam: { type: Boolean, default: false }, 
-    deletedAt: { type: Date, default: null },
-    createdAt: { type: Date, default: Date.now }
-});
-
-reviewSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 2419200 });
-const Review = mongoose.model('Review', reviewSchema, 'reviews'); 
-
-const settingsSchema = new mongoose.Schema({
-    widgetId: { type: String, default: 'default' }, 
-    autoApproveVerified: { type: Boolean, default: false },
-    autoApproveMinStars: { type: Number, default: 4 },
-    filters: { type: Array, default: [] },
-    widgetStyles: {
-        primaryColor: { type: String, default: '#000000' },
-        starColor: { type: String, default: '#fbbf24' },
-        titleSize: { type: Number, default: 26 },
-        textSize: { type: Number, default: 15 },
-        borderRadius: { type: Number, default: 12 }
-    }
-});
-const Settings = mongoose.model('Settings', settingsSchema, 'settings');
-
-async function initSettings() {
-    try {
-        const exists = await Settings.findOne({ widgetId: 'default' });
-        if (!exists) await new Settings({ widgetId: 'default' }).save();
-    } catch (e) { console.log("Settings init bypassed"); }
-}
-initSettings();
-
-function generateMagicToken(orderId, email) {
-    const secret = process.env.SHOPIFY_API_SECRET || 'fallback-nectar-secret';
-    const data = `${String(orderId).trim().toLowerCase()}:${String(email).trim().toLowerCase()}`;
-    return crypto.createHmac('sha256', secret).update(data).digest('hex');
-}
-
-async function verifyShopifyOrder(orderId, email, productId) {
-    const STORE_URL = process.env.SHOPIFY_STORE_URL; 
-    const CLIENT_ID = process.env.SHOPIFY_API_KEY; 
-    const CLIENT_SECRET = process.env.SHOPIFY_API_SECRET; 
-
-    if (!STORE_URL || !CLIENT_ID || !CLIENT_SECRET || !email || !orderId) return { verified: false, note: "Missing details." };
-
-    const rawNumber = orderId.replace(/\D/g, ""); 
-    const searchTerms = [`#${rawNumber}`, rawNumber]; 
-    const authString = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
-
-    for (const term of searchTerms) {
-        try {
-            const response = await fetch(`https://${STORE_URL}/admin/api/2024-01/orders.json?name=${encodeURIComponent(term)}&status=any`, {
-                headers: { 'Authorization': `Basic ${authString}`, 'Content-Type': 'application/json' }
-            });
-            const data = await response.json();
-
-            if (data.orders && data.orders.length > 0) {
-                const order = data.orders.find(o => String(o.order_number) === rawNumber || o.name === `#${rawNumber}` || o.name === rawNumber);
-                if (order) {
-                    if (!order.email || order.email.toLowerCase() !== email.toLowerCase()) return { verified: false, note: `Wrong email.` };
-                    const boughtProduct = order.line_items.some(item => String(item.product_id) === String(productId) || String(item.variant_id) === String(productId));
-                    if (!boughtProduct) return { verified: false, note: "Product not in order." };
-                    return { verified: true, note: "Successfully verified." };
-                }
+        // 1. Render the Flavor Profile Bars (Added this back in!)
+        let attrHTML = '';
+        if (r.attributes && Object.keys(r.attributes).length > 0) {
+            attrHTML = `<div style="margin-top: 20px; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid var(--border); display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px;">`;
+            for (const [key, val] of Object.entries(r.attributes)) {
+                attrHTML += `
+                    <div>
+                        <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-light); margin-bottom: 4px;">${key}</div>
+                        <div style="width: 100%; height: 6px; background: #e2e8f0; border-radius: 3px; position: relative;">
+                            <div style="width: ${(val/10)*100}%; height: 100%; background: var(--primary); border-radius: 3px;"></div>
+                        </div>
+                        <div style="font-size: 10px; font-weight: 600; text-align: right; margin-top: 4px;">${val}/10</div>
+                    </div>
+                `;
             }
-        } catch (error) { console.error("API Error:", error); }
+            attrHTML += `</div>`;
+        }
+
+        // 2. Render the Product Tags cleanly separated at the bottom
+        const tagsHtml = r.productTags && r.productTags.length > 0 
+            ? `<div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed var(--border);">
+                 <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-light); text-transform: uppercase; margin-right: 8px;">Product Tags:</span> 
+                 ${r.productTags.map(t => `<span style="font-size: 0.75rem; background: #e2e8f0; padding: 2px 8px; border-radius: 12px; margin-right: 5px; display: inline-block; margin-bottom: 5px;">${t}</span>`).join('')}
+               </div>`
+            : '';
+
+        const replyStateClass = r.reply ? 'has-reply' : 'no-reply';
+        const replyText = r.reply ? '💬 Edit Reply' : '💬 Reply to Customer';
+        const isReplyOpen = openReplyBoxes.has(r._id) ? 'block' : 'none';
+
+        return `
+        <div class="review-card status-border-${r.status}">
+            <div class="card-main">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        ${customerBox} ${r.isSpam ? '<span style="color:var(--red); font-weight:bold; font-size:0.85rem; margin-left:8px;">[SPAM FLAGGED]</span>' : ''}
+                        <div style="font-size: 0.85rem; color: var(--text-light); margin-top: 5px;">${r.email || 'No email provided'}</div>
+                    </div>
+                    
+                    <div class="status-group">
+                        <button onclick="updateStatus('${r._id}', 'accepted')" class="s-btn acc ${r.status==='accepted'?'active':''}" title="Accept">✓</button>
+                        <button onclick="updateStatus('${r._id}', 'hold')" class="s-btn hld ${r.status==='hold'?'active':''}" title="Hold">⏸</button>
+                        <button onclick="updateStatus('${r._id}', 'rejected')" class="s-btn rej ${r.status==='rejected'?'active':''}" title="Reject">✕</button>
+                    </div>
+                </div>
+
+                <div class="stars" style="margin-top:15px;">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
+                <div class="headline">${r.headline || 'No Headline'}</div>
+                <div class="comment">${r.comment}</div>
+                
+                ${attrHTML}
+                ${tagsHtml}
+                
+                <div class="reply-container">
+                    <button class="reply-pill ${replyStateClass}" onclick="toggleReplyBox('${r._id}')">${replyText}</button>
+                    
+                    <div id="reply-box-${r._id}" class="reply-panel" style="display: ${isReplyOpen};">
+                        <textarea id="reply-text-${r._id}" class="reply-input" placeholder="Type your public reply...">${r.reply || ''}</textarea>
+                        <button class="reply-btn" onclick="saveReply('${r._id}')">Publish Reply</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card-side">
+                <div>
+                    <div class="pid">Product ID: ${r.itemId}</div>
+                    ${r.orderId ? `<div style="font-size: 0.9rem; margin-bottom: 10px; color: var(--text-light); font-weight: 600;">Order #${r.orderId}</div>` : ''}
+                    
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; margin-top: 8px;">
+                        ${verifyHtml}
+                        <button class="force-verify-btn" onclick="toggleVerify('${r._id}', ${!r.verifiedPurchase})">
+                            ${r.verifiedPurchase ? 'Remove Verification' : 'Force Verify'}
+                        </button>
+                    </div>
+                </div>
+
+                <div style="padding-top: 20px;">
+                    ${isTrash ? 
+                        `<button class="action-pill restore-pill" onclick="toggleBin('${r._id}', false)">↺ Restore</button>` : 
+                        `<button class="action-pill bin-pill" onclick="toggleBin('${r._id}', true)">🗑️ Move to Bin</button>`
+                    }
+                </div>
+            </div>
+        </div>`;
     }
-    return { verified: false, note: "Order ID not found." };
-}
-
-// ==========================================
-// PUBLIC ROUTES
-// ==========================================
-app.get('/', (req, res) => res.send('🚀 Nectar API Live'));
-
-app.get('/api/widget/styles', async (req, res) => {
-    try {
-        const config = await Settings.findOne({ widgetId: 'default' });
-        res.status(200).json(config ? config.widgetStyles : {});
-    } catch (e) { res.status(500).json({}); }
-});
-
-app.get('/api/reviews/:itemId', async (req, res) => {
-    try { 
-        const reviews = await Review.find({ 
-            itemId: String(req.params.itemId), 
-            status: 'accepted', 
-            isDeleted: { $ne: true }, 
-            isSpam: { $ne: true } 
-        }).sort({ createdAt: -1 });
-        res.status(200).json(reviews); 
-    } catch (error) { res.status(500).json({ error: "Fetch error" }); }
-});
-
-// NEW: Fetch a single specific review (used to check status of a user's pending review)
-app.get('/api/reviews/single/:id', async (req, res) => {
-    try {
-        const review = await Review.findById(req.params.id);
-        if (!review) return res.status(404).json({ error: "Not found" });
-        res.status(200).json(review);
-    } catch (error) { res.status(500).json({ error: "Fetch error" }); }
-});
-
-app.post('/api/reviews', async (req, res) => {
-    try {
-        let isVerified = req.body.verifiedPurchase; 
-        let vNote = "Verified automatically by Shopify.";
-        let finalStatus = 'pending';
-        let flaggedSpam = false;
-
-        if (!isVerified && req.body.orderId && req.body.email) {
-            const checkResult = await verifyShopifyOrder(req.body.orderId, req.body.email, req.body.itemId);
-            isVerified = checkResult.verified;
-            vNote = checkResult.note;
-        } else if (!isVerified && !req.body.orderId) vNote = "No Order ID provided.";
-
-        if (!isVerified && req.body.email) {
-            const recentUnverified = await Review.countDocuments({ email: req.body.email, verifiedPurchase: false, createdAt: { $gte: new Date(Date.now() - 24*60*60*1000) }});
-            if (recentUnverified >= 2) { flaggedSpam = true; finalStatus = 'rejected'; vNote = "SPAM FLAG: Too many unverified reviews."; }
-        }
-
-        const config = await Settings.findOne({ widgetId: 'default' });
-        if (!flaggedSpam && config && config.autoApproveVerified && isVerified) {
-            if (req.body.rating >= config.autoApproveMinStars) finalStatus = 'accepted';
-        }
-
-        const newReview = new Review({
-            itemId: String(req.body.itemId), userId: req.body.userId, email: req.body.email,
-            isAnonymous: req.body.isAnonymous, rating: req.body.rating, headline: req.body.headline,
-            comment: req.body.comment, attributes: req.body.attributes, productTags: req.body.productTags,
-            verifiedPurchase: isVerified, verificationNote: vNote, orderId: req.body.orderId, 
-            status: finalStatus, isSpam: flaggedSpam, isDeleted: flaggedSpam, deletedAt: flaggedSpam ? new Date() : null
-        });
-
-        res.status(201).json(await newReview.save());
-    } catch (error) { res.status(400).json({ error: "Failed to submit" }); }
-});
-
-// MAGIC LINK ROUTES
-app.get('/api/magic-link/order', async (req, res) => {
-    const { orderId, email, token } = req.query;
-    if (!orderId || !email || !token) return res.status(400).json({ error: "Missing parameters" });
-    const expectedToken = generateMagicToken(orderId, email);
-    if (token !== expectedToken) return res.status(403).json({ error: "Invalid or expired secure link." });
-
-    const STORE_URL = process.env.SHOPIFY_STORE_URL; 
-    const CLIENT_ID = process.env.SHOPIFY_API_KEY; 
-    const CLIENT_SECRET = process.env.SHOPIFY_API_SECRET; 
-    const authString = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
-    const rawNumber = orderId.replace(/\D/g, ""); 
-
-    try {
-        const response = await fetch(`https://${STORE_URL}/admin/api/2024-01/orders.json?name=${encodeURIComponent(rawNumber)}&status=any`, {
-            headers: { 'Authorization': `Basic ${authString}`, 'Content-Type': 'application/json' }
-        });
-        const data = await response.json();
-        if (data.orders && data.orders.length > 0) {
-            const order = data.orders.find(o => String(o.order_number) === rawNumber || o.name.includes(rawNumber));
-            if (order && order.email.toLowerCase() === email.toLowerCase()) {
-                const products = order.line_items.map(item => ({
-                    productId: item.product_id, variantId: item.variant_id, name: item.title, image: null 
-                })).filter(item => item.productId); 
-                return res.status(200).json({ products, customerName: order.customer?.first_name || "Customer" });
-            }
-        }
-        return res.status(404).json({ error: "Order not found" });
-    } catch (err) { return res.status(500).json({ error: "Failed to fetch order details" }); }
-});
-
-app.post('/api/reviews/bulk', async (req, res) => {
-    const { orderId, email, token, reviews } = req.body; 
-    if (token !== generateMagicToken(orderId, email)) return res.status(403).json({ error: "Invalid secure link." });
-
-    try {
-        const config = await Settings.findOne({ widgetId: 'default' });
-        const savedReviews = [];
-
-        for (const rev of reviews) {
-            let finalStatus = 'pending';
-            if (config && config.autoApproveVerified && rev.rating >= config.autoApproveMinStars) finalStatus = 'accepted';
-            const newReview = new Review({
-                itemId: String(rev.itemId), userId: rev.userId, email: email,
-                isAnonymous: rev.isAnonymous, rating: rev.rating, headline: rev.headline,
-                comment: rev.comment, attributes: rev.attributes || {}, productTags: rev.productTags || [],
-                verifiedPurchase: true, verificationNote: "Auto-Verified via Email Magic Link",
-                orderId: orderId, status: finalStatus
-            });
-            savedReviews.push(await newReview.save());
-        }
-        res.status(201).json({ message: "Successfully saved bulk reviews", count: savedReviews.length });
-    } catch (error) { res.status(400).json({ error: "Failed to submit bulk reviews" }); }
-});
-
-app.get('/api/admin/generate-link', (req, res) => {
-    const { orderId, email } = req.query;
-    if(!orderId || !email) return res.status(400).send("Need orderId and email");
-    const token = generateMagicToken(orderId, email);
-    res.send(`?orderId=${orderId}&email=${email}&token=${token}`);
-});
-
-// ==========================================
-// ADMIN ROUTES & PATCH UPDATER
-// ==========================================
-app.get('/api/admin/reviews', async (req, res) => {
-    try { res.status(200).json(await Review.find().sort({ createdAt: -1 })); } 
-    catch (error) { res.status(500).json({ error: "Admin fetch error" }); }
-});
-
-app.patch('/api/reviews/:id', async (req, res) => {
-    try {
-        const updateData = {};
-        
-        // Admin updates
-        if (req.body.status !== undefined) updateData.status = req.body.status;
-        if (req.body.reply !== undefined) updateData.reply = req.body.reply;
-        if (req.body.verifiedPurchase !== undefined) updateData.verifiedPurchase = req.body.verifiedPurchase;
-        if (req.body.verificationNote !== undefined) updateData.verificationNote = req.body.verificationNote;
-        if (req.body.isDeleted !== undefined) {
-            updateData.isDeleted = req.body.isDeleted;
-            updateData.deletedAt = req.body.isDeleted ? new Date() : null; 
-            if (req.body.isDeleted === false) updateData.isSpam = false; 
-        }
-
-        // UPDATED: Allow users to edit their pending reviews
-        if (req.body.rating !== undefined) updateData.rating = req.body.rating;
-        if (req.body.headline !== undefined) updateData.headline = req.body.headline;
-        if (req.body.comment !== undefined) updateData.comment = req.body.comment;
-        if (req.body.attributes !== undefined) updateData.attributes = req.body.attributes;
-
-        res.json(await Review.findByIdAndUpdate(req.params.id, updateData, { new: true }));
-    } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.get('/api/admin/settings', async (req, res) => {
-    try { res.status(200).json(await Settings.findOne({ widgetId: 'default' })); } 
-    catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.patch('/api/admin/settings', async (req, res) => {
-    try { res.status(200).json(await Settings.findOneAndUpdate({ widgetId: 'default' }, req.body, { new: true, upsert: true })); } 
-    catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'admin.html')));
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Port ${PORT}`));
