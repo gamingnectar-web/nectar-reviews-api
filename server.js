@@ -34,22 +34,21 @@ const reviewSchema = new mongoose.Schema({
     verifiedPurchase: { type: Boolean, default: false },
     verificationNote: { type: String, default: '' }, 
     orderId: { type: String }, 
-    // NEW: Soft Delete Fields
     isDeleted: { type: Boolean, default: false },
+    isSpam: { type: Boolean, default: false }, // NEW: Spam Tracker
     deletedAt: { type: Date, default: null },
     createdAt: { type: Date, default: Date.now }
 });
 
-// NEW: 28-Day Auto-Delete (TTL Index)
-// 2419200 seconds = exactly 28 days. MongoDB will automatically delete records once this time passes.
+// 28-Day Auto-Delete (TTL Index)
 reviewSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 2419200 });
-
 const Review = mongoose.model('Review', reviewSchema, 'reviews'); 
 
 const settingsSchema = new mongoose.Schema({
     widgetId: { type: String, default: 'default' }, 
     autoApproveVerified: { type: Boolean, default: false },
-    autoApproveMinStars: { type: Number, default: 4 }
+    autoApproveMinStars: { type: Number, default: 4 },
+    filterTags: { type: String, default: '' } // Groundwork for Vendor/Line filtering
 });
 const Settings = mongoose.model('Settings', settingsSchema, 'settings');
 
@@ -62,7 +61,7 @@ async function initSettings() {
 initSettings();
 
 // ==========================================
-// REFINED DIAGNOSTIC VERIFICATION LOGIC
+// VERIFICATION LOGIC
 // ==========================================
 async function verifyShopifyOrder(orderId, email, productId) {
     const STORE_URL = process.env.SHOPIFY_STORE_URL; 
@@ -85,16 +84,12 @@ async function verifyShopifyOrder(orderId, email, productId) {
             const data = await response.json();
 
             if (data.orders && data.orders.length > 0) {
-                // Find the exact order by ID to prevent partial matches
                 const order = data.orders.find(o => String(o.order_number) === rawNumber || o.name === `#${rawNumber}` || o.name === rawNumber);
                 
                 if (order) {
-                    // Check 1: Does the email match?
                     if (!order.email || order.email.toLowerCase() !== email.toLowerCase()) {
                         return { verified: false, note: `Order exists, but placed under a different email.` };
                     }
-                    
-                    // Check 2: Is the product in the order?
                     const boughtProduct = order.line_items.some(item => 
                         String(item.product_id) === String(productId) || String(item.variant_id) === String(productId)
                     );
@@ -102,8 +97,6 @@ async function verifyShopifyOrder(orderId, email, productId) {
                     if (!boughtProduct) {
                         return { verified: false, note: "Email & Order ID match, but this product wasn't in the order." };
                     }
-
-                    // Success!
                     return { verified: true, note: "Successfully verified against Shopify order." };
                 }
             }
@@ -118,7 +111,7 @@ async function verifyShopifyOrder(orderId, email, productId) {
 app.get('/', (req, res) => res.send('🚀 Nectar API Live'));
 
 app.get('/api/reviews/:itemId', async (req, res) => {
-    try { res.status(200).json(await Review.find({ itemId: String(req.params.itemId), status: 'accepted', isDeleted: false }).sort({ createdAt: -1 })); } 
+    try { res.status(200).json(await Review.find({ itemId: String(req.params.itemId), status: 'accepted', isDeleted: false, isSpam: false }).sort({ createdAt: -1 })); } 
     catch (error) { res.status(500).json({ error: "Fetch error" }); }
 });
 
@@ -126,7 +119,11 @@ app.post('/api/reviews', async (req, res) => {
     try {
         let isVerified = req.body.verifiedPurchase; 
         let vNote = "Verified automatically by Shopify.";
+        let finalStatus = 'pending';
+        let flaggedSpam = false;
+        let isDeleted = false;
 
+        // 1. Check Shopify Verification
         if (!isVerified && req.body.orderId && req.body.email) {
             const checkResult = await verifyShopifyOrder(req.body.orderId, req.body.email, req.body.itemId);
             isVerified = checkResult.verified;
@@ -135,10 +132,24 @@ app.post('/api/reviews', async (req, res) => {
             vNote = "No Order ID provided by customer.";
         }
 
+        // 2. Automated Spam Check (If unverified, check recent submissions)
+        if (!isVerified && req.body.email) {
+            const recentUnverified = await Review.countDocuments({
+                email: req.body.email,
+                verifiedPurchase: false,
+                createdAt: { $gte: new Date(Date.now() - 24*60*60*1000) } // Last 24 hours
+            });
+            if (recentUnverified >= 2) {
+                flaggedSpam = true;
+                finalStatus = 'rejected';
+                isDeleted = true; // Throw straight into Bin/Spam
+                vNote = "SYSTEM SPAM FLAG: Too many unverified reviews from this email recently.";
+            }
+        }
+
+        // 3. Admin Auto-Approve Rules (Only if not spam)
         const config = await Settings.findOne({ widgetId: 'default' });
-        let finalStatus = 'pending';
-        
-        if (config && config.autoApproveVerified && isVerified) {
+        if (!flaggedSpam && config && config.autoApproveVerified && isVerified) {
             if (req.body.rating >= config.autoApproveMinStars) finalStatus = 'accepted';
         }
 
@@ -154,7 +165,10 @@ app.post('/api/reviews', async (req, res) => {
             verifiedPurchase: isVerified, 
             verificationNote: vNote,
             orderId: req.body.orderId, 
-            status: finalStatus 
+            status: finalStatus,
+            isSpam: flaggedSpam,
+            isDeleted: isDeleted,
+            deletedAt: isDeleted ? new Date() : null
         });
 
         res.status(201).json(await newReview.save());
@@ -174,12 +188,12 @@ app.patch('/api/reviews/:id', async (req, res) => {
         const updateData = {};
         if (req.body.status !== undefined) updateData.status = req.body.status;
         if (req.body.reply !== undefined) updateData.reply = req.body.reply;
-        if (req.body.verifiedPurchase !== undefined) updateData.verifiedPurchase = req.body.verifiedPurchase;
         
-        // Handle Soft Delete
         if (req.body.isDeleted !== undefined) {
             updateData.isDeleted = req.body.isDeleted;
-            updateData.deletedAt = req.body.isDeleted ? new Date() : null; // Start or clear the 28-day timer
+            updateData.deletedAt = req.body.isDeleted ? new Date() : null; 
+            // If restoring, unflag as spam just in case
+            if (req.body.isDeleted === false) updateData.isSpam = false; 
         }
 
         res.json(await Review.findByIdAndUpdate(req.params.id, updateData, { new: true }));
