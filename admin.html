@@ -15,14 +15,14 @@
         body, button, input, select, textarea { font-family: 'Inter', sans-serif !important; }
         body { background: var(--bg); color: var(--text); margin: 0; -webkit-font-smoothing: antialiased; display: flex; min-height: 100vh;}
         
-        /* NEW SIDEBAR LAYOUT */
         .app-sidebar { width: 240px; background: var(--sidebar-bg); padding: 30px 20px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px;}
         .sidebar-title { font-size: 0.85rem; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; padding-left: 12px;}
         .tab-btn { background: transparent; border: none; padding: 10px 12px; font-weight: 500; cursor: pointer; color: var(--text); font-size: 0.95rem; text-align: left; border-radius: 8px; transition: all 0.2s;}
         .tab-btn:hover { background: rgba(0,0,0,0.05); }
         .tab-btn.active { background: #ffffff; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
         
-        .main-content { flex: 1; padding: 40px; max-width: 1200px; overflow-y: auto;}
+        /* FULL WIDTH LAYOUT */
+        .main-content { flex: 1; padding: 40px; overflow-y: auto; width: 100%;}
 
         .view { display: none; }
         .view.active { display: block; }
@@ -85,7 +85,8 @@
         
         .error-box { background: #fbeae5; border: 1px solid #d82c0d; padding: 20px; border-radius: 8px; color: #d82c0d; text-align: center; margin-bottom: 20px; display: none; font-weight: 600;}
 
-        .settings-panel { background: var(--card); padding: 40px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);}
+        /* WIDER SETTINGS PANEL */
+        .settings-panel { background: var(--card); padding: 40px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); max-width: 1400px;}
         .setting-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 25px 0; border-bottom: 1px solid var(--border); flex-direction: column; gap: 15px;}
         @media(min-width: 600px) { .setting-row { flex-direction: row; align-items: center;} }
         .setting-row:last-child { border-bottom: none; }
@@ -103,6 +104,11 @@
         .tag-pill { background: white; border: 1px solid #c9cccf; padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 500; display: inline-flex; align-items: center; gap: 8px; margin: 0 10px 10px 0;}
         .pill-remove { color: var(--text-light); cursor: pointer; font-weight: bold; font-size: 0.75rem;}
         .pill-remove:hover { color: var(--red); }
+
+        /* SUB-TABS FOR WIDGET DESIGNER */
+        .sub-tab-btn { background: none; border: none; padding: 10px 5px; font-weight: 600; cursor: pointer; color: var(--text-light); font-size: 0.95rem; transition: all 0.2s; border-bottom: 3px solid transparent; margin-bottom: -2px;}
+        .sub-tab-btn:hover { color: var(--text); }
+        .sub-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
     </style>
 </head>
 <body>
@@ -220,54 +226,83 @@
     </div>
 
     <div id="designer" class="view">
-        <h2 style="margin-top: 0; margin-bottom: 25px;">Widget Customizer</h2>
-        <div style="display: flex; gap: 30px; flex-wrap: wrap;">
-            <div class="settings-panel" style="flex: 1; min-width: 350px; padding: 30px;">
-                <div class="setting-row" style="padding-top:0;"><div class="setting-info"><h3>Primary Brand Color</h3></div><input type="color" id="style-primary" oninput="updateLivePreview()" style="width: 40px; height: 40px; cursor: pointer; border: none; padding: 0;"></div>
-                <div class="setting-row"><div class="setting-info"><h3>Star Color</h3></div><input type="color" id="style-star" oninput="updateLivePreview()" style="width: 40px; height: 40px; cursor: pointer; border: none; padding: 0;"></div>
-                <div class="setting-row"><div class="setting-info"><h3>Title Size (Desktop px)</h3></div><input type="number" id="style-title-size" class="search-input" style="max-width: 80px;" oninput="updateLivePreview()"></div>
-                <div class="setting-row"><div class="setting-info"><h3>Base Text Size (px)</h3></div><input type="number" id="style-text-size" class="search-input" style="max-width: 80px;" oninput="updateLivePreview()"></div>
-                <div class="setting-row"><div class="setting-info"><h3>UI Corner Roundness (px)</h3></div><input type="number" id="style-radius" class="search-input" style="max-width: 80px;" oninput="updateLivePreview()"></div>
-                
-                <div class="setting-row" style="flex-direction: column; align-items: flex-start; border-top: 1px solid var(--border);">
-                    <div class="setting-info"><h3>Empty State Display</h3><p>What shows on the product page when there are zero reviews?</p></div>
-                    <select id="style-empty-mode" class="filter-select" style="width: 100%; margin-top: 10px;" onchange="updateLivePreview()">
-                        <option value="stars_text">Show grey stars & text (Recommended)</option>
-                        <option value="text_only">Show text only</option>
-                        <option value="hidden">Hide widget entirely</option>
-                    </select>
-                </div>
-                <div class="setting-row" id="empty-text-row" style="flex-direction: column; align-items: flex-start; border-bottom: none;">
-                    <div class="setting-info"><h3>Empty State Text</h3></div>
-                    <input type="text" id="style-empty-text" class="search-input" style="width: 100%; margin-top: 5px;" value="No reviews yet. Be the first to leave one!" oninput="updateLivePreview()">
-                </div>
+        <h2 style="margin-top: 0; margin-bottom: 15px;">Widget Customizer</h2>
+        
+        <div style="display: flex; gap: 25px; border-bottom: 2px solid var(--border); margin-bottom: 30px;">
+            <button class="sub-tab-btn active" onclick="subTab('designer-full')">Full Review Widget</button>
+            <button class="sub-tab-btn" onclick="subTab('designer-badge')">Small Badge Widget</button>
+            <button class="sub-tab-btn" onclick="subTab('designer-card')">On Product Card</button>
+            <button class="sub-tab-btn" onclick="subTab('designer-slider')">Review Slider</button>
+        </div>
 
-                <button class="reply-btn" style="width: 100%; margin-top: 20px; padding: 12px; font-size: 1rem;" onclick="saveStyles()">Save & Publish Design</button>
-            </div>
-
-            <div style="flex: 1.5; min-width: 400px;">
-                <div style="background: white; border: 1px solid var(--border); padding: 40px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" id="live-preview-container">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <h2 id="prev-title" style="margin: 0; font-family: 'Poppins', sans-serif;">Reviews</h2>
-                        <button id="prev-btn" style="color: white; border: none; padding: 10px 20px; cursor: pointer; font-family: 'Poppins', sans-serif; font-weight: bold;">Write a Review</button>
-                    </div>
+        <div id="designer-full" class="sub-view active" style="display: block;">
+            <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+                <div class="settings-panel" style="flex: 1; min-width: 350px; padding: 30px; margin-bottom: 0;">
+                    <div class="setting-row" style="padding-top:0;"><div class="setting-info"><h3>Primary Brand Color</h3></div><input type="color" id="style-primary" oninput="updateLivePreview()" style="width: 40px; height: 40px; cursor: pointer; border: none; padding: 0;"></div>
+                    <div class="setting-row"><div class="setting-info"><h3>Star Color</h3></div><input type="color" id="style-star" oninput="updateLivePreview()" style="width: 40px; height: 40px; cursor: pointer; border: none; padding: 0;"></div>
+                    <div class="setting-row"><div class="setting-info"><h3>Title Size (Desktop px)</h3></div><input type="number" id="style-title-size" class="search-input" style="max-width: 80px;" oninput="updateLivePreview()"></div>
+                    <div class="setting-row"><div class="setting-info"><h3>Base Text Size (px)</h3></div><input type="number" id="style-text-size" class="search-input" style="max-width: 80px;" oninput="updateLivePreview()"></div>
+                    <div class="setting-row"><div class="setting-info"><h3>UI Corner Roundness (px)</h3></div><input type="number" id="style-radius" class="search-input" style="max-width: 80px;" oninput="updateLivePreview()"></div>
                     
-                    <div id="prev-empty-state" style="text-align:center; padding:40px; border: 1px dashed var(--border); border-radius: 8px; margin-bottom: 20px;">
-                        <div id="prev-empty-stars" style="font-size: 24px; color: #c9cccf; margin-bottom: 10px;">★★★★★</div>
-                        <div id="prev-empty-text" style="color: #6d7175; font-size: 15px;">No reviews yet. Be the first to leave one!</div>
+                    <div class="setting-row" style="flex-direction: column; align-items: flex-start; border-top: 1px solid var(--border);">
+                        <div class="setting-info"><h3>Empty State Display</h3><p>What shows on the product page when there are zero reviews?</p></div>
+                        <select id="style-empty-mode" class="filter-select" style="width: 100%; margin-top: 10px;" onchange="updateLivePreview()">
+                            <option value="stars_text">Show grey stars & text (Recommended)</option>
+                            <option value="text_only">Show text only</option>
+                            <option value="hidden">Hide widget entirely</option>
+                        </select>
+                    </div>
+                    <div class="setting-row" id="empty-text-row" style="flex-direction: column; align-items: flex-start; border-bottom: none;">
+                        <div class="setting-info"><h3>Empty State Text</h3></div>
+                        <input type="text" id="style-empty-text" class="search-input" style="width: 100%; margin-top: 5px;" value="No reviews yet. Be the first to leave one!" oninput="updateLivePreview()">
                     </div>
 
-                    <div style="padding: 20px; border: 1px solid var(--border); font-family: 'Poppins', sans-serif;" id="prev-card">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                            <strong id="prev-text">Verified Customer</strong>
-                            <span style="font-size: 12px; color: #666;">Today</span>
+                    <button class="reply-btn" style="width: 100%; margin-top: 20px; padding: 12px; font-size: 1rem;" onclick="saveStyles()">Save & Publish Design</button>
+                </div>
+
+                <div style="flex: 1.5; min-width: 400px;">
+                    <div style="background: white; border: 1px solid var(--border); padding: 40px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" id="live-preview-container">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h2 id="prev-title" style="margin: 0; font-family: 'Poppins', sans-serif;">Reviews</h2>
+                            <button id="prev-btn" style="color: white; border: none; padding: 10px 20px; cursor: pointer; font-family: 'Poppins', sans-serif; font-weight: bold;">Write a Review</button>
                         </div>
-                        <div id="prev-stars" style="font-size: 20px; margin-bottom: 10px; line-height: 1;">★★★★★</div>
-                        <p id="prev-body" style="margin: 0; color: #444;">This product is incredible! The widget looks great.</p>
+                        
+                        <div id="prev-empty-state" style="text-align:center; padding:40px; border: 1px dashed var(--border); border-radius: 8px; margin-bottom: 20px;">
+                            <div id="prev-empty-stars" style="font-size: 24px; color: #c9cccf; margin-bottom: 10px;">★★★★★</div>
+                            <div id="prev-empty-text" style="color: #6d7175; font-size: 15px;">No reviews yet. Be the first to leave one!</div>
+                        </div>
+
+                        <div style="padding: 20px; border: 1px solid var(--border); font-family: 'Poppins', sans-serif;" id="prev-card">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                                <strong id="prev-text">Verified Customer</strong>
+                                <span style="font-size: 12px; color: #666;">Today</span>
+                            </div>
+                            <div id="prev-stars" style="font-size: 20px; margin-bottom: 10px; line-height: 1;">★★★★★</div>
+                            <p id="prev-body" style="margin: 0; color: #444;">This product is incredible! The widget looks great.</p>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
+
+        <div id="designer-badge" class="sub-view" style="display: none;">
+            <div class="settings-panel">
+                <p style="color: var(--text-light); font-weight: 500;">Configuration options for the Small Star Badge will appear here.</p>
+            </div>
+        </div>
+
+        <div id="designer-card" class="sub-view" style="display: none;">
+            <div class="settings-panel">
+                <p style="color: var(--text-light); font-weight: 500;"><em>Coming soon: Build your On-Product-Card review UI.</em></p>
+            </div>
+        </div>
+
+        <div id="designer-slider" class="sub-view" style="display: none;">
+            <div class="settings-panel">
+                <p style="color: var(--text-light); font-weight: 500;"><em>Coming soon: Build your scrolling Homepage Review Slider.</em></p>
+            </div>
+        </div>
+
     </div>
 </div>
 
@@ -284,6 +319,13 @@
     function tab(name) {
         document.querySelectorAll('.view, .tab-btn').forEach(el => el.classList.remove('active'));
         document.getElementById(name).classList.add('active');
+        event.currentTarget.classList.add('active');
+    }
+
+    function subTab(name) {
+        document.querySelectorAll('.sub-view').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.sub-tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(name).style.display = 'block';
         event.currentTarget.classList.add('active');
     }
 
@@ -331,7 +373,6 @@
         }
     }
 
-    // NEW: Smart UI for Rule Type
     function handleRuleTypeChange() {
         const type = document.getElementById('new-rule-type').value;
         const input = document.getElementById('new-rule-value');
@@ -362,7 +403,6 @@
         document.getElementById('prev-body').style.fontSize = txtSize;
         document.getElementById('prev-card').style.borderRadius = rad;
 
-        // Empty state preview logic
         const eStateBox = document.getElementById('prev-empty-state');
         const eStars = document.getElementById('prev-empty-stars');
         const eText = document.getElementById('prev-empty-text');
@@ -409,7 +449,7 @@
         if(val) {
             savedRules.push({ type: type, value: type === 'Vendor' ? 'All' : val });
             document.getElementById('new-rule-value').value = '';
-            handleRuleTypeChange(); // Reset input state
+            handleRuleTypeChange(); 
             renderRules();
             saveSettings();
         }
