@@ -5,125 +5,332 @@
     <title>Reviews Admin</title>
     <meta name="shopify-api-key" content="9b0bf096b37faf6dc0b19037b2d9d62a" />
     <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
-        :root { --bg: #f4f6f8; --card: #ffffff; --border: #ebebeb; --primary: #1a1a1a; --text: #202223; --text-light: #6d7175; --star: #ffc700; --green: #008060; --sidebar-bg: #ebebeb; --blue: #005bd3;}
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; min-height: 100vh;}
+        :root { --bg: #f4f6f8; --card: #ffffff; --border: #ebebeb; --primary: #303030; --text: #202223; --text-light: #6d7175; --star: #ffc700; --green: #008060; --red: #d82c0d; --orange: #e2a500; --sidebar-bg: #ebebeb; --blue: #005bd3;}
+        body, button, input, select, textarea { font-family: 'Inter', sans-serif !important; }
+        body { background: var(--bg); color: var(--text); margin: 0; -webkit-font-smoothing: antialiased; display: flex; min-height: 100vh;}
         
-        /* SIDEBAR */
-        .app-sidebar { width: 240px; background: var(--sidebar-bg); padding: 30px 20px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px;}
-        .sidebar-title { font-size: 11px; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; padding-left: 12px;}
-        .tab-btn { background: transparent; border: none; padding: 10px 12px; font-weight: 500; cursor: pointer; color: var(--text); font-size: 14px; text-align: left; border-radius: 8px;}
+        /* SIDEBAR NAVIGATION */
+        .app-sidebar { width: 240px; background: var(--sidebar-bg); padding: 30px 20px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; position: fixed; height: 100vh; box-sizing: border-box;}
+        .sidebar-title { font-size: 0.75rem; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; padding-left: 12px;}
+        .tab-btn { background: transparent; border: none; padding: 10px 12px; font-weight: 500; cursor: pointer; color: var(--text); font-size: 0.95rem; text-align: left; border-radius: 8px; transition: all 0.2s;}
+        .tab-btn:hover { background: rgba(0,0,0,0.05); }
         .tab-btn.active { background: #ffffff; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
         
-        /* CONTENT - FULL WIDTH */
-        .main-content { flex: 1; padding: 40px; width: 100%; box-sizing: border-box; }
-        .view { display: none; width: 100%; }
+        /* MAIN CONTENT AREA */
+        .main-content { flex: 1; padding: 40px; margin-left: 240px; width: calc(100% - 240px); box-sizing: border-box;}
+        .view { display: none; width: 100%; animation: fadeIn 0.2s ease-out; }
         .view.active { display: block; }
-        
-        .settings-panel { background: var(--card); padding: 40px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 25px; width: 100%; box-sizing: border-box;}
-        
-        /* CODE BOXES */
-        .code-block { background: #1a1a1a; color: #d1d1d1; padding: 20px; border-radius: 8px; font-family: monospace; font-size: 13px; position: relative; margin: 15px 0; overflow-x: auto;}
-        .guide-step { margin-bottom: 30px; padding-bottom: 30px; border-bottom: 1px solid var(--border); }
-        .guide-step:last-child { border-bottom: none; }
-        .file-badge { background: #e3e3e3; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 12px; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-        .sub-tab-btn { background: none; border: none; padding: 10px 15px; font-weight: 600; cursor: pointer; color: var(--text-light); font-size: 14px; border-bottom: 2px solid transparent; }
+        /* METRICS & CARDS */
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 25px; margin-bottom: 40px; }
+        .metric-card { background: var(--card); padding: 35px 30px; border-radius: 12px; border: 1px solid var(--border); position: relative; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);}
+        .metric-card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: #c1c2c3; }
+        .metric-card.live::before { background: var(--green); }
+        .metric-card h1 { font-size: 3.5rem; margin: 0; color: var(--primary); line-height: 1; font-weight: 800; }
+        .metric-card p { color: var(--text-light); font-weight: 600; margin: 10px 0 0 0; font-size: 0.9rem; text-transform: uppercase;}
+
+        /* REVIEW LIST & TABLES */
+        .review-card { background: var(--card); border: 1px solid var(--border); padding: 30px; margin-bottom: 20px; border-radius: 12px; display: flex; justify-content: space-between; gap: 40px; border-left: 5px solid #c1c2c3; box-shadow: 0 1px 3px rgba(0,0,0,0.05);}
+        .status-border-accepted { border-left-color: var(--green); }
+        .status-border-rejected { border-left-color: var(--red); background: #fafafa; }
+        
+        .stars { color: var(--star); font-size: 1.1rem; margin-bottom: 10px;}
+        .headline { font-weight: 700; font-size: 1.2rem; margin-bottom: 8px;}
+        .comment { font-size: 0.95rem; line-height: 1.6; color: var(--text); }
+
+        /* SETTINGS & FORMS */
+        .settings-panel { background: var(--card); padding: 40px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 25px 0; border-bottom: 1px solid var(--border); }
+        .setting-info h3 { margin: 0 0 5px 0; font-size: 1rem; color: var(--primary); }
+        .setting-info p { margin: 0; font-size: 0.85rem; color: var(--text-light); max-width: 500px; }
+
+        .search-input, .filter-select { padding: 12px 16px; border-radius: 8px; border: 1px solid #c9cccf; font-size: 0.95rem; background: #ffffff;}
+        .post-btn { background: var(--primary); color: white; border: none; padding: 12px 24px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: 0.2s;}
+        .post-btn:hover { background: #000; }
+
+        /* SUB-TABS (DESIGNER) */
+        .sub-tab-nav { display: flex; gap: 20px; border-bottom: 2px solid var(--border); margin-bottom: 30px; }
+        .sub-tab-btn { background: none; border: none; padding: 12px 5px; font-weight: 600; cursor: pointer; color: var(--text-light); font-size: 0.95rem; border-bottom: 3px solid transparent; margin-bottom: -2px;}
         .sub-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        /* CODE BOXES */
+        .code-block { background: #1a1a1a; color: #f4f6f8; padding: 25px; border-radius: 12px; font-family: monospace; font-size: 13px; margin: 20px 0; overflow-x: auto;}
+        .file-badge { background: #ebebeb; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; color: var(--primary); }
+        
+        /* SWITCH UI */
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #c9cccf; transition: .3s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--green); }
+        input:checked + .slider:before { transform: translateX(20px); }
     </style>
 </head>
 <body>
 
 <div class="app-sidebar">
-    <div class="sidebar-title">Management</div>
+    <div class="sidebar-title">Manage</div>
     <button class="tab-btn active" onclick="tab('dashboard')">Overview</button>
     <button class="tab-btn" onclick="tab('manage')">Reviews List</button>
+    <button class="tab-btn" onclick="tab('bin')">Bin & Spam 🗑️</button>
     
     <div class="sidebar-title" style="margin-top: 20px;">Settings</div>
-    <button class="tab-btn" onclick="tab('settings')">Auto-Approve & Rules</button> 
-    <button class="tab-btn" onclick="tab('designer')">Visual Customizer</button>
+    <button class="tab-btn" onclick="tab('settings')">Rules & Categorization</button> 
+    <button class="tab-btn" onclick="tab('designer')">Widget Customizer 🎨</button>
     
     <div class="sidebar-title" style="margin-top: 20px;">Developers</div>
-    <button class="tab-btn" onclick="tab('manual-install')">Manual Setup Guide</button>
+    <button class="tab-btn" onclick="tab('manual-install')">Setup Guide</button>
 </div>
 
 <div class="main-content">
+    <div id="error-alert" class="error-box"></div>
     
     <div id="dashboard" class="view active">
-        <h2>Store Overview</h2>
-        <div style="display: flex; gap: 20px;">
-            <div class="settings-panel" style="flex: 1;"><h3>Total Reviews</h3><h1 id="count-total">0</h1></div>
-            <div class="settings-panel" style="flex: 1;"><h3>Published</h3><h1 id="count-live">0</h1></div>
+        <h2 style="margin-top: 0;">Store Overview</h2>
+        <div class="metrics-grid">
+            <div class="metric-card"><h1 id="count-total">0</h1><p>Reviews Captured</p></div>
+            <div class="metric-card live"><h1 id="count-live">0</h1><p>Published to Store</p></div>
+        </div>
+    </div>
+    
+    <div id="manage" class="view">
+        <h2 style="margin-top: 0;">Review Management</h2>
+        <div style="display: flex; gap: 15px; margin-bottom: 25px;">
+            <input type="text" id="search-bar" class="search-input" style="flex: 1;" placeholder="Search reviews..." onkeyup="renderLists()">
+            <select id="status-filter" class="filter-select" onchange="renderLists()">
+                <option value="all">All Statuses</option>
+                <option value="pending">Pending</option>
+                <option value="accepted">Accepted</option>
+            </select>
+        </div>
+        <div id="mgmt-list">Loading reviews...</div>
+    </div>
+
+    <div id="bin" class="view">
+        <h2>Trash & Spam</h2>
+        <div id="trash-list">Bin is empty.</div>
+    </div>
+    
+    <div id="settings" class="view">
+        <h2 style="margin-top: 0;">Rules & Sliders</h2>
+        <div class="settings-panel">
+            <div class="setting-row">
+                <div class="setting-info">
+                    <h3>Auto-Approve Verified Reviews</h3>
+                    <p>Verified purchases bypass moderation if they meet your star criteria.</p>
+                </div>
+                <label class="switch"><input type="checkbox" id="set-auto-approve" onchange="saveSettings()"><span class="slider"></span></label>
+            </div>
+            <div class="setting-row" style="border: none;">
+                <div class="setting-info"><h3>Minimum Star Rating</h3></div>
+                <select id="set-min-stars" class="filter-select" onchange="saveSettings()">
+                    <option value="5">5 Stars only</option>
+                    <option value="4">4 Stars & up</option>
+                    <option value="1">All reviews</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="settings-panel">
+            <h3>Dynamic Slider Triggers</h3>
+            <p style="color: var(--text-light); font-size: 0.9rem;">Assign slider questions based on product tags.</p>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <input type="text" id="new-profile-tag" class="search-input" placeholder="Tag (e.g. snowboard)">
+                <input type="text" id="new-profile-sliders" class="search-input" style="flex: 1;" placeholder="Sliders (e.g. Fit, Speed, Quality)">
+                <button class="post-btn" onclick="addAttributeProfile()">Add Rule</button>
+            </div>
+            <div id="active-profiles-container" style="margin-top: 20px;"></div>
         </div>
     </div>
 
     <div id="designer" class="view">
-        <h2>Widget Customizer</h2>
-        <div style="display: flex; gap: 10px; margin-bottom: 25px;">
+        <h2 style="margin-top: 0;">Appearance Customizer</h2>
+        <div class="sub-tab-nav">
             <button class="sub-tab-btn active" onclick="subTab('designer-full')">Product Page Widget</button>
             <button class="sub-tab-btn" onclick="subTab('designer-card')">Product Card Stars</button>
-            <button class="sub-tab-btn" onclick="subTab('designer-badge')">Rating Badge</button>
         </div>
-        <div id="designer-full" class="sub-view active">
+
+        <div id="designer-full" class="sub-view active" style="display: block;">
             <div class="settings-panel">
-                </div>
+                <div class="setting-row"><h3>Brand Color</h3><input type="color" id="style-primary" oninput="saveStyles()"></div>
+                <div class="setting-row"><h3>Star Color</h3><input type="color" id="style-star" oninput="saveStyles()"></div>
+                <div class="setting-row" style="border: none;"><h3>Text Size (px)</h3><input type="number" id="style-text-size" class="search-input" style="width: 80px;" oninput="saveStyles()"></div>
+            </div>
+        </div>
+
+        <div id="designer-card" class="sub-view" style="display: none;">
+            <div class="settings-panel">
+                <div class="setting-row"><h3>Star Size (px)</h3><input type="number" id="card-star-size" class="search-input" style="width: 80px;" oninput="saveStyles()"></div>
+                <div class="setting-row" style="border: none;"><h3>Show Review Count</h3><label class="switch"><input type="checkbox" id="card-show-count" onchange="saveStyles()"><span class="slider"></span></label></div>
+            </div>
         </div>
     </div>
 
     <div id="manual-install" class="view">
-        <h2>Technical Setup Guide</h2>
-        <p style="color: var(--text-light);">Use these snippets if you are building a custom theme or prefer hard-coding the widgets.</p>
-
+        <h2 style="margin-top: 0;">Technical Setup Guide</h2>
         <div class="settings-panel">
-            <div class="guide-step">
-                <h3>1. Main Product Widget</h3>
-                <p>Open <span class="file-badge">sections/main-product.liquid</span>. Look for <code>{{ product.description }}</code> and paste this code immediately after it:</p>
-                <div class="code-block">
-&lt;div class="review-widget-container" 
-     data-product-id="&#123;&#123; product.id &#125;&#125;" 
-     data-shop="&#123;&#123; shop.domain &#125;&#125;"&gt;
-&lt;/div&gt;</div>
-            </div>
-
-            <div class="guide-step">
-                <h3>2. Collection Grid Stars</h3>
-                <p>Open <span class="file-badge">snippets/card-product.liquid</span>. Look for the <code>price</code> render tag and paste this code directly below it:</p>
-                <div class="code-block">
-&lt;div class="review-card-stars" 
-     data-product-id="&#123;&#123; product.id &#125;&#125;" 
-     data-shop="&#123;&#123; shop.domain &#125;&#125;"&gt;
-&lt;/div&gt;</div>
-            </div>
-
-            <div class="guide-step">
-                <h3>3. Global Script</h3>
-                <p>Paste this once at the very bottom of your <span class="file-badge">layout/theme.liquid</span> file, just before the <code>&lt;/body&gt;</code> tag:</p>
-                <div class="code-block">
-&lt;script src="https://your-api.render.com/widget-loader.js" async&gt;&lt;/script&gt;</div>
-            </div>
+            <h3>1. Main Review Widget</h3>
+            <p>Paste this into <span class="file-badge">sections/main-product.liquid</span>:</p>
+            <div class="code-block">
+&lt;div class="reviews-widget" data-product-id="&#123;&#123; product.id &#125;&#125;" data-shop="&#123;&#123; shop.domain &#125;&#125;"&gt;&lt;/div&gt;</div>
+            <h3>2. Product Grid Stars</h3>
+            <p>Paste this into <span class="file-badge">snippets/card-product.liquid</span>:</p>
+            <div class="code-block">
+&lt;div class="card-stars" data-product-id="&#123;&#123; product.id &#125;&#125;" data-shop="&#123;&#123; shop.domain &#125;&#125;"&gt;&lt;/div&gt;</div>
         </div>
     </div>
 
 </div>
 
 <script>
+    const API = '/api';
     const urlParams = new URLSearchParams(window.location.search);
-    const SHOP_DOMAIN = urlParams.get('shop') || 'demo.myshopify.com';
+    const SHOP_DOMAIN = urlParams.get('shop') || 'your-store.myshopify.com';
+
+    let data = [];
+    let savedRules = [];
+    let savedProfiles = [];
 
     function tab(name) {
-        document.querySelectorAll('.view, .tab-btn').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
         document.getElementById(name).classList.add('active');
         event.currentTarget.classList.add('active');
     }
+
     function subTab(name) {
         document.querySelectorAll('.sub-view').forEach(el => el.style.display = 'none');
         document.querySelectorAll('.sub-tab-btn').forEach(el => el.classList.remove('active'));
         document.getElementById(name).style.display = 'block';
         event.currentTarget.classList.add('active');
     }
-    // ... Load/Save functions remain same as previous SaaS logic
+
+    async function load() {
+        try {
+            const res = await fetch(`${API}/admin/reviews?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
+            data = await res.json();
+            updateMetrics();
+            renderLists();
+
+            const setRes = await fetch(`${API}/admin/settings?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
+            const settings = await setRes.json();
+            if(settings) {
+                document.getElementById('set-auto-approve').checked = settings.autoApproveVerified;
+                document.getElementById('set-min-stars').value = settings.autoApproveMinStars || 4;
+                savedProfiles = settings.attributeProfiles || [];
+                renderProfiles();
+                
+                // Designer fields
+                if(settings.widgetStyles) {
+                    document.getElementById('style-primary').value = settings.widgetStyles.primaryColor || '#000000';
+                    document.getElementById('style-star').value = settings.widgetStyles.starColor || '#ffc700';
+                    document.getElementById('style-text-size').value = settings.widgetStyles.textSize || 15;
+                }
+                if(settings.cardStyles) {
+                    document.getElementById('card-star-size').value = settings.cardStyles.starSize || 14;
+                    document.getElementById('card-show-count').checked = settings.cardStyles.showCount !== false;
+                }
+            }
+        } catch(e) { console.error("Load failed", e); }
+    }
+
+    function updateMetrics() {
+        const live = data.filter(r => r.status === 'accepted' && !r.isDeleted).length;
+        document.getElementById('count-total').innerText = data.length;
+        document.getElementById('count-live').innerText = live;
+    }
+
+    function renderLists() {
+        const query = document.getElementById('search-bar').value.toLowerCase();
+        const status = document.getElementById('status-filter').value;
+        
+        let filtered = data.filter(r => !r.isDeleted);
+        if(status !== 'all') filtered = filtered.filter(r => r.status === status);
+        if(query) filtered = filtered.filter(r => r.userId.toLowerCase().includes(query) || r.comment.toLowerCase().includes(query));
+
+        document.getElementById('mgmt-list').innerHTML = filtered.map(r => `
+            <div class="review-card status-border-${r.status}">
+                <div style="flex:1;">
+                    <div style="font-weight:700;">${r.userId}</div>
+                    <div class="stars">${'★'.repeat(r.rating)}</div>
+                    <div class="headline">${r.headline}</div>
+                    <div class="comment">${r.comment}</div>
+                </div>
+                <div style="text-align:right;">
+                    <button class="post-btn" style="background:var(--green);" onclick="updateStatus('${r._id}', 'accepted')">Accept</button>
+                    <button class="post-btn" style="background:var(--red); margin-top:10px;" onclick="toggleBin('${r._id}', true)">Bin</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function updateStatus(id, status) {
+        fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({status}) });
+        const r = data.find(x => x._id === id); if(r) r.status = status;
+        renderLists(); updateMetrics();
+    }
+
+    async function toggleBin(id, isDeleted) {
+        fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({isDeleted}) });
+        const r = data.find(x => x._id === id); if(r) r.isDeleted = isDeleted;
+        renderLists(); updateMetrics();
+    }
+
+    async function saveSettings() {
+        const payload = {
+            shopDomain: SHOP_DOMAIN,
+            autoApproveVerified: document.getElementById('set-auto-approve').checked,
+            autoApproveMinStars: parseInt(document.getElementById('set-min-stars').value),
+            attributeProfiles: savedProfiles
+        };
+        await fetch(`${API}/admin/settings`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    }
+
+    async function saveStyles() {
+        const payload = {
+            shopDomain: SHOP_DOMAIN,
+            widgetStyles: {
+                primaryColor: document.getElementById('style-primary').value,
+                starColor: document.getElementById('style-star').value,
+                textSize: parseInt(document.getElementById('style-text-size').value)
+            },
+            cardStyles: {
+                starSize: parseInt(document.getElementById('card-star-size').value),
+                showCount: document.getElementById('card-show-count').checked
+            }
+        };
+        await fetch(`${API}/admin/settings`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    }
+
+    function renderProfiles() {
+        document.getElementById('active-profiles-container').innerHTML = savedProfiles.map((p, idx) => `
+            <div style="background:#fff; border:1px solid var(--border); padding:15px; border-radius:8px; margin-bottom:10px; display:flex; justify-content:space-between;">
+                <div><strong>${p.tag}</strong>: ${p.sliders.join(', ')}</div>
+                <button onclick="removeProfile(${idx})" style="border:none; color:var(--red); cursor:pointer; background:none; font-weight:700;">Delete</button>
+            </div>
+        `).join('');
+    }
+
+    function addAttributeProfile() {
+        const tag = document.getElementById('new-profile-tag').value.trim();
+        const sliders = document.getElementById('new-profile-sliders').value.split(',').map(s => s.trim());
+        if(tag && sliders.length) {
+            savedProfiles.push({ tag, sliders });
+            renderProfiles();
+            saveSettings();
+        }
+    }
+
+    function removeProfile(i) { savedProfiles.splice(i, 1); renderProfiles(); saveSettings(); }
+
+    load();
 </script>
 </body>
 </html>
