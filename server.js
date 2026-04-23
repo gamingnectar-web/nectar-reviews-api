@@ -7,9 +7,6 @@ const crypto = require('crypto');
 
 const app = express();
 
-// ==========================================
-// MIDDLEWARE & SECURITY
-// ==========================================
 app.use(cors()); 
 app.use(express.json());
 app.use((req, res, next) => {
@@ -21,9 +18,6 @@ mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ Connected to MongoDB Atlas'))
   .catch((err) => console.error('❌ MongoDB Connection Error:', err));
 
-// ==========================================
-// DATABASE SCHEMAS
-// ==========================================
 const reviewSchema = new mongoose.Schema({
     itemId: { type: String, required: true },
     userId: { type: String, required: true }, 
@@ -71,9 +65,6 @@ async function initSettings() {
 }
 initSettings();
 
-// ==========================================
-// MAGIC LINK & VERIFICATION LOGIC
-// ==========================================
 function generateMagicToken(orderId, email) {
     const secret = process.env.SHOPIFY_API_SECRET || 'fallback-nectar-secret';
     const data = `${String(orderId).trim().toLowerCase()}:${String(email).trim().toLowerCase()}`;
@@ -117,7 +108,6 @@ async function verifyShopifyOrder(orderId, email, productId) {
 // ==========================================
 app.get('/', (req, res) => res.send('🚀 Nectar API Live'));
 
-// Widget Styles Route
 app.get('/api/widget/styles', async (req, res) => {
     try {
         const config = await Settings.findOne({ widgetId: 'default' });
@@ -133,8 +123,16 @@ app.get('/api/reviews/:itemId', async (req, res) => {
             isDeleted: { $ne: true }, 
             isSpam: { $ne: true } 
         }).sort({ createdAt: -1 });
-        
         res.status(200).json(reviews); 
+    } catch (error) { res.status(500).json({ error: "Fetch error" }); }
+});
+
+// NEW: Fetch a single specific review (used to check status of a user's pending review)
+app.get('/api/reviews/single/:id', async (req, res) => {
+    try {
+        const review = await Review.findById(req.params.id);
+        if (!review) return res.status(404).json({ error: "Not found" });
+        res.status(200).json(review);
     } catch (error) { res.status(500).json({ error: "Fetch error" }); }
 });
 
@@ -173,13 +171,10 @@ app.post('/api/reviews', async (req, res) => {
     } catch (error) { res.status(400).json({ error: "Failed to submit" }); }
 });
 
-// ==========================================
-// MAGIC LINK BULK ROUTES
-// ==========================================
+// MAGIC LINK ROUTES
 app.get('/api/magic-link/order', async (req, res) => {
     const { orderId, email, token } = req.query;
     if (!orderId || !email || !token) return res.status(400).json({ error: "Missing parameters" });
-    
     const expectedToken = generateMagicToken(orderId, email);
     if (token !== expectedToken) return res.status(403).json({ error: "Invalid or expired secure link." });
 
@@ -194,17 +189,12 @@ app.get('/api/magic-link/order', async (req, res) => {
             headers: { 'Authorization': `Basic ${authString}`, 'Content-Type': 'application/json' }
         });
         const data = await response.json();
-        
         if (data.orders && data.orders.length > 0) {
             const order = data.orders.find(o => String(o.order_number) === rawNumber || o.name.includes(rawNumber));
             if (order && order.email.toLowerCase() === email.toLowerCase()) {
                 const products = order.line_items.map(item => ({
-                    productId: item.product_id,
-                    variantId: item.variant_id,
-                    name: item.title,
-                    image: null 
+                    productId: item.product_id, variantId: item.variant_id, name: item.title, image: null 
                 })).filter(item => item.productId); 
-
                 return res.status(200).json({ products, customerName: order.customer?.first_name || "Customer" });
             }
         }
@@ -222,10 +212,7 @@ app.post('/api/reviews/bulk', async (req, res) => {
 
         for (const rev of reviews) {
             let finalStatus = 'pending';
-            if (config && config.autoApproveVerified && rev.rating >= config.autoApproveMinStars) {
-                finalStatus = 'accepted';
-            }
-
+            if (config && config.autoApproveVerified && rev.rating >= config.autoApproveMinStars) finalStatus = 'accepted';
             const newReview = new Review({
                 itemId: String(rev.itemId), userId: rev.userId, email: email,
                 isAnonymous: rev.isAnonymous, rating: rev.rating, headline: rev.headline,
@@ -247,7 +234,7 @@ app.get('/api/admin/generate-link', (req, res) => {
 });
 
 // ==========================================
-// ADMIN ROUTES
+// ADMIN ROUTES & PATCH UPDATER
 // ==========================================
 app.get('/api/admin/reviews', async (req, res) => {
     try { res.status(200).json(await Review.find().sort({ createdAt: -1 })); } 
@@ -257,13 +244,24 @@ app.get('/api/admin/reviews', async (req, res) => {
 app.patch('/api/reviews/:id', async (req, res) => {
     try {
         const updateData = {};
+        
+        // Admin updates
         if (req.body.status !== undefined) updateData.status = req.body.status;
         if (req.body.reply !== undefined) updateData.reply = req.body.reply;
+        if (req.body.verifiedPurchase !== undefined) updateData.verifiedPurchase = req.body.verifiedPurchase;
+        if (req.body.verificationNote !== undefined) updateData.verificationNote = req.body.verificationNote;
         if (req.body.isDeleted !== undefined) {
             updateData.isDeleted = req.body.isDeleted;
             updateData.deletedAt = req.body.isDeleted ? new Date() : null; 
             if (req.body.isDeleted === false) updateData.isSpam = false; 
         }
+
+        // UPDATED: Allow users to edit their pending reviews
+        if (req.body.rating !== undefined) updateData.rating = req.body.rating;
+        if (req.body.headline !== undefined) updateData.headline = req.body.headline;
+        if (req.body.comment !== undefined) updateData.comment = req.body.comment;
+        if (req.body.attributes !== undefined) updateData.attributes = req.body.attributes;
+
         res.json(await Review.findByIdAndUpdate(req.params.id, updateData, { new: true }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
