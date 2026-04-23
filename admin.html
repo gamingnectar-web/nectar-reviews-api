@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Review Admin Dashboard</title>
-    <meta name="shopify-api-key" content="9b0bf096b37faf6dc0b19037b2d9d62a" />
+    <meta name="shopify-api-key" content="PASTE_YOUR_CLIENT_ID_HERE" />
     <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -64,16 +64,24 @@
         .v-badge { font-size: 0.8rem; padding: 6px 12px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; letter-spacing: 0.5px;}
         .v-badge-yes { background: #d1fae5; color: #047857; border: 1px solid #a7f3d0;}
         .v-badge-no { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; cursor: help;}
-        
+        .force-verify-btn { margin-top: 8px; font-size: 0.75rem; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border); cursor: pointer; background: white; font-weight: 600; color: var(--text-light); transition: 0.2s;}
+        .force-verify-btn:hover { background: #f1f5f9; color: var(--primary); }
+
+        /* NEW: Pill Button Styles */
         .reply-container { margin-top: 25px; padding-top: 25px; border-top: 1px solid var(--border); }
-        .reply-toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--primary); font-weight: 600; cursor: pointer; border: none; background: none; font-size: 0.95rem; padding: 0;}
-        .reply-toggle:hover { text-decoration: underline; }
+        .reply-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: 0.2s; border: none; outline: none; }
+        .reply-pill.has-reply { background: #d1fae5; color: #047857; border: 1px solid #a7f3d0; }
+        .reply-pill.no-reply { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; }
+        .reply-pill:hover { filter: brightness(0.95); }
+
+        .action-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: 0.2s; border: none; outline: none; margin-top: 10px;}
+        .bin-pill { background: #fee2e2; color: #be123c; border: 1px solid #fecdd3; }
+        .restore-pill { background: #e0e7ff; color: #1d4ed8; border: 1px solid #c7d2fe; }
+        .action-pill:hover { filter: brightness(0.95); }
+
         .reply-panel { margin-top: 15px; background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid var(--border); display: none;}
         .reply-input { width: 100%; min-height: 80px; padding: 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem; resize: vertical; margin-bottom: 10px; font-family: inherit;}
         .reply-btn { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.9rem;}
-        
-        .delete-btn { background: none; border: none; color: var(--red); font-weight: 600; cursor: pointer; font-size: 0.9rem; text-decoration: underline;}
-        .restore-btn { background: none; border: none; color: var(--green); font-weight: 600; cursor: pointer; font-size: 0.9rem; text-decoration: underline;}
         
         .pub-preview-wrapper { background: var(--card); padding: 50px; border-radius: 16px; border: 1px solid var(--border); }
         .error-box { background: #fee2e2; border: 1px solid #ef4444; padding: 20px; border-radius: 8px; color: #991b1b; text-align: center; margin-bottom: 20px; display: none; font-weight: 600;}
@@ -96,10 +104,6 @@
         .builder-row { display: flex; gap: 15px; margin-bottom: 15px; }
         .tag-pill { background: white; border: 1px solid var(--border); padding: 8px 15px; border-radius: 20px; font-size: 0.9rem; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; margin: 0 10px 10px 0;}
         .pill-remove { color: var(--red); cursor: pointer; font-weight: bold; }
-        
-        /* New Manual Override Button */
-        .force-verify-btn { margin-top: 8px; font-size: 0.75rem; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border); cursor: pointer; background: white; font-weight: 600; color: var(--text-light); transition: 0.2s;}
-        .force-verify-btn:hover { background: #f1f5f9; color: var(--primary); }
     </style>
 </head>
 <body>
@@ -188,8 +192,7 @@
             <div class="setting-row" style="flex-direction: column; align-items: flex-start;">
                 <div class="setting-info" style="width: 100%;">
                     <h3>Product Categorization Rules</h3>
-                    <p>Define rules to automatically tag incoming reviews based on the product. This allows you to filter the 'Manage' tab by Vendor, Metafield, or Product Tag.</p>
-                    
+                    <p>Define rules to automatically tag incoming reviews based on the product.</p>
                     <div class="filter-builder">
                         <div class="builder-row">
                             <select id="new-rule-type" class="number-select">
@@ -262,6 +265,9 @@
     const API = '/api';
     let data = [];
     let savedRules = [];
+    
+    // Tracks which reply boxes the user has clicked open so they don't snap shut when updating status
+    let openReplyBoxes = new Set();
 
     function tab(name) {
         document.querySelectorAll('.view, .tab-btn').forEach(el => el.classList.remove('active'));
@@ -421,6 +427,18 @@
         document.getElementById('trash-list').innerHTML = trashData.length ? trashData.map(r => buildCard(r, true)).join('') : '<p style="text-align:center;">Bin is empty.</p>';
     }
 
+    // Toggle logic for the reply box so it slides open and closed
+    function toggleReplyBox(id) {
+        const box = document.getElementById(`reply-box-${id}`);
+        if (box.style.display === 'none' || box.style.display === '') {
+            box.style.display = 'block';
+            openReplyBoxes.add(id);
+        } else {
+            box.style.display = 'none';
+            openReplyBoxes.delete(id);
+        }
+    }
+
     function buildCard(r, isTrash) {
         let verifyHtml = r.verifiedPurchase 
             ? `<div class="v-badge v-badge-yes" title="${r.verificationNote || 'Verified'}">✓ Verified Buyer</div>` 
@@ -433,6 +451,11 @@
         const tagsHtml = r.productTags && r.productTags.length > 0 
             ? `<div style="margin-top: 10px;">${r.productTags.map(t => `<span style="font-size: 0.75rem; background: #e2e8f0; padding: 2px 8px; border-radius: 12px; margin-right: 5px;">${t}</span>`).join('')}</div>`
             : '';
+
+        // Dynamic Pill Styling based on if a reply exists
+        const replyStateClass = r.reply ? 'has-reply' : 'no-reply';
+        const replyText = r.reply ? '💬 Edit Reply' : '💬 Reply to Customer';
+        const isReplyOpen = openReplyBoxes.has(r._id) ? 'block' : 'none';
 
         return `
         <div class="review-card status-border-${r.status}">
@@ -456,8 +479,9 @@
                 ${tagsHtml}
                 
                 <div class="reply-container">
-                    <button class="reply-toggle" onclick="document.getElementById('reply-box-${r._id}').style.display = 'block'">💬 Reply to Customer</button>
-                    <div id="reply-box-${r._id}" class="reply-panel" style="display: ${r.reply ? 'block' : 'none'};">
+                    <button class="reply-pill ${replyStateClass}" onclick="toggleReplyBox('${r._id}')">${replyText}</button>
+                    
+                    <div id="reply-box-${r._id}" class="reply-panel" style="display: ${isReplyOpen};">
                         <textarea id="reply-text-${r._id}" class="reply-input" placeholder="Type your public reply...">${r.reply || ''}</textarea>
                         <button class="reply-btn" onclick="saveReply('${r._id}')">Publish Reply</button>
                     </div>
@@ -479,8 +503,8 @@
 
                 <div style="padding-top: 20px;">
                     ${isTrash ? 
-                        `<button class="restore-btn" onclick="toggleBin('${r._id}', false)">↺ Restore Review</button>` : 
-                        `<button class="delete-btn" onclick="toggleBin('${r._id}', true)">🗑️ Move to Bin</button>`
+                        `<button class="action-pill restore-pill" onclick="toggleBin('${r._id}', false)">↺ Restore</button>` : 
+                        `<button class="action-pill bin-pill" onclick="toggleBin('${r._id}', true)">🗑️ Move to Bin</button>`
                     }
                 </div>
             </div>
@@ -499,28 +523,62 @@
             </div>`).join('');
     }
 
+    // =====================================
+    // AJAX ACTIONS (Optimistic UI updates)
+    // =====================================
+
     async function updateStatus(id, status) {
-        await fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({status}) });
-        load();
+        // 1. Instantly update the local array
+        const review = data.find(r => r._id === id);
+        if(review) review.status = status;
+        
+        // 2. Instantly re-render the screen (No loading blink!)
+        renderLists();
+        updateMetrics();
+
+        // 3. Quietly sync to the database in the background
+        fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({status}) });
     }
 
     async function saveReply(id) {
         const text = document.getElementById(`reply-text-${id}`).value;
-        await fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({reply: text}) });
+        
+        // 1. Instantly update the local array
+        const review = data.find(r => r._id === id);
+        if(review) review.reply = text;
+        
+        // 2. Close the box and re-render so the Pill turns Green instantly!
+        openReplyBoxes.delete(id);
+        renderLists();
+
+        // 3. Sync to database
+        fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({reply: text}) });
         if(window.shopify) { window.shopify.toast.show('Reply published'); }
-        load();
     }
 
     async function toggleBin(id, isDeleted) {
         if(isDeleted && !confirm('Move to Bin? It will be deleted forever in 28 days.')) return;
-        await fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({isDeleted}) });
+        
+        const review = data.find(r => r._id === id);
+        if(review) review.isDeleted = isDeleted;
+        
+        renderLists();
+        updateMetrics();
+
+        fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({isDeleted}) });
         if(window.shopify) { window.shopify.toast.show(isDeleted ? 'Moved to Bin' : 'Restored'); }
-        load();
     }
 
-    // NEW: Manual Verify Toggle
     async function toggleVerify(id, isVerified) {
-        await fetch(`${API}/reviews/${id}`, { 
+        const review = data.find(r => r._id === id);
+        if(review) {
+            review.verifiedPurchase = isVerified;
+            review.verificationNote = isVerified ? "Manually verified by Admin" : "Verification manually removed";
+        }
+        
+        renderLists();
+
+        fetch(`${API}/reviews/${id}`, { 
             method: 'PATCH', 
             headers: {'Content-Type':'application/json'}, 
             body: JSON.stringify({
@@ -529,7 +587,6 @@
             }) 
         });
         if(window.shopify) { window.shopify.toast.show(isVerified ? 'Marked as Verified' : 'Verification Removed'); }
-        load();
     }
 
     load();
