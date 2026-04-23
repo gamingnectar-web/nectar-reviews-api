@@ -3,10 +3,13 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
-const crypto = require('crypto'); // NEW: Cryptographic engine for Magic Links
+const crypto = require('crypto'); // Cryptographic engine for Magic Links
 
 const app = express();
 
+// ==========================================
+// MIDDLEWARE & SECURITY
+// ==========================================
 app.use(cors()); 
 app.use(express.json());
 app.use((req, res, next) => {
@@ -31,7 +34,7 @@ const reviewSchema = new mongoose.Schema({
     comment: { type: String },
     reply: { type: String, default: '' },
     attributes: { type: Map, of: Number }, 
-    productTags: { type: [String], default: [] }, 
+    productTags: { type: [String], default: [] }, // Captures Vendor & Tags
     status: { type: String, enum: ['pending', 'accepted', 'rejected', 'hold'], default: 'pending' },
     verifiedPurchase: { type: Boolean, default: false },
     verificationNote: { type: String, default: '' }, 
@@ -42,6 +45,7 @@ const reviewSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 });
 
+// 28-Day Auto-Delete (TTL Index)
 reviewSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 2419200 });
 const Review = mongoose.model('Review', reviewSchema, 'reviews'); 
 
@@ -64,7 +68,6 @@ initSettings();
 // ==========================================
 // MAGIC LINK & VERIFICATION LOGIC
 // ==========================================
-// Uses your Shopify Secret to create an unbreakable hash.
 function generateMagicToken(orderId, email) {
     const secret = process.env.SHOPIFY_API_SECRET || 'fallback-nectar-secret';
     const data = `${String(orderId).trim().toLowerCase()}:${String(email).trim().toLowerCase()}`;
@@ -108,9 +111,18 @@ async function verifyShopifyOrder(orderId, email, productId) {
 // ==========================================
 app.get('/', (req, res) => res.send('🚀 Nectar API Live'));
 
+// THE FIX: Uses $ne to ensure old test reviews still load properly
 app.get('/api/reviews/:itemId', async (req, res) => {
-    try { res.status(200).json(await Review.find({ itemId: String(req.params.itemId), status: 'accepted', isDeleted: false, isSpam: false }).sort({ createdAt: -1 })); } 
-    catch (error) { res.status(500).json({ error: "Fetch error" }); }
+    try { 
+        const reviews = await Review.find({ 
+            itemId: String(req.params.itemId), 
+            status: 'accepted', 
+            isDeleted: { $ne: true }, 
+            isSpam: { $ne: true } 
+        }).sort({ createdAt: -1 });
+        
+        res.status(200).json(reviews); 
+    } catch (error) { res.status(500).json({ error: "Fetch error" }); }
 });
 
 // SINGLE REVIEW POST
@@ -121,17 +133,20 @@ app.post('/api/reviews', async (req, res) => {
         let finalStatus = 'pending';
         let flaggedSpam = false;
 
+        // 1. Verify if needed
         if (!isVerified && req.body.orderId && req.body.email) {
             const checkResult = await verifyShopifyOrder(req.body.orderId, req.body.email, req.body.itemId);
             isVerified = checkResult.verified;
             vNote = checkResult.note;
         } else if (!isVerified && !req.body.orderId) vNote = "No Order ID provided.";
 
+        // 2. Spam Trap (More than 2 unverified from same email in 24h)
         if (!isVerified && req.body.email) {
             const recentUnverified = await Review.countDocuments({ email: req.body.email, verifiedPurchase: false, createdAt: { $gte: new Date(Date.now() - 24*60*60*1000) }});
             if (recentUnverified >= 2) { flaggedSpam = true; finalStatus = 'rejected'; vNote = "SPAM FLAG: Too many unverified reviews."; }
         }
 
+        // 3. Auto-Approve Rules
         const config = await Settings.findOne({ widgetId: 'default' });
         if (!flaggedSpam && config && config.autoApproveVerified && isVerified) {
             if (req.body.rating >= config.autoApproveMinStars) finalStatus = 'accepted';
@@ -150,10 +165,9 @@ app.post('/api/reviews', async (req, res) => {
 });
 
 // ==========================================
-// MAGIC LINK BULK ROUTES (NEW!)
+// MAGIC LINK BULK ROUTES
 // ==========================================
-
-// 1. Fetch Order Items securely via Magic Link
+// Fetch Order Items securely via Magic Link
 app.get('/api/magic-link/order', async (req, res) => {
     const { orderId, email, token } = req.query;
     
@@ -163,7 +177,6 @@ app.get('/api/magic-link/order', async (req, res) => {
     const expectedToken = generateMagicToken(orderId, email);
     if (token !== expectedToken) return res.status(403).json({ error: "Invalid or expired secure link." });
 
-    // If the lock opens, fetch the order from Shopify
     const STORE_URL = process.env.SHOPIFY_STORE_URL; 
     const CLIENT_ID = process.env.SHOPIFY_API_KEY; 
     const CLIENT_SECRET = process.env.SHOPIFY_API_SECRET; 
@@ -179,27 +192,23 @@ app.get('/api/magic-link/order', async (req, res) => {
         if (data.orders && data.orders.length > 0) {
             const order = data.orders.find(o => String(o.order_number) === rawNumber || o.name.includes(rawNumber));
             if (order && order.email.toLowerCase() === email.toLowerCase()) {
-                
-                // Return only the actual products (ignore shipping, tips, etc.)
                 const products = order.line_items.map(item => ({
                     productId: item.product_id,
                     variantId: item.variant_id,
                     name: item.title,
-                    image: null // We will fetch images on the frontend
-                })).filter(item => item.productId); // Must have a product ID
+                    image: null // Frontend fetches imagery
+                })).filter(item => item.productId); 
 
                 return res.status(200).json({ products, customerName: order.customer?.first_name || "Customer" });
             }
         }
         return res.status(404).json({ error: "Order not found" });
-    } catch (err) {
-        return res.status(500).json({ error: "Failed to fetch order details" });
-    }
+    } catch (err) { return res.status(500).json({ error: "Failed to fetch order details" }); }
 });
 
-// 2. Submit Bulk Reviews securely via Magic Link
+// Submit Bulk Reviews securely via Magic Link
 app.post('/api/reviews/bulk', async (req, res) => {
-    const { orderId, email, token, reviews } = req.body; // 'reviews' is an array of review objects
+    const { orderId, email, token, reviews } = req.body; 
 
     if (token !== generateMagicToken(orderId, email)) return res.status(403).json({ error: "Invalid secure link." });
 
@@ -209,7 +218,6 @@ app.post('/api/reviews/bulk', async (req, res) => {
 
         for (const rev of reviews) {
             let finalStatus = 'pending';
-            // Auto-approve logic because the Magic Link guarantees it's verified!
             if (config && config.autoApproveVerified && rev.rating >= config.autoApproveMinStars) {
                 finalStatus = 'accepted';
             }
@@ -223,6 +231,7 @@ app.post('/api/reviews/bulk', async (req, res) => {
                 headline: rev.headline,
                 comment: rev.comment,
                 attributes: rev.attributes || {},
+                productTags: rev.productTags || [],
                 verifiedPurchase: true, // AUTO-VERIFIED BY MAGIC LINK
                 verificationNote: "Auto-Verified via Email Magic Link",
                 orderId: orderId,
@@ -232,9 +241,7 @@ app.post('/api/reviews/bulk', async (req, res) => {
         }
 
         res.status(201).json({ message: "Successfully saved bulk reviews", count: savedReviews.length });
-    } catch (error) {
-        res.status(400).json({ error: "Failed to submit bulk reviews" });
-    }
+    } catch (error) { res.status(400).json({ error: "Failed to submit bulk reviews" }); }
 });
 
 // Helper route to generate a link for testing (Admin only)
@@ -242,7 +249,7 @@ app.get('/api/admin/generate-link', (req, res) => {
     const { orderId, email } = req.query;
     if(!orderId || !email) return res.status(400).send("Need orderId and email");
     const token = generateMagicToken(orderId, email);
-    res.send(`?order=${orderId}&email=${email}&token=${token}`);
+    res.send(`?orderId=${orderId}&email=${email}&token=${token}`);
 });
 
 // ==========================================
