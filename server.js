@@ -28,14 +28,22 @@ const reviewSchema = new mongoose.Schema({
     rating: { type: Number, required: true, min: 1, max: 5 },
     headline: { type: String }, 
     comment: { type: String },
-    reply: { type: String, default: '' }, // NEW: Store Owner Reply
+    reply: { type: String, default: '' },
     attributes: { type: Map, of: Number }, 
     status: { type: String, enum: ['pending', 'accepted', 'rejected', 'hold'], default: 'pending' },
     verifiedPurchase: { type: Boolean, default: false },
-    verificationNote: { type: String, default: '' }, // NEW: Reason why it verified or failed
+    verificationNote: { type: String, default: '' }, 
     orderId: { type: String }, 
+    // NEW: Soft Delete Fields
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
     createdAt: { type: Date, default: Date.now }
 });
+
+// NEW: 28-Day Auto-Delete (TTL Index)
+// 2419200 seconds = exactly 28 days. MongoDB will automatically delete records once this time passes.
+reviewSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 2419200 });
+
 const Review = mongoose.model('Review', reviewSchema, 'reviews'); 
 
 const settingsSchema = new mongoose.Schema({
@@ -49,14 +57,12 @@ async function initSettings() {
     try {
         const exists = await Settings.findOne({ widgetId: 'default' });
         if (!exists) await new Settings({ widgetId: 'default' }).save();
-    } catch (e) {
-        console.log("Settings init bypassed");
-    }
+    } catch (e) { console.log("Settings init bypassed"); }
 }
 initSettings();
 
 // ==========================================
-// TRIPLE-CHECKED VERIFICATION LOGIC
+// REFINED DIAGNOSTIC VERIFICATION LOGIC
 // ==========================================
 async function verifyShopifyOrder(orderId, email, productId) {
     const STORE_URL = process.env.SHOPIFY_STORE_URL; 
@@ -64,7 +70,7 @@ async function verifyShopifyOrder(orderId, email, productId) {
     const CLIENT_SECRET = process.env.SHOPIFY_API_SECRET; 
 
     if (!STORE_URL || !CLIENT_ID || !CLIENT_SECRET || !email || !orderId) {
-        return { verified: false, note: "Missing credentials, email, or order ID." };
+        return { verified: false, note: "Missing details (Email or Order ID)." };
     }
 
     const rawNumber = orderId.replace(/\D/g, ""); 
@@ -79,29 +85,31 @@ async function verifyShopifyOrder(orderId, email, productId) {
             const data = await response.json();
 
             if (data.orders && data.orders.length > 0) {
-                // Check 1: Does the email match?
-                const order = data.orders.find(o => o.email && o.email.toLowerCase() === email.toLowerCase());
+                // Find the exact order by ID to prevent partial matches
+                const order = data.orders.find(o => String(o.order_number) === rawNumber || o.name === `#${rawNumber}` || o.name === rawNumber);
                 
                 if (order) {
-                    // Check 2: Did they actually buy this specific product?
+                    // Check 1: Does the email match?
+                    if (!order.email || order.email.toLowerCase() !== email.toLowerCase()) {
+                        return { verified: false, note: `Order exists, but placed under a different email.` };
+                    }
+                    
+                    // Check 2: Is the product in the order?
                     const boughtProduct = order.line_items.some(item => 
                         String(item.product_id) === String(productId) || String(item.variant_id) === String(productId)
                     );
                     
-                    if (boughtProduct) {
-                        return { verified: true, note: "Successfully verified against Shopify order." };
-                    } else {
-                        return { verified: false, note: "Order found and email matched, but this specific product was not in the order." };
+                    if (!boughtProduct) {
+                        return { verified: false, note: "Email & Order ID match, but this product wasn't in the order." };
                     }
-                } else {
-                    return { verified: false, note: "Order ID exists, but the email provided does not match the buyer's email." };
+
+                    // Success!
+                    return { verified: true, note: "Successfully verified against Shopify order." };
                 }
             }
-        } catch (error) { 
-            console.error("Shopify API Error:", error); 
-        }
+        } catch (error) { console.error("Shopify API Error:", error); }
     }
-    return { verified: false, note: "No Shopify order could be found with this Order ID." };
+    return { verified: false, note: "This Order ID does not exist in your Shopify." };
 }
 
 // ==========================================
@@ -110,16 +118,15 @@ async function verifyShopifyOrder(orderId, email, productId) {
 app.get('/', (req, res) => res.send('🚀 Nectar API Live'));
 
 app.get('/api/reviews/:itemId', async (req, res) => {
-    try { res.status(200).json(await Review.find({ itemId: String(req.params.itemId), status: 'accepted' }).sort({ createdAt: -1 })); } 
+    try { res.status(200).json(await Review.find({ itemId: String(req.params.itemId), status: 'accepted', isDeleted: false }).sort({ createdAt: -1 })); } 
     catch (error) { res.status(500).json({ error: "Fetch error" }); }
 });
 
 app.post('/api/reviews', async (req, res) => {
     try {
         let isVerified = req.body.verifiedPurchase; 
-        let vNote = "Verified automatically by Shopify Liquid.";
+        let vNote = "Verified automatically by Shopify.";
 
-        // Run the rigorous backend check if needed
         if (!isVerified && req.body.orderId && req.body.email) {
             const checkResult = await verifyShopifyOrder(req.body.orderId, req.body.email, req.body.itemId);
             isVerified = checkResult.verified;
@@ -132,9 +139,7 @@ app.post('/api/reviews', async (req, res) => {
         let finalStatus = 'pending';
         
         if (config && config.autoApproveVerified && isVerified) {
-            if (req.body.rating >= config.autoApproveMinStars) {
-                finalStatus = 'accepted';
-            }
+            if (req.body.rating >= config.autoApproveMinStars) finalStatus = 'accepted';
         }
 
         const newReview = new Review({
@@ -152,8 +157,7 @@ app.post('/api/reviews', async (req, res) => {
             status: finalStatus 
         });
 
-        const savedReview = await newReview.save();
-        res.status(201).json(savedReview);
+        res.status(201).json(await newReview.save());
     } catch (error) { res.status(400).json({ error: "Failed to submit" }); }
 });
 
@@ -170,14 +174,15 @@ app.patch('/api/reviews/:id', async (req, res) => {
         const updateData = {};
         if (req.body.status !== undefined) updateData.status = req.body.status;
         if (req.body.reply !== undefined) updateData.reply = req.body.reply;
-        res.json(await Review.findByIdAndUpdate(req.params.id, updateData, { new: true }));
-    } catch (err) { res.status(500).json({ error: err.message }); }
-});
+        if (req.body.verifiedPurchase !== undefined) updateData.verifiedPurchase = req.body.verifiedPurchase;
+        
+        // Handle Soft Delete
+        if (req.body.isDeleted !== undefined) {
+            updateData.isDeleted = req.body.isDeleted;
+            updateData.deletedAt = req.body.isDeleted ? new Date() : null; // Start or clear the 28-day timer
+        }
 
-app.delete('/api/reviews/:id', async (req, res) => {
-    try {
-        await Review.findByIdAndDelete(req.params.id);
-        res.json({ message: "Deleted" });
+        res.json(await Review.findByIdAndUpdate(req.params.id, updateData, { new: true }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
