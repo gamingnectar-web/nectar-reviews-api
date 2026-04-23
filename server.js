@@ -30,17 +30,17 @@ const reviewSchema = new mongoose.Schema({
     comment: { type: String },
     reply: { type: String, default: '' },
     attributes: { type: Map, of: Number }, 
+    productTags: { type: [String], default: [] }, // NEW: Stores Tags & Metafields from Shopify
     status: { type: String, enum: ['pending', 'accepted', 'rejected', 'hold'], default: 'pending' },
     verifiedPurchase: { type: Boolean, default: false },
     verificationNote: { type: String, default: '' }, 
     orderId: { type: String }, 
     isDeleted: { type: Boolean, default: false },
-    isSpam: { type: Boolean, default: false }, // NEW: Spam Tracker
+    isSpam: { type: Boolean, default: false }, 
     deletedAt: { type: Date, default: null },
     createdAt: { type: Date, default: Date.now }
 });
 
-// 28-Day Auto-Delete (TTL Index)
 reviewSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 2419200 });
 const Review = mongoose.model('Review', reviewSchema, 'reviews'); 
 
@@ -48,7 +48,7 @@ const settingsSchema = new mongoose.Schema({
     widgetId: { type: String, default: 'default' }, 
     autoApproveVerified: { type: Boolean, default: false },
     autoApproveMinStars: { type: Number, default: 4 },
-    filterTags: { type: String, default: '' } // Groundwork for Vendor/Line filtering
+    filters: { type: Array, default: [] } // NEW: Dynamic Filter Rules
 });
 const Settings = mongoose.model('Settings', settingsSchema, 'settings');
 
@@ -68,9 +68,7 @@ async function verifyShopifyOrder(orderId, email, productId) {
     const CLIENT_ID = process.env.SHOPIFY_API_KEY; 
     const CLIENT_SECRET = process.env.SHOPIFY_API_SECRET; 
 
-    if (!STORE_URL || !CLIENT_ID || !CLIENT_SECRET || !email || !orderId) {
-        return { verified: false, note: "Missing details (Email or Order ID)." };
-    }
+    if (!STORE_URL || !CLIENT_ID || !CLIENT_SECRET || !email || !orderId) return { verified: false, note: "Missing details." };
 
     const rawNumber = orderId.replace(/\D/g, ""); 
     const searchTerms = [`#${rawNumber}`, rawNumber]; 
@@ -85,24 +83,16 @@ async function verifyShopifyOrder(orderId, email, productId) {
 
             if (data.orders && data.orders.length > 0) {
                 const order = data.orders.find(o => String(o.order_number) === rawNumber || o.name === `#${rawNumber}` || o.name === rawNumber);
-                
                 if (order) {
-                    if (!order.email || order.email.toLowerCase() !== email.toLowerCase()) {
-                        return { verified: false, note: `Order exists, but placed under a different email.` };
-                    }
-                    const boughtProduct = order.line_items.some(item => 
-                        String(item.product_id) === String(productId) || String(item.variant_id) === String(productId)
-                    );
-                    
-                    if (!boughtProduct) {
-                        return { verified: false, note: "Email & Order ID match, but this product wasn't in the order." };
-                    }
-                    return { verified: true, note: "Successfully verified against Shopify order." };
+                    if (!order.email || order.email.toLowerCase() !== email.toLowerCase()) return { verified: false, note: `Wrong email.` };
+                    const boughtProduct = order.line_items.some(item => String(item.product_id) === String(productId) || String(item.variant_id) === String(productId));
+                    if (!boughtProduct) return { verified: false, note: "Product not in order." };
+                    return { verified: true, note: "Successfully verified." };
                 }
             }
-        } catch (error) { console.error("Shopify API Error:", error); }
+        } catch (error) { console.error("API Error:", error); }
     }
-    return { verified: false, note: "This Order ID does not exist in your Shopify." };
+    return { verified: false, note: "Order ID not found." };
 }
 
 // ==========================================
@@ -121,33 +111,18 @@ app.post('/api/reviews', async (req, res) => {
         let vNote = "Verified automatically by Shopify.";
         let finalStatus = 'pending';
         let flaggedSpam = false;
-        let isDeleted = false;
 
-        // 1. Check Shopify Verification
         if (!isVerified && req.body.orderId && req.body.email) {
             const checkResult = await verifyShopifyOrder(req.body.orderId, req.body.email, req.body.itemId);
             isVerified = checkResult.verified;
             vNote = checkResult.note;
-        } else if (!isVerified && !req.body.orderId) {
-            vNote = "No Order ID provided by customer.";
-        }
+        } else if (!isVerified && !req.body.orderId) vNote = "No Order ID provided.";
 
-        // 2. Automated Spam Check (If unverified, check recent submissions)
         if (!isVerified && req.body.email) {
-            const recentUnverified = await Review.countDocuments({
-                email: req.body.email,
-                verifiedPurchase: false,
-                createdAt: { $gte: new Date(Date.now() - 24*60*60*1000) } // Last 24 hours
-            });
-            if (recentUnverified >= 2) {
-                flaggedSpam = true;
-                finalStatus = 'rejected';
-                isDeleted = true; // Throw straight into Bin/Spam
-                vNote = "SYSTEM SPAM FLAG: Too many unverified reviews from this email recently.";
-            }
+            const recentUnverified = await Review.countDocuments({ email: req.body.email, verifiedPurchase: false, createdAt: { $gte: new Date(Date.now() - 24*60*60*1000) }});
+            if (recentUnverified >= 2) { flaggedSpam = true; finalStatus = 'rejected'; vNote = "SPAM FLAG: Too many unverified reviews."; }
         }
 
-        // 3. Admin Auto-Approve Rules (Only if not spam)
         const config = await Settings.findOne({ widgetId: 'default' });
         if (!flaggedSpam && config && config.autoApproveVerified && isVerified) {
             if (req.body.rating >= config.autoApproveMinStars) finalStatus = 'accepted';
@@ -162,13 +137,14 @@ app.post('/api/reviews', async (req, res) => {
             headline: req.body.headline,
             comment: req.body.comment,
             attributes: req.body.attributes,
+            productTags: req.body.productTags, // Captures Tags!
             verifiedPurchase: isVerified, 
             verificationNote: vNote,
             orderId: req.body.orderId, 
             status: finalStatus,
             isSpam: flaggedSpam,
-            isDeleted: isDeleted,
-            deletedAt: isDeleted ? new Date() : null
+            isDeleted: flaggedSpam,
+            deletedAt: flaggedSpam ? new Date() : null
         });
 
         res.status(201).json(await newReview.save());
@@ -188,14 +164,11 @@ app.patch('/api/reviews/:id', async (req, res) => {
         const updateData = {};
         if (req.body.status !== undefined) updateData.status = req.body.status;
         if (req.body.reply !== undefined) updateData.reply = req.body.reply;
-        
         if (req.body.isDeleted !== undefined) {
             updateData.isDeleted = req.body.isDeleted;
             updateData.deletedAt = req.body.isDeleted ? new Date() : null; 
-            // If restoring, unflag as spam just in case
             if (req.body.isDeleted === false) updateData.isSpam = false; 
         }
-
         res.json(await Review.findByIdAndUpdate(req.params.id, updateData, { new: true }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
