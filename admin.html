@@ -5,65 +5,40 @@
     <title>Reviews Admin</title>
     <meta name="shopify-api-key" content="9b0bf096b37faf6dc0b19037b2d9d62a" />
     <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
-
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
     <style>
-        :root { --bg: #f4f6f8; --card: #ffffff; --border: #ebebeb; --primary: #303030; --text: #202223; --text-light: #6d7175; --star: #ffc700; --green: #008060; --red: #d82c0d; --orange: #e2a500; --sidebar-bg: #ebebeb; --blue: #005bd3;}
-        body, button, input, select, textarea { font-family: 'Inter', sans-serif !important; }
-        body { background: var(--bg); color: var(--text); margin: 0; -webkit-font-smoothing: antialiased; display: flex; min-height: 100vh;}
+        :root { --bg: #f6f6f7; --card: #ffffff; --border: #e1e3e5; --primary: #1a1a1a; --text: #202223; --text-light: #6d7175; --star: #ffc700; --green: #008060; --blue: #005bd3;}
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; min-height: 100vh;}
         
-        /* SIDEBAR NAVIGATION */
-        .app-sidebar { width: 240px; background: var(--sidebar-bg); padding: 30px 20px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; position: fixed; height: 100vh; box-sizing: border-box;}
-        .sidebar-title { font-size: 0.75rem; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; padding-left: 12px;}
-        .tab-btn { background: transparent; border: none; padding: 10px 12px; font-weight: 500; cursor: pointer; color: var(--text); font-size: 0.95rem; text-align: left; border-radius: 8px; transition: all 0.2s;}
-        .tab-btn:hover { background: rgba(0,0,0,0.05); }
+        .app-sidebar { width: 240px; background: #ebebeb; padding: 30px 20px; border-right: 1px solid var(--border); position: fixed; height: 100vh; box-sizing: border-box;}
+        .sidebar-title { font-size: 11px; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; padding-left: 12px;}
+        .tab-btn { background: transparent; border: none; padding: 10px 12px; font-weight: 500; cursor: pointer; color: var(--text); font-size: 14px; text-align: left; border-radius: 8px; width: 100%; margin-bottom: 4px;}
         .tab-btn.active { background: #ffffff; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        
-        /* MAIN CONTENT AREA */
-        .main-content { flex: 1; padding: 40px; margin-left: 240px; width: calc(100% - 240px); box-sizing: border-box;}
-        .view { display: none; width: 100%; animation: fadeIn 0.2s ease-out; }
+
+        .main-content { flex: 1; padding: 40px; margin-left: 240px; box-sizing: border-box; width: calc(100% - 240px);}
+        .view { display: none; width: 100%; }
         .view.active { display: block; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* METRICS & CARDS */
-        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 25px; margin-bottom: 40px; }
-        .metric-card { background: var(--card); padding: 35px 30px; border-radius: 12px; border: 1px solid var(--border); position: relative; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);}
-        .metric-card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: #c1c2c3; }
-        .metric-card.live::before { background: var(--green); }
-        .metric-card h1 { font-size: 3.5rem; margin: 0; color: var(--primary); line-height: 1; font-weight: 800; }
-        .metric-card p { color: var(--text-light); font-weight: 600; margin: 10px 0 0 0; font-size: 0.9rem; text-transform: uppercase;}
+        .settings-panel { background: var(--card); padding: 30px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);}
+        .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid #f1f2f3; }
+        .setting-row:last-child { border-bottom: none; }
 
-        /* REVIEW LIST & TABLES */
-        .review-card { background: var(--card); border: 1px solid var(--border); padding: 30px; margin-bottom: 20px; border-radius: 12px; display: flex; justify-content: space-between; gap: 40px; border-left: 5px solid #c1c2c3; box-shadow: 0 1px 3px rgba(0,0,0,0.05);}
-        .status-border-accepted { border-left-color: var(--green); }
-        .status-border-rejected { border-left-color: var(--red); background: #fafafa; }
+        /* PREVIEW AREA */
+        .preview-layout { display: flex; gap: 30px; }
+        .controls-col { flex: 1; min-width: 400px; }
+        .preview-col { flex: 1.2; position: sticky; top: 40px; }
+        .mockup-card { background: white; border: 1px solid var(--border); padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px;}
+
+        .search-input, .filter-select { padding: 10px 14px; border-radius: 8px; border: 1px solid #c9cccf; font-size: 14px; background: #ffffff;}
+        .post-btn { background: var(--primary); color: white; border: none; padding: 10px 20px; font-weight: 600; border-radius: 8px; cursor: pointer;}
         
-        .stars { color: var(--star); font-size: 1.1rem; margin-bottom: 10px;}
-        .headline { font-weight: 700; font-size: 1.2rem; margin-bottom: 8px;}
-        .comment { font-size: 0.95rem; line-height: 1.6; color: var(--text); }
+        .tag-pill { background: #f1f2f3; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; margin: 4px;}
+        .pill-remove { cursor: pointer; color: var(--text-light); }
 
-        /* SETTINGS & FORMS */
-        .settings-panel { background: var(--card); padding: 40px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 25px 0; border-bottom: 1px solid var(--border); }
-        .setting-info h3 { margin: 0 0 5px 0; font-size: 1rem; color: var(--primary); }
-        .setting-info p { margin: 0; font-size: 0.85rem; color: var(--text-light); max-width: 500px; }
+        .sub-tab-nav { display: flex; gap: 15px; border-bottom: 1px solid var(--border); margin-bottom: 25px; }
+        .sub-tab-btn { background: none; border: none; padding: 10px 5px; font-weight: 600; cursor: pointer; color: var(--text-light); font-size: 14px; border-bottom: 2px solid transparent; }
+        .sub-tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
 
-        .search-input, .filter-select { padding: 12px 16px; border-radius: 8px; border: 1px solid #c9cccf; font-size: 0.95rem; background: #ffffff;}
-        .post-btn { background: var(--primary); color: white; border: none; padding: 12px 24px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: 0.2s;}
-        .post-btn:hover { background: #000; }
-
-        /* SUB-TABS (DESIGNER) */
-        .sub-tab-nav { display: flex; gap: 20px; border-bottom: 2px solid var(--border); margin-bottom: 30px; }
-        .sub-tab-btn { background: none; border: none; padding: 12px 5px; font-weight: 600; cursor: pointer; color: var(--text-light); font-size: 0.95rem; border-bottom: 3px solid transparent; margin-bottom: -2px;}
-        .sub-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
-
-        /* CODE BOXES */
-        .code-block { background: #1a1a1a; color: #f4f6f8; padding: 25px; border-radius: 12px; font-family: monospace; font-size: 13px; margin: 20px 0; overflow-x: auto;}
-        .file-badge { background: #ebebeb; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; color: var(--primary); }
-        
         /* SWITCH UI */
         .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
         .switch input { opacity: 0; width: 0; height: 0; }
@@ -78,112 +53,149 @@
 <div class="app-sidebar">
     <div class="sidebar-title">Manage</div>
     <button class="tab-btn active" onclick="tab('dashboard')">Overview</button>
-    <button class="tab-btn" onclick="tab('manage')">Reviews List</button>
-    <button class="tab-btn" onclick="tab('bin')">Bin & Spam 🗑️</button>
+    <button class="tab-btn" onclick="tab('manage')">Reviews Manager</button>
     
-    <div class="sidebar-title" style="margin-top: 20px;">Settings</div>
-    <button class="tab-btn" onclick="tab('settings')">Rules & Categorization</button> 
-    <button class="tab-btn" onclick="tab('designer')">Widget Customizer 🎨</button>
-    
-    <div class="sidebar-title" style="margin-top: 20px;">Developers</div>
-    <button class="tab-btn" onclick="tab('manual-install')">Setup Guide</button>
+    <div class="sidebar-title" style="margin-top: 20px;">Configuration</div>
+    <button class="tab-btn" onclick="tab('settings')">Auto-Approve & Rules</button> 
+    <button class="tab-btn" onclick="tab('designer')">Visual Customizer</button>
+    <button class="tab-btn" onclick="tab('email')">Post-Purchase Email ✉️</button>
 </div>
 
 <div class="main-content">
-    <div id="error-alert" class="error-box"></div>
     
     <div id="dashboard" class="view active">
-        <h2 style="margin-top: 0;">Store Overview</h2>
-        <div class="metrics-grid">
-            <div class="metric-card"><h1 id="count-total">0</h1><p>Reviews Captured</p></div>
-            <div class="metric-card live"><h1 id="count-live">0</h1><p>Published to Store</p></div>
+        <h2>Overview</h2>
+        <div style="display: flex; gap: 20px;">
+            <div class="settings-panel" style="flex:1"><h3>Reviews</h3><h1 id="count-total">0</h1></div>
+            <div class="settings-panel" style="flex:1"><h3>Published</h3><h1 id="count-live">0</h1></div>
         </div>
     </div>
-    
+
     <div id="manage" class="view">
-        <h2 style="margin-top: 0;">Review Management</h2>
-        <div style="display: flex; gap: 15px; margin-bottom: 25px;">
-            <input type="text" id="search-bar" class="search-input" style="flex: 1;" placeholder="Search reviews..." onkeyup="renderLists()">
-            <select id="status-filter" class="filter-select" onchange="renderLists()">
+        <h2>Reviews Manager</h2>
+        <div class="settings-panel" style="display: flex; gap: 10px; align-items: center;">
+            <input type="text" id="search-bar" class="search-input" style="flex: 1" placeholder="Search customer name or comment..." onkeyup="renderLists()">
+            <div id="dynamic-filter-container" style="display: flex; gap: 10px;">
+                <select id="mgr-filter-type" class="filter-select">
+                    <option value="all">All Products</option>
+                </select>
+            </div>
+            <select id="mgr-status" class="filter-select" onchange="renderLists()">
                 <option value="all">All Statuses</option>
                 <option value="pending">Pending</option>
                 <option value="accepted">Accepted</option>
             </select>
         </div>
-        <div id="mgmt-list">Loading reviews...</div>
+        <div id="mgmt-list">Loading...</div>
     </div>
 
-    <div id="bin" class="view">
-        <h2>Trash & Spam</h2>
-        <div id="trash-list">Bin is empty.</div>
-    </div>
-    
     <div id="settings" class="view">
-        <h2 style="margin-top: 0;">Rules & Sliders</h2>
+        <h2>Rules & Custom Filters</h2>
         <div class="settings-panel">
-            <div class="setting-row">
-                <div class="setting-info">
-                    <h3>Auto-Approve Verified Reviews</h3>
-                    <p>Verified purchases bypass moderation if they meet your star criteria.</p>
-                </div>
-                <label class="switch"><input type="checkbox" id="set-auto-approve" onchange="saveSettings()"><span class="slider"></span></label>
-            </div>
-            <div class="setting-row" style="border: none;">
-                <div class="setting-info"><h3>Minimum Star Rating</h3></div>
-                <select id="set-min-stars" class="filter-select" onchange="saveSettings()">
-                    <option value="5">5 Stars only</option>
-                    <option value="4">4 Stars & up</option>
-                    <option value="1">All reviews</option>
+            <h3>Review Manager Filters</h3>
+            <p style="color: var(--text-light); font-size: 0.85rem;">Add specific Metafields or Vendor tags as persistent filter options in your manager.</p>
+            <div style="display: flex; gap: 10px; margin: 20px 0;">
+                <select id="rule-type" class="filter-select" onchange="handleRuleToggle()">
+                    <option value="Vendor">Vendor</option>
+                    <option value="Metafield">Metafield Key</option>
                 </select>
+                <input type="text" id="rule-val" class="search-input" placeholder="e.g. custom.color" style="flex: 1">
+                <button class="post-btn" onclick="addFilterRule()">Add Filter</button>
             </div>
+            <div id="active-rules"></div>
         </div>
 
         <div class="settings-panel">
-            <h3>Dynamic Slider Triggers</h3>
-            <p style="color: var(--text-light); font-size: 0.9rem;">Assign slider questions based on product tags.</p>
-            <div style="display: flex; gap: 10px; margin-top: 20px;">
-                <input type="text" id="new-profile-tag" class="search-input" placeholder="Tag (e.g. snowboard)">
-                <input type="text" id="new-profile-sliders" class="search-input" style="flex: 1;" placeholder="Sliders (e.g. Fit, Speed, Quality)">
-                <button class="post-btn" onclick="addAttributeProfile()">Add Rule</button>
+            <h3>Automatic Approval</h3>
+            <div class="setting-row">
+                <span>Enable for Verified Purchases</span>
+                <label class="switch"><input type="checkbox" id="set-auto" onchange="saveAll()"><span class="slider"></span></label>
             </div>
-            <div id="active-profiles-container" style="margin-top: 20px;"></div>
         </div>
     </div>
 
     <div id="designer" class="view">
-        <h2 style="margin-top: 0;">Appearance Customizer</h2>
-        <div class="sub-tab-nav">
-            <button class="sub-tab-btn active" onclick="subTab('designer-full')">Product Page Widget</button>
-            <button class="sub-tab-btn" onclick="subTab('designer-card')">Product Card Stars</button>
-        </div>
+        <h2>Visual Customizer</h2>
+        <div class="preview-layout">
+            <div class="controls-col">
+                <div class="sub-tab-nav">
+                    <button class="sub-tab-btn active" onclick="subTab('ds-full')">Full Widget</button>
+                    <button class="sub-tab-btn" onclick="subTab('ds-card')">Product Card</button>
+                    <button class="sub-tab-btn" onclick="subTab('ds-badge')">Badge</button>
+                </div>
 
-        <div id="designer-full" class="sub-view active" style="display: block;">
-            <div class="settings-panel">
-                <div class="setting-row"><h3>Brand Color</h3><input type="color" id="style-primary" oninput="saveStyles()"></div>
-                <div class="setting-row"><h3>Star Color</h3><input type="color" id="style-star" oninput="saveStyles()"></div>
-                <div class="setting-row" style="border: none;"><h3>Text Size (px)</h3><input type="number" id="style-text-size" class="search-input" style="width: 80px;" oninput="saveStyles()"></div>
+                <div id="ds-full" class="sub-view active" style="display:block">
+                    <div class="settings-panel">
+                        <div class="setting-row"><span>Brand Color</span><input type="color" id="style-primary" oninput="updatePreviews()"></div>
+                        <div class="setting-row"><span>Star Color</span><input type="color" id="style-star" oninput="updatePreviews()"></div>
+                        <div class="setting-row"><span>Text Size</span><input type="number" id="style-text" class="search-input" style="width:70px" oninput="updatePreviews()"></div>
+                        <button class="post-btn" style="width:100%; margin-top:20px;" onclick="saveAll()">Publish Styles</button>
+                    </div>
+                </div>
+
+                <div id="ds-card" class="sub-view" style="display:none">
+                    <div class="settings-panel">
+                        <div class="setting-row"><span>Star Size (px)</span><input type="number" id="card-star" class="search-input" style="width:70px" oninput="updatePreviews()"></div>
+                        <div class="setting-row"><span>Show Count</span><label class="switch"><input type="checkbox" id="card-count" onchange="updatePreviews()"><span class="slider"></span></label></div>
+                        <button class="post-btn" style="width:100%; margin-top:20px;" onclick="saveAll()">Publish Styles</button>
+                    </div>
+                </div>
             </div>
-        </div>
 
-        <div id="designer-card" class="sub-view" style="display: none;">
-            <div class="settings-panel">
-                <div class="setting-row"><h3>Star Size (px)</h3><input type="number" id="card-star-size" class="search-input" style="width: 80px;" oninput="saveStyles()"></div>
-                <div class="setting-row" style="border: none;"><h3>Show Review Count</h3><label class="switch"><input type="checkbox" id="card-show-count" onchange="saveStyles()"><span class="slider"></span></label></div>
+            <div class="preview-col">
+                <h4 style="margin-top: 0; color: var(--text-light);">Live Preview</h4>
+                <div class="mockup-card" id="preview-main">
+                    <div style="display: flex; justify-content: space-between; align-items:center; margin-bottom: 20px;">
+                        <h3 id="pre-title" style="margin:0">Reviews</h3>
+                        <button id="pre-btn" style="padding: 8px 16px; color:white; border:none; border-radius:4px; font-weight:600;">Write Review</button>
+                    </div>
+                    <div id="pre-stars" style="font-size: 20px; margin-bottom:10px;">★★★★★</div>
+                    <p id="pre-text" style="color: #444; line-height: 1.5;">This product is amazing! The quality is top notch.</p>
+                </div>
+                
+                <div class="mockup-card" style="padding: 20px;">
+                    <p style="font-size: 11px; text-transform: uppercase; color: #999; margin-bottom: 10px;">Product Card Preview</p>
+                    <div id="pre-card-stars" style="display: flex; align-items: center; gap: 5px; font-weight: 700;">
+                        <span id="pre-card-icon">★</span> 4.8 <span id="pre-card-count" style="font-weight: 400; color: #666;">(12)</span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <div id="manual-install" class="view">
-        <h2 style="margin-top: 0;">Technical Setup Guide</h2>
-        <div class="settings-panel">
-            <h3>1. Main Review Widget</h3>
-            <p>Paste this into <span class="file-badge">sections/main-product.liquid</span>:</p>
-            <div class="code-block">
-&lt;div class="reviews-widget" data-product-id="&#123;&#123; product.id &#125;&#125;" data-shop="&#123;&#123; shop.domain &#125;&#125;"&gt;&lt;/div&gt;</div>
-            <h3>2. Product Grid Stars</h3>
-            <p>Paste this into <span class="file-badge">snippets/card-product.liquid</span>:</p>
-            <div class="code-block">
-&lt;div class="card-stars" data-product-id="&#123;&#123; product.id &#125;&#125;" data-shop="&#123;&#123; shop.domain &#125;&#125;"&gt;&lt;/div&gt;</div>
+    <div id="email" class="view">
+        <h2>Post-Purchase Email</h2>
+        <div class="preview-layout">
+            <div class="controls-col">
+                <div class="settings-panel">
+                    <div class="setting-row">
+                        <span>Enable Automation</span>
+                        <label class="switch"><input type="checkbox" id="email-enabled" onchange="saveAll()"><span class="slider"></span></label>
+                    </div>
+                    <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 10px;">
+                        <span>Email Subject</span>
+                        <input type="text" id="email-subject" class="search-input" style="width:100%" oninput="updatePreviews()">
+                    </div>
+                    <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 10px;">
+                        <span>Message Body</span>
+                        <textarea id="email-body" class="search-input" style="width:100%; height: 100px;" oninput="updatePreviews()"></textarea>
+                    </div>
+                    <div class="setting-row">
+                        <span>Days after fulfillment to send</span>
+                        <input type="number" id="email-delay" class="search-input" style="width:70px">
+                    </div>
+                    <button class="post-btn" style="width:100%; margin-top:20px;" onclick="saveAll()">Save Email Logic</button>
+                </div>
+            </div>
+            <div class="preview-col">
+                <div class="mockup-card" style="background: #fdfdfd;">
+                    <div style="font-size: 12px; color: #999; margin-bottom: 20px;">Subject: <span id="pre-em-sub">...</span></div>
+                    <p id="pre-em-body" style="white-space: pre-wrap; font-size: 15px;"></p>
+                    <div style="text-align: center; margin-top: 30px;">
+                        <button style="background: #000; color: #fff; padding: 12px 24px; border: none; border-radius: 4px; font-weight: 700; cursor: pointer;">Review Your Items</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -195,140 +207,148 @@
     const SHOP_DOMAIN = urlParams.get('shop') || 'your-store.myshopify.com';
 
     let data = [];
-    let savedRules = [];
-    let savedProfiles = [];
+    let config = {};
 
-    function tab(name) {
-        document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-        document.getElementById(name).classList.add('active');
+    function tab(id) {
+        document.querySelectorAll('.view, .tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
         event.currentTarget.classList.add('active');
     }
 
-    function subTab(name) {
+    function subTab(id) {
+        document.querySelectorAll('.sub-view, .sub-tab-btn').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.sub-view').forEach(el => el.style.display = 'none');
-        document.querySelectorAll('.sub-tab-btn').forEach(el => el.classList.remove('active'));
-        document.getElementById(name).style.display = 'block';
+        document.getElementById(id).classList.add('active');
+        document.getElementById(id).style.display = 'block';
         event.currentTarget.classList.add('active');
+    }
+
+    function handleRuleToggle() {
+        const type = document.getElementById('rule-type').value;
+        const input = document.getElementById('rule-val');
+        input.style.display = (type === 'Vendor') ? 'none' : 'block';
     }
 
     async function load() {
         try {
             const res = await fetch(`${API}/admin/reviews?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
             data = await res.json();
+            
+            const setRes = await fetch(`${API}/admin/settings?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
+            config = await setRes.json();
+
+            if (config) {
+                // Populate Inputs
+                document.getElementById('set-auto').checked = config.autoApproveVerified;
+                document.getElementById('style-primary').value = config.widgetStyles.primaryColor;
+                document.getElementById('style-star').value = config.widgetStyles.starColor;
+                document.getElementById('style-text').value = config.widgetStyles.textSize;
+                document.getElementById('card-star').value = config.cardStyles.starSize;
+                document.getElementById('card-count').checked = config.cardStyles.showCount;
+                
+                document.getElementById('email-enabled').checked = config.emailSettings.enabled;
+                document.getElementById('email-subject').value = config.emailSettings.subject;
+                document.getElementById('email-body').value = config.emailSettings.body;
+                document.getElementById('email-delay').value = config.emailSettings.delayDays;
+
+                renderRules();
+                updatePreviews();
+            }
             updateMetrics();
             renderLists();
-
-            const setRes = await fetch(`${API}/admin/settings?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
-            const settings = await setRes.json();
-            if(settings) {
-                document.getElementById('set-auto-approve').checked = settings.autoApproveVerified;
-                document.getElementById('set-min-stars').value = settings.autoApproveMinStars || 4;
-                savedProfiles = settings.attributeProfiles || [];
-                renderProfiles();
-                
-                // Designer fields
-                if(settings.widgetStyles) {
-                    document.getElementById('style-primary').value = settings.widgetStyles.primaryColor || '#000000';
-                    document.getElementById('style-star').value = settings.widgetStyles.starColor || '#ffc700';
-                    document.getElementById('style-text-size').value = settings.widgetStyles.textSize || 15;
-                }
-                if(settings.cardStyles) {
-                    document.getElementById('card-star-size').value = settings.cardStyles.starSize || 14;
-                    document.getElementById('card-show-count').checked = settings.cardStyles.showCount !== false;
-                }
-            }
-        } catch(e) { console.error("Load failed", e); }
+        } catch(e) { console.error(e); }
     }
 
+    function updatePreviews() {
+        const prim = document.getElementById('style-primary').value;
+        const star = document.getElementById('style-star').value;
+        const txt = document.getElementById('style-text').value + 'px';
+        
+        // Full Widget
+        document.getElementById('pre-btn').style.background = prim;
+        document.getElementById('pre-stars').style.color = star;
+        document.getElementById('pre-text').style.fontSize = txt;
+
+        // Card Widget
+        document.getElementById('pre-card-icon').style.color = star;
+        document.getElementById('pre-card-icon').style.fontSize = document.getElementById('card-star').value + 'px';
+        document.getElementById('pre-card-count').style.display = document.getElementById('card-count').checked ? 'inline' : 'none';
+
+        // Email
+        document.getElementById('pre-em-sub').innerText = document.getElementById('email-subject').value;
+        document.getElementById('pre-em-body').innerText = document.getElementById('email-body').value;
+    }
+
+    async function saveAll() {
+        const payload = {
+            shopDomain: SHOP_DOMAIN,
+            autoApproveVerified: document.getElementById('set-auto').checked,
+            customFilters: config.customFilters,
+            widgetStyles: {
+                primaryColor: document.getElementById('style-primary').value,
+                starColor: document.getElementById('style-star').value,
+                textSize: parseInt(document.getElementById('style-text').value)
+            },
+            cardStyles: {
+                starSize: parseInt(document.getElementById('card-star').value),
+                showCount: document.getElementById('card-count').checked
+            },
+            emailSettings: {
+                enabled: document.getElementById('email-enabled').checked,
+                subject: document.getElementById('email-subject').value,
+                body: document.getElementById('email-body').value,
+                delayDays: parseInt(document.getElementById('email-delay').value)
+            }
+        };
+        await fetch(`${API}/admin/settings`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        if(window.shopify) window.shopify.toast.show('Settings Published!');
+    }
+
+    function addFilterRule() {
+        const type = document.getElementById('rule-type').value;
+        const val = document.getElementById('rule-val').value.trim();
+        config.customFilters.push({ type, value: type === 'Vendor' ? 'All' : val });
+        renderRules();
+        saveAll();
+    }
+
+    function renderRules() {
+        document.getElementById('active-rules').innerHTML = config.customFilters.map((f, i) => `
+            <div class="tag-pill">${f.type}: ${f.value} <span class="pill-remove" onclick="removeRule(${i})">✕</span></div>
+        `).join('');
+    }
+
+    function removeRule(i) { config.customFilters.splice(i, 1); renderRules(); saveAll(); }
+
     function updateMetrics() {
-        const live = data.filter(r => r.status === 'accepted' && !r.isDeleted).length;
         document.getElementById('count-total').innerText = data.length;
-        document.getElementById('count-live').innerText = live;
+        document.getElementById('count-live').innerText = data.filter(r => r.status === 'accepted').length;
     }
 
     function renderLists() {
-        const query = document.getElementById('search-bar').value.toLowerCase();
-        const status = document.getElementById('status-filter').value;
-        
+        const q = document.getElementById('search-bar').value.toLowerCase();
+        const s = document.getElementById('mgr-status').value;
         let filtered = data.filter(r => !r.isDeleted);
-        if(status !== 'all') filtered = filtered.filter(r => r.status === status);
-        if(query) filtered = filtered.filter(r => r.userId.toLowerCase().includes(query) || r.comment.toLowerCase().includes(query));
+        if(s !== 'all') filtered = filtered.filter(r => r.status === s);
+        if(q) filtered = filtered.filter(r => r.comment.toLowerCase().includes(q) || r.userId.toLowerCase().includes(q));
 
         document.getElementById('mgmt-list').innerHTML = filtered.map(r => `
             <div class="review-card status-border-${r.status}">
-                <div style="flex:1;">
-                    <div style="font-weight:700;">${r.userId}</div>
+                <div style="flex:1">
+                    <div style="font-weight:700">${r.userId}</div>
                     <div class="stars">${'★'.repeat(r.rating)}</div>
                     <div class="headline">${r.headline}</div>
                     <div class="comment">${r.comment}</div>
                 </div>
-                <div style="text-align:right;">
-                    <button class="post-btn" style="background:var(--green);" onclick="updateStatus('${r._id}', 'accepted')">Accept</button>
-                    <button class="post-btn" style="background:var(--red); margin-top:10px;" onclick="toggleBin('${r._id}', true)">Bin</button>
-                </div>
+                <div><button class="post-btn" onclick="updateStatus('${r._id}', 'accepted')">Accept</button></div>
             </div>
         `).join('');
     }
 
     async function updateStatus(id, status) {
-        fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({status}) });
-        const r = data.find(x => x._id === id); if(r) r.status = status;
-        renderLists(); updateMetrics();
+        await fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({status}) });
+        load();
     }
-
-    async function toggleBin(id, isDeleted) {
-        fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({isDeleted}) });
-        const r = data.find(x => x._id === id); if(r) r.isDeleted = isDeleted;
-        renderLists(); updateMetrics();
-    }
-
-    async function saveSettings() {
-        const payload = {
-            shopDomain: SHOP_DOMAIN,
-            autoApproveVerified: document.getElementById('set-auto-approve').checked,
-            autoApproveMinStars: parseInt(document.getElementById('set-min-stars').value),
-            attributeProfiles: savedProfiles
-        };
-        await fetch(`${API}/admin/settings`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-    }
-
-    async function saveStyles() {
-        const payload = {
-            shopDomain: SHOP_DOMAIN,
-            widgetStyles: {
-                primaryColor: document.getElementById('style-primary').value,
-                starColor: document.getElementById('style-star').value,
-                textSize: parseInt(document.getElementById('style-text-size').value)
-            },
-            cardStyles: {
-                starSize: parseInt(document.getElementById('card-star-size').value),
-                showCount: document.getElementById('card-show-count').checked
-            }
-        };
-        await fetch(`${API}/admin/settings`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-    }
-
-    function renderProfiles() {
-        document.getElementById('active-profiles-container').innerHTML = savedProfiles.map((p, idx) => `
-            <div style="background:#fff; border:1px solid var(--border); padding:15px; border-radius:8px; margin-bottom:10px; display:flex; justify-content:space-between;">
-                <div><strong>${p.tag}</strong>: ${p.sliders.join(', ')}</div>
-                <button onclick="removeProfile(${idx})" style="border:none; color:var(--red); cursor:pointer; background:none; font-weight:700;">Delete</button>
-            </div>
-        `).join('');
-    }
-
-    function addAttributeProfile() {
-        const tag = document.getElementById('new-profile-tag').value.trim();
-        const sliders = document.getElementById('new-profile-sliders').value.split(',').map(s => s.trim());
-        if(tag && sliders.length) {
-            savedProfiles.push({ tag, sliders });
-            renderProfiles();
-            saveSettings();
-        }
-    }
-
-    function removeProfile(i) { savedProfiles.splice(i, 1); renderProfiles(); saveSettings(); }
 
     load();
 </script>
