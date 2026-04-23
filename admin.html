@@ -67,7 +67,6 @@
         .force-verify-btn { margin-top: 8px; font-size: 0.75rem; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border); cursor: pointer; background: white; font-weight: 600; color: var(--text-light); transition: 0.2s;}
         .force-verify-btn:hover { background: #f1f5f9; color: var(--primary); }
 
-        /* NEW: Pill Button Styles */
         .reply-container { margin-top: 25px; padding-top: 25px; border-top: 1px solid var(--border); }
         .reply-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: 0.2s; border: none; outline: none; }
         .reply-pill.has-reply { background: #d1fae5; color: #047857; border: 1px solid #a7f3d0; }
@@ -86,7 +85,7 @@
         .pub-preview-wrapper { background: var(--card); padding: 50px; border-radius: 16px; border: 1px solid var(--border); }
         .error-box { background: #fee2e2; border: 1px solid #ef4444; padding: 20px; border-radius: 8px; color: #991b1b; text-align: center; margin-bottom: 20px; display: none; font-weight: 600;}
 
-        .settings-panel { background: var(--card); padding: 40px; border-radius: 16px; border: 1px solid var(--border); max-width: 800px;}
+        .settings-panel { background: var(--card); padding: 40px; border-radius: 16px; border: 1px solid var(--border); max-width: 800px; margin-bottom: 25px;}
         .setting-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 25px 0; border-bottom: 1px solid var(--border); flex-direction: column; gap: 15px;}
         @media(min-width: 600px) { .setting-row { flex-direction: row; align-items: center;} }
         .setting-row:last-child { border-bottom: none; }
@@ -208,38 +207,34 @@
                 </div>
             </div>
         </div>
+
+        <div class="settings-panel">
+            <div class="setting-row" style="flex-direction: column; align-items: flex-start; border-bottom: none;">
+                <div class="setting-info" style="width: 100%;">
+                    <h3>Dynamic Review Sliders</h3>
+                    <p>Automatically show specific slider questions based on the product's tags. (e.g. Tag: <strong>drink</strong> -> Sliders: <strong>Sweetness, Taste</strong>)</p>
+                    <div class="filter-builder" style="background: #fff; border: 2px dashed var(--border);">
+                        <div class="builder-row">
+                            <input type="text" id="new-profile-tag" class="search-input" placeholder="Trigger Tag (e.g. clothing)">
+                            <input type="text" id="new-profile-sliders" class="search-input" placeholder="Sliders (comma separated, e.g. Fit, Comfort, Style)" style="flex: 2;">
+                            <button class="reply-btn" onclick="addAttributeProfile()">Create Sliders</button>
+                        </div>
+                        <div id="active-profiles-container" style="margin-top: 20px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div id="designer" class="view">
         <div style="display: flex; gap: 40px; flex-wrap: wrap;">
             <div class="settings-panel" style="flex: 1; min-width: 300px;">
                 <h2 style="margin-top: 0;">Widget Customizer</h2>
-                
-                <div class="setting-row">
-                    <div class="setting-info"><h3>Primary Brand Color</h3><p>Buttons and progress bars.</p></div>
-                    <input type="color" id="style-primary" oninput="updateLivePreview()" style="width: 50px; height: 50px; cursor: pointer; border: none; padding: 0;">
-                </div>
-                
-                <div class="setting-row">
-                    <div class="setting-info"><h3>Star Color</h3><p>Rating stars.</p></div>
-                    <input type="color" id="style-star" oninput="updateLivePreview()" style="width: 50px; height: 50px; cursor: pointer; border: none; padding: 0;">
-                </div>
-                
-                <div class="setting-row">
-                    <div class="setting-info"><h3>Title Size (Desktop px)</h3></div>
-                    <input type="number" id="style-title-size" class="search-input" style="max-width: 100px;" oninput="updateLivePreview()">
-                </div>
-                
-                <div class="setting-row">
-                    <div class="setting-info"><h3>Base Text Size (px)</h3></div>
-                    <input type="number" id="style-text-size" class="search-input" style="max-width: 100px;" oninput="updateLivePreview()">
-                </div>
-                
-                <div class="setting-row">
-                    <div class="setting-info"><h3>Card & Button Roundness (px)</h3></div>
-                    <input type="number" id="style-radius" class="search-input" style="max-width: 100px;" oninput="updateLivePreview()">
-                </div>
-
+                <div class="setting-row"><div class="setting-info"><h3>Primary Brand Color</h3></div><input type="color" id="style-primary" oninput="updateLivePreview()" style="width: 50px; height: 50px; cursor: pointer; border: none; padding: 0;"></div>
+                <div class="setting-row"><div class="setting-info"><h3>Star Color</h3></div><input type="color" id="style-star" oninput="updateLivePreview()" style="width: 50px; height: 50px; cursor: pointer; border: none; padding: 0;"></div>
+                <div class="setting-row"><div class="setting-info"><h3>Title Size (Desktop px)</h3></div><input type="number" id="style-title-size" class="search-input" style="max-width: 100px;" oninput="updateLivePreview()"></div>
+                <div class="setting-row"><div class="setting-info"><h3>Base Text Size (px)</h3></div><input type="number" id="style-text-size" class="search-input" style="max-width: 100px;" oninput="updateLivePreview()"></div>
+                <div class="setting-row"><div class="setting-info"><h3>Card & Button Roundness (px)</h3></div><input type="number" id="style-radius" class="search-input" style="max-width: 100px;" oninput="updateLivePreview()"></div>
                 <button class="post-btn" style="width: 100%; margin-top: 20px; background: var(--green); color: white; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;" onclick="saveStyles()">Save & Publish Design</button>
             </div>
 
@@ -265,8 +260,7 @@
     const API = '/api';
     let data = [];
     let savedRules = [];
-    
-    // Tracks which reply boxes the user has clicked open so they don't snap shut when updating status
+    let savedProfiles = [];
     let openReplyBoxes = new Set();
 
     function tab(name) {
@@ -291,8 +285,12 @@
                 if(settings) {
                     document.getElementById('set-auto-approve').checked = settings.autoApproveVerified || false;
                     document.getElementById('set-min-stars').value = settings.autoApproveMinStars || 4;
+                    
                     savedRules = settings.filters || [];
+                    savedProfiles = settings.attributeProfiles || [];
+                    
                     renderRules();
+                    renderProfiles();
 
                     if(settings.widgetStyles) {
                         document.getElementById('style-primary').value = settings.widgetStyles.primaryColor || '#000000';
@@ -347,10 +345,7 @@
 
     function renderRules() {
         document.getElementById('active-rules-container').innerHTML = savedRules.map((rule, idx) => `
-            <div class="tag-pill">
-                ${rule.type}: ${rule.value} 
-                <span class="pill-remove" onclick="removeRule(${idx})">✕</span>
-            </div>
+            <div class="tag-pill">${rule.type}: ${rule.value} <span class="pill-remove" onclick="removeRule(${idx})">✕</span></div>
         `).join('');
     }
 
@@ -371,12 +366,47 @@
         saveSettings();
     }
 
+    // --- NEW: DYNAMIC SLIDER PROFILES ---
+    function renderProfiles() {
+        document.getElementById('active-profiles-container').innerHTML = savedProfiles.map((p, idx) => `
+            <div style="background: white; border: 1px solid var(--border); padding: 15px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <strong>Tag:</strong> <span style="background: #e2e8f0; padding: 2px 8px; border-radius: 4px; font-size: 0.85rem; margin-right: 15px;">${p.tag}</span>
+                    <strong>Sliders:</strong> <span style="color: var(--text-light); font-size: 0.9rem;">${p.sliders.join(', ')}</span>
+                </div>
+                <button class="action-pill bin-pill" style="margin:0;" onclick="removeProfile(${idx})">Delete</button>
+            </div>
+        `).join('');
+    }
+
+    function addAttributeProfile() {
+        const tag = document.getElementById('new-profile-tag').value.trim().toLowerCase();
+        const slidersStr = document.getElementById('new-profile-sliders').value.trim();
+        
+        if(tag && slidersStr) {
+            const slidersArray = slidersStr.split(',').map(s => s.trim()).filter(s => s);
+            savedProfiles.push({ tag: tag, sliders: slidersArray });
+            
+            document.getElementById('new-profile-tag').value = '';
+            document.getElementById('new-profile-sliders').value = '';
+            renderProfiles();
+            saveSettings();
+        }
+    }
+
+    function removeProfile(index) {
+        savedProfiles.splice(index, 1);
+        renderProfiles();
+        saveSettings();
+    }
+
     async function saveSettings() {
         try {
             const payload = { 
                 autoApproveVerified: document.getElementById('set-auto-approve').checked, 
                 autoApproveMinStars: parseInt(document.getElementById('set-min-stars').value),
-                filters: savedRules
+                filters: savedRules,
+                attributeProfiles: savedProfiles // Save the dynamic sliders!
             };
             await fetch(API + '/admin/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             if(window.shopify) { window.shopify.toast.show('Settings saved'); }
@@ -427,7 +457,6 @@
         document.getElementById('trash-list').innerHTML = trashData.length ? trashData.map(r => buildCard(r, true)).join('') : '<p style="text-align:center;">Bin is empty.</p>';
     }
 
-    // Toggle logic for the reply box so it slides open and closed
     function toggleReplyBox(id) {
         const box = document.getElementById(`reply-box-${id}`);
         if (box.style.display === 'none' || box.style.display === '') {
@@ -448,7 +477,6 @@
             ? `<a href="https://admin.shopify.com/customers?query=${encodeURIComponent(r.email)}" target="_blank" class="customer-link" title="Open Customer Account">${r.userId}</a>` 
             : `<strong style="font-size: 1.05rem;">${r.userId}</strong>`;
 
-        // 1. Render the Flavor Profile Bars (Added this back in!)
         let attrHTML = '';
         if (r.attributes && Object.keys(r.attributes).length > 0) {
             attrHTML = `<div style="margin-top: 20px; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid var(--border); display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px;">`;
@@ -466,7 +494,6 @@
             attrHTML += `</div>`;
         }
 
-        // 2. Render the Product Tags cleanly separated at the bottom
         const tagsHtml = r.productTags && r.productTags.length > 0 
             ? `<div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed var(--border);">
                  <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-light); text-transform: uppercase; margin-right: 8px;">Product Tags:</span> 
@@ -503,7 +530,6 @@
                 
                 <div class="reply-container">
                     <button class="reply-pill ${replyStateClass}" onclick="toggleReplyBox('${r._id}')">${replyText}</button>
-                    
                     <div id="reply-box-${r._id}" class="reply-panel" style="display: ${isReplyOpen};">
                         <textarea id="reply-text-${r._id}" class="reply-input" placeholder="Type your public reply...">${r.reply || ''}</textarea>
                         <button class="reply-btn" onclick="saveReply('${r._id}')">Publish Reply</button>
@@ -515,7 +541,6 @@
                 <div>
                     <div class="pid">Product ID: ${r.itemId}</div>
                     ${r.orderId ? `<div style="font-size: 0.9rem; margin-bottom: 10px; color: var(--text-light); font-weight: 600;">Order #${r.orderId}</div>` : ''}
-                    
                     <div style="display: flex; flex-direction: column; align-items: flex-end; margin-top: 8px;">
                         ${verifyHtml}
                         <button class="force-verify-btn" onclick="toggleVerify('${r._id}', ${!r.verifiedPurchase})">
@@ -546,48 +571,30 @@
             </div>`).join('');
     }
 
-    // =====================================
-    // AJAX ACTIONS (Optimistic UI updates)
-    // =====================================
-
     async function updateStatus(id, status) {
-        // 1. Instantly update the local array
         const review = data.find(r => r._id === id);
         if(review) review.status = status;
-        
-        // 2. Instantly re-render the screen (No loading blink!)
         renderLists();
         updateMetrics();
-
-        // 3. Quietly sync to the database in the background
         fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({status}) });
     }
 
     async function saveReply(id) {
         const text = document.getElementById(`reply-text-${id}`).value;
-        
-        // 1. Instantly update the local array
         const review = data.find(r => r._id === id);
         if(review) review.reply = text;
-        
-        // 2. Close the box and re-render so the Pill turns Green instantly!
         openReplyBoxes.delete(id);
         renderLists();
-
-        // 3. Sync to database
         fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({reply: text}) });
         if(window.shopify) { window.shopify.toast.show('Reply published'); }
     }
 
     async function toggleBin(id, isDeleted) {
         if(isDeleted && !confirm('Move to Bin? It will be deleted forever in 28 days.')) return;
-        
         const review = data.find(r => r._id === id);
         if(review) review.isDeleted = isDeleted;
-        
         renderLists();
         updateMetrics();
-
         fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({isDeleted}) });
         if(window.shopify) { window.shopify.toast.show(isDeleted ? 'Moved to Bin' : 'Restored'); }
     }
@@ -598,16 +605,11 @@
             review.verifiedPurchase = isVerified;
             review.verificationNote = isVerified ? "Manually verified by Admin" : "Verification manually removed";
         }
-        
         renderLists();
-
         fetch(`${API}/reviews/${id}`, { 
             method: 'PATCH', 
             headers: {'Content-Type':'application/json'}, 
-            body: JSON.stringify({
-                verifiedPurchase: isVerified, 
-                verificationNote: isVerified ? "Manually verified by Admin" : "Verification manually removed"
-            }) 
+            body: JSON.stringify({ verifiedPurchase: isVerified, verificationNote: isVerified ? "Manually verified by Admin" : "Verification manually removed" }) 
         });
         if(window.shopify) { window.shopify.toast.show(isVerified ? 'Marked as Verified' : 'Verification Removed'); }
     }
