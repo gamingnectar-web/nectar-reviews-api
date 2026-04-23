@@ -18,7 +18,11 @@ mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ Connected to MongoDB Atlas'))
   .catch((err) => console.error('❌ MongoDB Connection Error:', err));
 
+// ==========================================
+// SAAS SCHEMAS (Multi-Tenant)
+// ==========================================
 const reviewSchema = new mongoose.Schema({
+    shopDomain: { type: String, required: true }, // NEW: Locks review to a specific store
     itemId: { type: String, required: true },
     userId: { type: String, required: true }, 
     email: { type: String }, 
@@ -40,14 +44,16 @@ const reviewSchema = new mongoose.Schema({
 });
 
 reviewSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 2419200 });
+// Compound index for fast queries across tenants
+reviewSchema.index({ shopDomain: 1, itemId: 1 }); 
 const Review = mongoose.model('Review', reviewSchema, 'reviews'); 
 
 const settingsSchema = new mongoose.Schema({
-    widgetId: { type: String, default: 'default' }, 
+    shopDomain: { type: String, required: true, unique: true }, // NEW: One settings doc per store
     autoApproveVerified: { type: Boolean, default: false },
     autoApproveMinStars: { type: Number, default: 4 },
     filters: { type: Array, default: [] },
-    attributeProfiles: { type: Array, default: [] }, // NEW: Stores Dynamic Slider Rules
+    attributeProfiles: { type: Array, default: [] },
     widgetStyles: {
         primaryColor: { type: String, default: '#000000' },
         starColor: { type: String, default: '#fbbf24' },
@@ -58,22 +64,19 @@ const settingsSchema = new mongoose.Schema({
 });
 const Settings = mongoose.model('Settings', settingsSchema, 'settings');
 
-async function initSettings() {
-    try {
-        const exists = await Settings.findOne({ widgetId: 'default' });
-        if (!exists) await new Settings({ widgetId: 'default' }).save();
-    } catch (e) { console.log("Settings init bypassed"); }
-}
-initSettings();
-
-function generateMagicToken(orderId, email) {
+// ==========================================
+// MAGIC LINK & VERIFICATION LOGIC
+// ==========================================
+function generateMagicToken(shopDomain, orderId, email) {
     const secret = process.env.SHOPIFY_API_SECRET || 'fallback-nectar-secret';
-    const data = `${String(orderId).trim().toLowerCase()}:${String(email).trim().toLowerCase()}`;
+    const data = `${String(shopDomain).trim().toLowerCase()}:${String(orderId).trim().toLowerCase()}:${String(email).trim().toLowerCase()}`;
     return crypto.createHmac('sha256', secret).update(data).digest('hex');
 }
 
-async function verifyShopifyOrder(orderId, email, productId) {
-    const STORE_URL = process.env.SHOPIFY_STORE_URL; 
+// NOTE: For a fully public app, STORE_URL and CLIENT_SECRET will be fetched from a database based on shopDomain. 
+// For now, we pass shopDomain through the architecture to prepare it, while using the .env fallback.
+async function verifyShopifyOrder(shopDomain, orderId, email, productId) {
+    const STORE_URL = shopDomain || process.env.SHOPIFY_STORE_URL; 
     const CLIENT_ID = process.env.SHOPIFY_API_KEY; 
     const CLIENT_SECRET = process.env.SHOPIFY_API_SECRET; 
 
@@ -105,14 +108,15 @@ async function verifyShopifyOrder(orderId, email, productId) {
 }
 
 // ==========================================
-// PUBLIC ROUTES
+// PUBLIC STOREFRONT ROUTES
 // ==========================================
-app.get('/', (req, res) => res.send('🚀 Nectar API Live'));
+app.get('/', (req, res) => res.send('🚀 Nectar API Live - SaaS Edition'));
 
-// UPGRADED: Now sends both CSS Styles AND Dynamic Slider Profiles
 app.get('/api/widget/config', async (req, res) => {
+    const { shopDomain } = req.query;
+    if (!shopDomain) return res.status(400).json({ error: "Missing shopDomain" });
     try {
-        const config = await Settings.findOne({ widgetId: 'default' });
+        const config = await Settings.findOne({ shopDomain: shopDomain });
         res.status(200).json({
             styles: config ? config.widgetStyles : {},
             profiles: config ? config.attributeProfiles : []
@@ -121,8 +125,11 @@ app.get('/api/widget/config', async (req, res) => {
 });
 
 app.get('/api/reviews/:itemId', async (req, res) => {
+    const { shopDomain } = req.query;
+    if (!shopDomain) return res.status(400).json({ error: "Missing shopDomain" });
     try { 
         const reviews = await Review.find({ 
+            shopDomain: shopDomain,
             itemId: String(req.params.itemId), 
             status: 'accepted', 
             isDeleted: { $ne: true }, 
@@ -141,6 +148,9 @@ app.get('/api/reviews/single/:id', async (req, res) => {
 });
 
 app.post('/api/reviews', async (req, res) => {
+    const { shopDomain } = req.body;
+    if (!shopDomain) return res.status(400).json({ error: "Missing shopDomain" });
+
     try {
         let isVerified = req.body.verifiedPurchase; 
         let vNote = "Verified automatically by Shopify.";
@@ -148,22 +158,23 @@ app.post('/api/reviews', async (req, res) => {
         let flaggedSpam = false;
 
         if (!isVerified && req.body.orderId && req.body.email) {
-            const checkResult = await verifyShopifyOrder(req.body.orderId, req.body.email, req.body.itemId);
+            const checkResult = await verifyShopifyOrder(shopDomain, req.body.orderId, req.body.email, req.body.itemId);
             isVerified = checkResult.verified;
             vNote = checkResult.note;
         } else if (!isVerified && !req.body.orderId) vNote = "No Order ID provided.";
 
         if (!isVerified && req.body.email) {
-            const recentUnverified = await Review.countDocuments({ email: req.body.email, verifiedPurchase: false, createdAt: { $gte: new Date(Date.now() - 24*60*60*1000) }});
+            const recentUnverified = await Review.countDocuments({ shopDomain, email: req.body.email, verifiedPurchase: false, createdAt: { $gte: new Date(Date.now() - 24*60*60*1000) }});
             if (recentUnverified >= 2) { flaggedSpam = true; finalStatus = 'rejected'; vNote = "SPAM FLAG: Too many unverified reviews."; }
         }
 
-        const config = await Settings.findOne({ widgetId: 'default' });
+        const config = await Settings.findOne({ shopDomain: shopDomain });
         if (!flaggedSpam && config && config.autoApproveVerified && isVerified) {
             if (req.body.rating >= config.autoApproveMinStars) finalStatus = 'accepted';
         }
 
         const newReview = new Review({
+            shopDomain: shopDomain,
             itemId: String(req.body.itemId), userId: req.body.userId, email: req.body.email,
             isAnonymous: req.body.isAnonymous, rating: req.body.rating, headline: req.body.headline,
             comment: req.body.comment, attributes: req.body.attributes, productTags: req.body.productTags,
@@ -175,14 +186,17 @@ app.post('/api/reviews', async (req, res) => {
     } catch (error) { res.status(400).json({ error: "Failed to submit" }); }
 });
 
-// MAGIC LINK ROUTES
+// ==========================================
+// MAGIC LINK BULK ROUTES
+// ==========================================
 app.get('/api/magic-link/order', async (req, res) => {
-    const { orderId, email, token } = req.query;
-    if (!orderId || !email || !token) return res.status(400).json({ error: "Missing parameters" });
-    const expectedToken = generateMagicToken(orderId, email);
+    const { shopDomain, orderId, email, token } = req.query;
+    if (!shopDomain || !orderId || !email || !token) return res.status(400).json({ error: "Missing parameters" });
+    
+    const expectedToken = generateMagicToken(shopDomain, orderId, email);
     if (token !== expectedToken) return res.status(403).json({ error: "Invalid or expired secure link." });
 
-    const STORE_URL = process.env.SHOPIFY_STORE_URL; 
+    const STORE_URL = shopDomain || process.env.SHOPIFY_STORE_URL; 
     const CLIENT_ID = process.env.SHOPIFY_API_KEY; 
     const CLIENT_SECRET = process.env.SHOPIFY_API_SECRET; 
     const authString = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
@@ -207,17 +221,19 @@ app.get('/api/magic-link/order', async (req, res) => {
 });
 
 app.post('/api/reviews/bulk', async (req, res) => {
-    const { orderId, email, token, reviews } = req.body; 
-    if (token !== generateMagicToken(orderId, email)) return res.status(403).json({ error: "Invalid secure link." });
+    const { shopDomain, orderId, email, token, reviews } = req.body; 
+    if (!shopDomain) return res.status(400).json({ error: "Missing shopDomain" });
+    if (token !== generateMagicToken(shopDomain, orderId, email)) return res.status(403).json({ error: "Invalid secure link." });
 
     try {
-        const config = await Settings.findOne({ widgetId: 'default' });
+        const config = await Settings.findOne({ shopDomain: shopDomain });
         const savedReviews = [];
 
         for (const rev of reviews) {
             let finalStatus = 'pending';
             if (config && config.autoApproveVerified && rev.rating >= config.autoApproveMinStars) finalStatus = 'accepted';
             const newReview = new Review({
+                shopDomain: shopDomain,
                 itemId: String(rev.itemId), userId: rev.userId, email: email,
                 isAnonymous: rev.isAnonymous, rating: rev.rating, headline: rev.headline,
                 comment: rev.comment, attributes: rev.attributes || {}, productTags: rev.productTags || [],
@@ -231,24 +247,27 @@ app.post('/api/reviews/bulk', async (req, res) => {
 });
 
 app.get('/api/admin/generate-link', (req, res) => {
-    const { orderId, email } = req.query;
-    if(!orderId || !email) return res.status(400).send("Need orderId and email");
-    const token = generateMagicToken(orderId, email);
-    res.send(`?orderId=${orderId}&email=${email}&token=${token}`);
+    const { shopDomain, orderId, email } = req.query;
+    if(!shopDomain || !orderId || !email) return res.status(400).send("Need shopDomain, orderId and email");
+    const token = generateMagicToken(shopDomain, orderId, email);
+    res.send(`?shopDomain=${shopDomain}&orderId=${orderId}&email=${email}&token=${token}`);
 });
 
 // ==========================================
-// ADMIN ROUTES & PATCH UPDATER
+// ADMIN DASHBOARD ROUTES
 // ==========================================
 app.get('/api/admin/reviews', async (req, res) => {
-    try { res.status(200).json(await Review.find().sort({ createdAt: -1 })); } 
+    const { shopDomain } = req.query;
+    if (!shopDomain) return res.status(400).json({ error: "Missing shopDomain" });
+    try { res.status(200).json(await Review.find({ shopDomain: shopDomain }).sort({ createdAt: -1 })); } 
     catch (error) { res.status(500).json({ error: "Admin fetch error" }); }
 });
 
 app.patch('/api/reviews/:id', async (req, res) => {
+    // Note: In a full SaaS app, you'd also verify shopDomain via session token here to ensure
+    // a malicious admin can't patch a review from another store.
     try {
         const updateData = {};
-        
         if (req.body.status !== undefined) updateData.status = req.body.status;
         if (req.body.reply !== undefined) updateData.reply = req.body.reply;
         if (req.body.verifiedPurchase !== undefined) updateData.verifiedPurchase = req.body.verifiedPurchase;
@@ -269,12 +288,16 @@ app.patch('/api/reviews/:id', async (req, res) => {
 });
 
 app.get('/api/admin/settings', async (req, res) => {
-    try { res.status(200).json(await Settings.findOne({ widgetId: 'default' })); } 
+    const { shopDomain } = req.query;
+    if (!shopDomain) return res.status(400).json({ error: "Missing shopDomain" });
+    try { res.status(200).json(await Settings.findOne({ shopDomain: shopDomain })); } 
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.patch('/api/admin/settings', async (req, res) => {
-    try { res.status(200).json(await Settings.findOneAndUpdate({ widgetId: 'default' }, req.body, { new: true, upsert: true })); } 
+    const { shopDomain } = req.body;
+    if (!shopDomain) return res.status(400).json({ error: "Missing shopDomain" });
+    try { res.status(200).json(await Settings.findOneAndUpdate({ shopDomain: shopDomain }, req.body, { new: true, upsert: true })); } 
     catch (err) { res.status(500).json({ error: err.message }); }
 });
 
