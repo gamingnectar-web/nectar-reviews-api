@@ -52,23 +52,31 @@ const settingsSchema = new mongoose.Schema({
     shopDomain: { type: String, required: true, unique: true }, 
     autoApproveVerified: { type: Boolean, default: false },
     autoApproveMinStars: { type: Number, default: 4 },
-    filters: { type: Array, default: [] },
     attributeProfiles: { type: Array, default: [] },
+    // NEW: Review Manager Custom Filters
+    customFilters: { type: Array, default: [] }, 
+    // STYLES
     widgetStyles: {
         primaryColor: { type: String, default: '#000000' },
-        starColor: { type: String, default: '#fbbf24' },
-        titleSize: { type: Number, default: 26 },
+        starColor: { type: String, default: '#ffc700' },
         textSize: { type: Number, default: 15 },
-        borderRadius: { type: Number, default: 12 },
-        emptyStateMode: { type: String, default: 'stars_text' },
-        emptyStateText: { type: String, default: 'No reviews yet. Be the first to leave one!' }
+        emptyMode: { type: String, default: 'stars_text' },
+        emptyText: { type: String, default: 'No reviews yet.' }
     },
-    // NEW: On-Card Widget Styles
     cardStyles: {
         starSize: { type: Number, default: 14 },
-        fontSize: { type: Number, default: 13 },
-        showCount: { type: Boolean, default: true },
-        alignment: { type: String, default: 'flex-start' } // 'flex-start', 'center', 'flex-end'
+        showCount: { type: Boolean, default: true }
+    },
+    badgeStyles: {
+        starSize: { type: Number, default: 18 },
+        fontSize: { type: Number, default: 14 }
+    },
+    // NEW: Email Automation Settings
+    emailSettings: {
+        subject: { type: String, default: "How was your recent order?" },
+        body: { type: String, default: "Thank you for shopping! We would love to hear what you think of your items." },
+        delayDays: { type: Number, default: 7 },
+        enabled: { type: Boolean, default: false }
     }
 });
 const Settings = mongoose.model('Settings', settingsSchema, 'settings');
