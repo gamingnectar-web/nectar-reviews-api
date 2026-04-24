@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style>
-        :root { --bg: #f4f6f8; --card: #ffffff; --border: #ebebeb; --primary: #1a1a1a; --text: #202223; --text-light: #6d7175; --star: #ffc700; --green: #008060; --red: #d82c0d; --sidebar-bg: #ebebeb; --blue: #005bd3;}
+        :root { --bg: #f4f6f8; --card: #ffffff; --border: #ebebeb; --primary: #1a1a1a; --text: #202223; --text-light: #6d7175; --star: #ffc700; --green: #008060; --red: #d82c0d; --orange: #ea580c; --sidebar-bg: #ebebeb; --blue: #005bd3;}
         body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; min-height: 100vh;}
         
         .app-sidebar { width: 240px; background: var(--sidebar-bg); padding: 30px 20px; border-right: 1px solid var(--border); position: fixed; height: 100vh; box-sizing: border-box;}
@@ -35,16 +35,50 @@
         .post-btn { background: var(--primary); color: white; border: none; padding: 10px 20px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: 0.2s;}
         .post-btn:hover { opacity: 0.8; }
 
-        .review-card { background: var(--card); border: 1px solid var(--border); padding: 25px; margin-bottom: 15px; border-radius: 12px; display: flex; justify-content: space-between; gap: 20px; border-left: 4px solid #c1c2c3; }
-        .status-border-accepted { border-left-color: var(--green); }
-        .status-border-rejected { border-left-color: var(--red); background: #fafafa; }
+        /* RESTORED: RICH REVIEW CARDS */
+        .review-card { background: var(--card); border: 2px solid var(--border); padding: 25px; margin-bottom: 20px; border-radius: 12px; display: flex; justify-content: space-between; gap: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); transition: all 0.2s;}
+        .review-card:hover { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
+        .status-border-pending { border-color: var(--border); }
+        .status-border-accepted { border-color: var(--green); }
+        .status-border-rejected { border-color: var(--red); }
+        .status-border-hold { border-color: var(--orange); }
+
+        .card-main { flex: 1; }
+        .card-side { text-align: right; border-left: 1px solid var(--border); padding-left: 30px; min-width: 240px; display: flex; flex-direction: column; justify-content: space-between;}
         
+        .customer-link { display: inline-block; padding: 4px 12px; border: 1px solid var(--text); border-radius: 6px; color: var(--text); font-weight: 700; text-decoration: none; font-size: 1.05rem; transition: 0.2s;}
+        .customer-link:hover { background: var(--text); color: white; }
+
+        /* RESTORED: ROUND BUTTONS */
+        .status-group { display: flex; gap: 8px; justify-content: flex-end;}
+        .s-btn { width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer; background: white; font-size: 16px; transition: 0.2s; color: var(--text-light);}
+        .s-btn:hover { transform: scale(1.05); }
+        .s-btn.acc { border-color: var(--green); }
+        .s-btn.acc.active { background: var(--green); color: white; }
+        .s-btn.hld { border-color: var(--orange); }
+        .s-btn.hld.active { background: var(--orange); color: white; }
+        .s-btn.rej { border-color: var(--red); }
+        .s-btn.rej.active { background: var(--red); color: white; }
+
+        /* RESTORED: VERIFIED BADGES & HOVER DIAGNOSTICS */
+        .v-badge { font-size: 0.8rem; padding: 6px 12px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; letter-spacing: 0.5px;}
+        .v-badge-yes { background: #e3f1df; color: #008060; border: 1px solid #bae0bc;}
+        .v-badge-no { background: #ffebcd; color: #b45309; border: 1px solid #fde68a; cursor: help;}
+
+        /* RESTORED: REPLY BOX */
+        .reply-toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--blue); font-weight: 600; cursor: pointer; margin-top: 15px; border: none; background: none; font-size: 0.95rem; padding: 0;}
+        .reply-toggle:hover { text-decoration: underline; }
+        .reply-panel { margin-top: 15px; background: #f4f6f8; padding: 20px; border-radius: 8px; border: 1px solid var(--border); display: none;}
+        .reply-input { width: 100%; min-height: 80px; padding: 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem; resize: vertical; margin-bottom: 10px; font-family: inherit;}
+        
+        .delete-btn { background: none; border: none; color: var(--red); font-weight: 600; cursor: pointer; font-size: 0.9rem; text-decoration: underline; padding:0;}
+        .restore-btn { background: none; border: none; color: var(--blue); font-weight: 600; cursor: pointer; font-size: 0.9rem; text-decoration: underline; padding:0;}
+
         .sub-tab-nav { display: flex; gap: 15px; border-bottom: 1px solid var(--border); margin-bottom: 25px; }
         .sub-tab-btn { background: none; border: none; padding: 10px 5px; font-weight: 600; cursor: pointer; color: var(--text-light); font-size: 14px; border-bottom: 2px solid transparent; }
         .sub-tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
         .sub-view { display: none; }
         .sub-view.active { display: block; }
-
         .code-block { background: #1a1a1a; color: #f4f6f8; padding: 20px; border-radius: 8px; font-family: monospace; font-size: 13px; overflow-x: auto; margin: 10px 0; }
         
         .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
@@ -61,6 +95,7 @@
     <div class="sidebar-title">Manage</div>
     <button class="tab-btn active" onclick="tab('v-dash')">Dashboard</button>
     <button class="tab-btn" onclick="tab('v-mgr')">Review Manager</button>
+    <button class="tab-btn" onclick="tab('v-trash')">Trash 🗑️</button>
     <button class="tab-btn" onclick="tab('v-imp')">Import CSV 📥</button>
     
     <div class="sidebar-title" style="margin-top: 20px;">Configuration</div>
@@ -103,10 +138,16 @@
                 <option value="all">All Statuses</option>
                 <option value="pending">Pending</option>
                 <option value="accepted">Accepted</option>
-                <option value="rejected">Rejected / Bin</option>
+                <option value="hold">On Hold</option>
             </select>
         </div>
         <div id="mgr-list">Loading reviews...</div>
+    </div>
+
+    <div id="v-trash" class="view">
+        <h2>Trash Bin</h2>
+        <p style="color: var(--text-light); margin-bottom: 20px;">Reviews here will be permanently deleted after 28 days.</p>
+        <div id="trash-list">Loading...</div>
     </div>
 
     <div id="v-imp" class="view">
@@ -114,13 +155,11 @@
         <div class="settings-panel">
             <h3>Import from Yotpo, Loox, or Okendo</h3>
             <p style="color: var(--text-light); font-size: 14px;">Upload your CSV file to map your columns automatically.</p>
-            
             <div style="border: 2px dashed #c9cccf; padding: 40px; text-align: center; border-radius: 12px; margin: 20px 0; background: #fafafa;">
                 <input type="file" id="csv-file" accept=".csv" style="display: none;" onchange="handleFileUpload()">
                 <button class="post-btn" onclick="document.getElementById('csv-file').click()">Select CSV File</button>
                 <div id="file-name" style="margin-top: 15px; font-weight: 600; color: var(--blue);"></div>
             </div>
-
             <div id="mapping-ui" style="display: none; margin-top: 30px; padding-top: 30px; border-top: 1px solid var(--border);">
                 <h4>Map your columns</h4>
                 <div id="column-mappers" style="display: grid; gap: 20px; grid-template-columns: 1fr 1fr;"></div>
@@ -155,7 +194,6 @@
                     <button class="sub-tab-btn active" onclick="subTab('ds-full')">Product Widget</button>
                     <button class="sub-tab-btn" onclick="subTab('ds-card')">Product Card Stars</button>
                 </div>
-
                 <div id="ds-full" class="sub-view active">
                     <div class="settings-panel">
                         <div class="setting-row"><span>Brand Color</span><input type="color" id="style-primary" oninput="updatePreviews()"></div>
@@ -164,7 +202,6 @@
                         <button class="post-btn" style="width:100%; margin-top:20px;" onclick="saveSettings()">Publish Styles</button>
                     </div>
                 </div>
-
                 <div id="ds-card" class="sub-view">
                     <div class="settings-panel">
                         <div class="setting-row"><span>Star Size (px)</span><input type="number" id="card-star" class="search-input" style="width:70px" oninput="updatePreviews()"></div>
@@ -173,7 +210,6 @@
                     </div>
                 </div>
             </div>
-
             <div style="flex: 1;">
                 <h4 style="margin-top: 0; color: var(--text-light);">Live Preview</h4>
                 <div class="settings-panel" style="padding: 20px;">
@@ -215,10 +251,9 @@
     let data = [];
     let chartInstance = null;
 
-    // --- NAVIGATION LOGIC ---
     function tab(id) {
         const target = document.getElementById(id);
-        if(!target) return; // Prevent crashes if ID is missing
+        if(!target) return; 
         document.querySelectorAll('.view, .tab-btn').forEach(el => el.classList.remove('active'));
         target.classList.add('active');
         event.currentTarget.classList.add('active');
@@ -231,14 +266,11 @@
         event.currentTarget.classList.add('active');
     }
 
-    // --- INIT / LOAD LOGIC ---
     async function load() {
         try {
-            // Load Reviews
             const res = await fetch(`${API}/admin/reviews?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
             if(res.ok) data = await res.json();
             
-            // Load Settings
             const setRes = await fetch(`${API}/admin/settings?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
             if(setRes.ok) {
                 const config = await setRes.json();
@@ -257,13 +289,11 @@
                     updatePreviews();
                 }
             }
-            
             renderLists();
             loadStats();
-        } catch(e) { console.error("Initialization error:", e); }
+        } catch(e) { console.error("Init error:", e); }
     }
 
-    // --- DASHBOARD ANALYTICS ---
     async function loadStats() {
         try {
             const res = await fetch(`${API}/admin/stats?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
@@ -287,40 +317,83 @@
         } catch(e) {}
     }
 
-    // --- REVIEW MANAGER LOGIC ---
+    // --- RESTORED: RICH CARD BUILDING LOGIC ---
     function renderLists() {
         const query = document.getElementById('search-bar').value.toLowerCase();
         const status = document.getElementById('status-filter').value;
         
-        let filtered = data.filter(r => !r.isDeleted);
-        if(status === 'rejected') filtered = data.filter(r => r.isDeleted || r.status === 'rejected');
-        else if(status !== 'all') filtered = filtered.filter(r => r.status === status);
-        
-        if(query) filtered = filtered.filter(r => (r.userId || '').toLowerCase().includes(query) || (r.comment || '').toLowerCase().includes(query));
+        // Active List
+        let active = data.filter(r => !r.isDeleted);
+        if(status !== 'all') active = active.filter(r => r.status === status);
+        if(query) active = active.filter(r => (r.userId || '').toLowerCase().includes(query) || (r.comment || '').toLowerCase().includes(query));
 
-        const container = document.getElementById('mgr-list');
-        if(filtered.length === 0) {
-            container.innerHTML = '<p style="text-align:center; color:#999; padding: 40px;">No reviews match this filter.</p>';
-            return;
+        // Trash List
+        const trash = data.filter(r => r.isDeleted);
+
+        document.getElementById('mgr-list').innerHTML = active.length ? active.map(r => buildCard(r, false)).join('') : '<p style="text-align:center; padding: 40px; color:#999;">No reviews match this filter.</p>';
+        document.getElementById('trash-list').innerHTML = trash.length ? trash.map(r => buildCard(r, true)).join('') : '<p style="text-align:center; padding: 40px; color:#999;">Trash is empty.</p>';
+    }
+
+    function buildCard(r, isTrash) {
+        let verifyHtml = '';
+        if (r.verifiedPurchase) {
+            verifyHtml = `<div class="v-badge v-badge-yes" title="${r.verificationNote || 'Verified Purchase'}">✓ Verified Buyer</div>`;
+        } else {
+            verifyHtml = `<div class="v-badge v-badge-no" title="Diagnostic: ${r.verificationNote || 'Could not verify.'}">⚠️ Unverified (Hover)</div>`;
         }
 
-        container.innerHTML = filtered.map(r => `
-            <div class="review-card status-border-${r.status}">
-                <div style="flex:1;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                        <strong>${r.userId}</strong>
-                        <span style="font-size:12px; color:#999;">${new Date(r.createdAt).toLocaleDateString()}</span>
+        const customerBox = r.email 
+            ? `<a href="https://admin.shopify.com/customers?query=${encodeURIComponent(r.email)}" target="_blank" class="customer-link" title="Open Customer Profile">${r.userId}</a>` 
+            : `<strong style="font-size: 1.1rem;">${r.userId}</strong>`;
+
+        let attrHtml = '';
+        if (r.attributes && Object.keys(r.attributes).length > 0) {
+            attrHtml = `<div style="margin-top: 15px; font-size: 12px; color: var(--text-light); background: #fafafa; padding: 10px; border-radius: 6px; border: 1px solid var(--border);">
+                <strong>Attribute Profile:</strong> ${Object.entries(r.attributes).map(([k, v]) => `${k}: ${v}/10`).join(' • ')}
+            </div>`;
+        }
+
+        return `
+        <div class="review-card status-border-${r.status}">
+            <div class="card-main">
+                <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
+                    <div>${customerBox}</div>
+                    <div class="status-group">
+                        <button onclick="updateStatus('${r._id}', 'accepted')" class="s-btn acc ${r.status==='accepted'?'active':''}" title="Accept">✓</button>
+                        <button onclick="updateStatus('${r._id}', 'hold')" class="s-btn hld ${r.status==='hold'?'active':''}" title="Hold">⏸</button>
+                        <button onclick="updateStatus('${r._id}', 'rejected')" class="s-btn rej ${r.status==='rejected'?'active':''}" title="Reject">✕</button>
                     </div>
-                    <div style="color:var(--star); margin-bottom:10px;">${'★'.repeat(r.rating)}</div>
-                    <div style="font-weight:700; margin-bottom:5px;">${r.headline || ''}</div>
-                    <div style="color:#444; line-height:1.5; font-size: 14px;">${r.comment}</div>
                 </div>
-                <div style="display:flex; flex-direction:column; gap:10px; min-width: 100px;">
-                    <button class="post-btn" style="background:var(--green);" onclick="updateStatus('${r._id}', 'accepted')">Accept</button>
-                    ${!r.isDeleted ? `<button class="post-btn" style="background:var(--red);" onclick="toggleBin('${r._id}', true)">Bin</button>` : `<button class="post-btn" style="background:var(--blue);" onclick="toggleBin('${r._id}', false)">Restore</button>`}
+
+                <div style="color:var(--star); margin-bottom:10px; font-size: 18px;">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
+                <div style="font-weight:700; margin-bottom:8px; font-size: 18px;">${r.headline || 'No Headline'}</div>
+                <div style="color:#444; line-height:1.6; font-size: 15px;">${r.comment}</div>
+                ${attrHtml}
+                
+                <button class="reply-toggle" onclick="document.getElementById('reply-box-${r._id}').style.display = 'block'">💬 Reply to Customer</button>
+                <div id="reply-box-${r._id}" class="reply-panel" style="display: ${r.reply ? 'block' : 'none'};">
+                    <textarea id="reply-text-${r._id}" class="reply-input" placeholder="Type your public reply...">${r.reply || ''}</textarea>
+                    <button class="post-btn" onclick="saveReply('${r._id}')">Publish Reply</button>
                 </div>
             </div>
-        `).join('');
+            
+            <div class="card-side">
+                <div>
+                    <div style="font-size: 12px; color: var(--text-light); margin-bottom: 5px;">Product ID: ${r.itemId}</div>
+                    <div style="font-size: 12px; color: var(--text-light); margin-bottom: 5px;">${new Date(r.createdAt).toLocaleDateString()}</div>
+                    <div style="font-size: 13px; color: var(--primary); font-weight: 600; margin-bottom: 5px;">${r.email || 'No Email'}</div>
+                    ${r.orderId ? `<div style="font-size: 13px; font-weight: 700; margin-bottom: 12px;">Order #${r.orderId}</div>` : '<div style="margin-bottom:12px;"></div>'}
+                    ${verifyHtml}
+                </div>
+
+                <div style="padding-top: 20px;">
+                    ${isTrash ? 
+                        `<button class="restore-btn" onclick="toggleBin('${r._id}', false)">↺ Restore Review</button>` : 
+                        `<button class="delete-btn" onclick="toggleBin('${r._id}', true)">🗑️ Move to Trash</button>`
+                    }
+                </div>
+            </div>
+        </div>`;
     }
 
     async function updateStatus(id, status) {
@@ -330,9 +403,17 @@
     }
 
     async function toggleBin(id, isDeleted) {
+        if(isDeleted && !confirm('Move to trash? It will be permanently deleted in 28 days.')) return;
         const r = data.find(x => x._id === id); if(r) r.isDeleted = isDeleted;
         renderLists();
         fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({isDeleted}) });
+    }
+
+    async function saveReply(id) {
+        const text = document.getElementById(`reply-text-${id}`).value;
+        const r = data.find(x => x._id === id); if(r) r.reply = text;
+        await fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({reply: text}) });
+        if(window.shopify) window.shopify.toast.show('Reply published');
     }
 
     // --- SETTINGS & PREVIEW LOGIC ---
@@ -378,29 +459,19 @@
         const file = document.getElementById('csv-file').files[0];
         if (!file) return;
         document.getElementById('file-name').innerText = `📄 ${file.name} selected`;
-        
-        Papa.parse(file, {
-            header: true, skipEmptyLines: true,
-            complete: function(results) {
-                parsedCSVData = results.data;
-                csvHeaders = results.meta.fields;
-                buildMappingUI();
-            }
-        });
+        Papa.parse(file, { header: true, skipEmptyLines: true, complete: function(results) {
+            parsedCSVData = results.data; csvHeaders = results.meta.fields; buildMappingUI();
+        }});
     }
 
     function buildMappingUI() {
         document.getElementById('mapping-ui').style.display = 'block';
         const reqFields = [
-            { id: 'map-itemId', label: 'Product ID (Required)' },
-            { id: 'map-rating', label: 'Star Rating (Required)' },
-            { id: 'map-userId', label: 'Reviewer Name' },
-            { id: 'map-email', label: 'Reviewer Email' },
-            { id: 'map-headline', label: 'Review Title' },
-            { id: 'map-comment', label: 'Review Body' },
+            { id: 'map-itemId', label: 'Product ID (Required)' }, { id: 'map-rating', label: 'Star Rating (Required)' },
+            { id: 'map-userId', label: 'Reviewer Name' }, { id: 'map-email', label: 'Reviewer Email' },
+            { id: 'map-headline', label: 'Review Title' }, { id: 'map-comment', label: 'Review Body' },
             { id: 'map-date', label: 'Review Date' }
         ];
-
         let html = '';
         reqFields.forEach(f => {
             let options = `<option value="">-- Ignore --</option>`;
@@ -415,47 +486,23 @@
                 if (f.id === 'map-date' && hL.includes('date')) s = 'selected';
                 options += `<option value="${h}" ${s}>${h}</option>`;
             });
-            html += `<div><label style="font-size:13px; font-weight:600; display:block; margin-bottom:5px;">${f.label}</label>
-                     <select id="${f.id}" class="filter-select">${options}</select></div>`;
+            html += `<div><label style="font-size:13px; font-weight:600; display:block; margin-bottom:5px;">${f.label}</label><select id="${f.id}" class="filter-select">${options}</select></div>`;
         });
         document.getElementById('column-mappers').innerHTML = html;
     }
 
     async function processImport() {
-        const map = {
-            itemId: document.getElementById('map-itemId').value,
-            rating: document.getElementById('map-rating').value,
-            userId: document.getElementById('map-userId').value,
-            email: document.getElementById('map-email').value,
-            headline: document.getElementById('map-headline').value,
-            comment: document.getElementById('map-comment').value,
-            createdAt: document.getElementById('map-date').value
-        };
-
+        const map = { itemId: document.getElementById('map-itemId').value, rating: document.getElementById('map-rating').value, userId: document.getElementById('map-userId').value, email: document.getElementById('map-email').value, headline: document.getElementById('map-headline').value, comment: document.getElementById('map-comment').value, createdAt: document.getElementById('map-date').value };
         if (!map.itemId || !map.rating) { alert("Product ID and Star Rating must be mapped."); return; }
-
-        const btn = document.getElementById('import-submit-btn');
-        btn.innerText = "Importing..."; btn.disabled = true;
-
-        const payload = parsedCSVData.map(row => ({
-            itemId: row[map.itemId], rating: row[map.rating], userId: row[map.userId], email: row[map.email],
-            headline: row[map.headline], comment: row[map.comment], createdAt: row[map.createdAt]
-        }));
-
+        const btn = document.getElementById('import-submit-btn'); btn.innerText = "Importing..."; btn.disabled = true;
+        const payload = parsedCSVData.map(row => ({ itemId: row[map.itemId], rating: row[map.rating], userId: row[map.userId], email: row[map.email], headline: row[map.headline], comment: row[map.comment], createdAt: row[map.createdAt] }));
         try {
-            const res = await fetch(`${API}/reviews/import`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ shopDomain: SHOP_DOMAIN, reviews: payload })
-            });
-            if (res.ok) {
-                alert(`🎉 Import successful!`);
-                document.getElementById('mapping-ui').style.display = 'none';
-                load(); // Reload everything
-            } else alert("Import failed.");
+            const res = await fetch(`${API}/reviews/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shopDomain: SHOP_DOMAIN, reviews: payload }) });
+            if (res.ok) { alert(`🎉 Import successful!`); document.getElementById('mapping-ui').style.display = 'none'; load(); } 
+            else alert("Import failed.");
         } catch(e) { alert("Error occurred."); } finally { btn.innerText = "Start Import"; btn.disabled = false; }
     }
 
-    // Initialize App
     load();
 </script>
 </body>
