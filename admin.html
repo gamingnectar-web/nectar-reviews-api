@@ -35,7 +35,7 @@
         .post-btn { background: var(--primary); color: white; border: none; padding: 10px 20px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: 0.2s;}
         .post-btn:hover { opacity: 0.8; }
 
-        /* RESTORED: RICH REVIEW CARDS */
+        /* REVIEW CARDS */
         .review-card { background: var(--card); border: 2px solid var(--border); padding: 25px; margin-bottom: 20px; border-radius: 12px; display: flex; justify-content: space-between; gap: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); transition: all 0.2s;}
         .review-card:hover { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
         .status-border-pending { border-color: var(--border); }
@@ -49,7 +49,6 @@
         .customer-link { display: inline-block; padding: 4px 12px; border: 1px solid var(--text); border-radius: 6px; color: var(--text); font-weight: 700; text-decoration: none; font-size: 1.05rem; transition: 0.2s;}
         .customer-link:hover { background: var(--text); color: white; }
 
-        /* RESTORED: ROUND BUTTONS */
         .status-group { display: flex; gap: 8px; justify-content: flex-end;}
         .s-btn { width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer; background: white; font-size: 16px; transition: 0.2s; color: var(--text-light);}
         .s-btn:hover { transform: scale(1.05); }
@@ -60,12 +59,10 @@
         .s-btn.rej { border-color: var(--red); }
         .s-btn.rej.active { background: var(--red); color: white; }
 
-        /* RESTORED: VERIFIED BADGES & HOVER DIAGNOSTICS */
         .v-badge { font-size: 0.8rem; padding: 6px 12px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; letter-spacing: 0.5px;}
         .v-badge-yes { background: #e3f1df; color: #008060; border: 1px solid #bae0bc;}
         .v-badge-no { background: #ffebcd; color: #b45309; border: 1px solid #fde68a; cursor: help;}
 
-        /* RESTORED: REPLY BOX */
         .reply-toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--blue); font-weight: 600; cursor: pointer; margin-top: 15px; border: none; background: none; font-size: 0.95rem; padding: 0;}
         .reply-toggle:hover { text-decoration: underline; }
         .reply-panel { margin-top: 15px; background: #f4f6f8; padding: 20px; border-radius: 8px; border: 1px solid var(--border); display: none;}
@@ -87,6 +84,8 @@
         .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
         input:checked + .slider { background-color: var(--green); }
         input:checked + .slider:before { transform: translateX(20px); }
+        
+        .attr-pill { display: flex; justify-content: space-between; align-items: center; background: #fafafa; padding: 10px 15px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;}
     </style>
 </head>
 <body>
@@ -134,6 +133,14 @@
         <h2>Review Manager</h2>
         <div class="settings-panel" style="display: flex; gap: 15px; margin-bottom: 20px; padding: 15px;">
             <input type="text" id="search-bar" class="search-input" style="flex: 1;" placeholder="Search reviews..." onkeyup="renderLists()">
+            <select id="star-filter" class="filter-select" style="width: 150px;" onchange="renderLists()">
+                <option value="all">All Stars</option>
+                <option value="5">5 Stars</option>
+                <option value="4">4 Stars</option>
+                <option value="3">3 Stars</option>
+                <option value="2">2 Stars</option>
+                <option value="1">1 Star</option>
+            </select>
             <select id="status-filter" class="filter-select" style="width: 200px;" onchange="renderLists()">
                 <option value="all">All Statuses</option>
                 <option value="pending">Pending</option>
@@ -170,18 +177,41 @@
 
     <div id="v-set" class="view">
         <h2>Rules & Settings</h2>
+        
         <div class="settings-panel">
+            <h3 style="margin-top: 0;">Automated Publishing</h3>
             <div class="setting-row">
-                <div><h3>Auto-Approve Verified Reviews</h3><p style="color:var(--text-light); font-size:13px; margin:0;">Publish confirmed purchases instantly.</p></div>
-                <label class="switch"><input type="checkbox" id="set-auto" onchange="saveSettings()"><span class="slider"></span></label>
+                <div><h4>Enable Auto-Approve</h4><p style="color:var(--text-light); font-size:13px; margin:0;">Allow the system to publish reviews instantly based on the rules below.</p></div>
+                <label class="switch"><input type="checkbox" id="set-auto-enable" onchange="saveSettings()"><span class="slider"></span></label>
+            </div>
+            <div class="setting-row">
+                <div><h4>Which reviews are eligible?</h4><p style="color:var(--text-light); font-size:13px; margin:0;">Choose if you want to strictly auto-approve verified buyers.</p></div>
+                <select id="set-auto-type" class="filter-select" style="width: auto; min-width: 200px;" onchange="saveSettings()">
+                    <option value="verified">Verified Purchases Only</option>
+                    <option value="all">All Reviews (Inc. Unverified)</option>
+                </select>
             </div>
             <div class="setting-row" style="border: none;">
-                <div><h3>Minimum Rating</h3></div>
-                <select id="set-min-stars" class="filter-select" style="width: auto;" onchange="saveSettings()">
+                <div><h4>Minimum Star Rating</h4><p style="color:var(--text-light); font-size:13px; margin:0;">Lower ratings will bypass the rule and sit in 'Pending'.</p></div>
+                <select id="set-min-stars" class="filter-select" style="width: auto; min-width: 200px;" onchange="saveSettings()">
                     <option value="5">5 Stars only</option>
                     <option value="4">4 Stars & up</option>
+                    <option value="3">3 Stars & up</option>
+                    <option value="2">2 Stars & up</option>
                     <option value="1">All Ratings</option>
                 </select>
+            </div>
+        </div>
+
+        <div class="settings-panel">
+            <h3 style="margin-top: 0;">Custom Attribute Sliders</h3>
+            <p style="color: var(--text-light); font-size: 14px; margin-top: 0;">Add up to 4 custom traits (e.g., Quality, Fit, Taste) for customers to rate via sliders on the widget.</p>
+            
+            <div id="attributes-list" style="margin-bottom: 20px; margin-top: 15px;"></div>
+            
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="text" id="new-attr-input" class="search-input" style="max-width: 300px;" placeholder="E.g. Build Quality">
+                <button class="post-btn" onclick="addAttribute()">+ Add Attribute</button>
             </div>
         </div>
     </div>
@@ -250,6 +280,7 @@
     const SHOP_DOMAIN = urlParams.get('shop') || 'your-dev-store.myshopify.com';
     let data = [];
     let chartInstance = null;
+    let currentAttributes = [];
 
     function tab(id) {
         const target = document.getElementById(id);
@@ -275,8 +306,11 @@
             if(setRes.ok) {
                 const config = await setRes.json();
                 if(config) {
-                    document.getElementById('set-auto').checked = config.autoApproveVerified || false;
+                    document.getElementById('set-auto-enable').checked = config.autoApproveEnabled || false;
+                    document.getElementById('set-auto-type').value = config.autoApproveType || 'verified';
                     document.getElementById('set-min-stars').value = config.autoApproveMinStars || 4;
+                    currentAttributes = config.attributeProfiles || [];
+                    
                     if(config.widgetStyles) {
                         document.getElementById('style-primary').value = config.widgetStyles.primaryColor || '#000000';
                         document.getElementById('style-star').value = config.widgetStyles.starColor || '#ffc700';
@@ -287,6 +321,7 @@
                         document.getElementById('card-count').checked = config.cardStyles.showCount !== false;
                     }
                     updatePreviews();
+                    renderAttributes();
                 }
             }
             renderLists();
@@ -317,17 +352,17 @@
         } catch(e) {}
     }
 
-    // --- RESTORED: RICH CARD BUILDING LOGIC ---
     function renderLists() {
         const query = document.getElementById('search-bar').value.toLowerCase();
         const status = document.getElementById('status-filter').value;
+        const starF = document.getElementById('star-filter').value;
         
-        // Active List
+        // Active List Logic
         let active = data.filter(r => !r.isDeleted);
         if(status !== 'all') active = active.filter(r => r.status === status);
+        if(starF !== 'all') active = active.filter(r => r.rating === parseInt(starF));
         if(query) active = active.filter(r => (r.userId || '').toLowerCase().includes(query) || (r.comment || '').toLowerCase().includes(query));
 
-        // Trash List
         const trash = data.filter(r => r.isDeleted);
 
         document.getElementById('mgr-list').innerHTML = active.length ? active.map(r => buildCard(r, false)).join('') : '<p style="text-align:center; padding: 40px; color:#999;">No reviews match this filter.</p>';
@@ -416,7 +451,40 @@
         if(window.shopify) window.shopify.toast.show('Reply published');
     }
 
-    // --- SETTINGS & PREVIEW LOGIC ---
+    // --- ATTRIBUTE SLIDERS LOGIC ---
+    function renderAttributes() {
+        const container = document.getElementById('attributes-list');
+        if (currentAttributes.length === 0) {
+            container.innerHTML = `<div style="color: var(--text-light); font-size: 13px;">No custom attributes created yet.</div>`;
+            return;
+        }
+        container.innerHTML = currentAttributes.map((attr, i) => `
+            <div class="attr-pill">
+                <span style="font-weight: 600;">${attr}</span>
+                <button style="background: none; border: none; color: var(--red); cursor: pointer; font-weight: 600;" onclick="removeAttribute(${i})">✕ Remove</button>
+            </div>
+        `).join('');
+    }
+
+    function addAttribute() {
+        const input = document.getElementById('new-attr-input');
+        const val = input.value.trim();
+        if (val && currentAttributes.length < 4 && !currentAttributes.includes(val)) {
+            currentAttributes.push(val);
+            input.value = '';
+            saveSettings();
+            renderAttributes();
+        } else if (currentAttributes.length >= 4) {
+            alert("Maximum of 4 attribute sliders allowed per product.");
+        }
+    }
+
+    function removeAttribute(index) {
+        currentAttributes.splice(index, 1);
+        saveSettings();
+        renderAttributes();
+    }
+
     function updatePreviews() {
         const primary = document.getElementById('style-primary').value;
         const star = document.getElementById('style-star').value;
@@ -435,8 +503,10 @@
     async function saveSettings() {
         const payload = {
             shopDomain: SHOP_DOMAIN,
-            autoApproveVerified: document.getElementById('set-auto').checked,
+            autoApproveEnabled: document.getElementById('set-auto-enable').checked,
+            autoApproveType: document.getElementById('set-auto-type').value,
             autoApproveMinStars: parseInt(document.getElementById('set-min-stars').value),
+            attributeProfiles: currentAttributes,
             widgetStyles: {
                 primaryColor: document.getElementById('style-primary').value,
                 starColor: document.getElementById('style-star').value,
@@ -451,7 +521,6 @@
         if(window.shopify) window.shopify.toast.show('Saved!');
     }
 
-    // --- CSV IMPORTER LOGIC ---
     let parsedCSVData = [];
     let csvHeaders = [];
 
