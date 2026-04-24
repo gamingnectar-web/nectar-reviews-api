@@ -103,4 +103,9 @@ app.get('/api/widget/config', async (req, res) => {
     res.json({ styles: config?.widgetStyles, cardStyles: config?.cardStyles, profiles: config?.attributeProfiles });
 });
 
-app.listen(process.env.PORT || 3000);
+// Admin Route
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'admin.html')));
+
+// ONLY ONE app.listen!
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🚀 Port ${PORT}`));
