@@ -18,7 +18,7 @@ mongoose.connect(process.env.MONGODB_URI)
   .catch((err) => console.error('❌ DB Connection Error:', err));
 
 // ==========================================
-// SCHEMAS (Fully Restored)
+// SCHEMAS 
 // ==========================================
 const reviewSchema = new mongoose.Schema({
     shopDomain: { type: String, required: true },
@@ -30,27 +30,31 @@ const reviewSchema = new mongoose.Schema({
     headline: { type: String }, 
     comment: { type: String },
     reply: { type: String, default: '' },
-    attributes: { type: Map, of: Number }, // RESTORED: Sliders/Attributes
+    attributes: { type: Map, of: Number }, 
     source: { type: String, enum: ['website', 'email', 'import'], default: 'website' }, 
     status: { type: String, enum: ['pending', 'accepted', 'rejected', 'hold'], default: 'pending' },
     verifiedPurchase: { type: Boolean, default: false },
-    verificationNote: { type: String, default: '' }, // RESTORED: Diagnostics
+    verificationNote: { type: String, default: '' }, 
     orderId: { type: String }, 
     isDeleted: { type: Boolean, default: false },
-    deletedAt: { type: Date, default: null }, // RESTORED: 28-day trash
+    deletedAt: { type: Date, default: null }, 
     createdAt: { type: Date, default: Date.now }
 });
 
-// 28-Day Auto-Delete (TTL Index)
 reviewSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 2419200 });
 const Review = mongoose.model('Review', reviewSchema, 'reviews');
 
 const settingsSchema = new mongoose.Schema({
     shopDomain: { type: String, required: true, unique: true },
     emailsSentTotal: { type: Number, default: 0 }, 
-    autoApproveVerified: { type: Boolean, default: false },
+    
+    // UPGRADED AUTO-APPROVE RULES
+    autoApproveEnabled: { type: Boolean, default: false },
+    autoApproveType: { type: String, enum: ['verified', 'all'], default: 'verified' },
     autoApproveMinStars: { type: Number, default: 4 },
-    attributeProfiles: { type: Array, default: [] },
+    
+    attributeProfiles: { type: [String], default: [] }, // Array of Strings (e.g. ["Quality", "Fit"])
+    
     widgetStyles: {
         primaryColor: { type: String, default: '#000000' },
         starColor: { type: String, default: '#ffc700' },
@@ -66,7 +70,7 @@ const settingsSchema = new mongoose.Schema({
 const Settings = mongoose.model('Settings', settingsSchema, 'settings');
 
 // ==========================================
-// RESTORED: SHOPIFY VERIFICATION LOGIC
+// SHOPIFY VERIFICATION LOGIC
 // ==========================================
 async function verifyShopifyOrder(orderId, email, productId) {
     const STORE_URL = process.env.SHOPIFY_STORE_URL; 
@@ -147,8 +151,13 @@ app.post('/api/reviews', async (req, res) => {
 
         const config = await Settings.findOne({ shopDomain: req.body.shopDomain });
         let finalStatus = 'pending';
-        if (config && config.autoApproveVerified && isVerified) {
-            if (req.body.rating >= config.autoApproveMinStars) finalStatus = 'accepted';
+        
+        // UPGRADED AUTO-APPROVE LOGIC
+        if (config && config.autoApproveEnabled) {
+            const meetsVerificationReq = (config.autoApproveType === 'all') || (config.autoApproveType === 'verified' && isVerified);
+            if (meetsVerificationReq && req.body.rating >= config.autoApproveMinStars) {
+                finalStatus = 'accepted';
+            }
         }
 
         const newReview = new Review({ ...req.body, verifiedPurchase: isVerified, verificationNote: vNote, status: finalStatus });
