@@ -35,7 +35,6 @@
         .post-btn { background: var(--primary); color: white; border: none; padding: 10px 20px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: 0.2s;}
         .post-btn:hover { opacity: 0.8; }
 
-        /* REVIEW CARDS */
         .review-card { background: var(--card); border: 2px solid var(--border); padding: 25px; margin-bottom: 20px; border-radius: 12px; display: flex; justify-content: space-between; gap: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); transition: all 0.2s;}
         .review-card:hover { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
         .status-border-pending { border-color: var(--border); }
@@ -71,12 +70,12 @@
         .delete-btn { background: none; border: none; color: var(--red); font-weight: 600; cursor: pointer; font-size: 0.9rem; text-decoration: underline; padding:0;}
         .restore-btn { background: none; border: none; color: var(--blue); font-weight: 600; cursor: pointer; font-size: 0.9rem; text-decoration: underline; padding:0;}
 
-        .sub-tab-nav { display: flex; gap: 15px; border-bottom: 1px solid var(--border); margin-bottom: 25px; }
-        .sub-tab-btn { background: none; border: none; padding: 10px 5px; font-weight: 600; cursor: pointer; color: var(--text-light); font-size: 14px; border-bottom: 2px solid transparent; }
+        .sub-tab-nav { display: flex; gap: 15px; border-bottom: 1px solid var(--border); margin-bottom: 25px; overflow-x: auto; padding-bottom: 5px;}
+        .sub-tab-btn { background: none; border: none; padding: 10px 5px; font-weight: 600; cursor: pointer; color: var(--text-light); font-size: 14px; border-bottom: 2px solid transparent; white-space: nowrap;}
         .sub-tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
         .sub-view { display: none; }
         .sub-view.active { display: block; }
-        .code-block { background: #1a1a1a; color: #f4f6f8; padding: 20px; border-radius: 8px; font-family: monospace; font-size: 13px; overflow-x: auto; margin: 10px 0; }
+        .code-block { background: #1a1a1a; color: #f4f6f8; padding: 20px; border-radius: 8px; font-family: monospace; font-size: 13px; overflow-x: auto; margin: 10px 0; border-left: 4px solid var(--blue);}
         
         .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
         .switch input { opacity: 0; width: 0; height: 0; }
@@ -85,7 +84,8 @@
         input:checked + .slider { background-color: var(--green); }
         input:checked + .slider:before { transform: translateX(20px); }
         
-        .attr-pill { display: flex; justify-content: space-between; align-items: center; background: #fafafa; padding: 10px 15px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;}
+        .attr-pill { display: flex; justify-content: space-between; align-items: center; background: #fafafa; padding: 15px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; font-size: 14px;}
+        .attr-tag { background: var(--primary); color: white; padding: 3px 8px; border-radius: 4px; font-weight: 600; font-size: 12px; text-transform: uppercase; margin-right: 8px;}
     </style>
 </head>
 <body>
@@ -179,6 +179,18 @@
         <h2>Rules & Settings</h2>
         
         <div class="settings-panel">
+            <div class="setting-row">
+                <div>
+                    <h3 style="margin-top: 0;">Google Rich Snippets (SEO)</h3>
+                    <p style="color:var(--text-light); font-size:13px; margin:0; max-width: 500px;">
+                        Enable Server-Side Metafield injection. This pushes review averages directly to Shopify so Google can instantly index your gold stars.
+                    </p>
+                </div>
+                <label class="switch"><input type="checkbox" id="set-seo" onchange="saveSettings()"><span class="slider"></span></label>
+            </div>
+        </div>
+
+        <div class="settings-panel">
             <h3 style="margin-top: 0;">Automated Publishing</h3>
             <div class="setting-row">
                 <div><h4>Enable Auto-Approve</h4><p style="color:var(--text-light); font-size:13px; margin:0;">Allow the system to publish reviews instantly based on the rules below.</p></div>
@@ -204,14 +216,23 @@
         </div>
 
         <div class="settings-panel">
-            <h3 style="margin-top: 0;">Custom Attribute Sliders</h3>
-            <p style="color: var(--text-light); font-size: 14px; margin-top: 0;">Add up to 4 custom traits (e.g., Quality, Fit, Taste) for customers to rate via sliders on the widget.</p>
-            
+            <h3 style="margin-top: 0;">Smart Conditional Sliders</h3>
+            <p style="color: var(--text-light); font-size: 14px; margin-top: 0;">Create sliders that only appear when a product matches a specific Tag or Metafield.</p>
             <div id="attributes-list" style="margin-bottom: 20px; margin-top: 15px;"></div>
-            
-            <div style="display: flex; gap: 10px; align-items: center;">
-                <input type="text" id="new-attr-input" class="search-input" style="max-width: 300px;" placeholder="E.g. Build Quality">
-                <button class="post-btn" onclick="addAttribute()">+ Add Attribute</button>
+            <div style="background: #fafafa; padding: 20px; border-radius: 8px; border: 1px solid var(--border);">
+                <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+                    <select id="attr-rule-type" class="filter-select" style="width: 150px;" onchange="toggleRuleInput()">
+                        <option value="tag">Product Tag</option>
+                        <option value="metafield">Metafield Key</option>
+                    </select>
+                    <input type="text" id="attr-rule-val-tag" class="search-input" style="flex: 1; min-width: 150px;" placeholder="e.g. 'drink' or 'summer'">
+                    <select id="attr-rule-val-meta" class="filter-select" style="flex: 1; min-width: 150px; display: none;">
+                        <option value="">Loading Shopify Metafields...</option>
+                    </select>
+                    <span style="font-weight: 800; color: var(--text-light);">→</span>
+                    <input type="text" id="attr-label" class="search-input" style="flex: 1; min-width: 150px;" placeholder="Slider Name (e.g. Taste)">
+                    <button class="post-btn" onclick="addAttribute()">+ Create Rule</button>
+                </div>
             </div>
         </div>
     </div>
@@ -223,15 +244,19 @@
                 <div class="sub-tab-nav">
                     <button class="sub-tab-btn active" onclick="subTab('ds-full')">Product Widget</button>
                     <button class="sub-tab-btn" onclick="subTab('ds-card')">Product Card Stars</button>
+                    <button class="sub-tab-btn" onclick="subTab('ds-carousel')">Global Carousel</button>
                 </div>
+                
                 <div id="ds-full" class="sub-view active">
                     <div class="settings-panel">
+                        <div class="setting-row"><span>Widget Title</span><input type="text" id="style-title" class="search-input" style="width:180px;" oninput="updatePreviews()"></div>
                         <div class="setting-row"><span>Brand Color</span><input type="color" id="style-primary" oninput="updatePreviews()"></div>
                         <div class="setting-row"><span>Star Color</span><input type="color" id="style-star" oninput="updatePreviews()"></div>
                         <div class="setting-row"><span>Text Size (px)</span><input type="number" id="style-text" class="search-input" style="width:70px" oninput="updatePreviews()"></div>
                         <button class="post-btn" style="width:100%; margin-top:20px;" onclick="saveSettings()">Publish Styles</button>
                     </div>
                 </div>
+                
                 <div id="ds-card" class="sub-view">
                     <div class="settings-panel">
                         <div class="setting-row"><span>Star Size (px)</span><input type="number" id="card-star" class="search-input" style="width:70px" oninput="updatePreviews()"></div>
@@ -239,22 +264,34 @@
                         <button class="post-btn" style="width:100%; margin-top:20px;" onclick="saveSettings()">Publish Styles</button>
                     </div>
                 </div>
+
+                <div id="ds-carousel" class="sub-view">
+                    <div class="settings-panel">
+                        <div class="setting-row">
+                            <span>Layout Style</span>
+                            <select id="car-layout" class="filter-select" style="width: 150px;" onchange="saveSettings()">
+                                <option value="infinite">Infinite Auto-Scroll</option>
+                                <option value="grid">Standard Grid</option>
+                                <option value="masonry">Pinterest Masonry</option>
+                            </select>
+                        </div>
+                        <div class="setting-row"><span>Auto-Play Carousel</span><label class="switch"><input type="checkbox" id="car-autoplay"><span class="slider"></span></label></div>
+                        <div class="setting-row"><span>Slide Delay (ms)</span><input type="number" id="car-delay" class="search-input" style="width:90px" value="4000"></div>
+                        <div class="setting-row"><span>Show Arrows</span><label class="switch"><input type="checkbox" id="car-arrows"><span class="slider"></span></label></div>
+                        <button class="post-btn" style="width:100%; margin-top:20px;" onclick="saveSettings()">Publish Styles</button>
+                    </div>
+                </div>
             </div>
+            
             <div style="flex: 1;">
                 <h4 style="margin-top: 0; color: var(--text-light);">Live Preview</h4>
                 <div class="settings-panel" style="padding: 20px;">
                     <div style="display: flex; justify-content: space-between; align-items:center; margin-bottom: 20px;">
-                        <h3 style="margin:0">Reviews</h3>
+                        <h3 id="pre-title" style="margin:0">Customer Reviews</h3>
                         <button id="pre-btn" style="padding: 8px 16px; color:white; border:none; border-radius:4px; font-weight:600;">Write Review</button>
                     </div>
                     <div id="pre-stars" style="font-size: 20px; margin-bottom:10px;">★★★★★</div>
                     <p id="pre-text" style="color: #444; line-height: 1.5; margin:0;">This product is amazing! The quality is top notch.</p>
-                </div>
-                <div class="settings-panel" style="padding: 20px;">
-                    <p style="font-size: 11px; text-transform: uppercase; color: #999; margin-bottom: 10px;">Product Card</p>
-                    <div style="display: flex; align-items: center; gap: 5px; font-weight: 700;">
-                        <span id="pre-card-icon">★</span> 4.8 <span id="pre-card-count" style="font-weight: 400; color: #666;">(12)</span>
-                    </div>
                 </div>
             </div>
         </div>
@@ -264,11 +301,59 @@
         <h2>Manual Installation</h2>
         <div class="settings-panel">
             <h3>1. Product Page Widget</h3>
-            <p>Paste this into <code>sections/main-product.liquid</code>:</p>
+            <p>Paste this into <code>sections/main-product.liquid</code> to show reviews for a specific product:</p>
             <div class="code-block">&lt;div class="rev-widget" data-id="&#123;&#123; product.id &#125;&#125;" data-shop="&#123;&#123; shop.domain &#125;&#125;"&gt;&lt;/div&gt;</div>
-            <h3>2. Collection Card Stars</h3>
-            <p>Paste this into <code>snippets/card-product.liquid</code>:</p>
-            <div class="code-block">&lt;div class="rev-card-stars" data-id="&#123;&#123; product.id &#125;&#125;" data-shop="&#123;&#123; shop.domain &#125;&#125;"&gt;&lt;/div&gt;</div>
+            
+            <h3>2. Collection Card Stars (Zero-JS)</h3>
+            <p>Paste this into <code>snippets/card-product.liquid</code>. It reads directly from Shopify Metafields for instant loading:</p>
+            <div class="code-block">
+&#123;% if product.metafields.reviews.rating_count.value > 0 %&#125;
+  &lt;div style="display: flex; align-items: center; gap: 4px; margin-top: 8px; font-size: 14px;"&gt;
+    &lt;span style="color: #ffc700;"&gt;★&lt;/span&gt;
+    &lt;span style="font-weight: 700; color: #000;"&gt;&#123;&#123; product.metafields.reviews.rating.value &#125;&#125;&lt;/span&gt;
+    &lt;span style="color: #666;"&gt;(&#123;&#123; product.metafields.reviews.rating_count.value &#125;&#125;)&lt;/span&gt;
+  &lt;/div&gt;
+&#123;% endif %&#125;</div>
+            
+            <hr style="border: 0; border-top: 1px solid var(--border); margin: 30px 0;">
+
+            <h3 style="color: var(--blue);">3. Home Page Carousel</h3>
+            <p>Paste this into <code>sections/index.liquid</code> or anywhere on your homepage to show your top 5-star reviews globally:</p>
+            <div class="code-block">&lt;div class="rev-carousel" data-shop="&#123;&#123; shop.domain &#125;&#125;"&gt;&lt;/div&gt;</div>
+
+            <h3 style="color: var(--blue);">4. Dedicated "All Reviews" Page</h3>
+            <p>Create a new Page in Shopify (e.g. 'Happy Customers') and paste this into the HTML editor to show every accepted review on your store:</p>
+            <div class="code-block">&lt;div class="rev-global-page" data-shop="&#123;&#123; shop.domain &#125;&#125;"&gt;&lt;/div&gt;</div>
+
+            <hr style="border: 0; border-top: 1px solid var(--border); margin: 30px 0;">
+
+            <h3 style="color: var(--green);">5. Google Rich Snippets (SEO)</h3>
+            <p>Paste this inside the <code>&lt;head&gt;</code> tag of your <code>theme.liquid</code> file. This pulls the data pumped from our server directly into your HTML for instant Google indexing:</p>
+            <div class="code-block" style="border-color: var(--green);">
+&#123;% if template contains 'product' and product.metafields.reviews.rating_count.value > 0 %&#125;
+&lt;script type="application/ld+json"&gt;
+{
+  "@context": "https://schema.org/",
+  "@type": "Product",
+  "name": "&#123;&#123; product.title | escape &#125;&#125;",
+  "image": "&#123;&#123; product.featured_image | img_url: 'master' &#125;&#125;",
+  "description": "&#123;&#123; product.description | strip_html | escape &#125;&#125;",
+  "sku": "&#123;&#123; product.variants.first.sku &#125;&#125;",
+  "offers": {
+    "@type": "Offer",
+    "url": "&#123;&#123; shop.url &#125;&#125;&#123;&#123; product.url &#125;&#125;",
+    "priceCurrency": "&#123;&#123; cart.currency.iso_code &#125;&#125;",
+    "price": "&#123;&#123; product.price | money_without_currency &#125;&#125;",
+    "availability": "https://schema.org/&#123;% if product.available %&#125;InStock&#123;% else %&#125;OutOfStock&#123;% endif %&#125;"
+  },
+  "aggregateRating": {
+    "@type": "AggregateRating",
+    "ratingValue": "&#123;&#123; product.metafields.reviews.rating.value &#125;&#125;",
+    "reviewCount": "&#123;&#123; product.metafields.reviews.rating_count.value &#125;&#125;"
+  }
+}
+&lt;/script&gt;
+&#123;% endif %&#125;</div>
         </div>
     </div>
 
@@ -297,6 +382,33 @@
         event.currentTarget.classList.add('active');
     }
 
+    async function fetchMetafields() {
+        try {
+            const res = await fetch(`${API}/admin/metafields`);
+            if (res.ok) {
+                const metafields = await res.json();
+                const select = document.getElementById('attr-rule-val-meta');
+                if(metafields.length === 0) {
+                    select.innerHTML = '<option value="">No metafields found on this store</option>';
+                    return;
+                }
+                select.innerHTML = metafields.map(m => `<option value="${m.key}">${m.name} (${m.key})</option>`).join('');
+            }
+        } catch(e) { console.error(e); }
+    }
+
+    function toggleRuleInput() {
+        const type = document.getElementById('attr-rule-type').value;
+        if(type === 'tag') {
+            document.getElementById('attr-rule-val-tag').style.display = 'block';
+            document.getElementById('attr-rule-val-meta').style.display = 'none';
+        } else {
+            document.getElementById('attr-rule-val-tag').style.display = 'none';
+            document.getElementById('attr-rule-val-meta').style.display = 'block';
+            if(document.getElementById('attr-rule-val-meta').options.length <= 1) fetchMetafields();
+        }
+    }
+
     async function load() {
         try {
             const res = await fetch(`${API}/admin/reviews?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
@@ -309,9 +421,12 @@
                     document.getElementById('set-auto-enable').checked = config.autoApproveEnabled || false;
                     document.getElementById('set-auto-type').value = config.autoApproveType || 'verified';
                     document.getElementById('set-min-stars').value = config.autoApproveMinStars || 4;
+                    document.getElementById('set-seo').checked = config.seo?.richSnippets !== false; 
+                    
                     currentAttributes = config.attributeProfiles || [];
                     
                     if(config.widgetStyles) {
+                        document.getElementById('style-title').value = config.widgetStyles.widgetTitle || 'Customer Reviews';
                         document.getElementById('style-primary').value = config.widgetStyles.primaryColor || '#000000';
                         document.getElementById('style-star').value = config.widgetStyles.starColor || '#ffc700';
                         document.getElementById('style-text').value = config.widgetStyles.textSize || 15;
@@ -319,6 +434,12 @@
                     if(config.cardStyles) {
                         document.getElementById('card-star').value = config.cardStyles.starSize || 14;
                         document.getElementById('card-count').checked = config.cardStyles.showCount !== false;
+                    }
+                    if(config.carouselStyles) {
+                        document.getElementById('car-layout').value = config.carouselStyles.layout || 'infinite';
+                        document.getElementById('car-autoplay').checked = config.carouselStyles.autoplay !== false;
+                        document.getElementById('car-delay').value = config.carouselStyles.delay || 4000;
+                        document.getElementById('car-arrows').checked = config.carouselStyles.showArrows || false;
                     }
                     updatePreviews();
                     renderAttributes();
@@ -357,7 +478,6 @@
         const status = document.getElementById('status-filter').value;
         const starF = document.getElementById('star-filter').value;
         
-        // Active List Logic
         let active = data.filter(r => !r.isDeleted);
         if(status !== 'all') active = active.filter(r => r.status === status);
         if(starF !== 'all') active = active.filter(r => r.rating === parseInt(starF));
@@ -370,12 +490,9 @@
     }
 
     function buildCard(r, isTrash) {
-        let verifyHtml = '';
-        if (r.verifiedPurchase) {
-            verifyHtml = `<div class="v-badge v-badge-yes" title="${r.verificationNote || 'Verified Purchase'}">✓ Verified Buyer</div>`;
-        } else {
-            verifyHtml = `<div class="v-badge v-badge-no" title="Diagnostic: ${r.verificationNote || 'Could not verify.'}">⚠️ Unverified (Hover)</div>`;
-        }
+        let verifyHtml = r.verifiedPurchase 
+            ? `<div class="v-badge v-badge-yes" title="${r.verificationNote || 'Verified Purchase'}">✓ Verified Buyer</div>`
+            : `<div class="v-badge v-badge-no" title="Diagnostic: ${r.verificationNote || 'Could not verify.'}">⚠️ Unverified (Hover)</div>`;
 
         const customerBox = r.email 
             ? `<a href="https://admin.shopify.com/customers?query=${encodeURIComponent(r.email)}" target="_blank" class="customer-link" title="Open Customer Profile">${r.userId}</a>` 
@@ -422,10 +539,7 @@
                 </div>
 
                 <div style="padding-top: 20px;">
-                    ${isTrash ? 
-                        `<button class="restore-btn" onclick="toggleBin('${r._id}', false)">↺ Restore Review</button>` : 
-                        `<button class="delete-btn" onclick="toggleBin('${r._id}', true)">🗑️ Move to Trash</button>`
-                    }
+                    ${isTrash ? `<button class="restore-btn" onclick="toggleBin('${r._id}', false)">↺ Restore Review</button>` : `<button class="delete-btn" onclick="toggleBin('${r._id}', true)">🗑️ Move to Trash</button>`}
                 </div>
             </div>
         </div>`;
@@ -451,31 +565,40 @@
         if(window.shopify) window.shopify.toast.show('Reply published');
     }
 
-    // --- ATTRIBUTE SLIDERS LOGIC ---
     function renderAttributes() {
         const container = document.getElementById('attributes-list');
         if (currentAttributes.length === 0) {
-            container.innerHTML = `<div style="color: var(--text-light); font-size: 13px;">No custom attributes created yet.</div>`;
+            container.innerHTML = `<div style="color: var(--text-light); font-size: 13px;">No conditional rules created yet.</div>`;
             return;
         }
         container.innerHTML = currentAttributes.map((attr, i) => `
             <div class="attr-pill">
-                <span style="font-weight: 600;">${attr}</span>
+                <div style="display:flex; align-items:center;">
+                    <span class="attr-tag">${attr.type}</span>
+                    <span style="color: var(--text-light); font-family: monospace; margin-right: 15px;">${attr.condition}</span>
+                    <span style="font-weight: 800; color: var(--border); margin-right: 15px;">→</span>
+                    <span style="font-weight: 600;">Slider: '${attr.label}'</span>
+                </div>
                 <button style="background: none; border: none; color: var(--red); cursor: pointer; font-weight: 600;" onclick="removeAttribute(${i})">✕ Remove</button>
             </div>
         `).join('');
     }
 
     function addAttribute() {
-        const input = document.getElementById('new-attr-input');
-        const val = input.value.trim();
-        if (val && currentAttributes.length < 4 && !currentAttributes.includes(val)) {
-            currentAttributes.push(val);
-            input.value = '';
+        const type = document.getElementById('attr-rule-type').value;
+        const condition = type === 'tag' ? document.getElementById('attr-rule-val-tag').value.trim() : document.getElementById('attr-rule-val-meta').value;
+        const label = document.getElementById('attr-label').value.trim();
+
+        if (condition && label && currentAttributes.length < 8) {
+            currentAttributes.push({ type, condition, label });
+            document.getElementById('attr-rule-val-tag').value = '';
+            document.getElementById('attr-label').value = '';
             saveSettings();
             renderAttributes();
-        } else if (currentAttributes.length >= 4) {
-            alert("Maximum of 4 attribute sliders allowed per product.");
+        } else if (!condition || !label) {
+            alert("Please fill out both the condition value and the slider name.");
+        } else {
+            alert("Maximum of 8 slider rules allowed.");
         }
     }
 
@@ -486,11 +609,13 @@
     }
 
     function updatePreviews() {
+        const title = document.getElementById('style-title').value || 'Customer Reviews';
         const primary = document.getElementById('style-primary').value;
         const star = document.getElementById('style-star').value;
         const txt = document.getElementById('style-text').value + 'px';
         const cardStar = document.getElementById('card-star').value + 'px';
         
+        document.getElementById('pre-title').innerText = title;
         document.getElementById('pre-btn').style.background = primary;
         document.getElementById('pre-stars').style.color = star;
         document.getElementById('pre-text').style.fontSize = txt;
@@ -507,7 +632,9 @@
             autoApproveType: document.getElementById('set-auto-type').value,
             autoApproveMinStars: parseInt(document.getElementById('set-min-stars').value),
             attributeProfiles: currentAttributes,
+            seo: { richSnippets: document.getElementById('set-seo').checked },
             widgetStyles: {
+                widgetTitle: document.getElementById('style-title').value,
                 primaryColor: document.getElementById('style-primary').value,
                 starColor: document.getElementById('style-star').value,
                 textSize: parseInt(document.getElementById('style-text').value)
@@ -515,32 +642,29 @@
             cardStyles: {
                 starSize: parseInt(document.getElementById('card-star').value),
                 showCount: document.getElementById('card-count').checked
+            },
+            carouselStyles: {
+                layout: document.getElementById('car-layout').value,
+                autoplay: document.getElementById('car-autoplay').checked,
+                delay: parseInt(document.getElementById('car-delay').value) || 4000,
+                showArrows: document.getElementById('car-arrows').checked
             }
         };
         await fetch(`${API}/admin/settings`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
         if(window.shopify) window.shopify.toast.show('Saved!');
     }
 
-    let parsedCSVData = [];
-    let csvHeaders = [];
-
+    // CSV IMPORT
+    let parsedCSVData = []; let csvHeaders = [];
     function handleFileUpload() {
-        const file = document.getElementById('csv-file').files[0];
-        if (!file) return;
+        const file = document.getElementById('csv-file').files[0]; if (!file) return;
         document.getElementById('file-name').innerText = `📄 ${file.name} selected`;
-        Papa.parse(file, { header: true, skipEmptyLines: true, complete: function(results) {
-            parsedCSVData = results.data; csvHeaders = results.meta.fields; buildMappingUI();
-        }});
+        Papa.parse(file, { header: true, skipEmptyLines: true, complete: function(results) { parsedCSVData = results.data; csvHeaders = results.meta.fields; buildMappingUI(); }});
     }
 
     function buildMappingUI() {
         document.getElementById('mapping-ui').style.display = 'block';
-        const reqFields = [
-            { id: 'map-itemId', label: 'Product ID (Required)' }, { id: 'map-rating', label: 'Star Rating (Required)' },
-            { id: 'map-userId', label: 'Reviewer Name' }, { id: 'map-email', label: 'Reviewer Email' },
-            { id: 'map-headline', label: 'Review Title' }, { id: 'map-comment', label: 'Review Body' },
-            { id: 'map-date', label: 'Review Date' }
-        ];
+        const reqFields = [{ id: 'map-itemId', label: 'Product ID (Req)' }, { id: 'map-rating', label: 'Star Rating (Req)' }, { id: 'map-userId', label: 'Reviewer Name' }, { id: 'map-email', label: 'Reviewer Email' }, { id: 'map-headline', label: 'Review Title' }, { id: 'map-comment', label: 'Review Body' }, { id: 'map-date', label: 'Review Date' }];
         let html = '';
         reqFields.forEach(f => {
             let options = `<option value="">-- Ignore --</option>`;
@@ -567,8 +691,7 @@
         const payload = parsedCSVData.map(row => ({ itemId: row[map.itemId], rating: row[map.rating], userId: row[map.userId], email: row[map.email], headline: row[map.headline], comment: row[map.comment], createdAt: row[map.createdAt] }));
         try {
             const res = await fetch(`${API}/reviews/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shopDomain: SHOP_DOMAIN, reviews: payload }) });
-            if (res.ok) { alert(`🎉 Import successful!`); document.getElementById('mapping-ui').style.display = 'none'; load(); } 
-            else alert("Import failed.");
+            if (res.ok) { alert(`🎉 Import successful!`); document.getElementById('mapping-ui').style.display = 'none'; load(); } else alert("Import failed.");
         } catch(e) { alert("Error occurred."); } finally { btn.innerText = "Start Import"; btn.disabled = false; }
     }
 
