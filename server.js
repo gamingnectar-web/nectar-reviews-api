@@ -47,15 +47,15 @@ const Review = mongoose.model('Review', reviewSchema, 'reviews');
 const settingsSchema = new mongoose.Schema({
     shopDomain: { type: String, required: true, unique: true },
     emailsSentTotal: { type: Number, default: 0 }, 
+    
+    // UPGRADED AUTO-APPROVE RULES
     autoApproveEnabled: { type: Boolean, default: false },
     autoApproveType: { type: String, enum: ['verified', 'all'], default: 'verified' },
     autoApproveMinStars: { type: Number, default: 4 },
     
-    // UPGRADED: Now accepts an array of Rule Objects [{type: 'tag', condition: 'drink', label: 'Taste'}]
-    attributeProfiles: { type: Array, default: [] }, 
+    attributeProfiles: { type: [String], default: [] }, // Array of Strings (e.g. ["Quality", "Fit"])
     
     widgetStyles: {
-        widgetTitle: { type: String, default: 'Customer Reviews' }, // NEW: Custom Title
         primaryColor: { type: String, default: '#000000' },
         starColor: { type: String, default: '#ffc700' },
         textSize: { type: Number, default: 15 },
@@ -70,14 +70,16 @@ const settingsSchema = new mongoose.Schema({
 const Settings = mongoose.model('Settings', settingsSchema, 'settings');
 
 // ==========================================
-// API ROUTES
+// SHOPIFY VERIFICATION LOGIC
 // ==========================================
 async function verifyShopifyOrder(orderId, email, productId) {
     const STORE_URL = process.env.SHOPIFY_STORE_URL; 
     const CLIENT_ID = process.env.SHOPIFY_API_KEY; 
     const CLIENT_SECRET = process.env.SHOPIFY_API_SECRET; 
 
-    if (!STORE_URL || !CLIENT_ID || !CLIENT_SECRET || !email || !orderId) return { verified: false, note: "Missing details (Email or Order ID)." };
+    if (!STORE_URL || !CLIENT_ID || !CLIENT_SECRET || !email || !orderId) {
+        return { verified: false, note: "Missing details (Email or Order ID)." };
+    }
 
     const rawNumber = orderId.replace(/\D/g, ""); 
     const searchTerms = [`#${rawNumber}`, rawNumber]; 
@@ -89,12 +91,17 @@ async function verifyShopifyOrder(orderId, email, productId) {
                 headers: { 'Authorization': `Basic ${authString}`, 'Content-Type': 'application/json' }
             });
             const data = await response.json();
+
             if (data.orders && data.orders.length > 0) {
                 const order = data.orders.find(o => String(o.order_number) === rawNumber || o.name === `#${rawNumber}` || o.name === rawNumber);
                 if (order) {
-                    if (!order.email || order.email.toLowerCase() !== email.toLowerCase()) return { verified: false, note: `Order exists, but placed under a different email.` };
+                    if (!order.email || order.email.toLowerCase() !== email.toLowerCase()) {
+                        return { verified: false, note: `Order exists, but placed under a different email.` };
+                    }
                     const boughtProduct = order.line_items.some(item => String(item.product_id) === String(productId) || String(item.variant_id) === String(productId));
-                    if (!boughtProduct) return { verified: false, note: "Email & Order ID match, but this product wasn't in the order." };
+                    if (!boughtProduct) {
+                        return { verified: false, note: "Email & Order ID match, but this product wasn't in the order." };
+                    }
                     return { verified: true, note: "Successfully verified against Shopify order." };
                 }
             }
@@ -103,6 +110,9 @@ async function verifyShopifyOrder(orderId, email, productId) {
     return { verified: false, note: "This Order ID does not exist in your Shopify." };
 }
 
+// ==========================================
+// API ROUTES
+// ==========================================
 app.get('/api/admin/stats', async (req, res) => {
     const { shopDomain } = req.query;
     try {
@@ -110,7 +120,10 @@ app.get('/api/admin/stats', async (req, res) => {
         const config = await Settings.findOne({ shopDomain });
         const sources = { website: 0, email: 0, import: 0 };
         const products = {};
-        reviews.forEach(r => { sources[r.source || 'website']++; products[r.itemId] = (products[r.itemId] || 0) + 1; });
+        reviews.forEach(r => {
+            sources[r.source || 'website']++;
+            products[r.itemId] = (products[r.itemId] || 0) + 1;
+        });
         const topProduct = Object.entries(products).sort((a,b) => b[1]-a[1])[0] || ["N/A", 0];
         const sent = config?.emailsSentTotal || 0;
         const rate = sent > 0 ? ((sources.email / sent) * 100).toFixed(1) : 0;
@@ -119,7 +132,8 @@ app.get('/api/admin/stats', async (req, res) => {
 });
 
 app.get('/api/reviews/:itemId', async (req, res) => {
-    res.json(await Review.find({ itemId: req.params.itemId, shopDomain: req.query.shopDomain, status: 'accepted', isDeleted: false }).sort({createdAt: -1}));
+    const reviews = await Review.find({ itemId: req.params.itemId, shopDomain: req.query.shopDomain, status: 'accepted', isDeleted: false }).sort({createdAt: -1});
+    res.json(reviews);
 });
 
 app.post('/api/reviews', async (req, res) => {
@@ -129,14 +143,21 @@ app.post('/api/reviews', async (req, res) => {
 
         if (!isVerified && req.body.orderId && req.body.email) {
             const checkResult = await verifyShopifyOrder(req.body.orderId, req.body.email, req.body.itemId);
-            isVerified = checkResult.verified; vNote = checkResult.note;
-        } else if (!isVerified && !req.body.orderId) vNote = "No Order ID provided by customer.";
+            isVerified = checkResult.verified;
+            vNote = checkResult.note;
+        } else if (!isVerified && !req.body.orderId) {
+            vNote = "No Order ID provided by customer.";
+        }
 
         const config = await Settings.findOne({ shopDomain: req.body.shopDomain });
         let finalStatus = 'pending';
+        
+        // UPGRADED AUTO-APPROVE LOGIC
         if (config && config.autoApproveEnabled) {
             const meetsVerificationReq = (config.autoApproveType === 'all') || (config.autoApproveType === 'verified' && isVerified);
-            if (meetsVerificationReq && req.body.rating >= config.autoApproveMinStars) finalStatus = 'accepted';
+            if (meetsVerificationReq && req.body.rating >= config.autoApproveMinStars) {
+                finalStatus = 'accepted';
+            }
         }
 
         const newReview = new Review({ ...req.body, verifiedPurchase: isVerified, verificationNote: vNote, status: finalStatus });
@@ -148,29 +169,39 @@ app.post('/api/reviews/import', async (req, res) => {
     try {
         const { shopDomain, reviews } = req.body;
         if (!shopDomain || !reviews || !Array.isArray(reviews)) return res.status(400).json({ error: "Invalid payload." });
+
         const importData = reviews.map(r => ({
             shopDomain: shopDomain, itemId: String(r.itemId).trim(), userId: r.userId || "Verified Customer",
-            email: r.email || "", rating: parseInt(r.rating) || 5, headline: r.headline || "", comment: r.comment || "",
-            source: 'import', status: 'accepted', verifiedPurchase: true, isDeleted: false, createdAt: r.createdAt ? new Date(r.createdAt) : new Date() 
+            email: r.email || "", rating: parseInt(r.rating) || 5, headline: r.headline || "",
+            comment: r.comment || "", source: 'import', status: 'accepted', verifiedPurchase: true,
+            isDeleted: false, createdAt: r.createdAt ? new Date(r.createdAt) : new Date() 
         }));
         await Review.insertMany(importData);
         res.status(201).json({ message: `Imported ${importData.length} reviews.` });
     } catch (error) { res.status(500).json({ error: "Failed to import reviews." }); }
 });
 
-app.get('/api/admin/reviews', async (req, res) => { res.json(await Review.find({ shopDomain: req.query.shopDomain }).sort({createdAt: -1})); });
+app.get('/api/admin/reviews', async (req, res) => {
+    res.json(await Review.find({ shopDomain: req.query.shopDomain }).sort({createdAt: -1}));
+});
 
 app.patch('/api/reviews/:id', async (req, res) => {
     try {
         const updateData = { ...req.body };
-        if (req.body.isDeleted !== undefined) updateData.deletedAt = req.body.isDeleted ? new Date() : null; 
+        if (req.body.isDeleted !== undefined) {
+            updateData.deletedAt = req.body.isDeleted ? new Date() : null; 
+        }
         res.json(await Review.findByIdAndUpdate(req.params.id, updateData, { new: true }));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/admin/settings', async (req, res) => { res.json(await Settings.findOne({ shopDomain: req.query.shopDomain })); });
+app.get('/api/admin/settings', async (req, res) => {
+    res.json(await Settings.findOne({ shopDomain: req.query.shopDomain }));
+});
 
-app.patch('/api/admin/settings', async (req, res) => { res.json(await Settings.findOneAndUpdate({ shopDomain: req.body.shopDomain }, req.body, { upsert: true, new: true })); });
+app.patch('/api/admin/settings', async (req, res) => {
+    res.json(await Settings.findOneAndUpdate({ shopDomain: req.body.shopDomain }, req.body, { upsert: true, new: true }));
+});
 
 app.get('/api/widget/config', async (req, res) => {
     const config = await Settings.findOne({ shopDomain: req.query.shopDomain });
