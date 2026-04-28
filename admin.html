@@ -409,12 +409,26 @@
 </div>
 
 <script>
+    // Because admin.html is served from the Render server itself, we use a relative path
     const API = '/api';
     const urlParams = new URLSearchParams(window.location.search);
     const SHOP_DOMAIN = urlParams.get('shop') || 'your-dev-store.myshopify.com';
     let data = [];
     let chartInstance = null;
     let currentAttributes = [];
+
+    // Attach ENTER key listener for slider input
+    document.addEventListener('DOMContentLoaded', () => {
+        const labelInput = document.getElementById('attr-label');
+        if (labelInput) {
+            labelInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addAttribute();
+                }
+            });
+        }
+    });
 
     function tab(id) {
         const target = document.getElementById(id);
@@ -425,13 +439,11 @@
         if(id === 'v-dash') loadStats();
     }
 
-    // UPDATED: Now toggles the correct preview panel!
     function subTab(controlId, previewId) {
         document.querySelectorAll('.sub-view, .sub-tab-btn').forEach(el => el.classList.remove('active'));
         document.getElementById(controlId).classList.add('active');
         event.currentTarget.classList.add('active');
         
-        // Hide all previews, show the relevant one
         if (previewId) {
             document.querySelectorAll('.sub-preview').forEach(el => el.classList.remove('active'));
             document.getElementById(previewId).classList.add('active');
@@ -651,7 +663,7 @@
         const condition = type === 'tag' ? document.getElementById('attr-rule-val-tag').value.trim() : document.getElementById('attr-rule-val-meta').value;
         const label = document.getElementById('attr-label').value.trim();
 
-        // Strict check to prevent 'undefined'
+        // Strict check to prevent 'undefined' or empty values
         if (!condition || condition === 'undefined' || !label) {
             alert("Please fill out both the condition value and the slider name.");
             return;
@@ -668,29 +680,15 @@
         }
     }
 
-    // Attach ENTER key functionality
-    document.addEventListener('DOMContentLoaded', () => {
-        const labelInput = document.getElementById('attr-label');
-        if (labelInput) {
-            labelInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    addAttribute();
-                }
-            });
-        }
-    });
-
-    // Make removeAttribute globally available
-    window.removeAttribute = function(index) {
+    // Globally scoped so the inline HTML button can access it
+    function removeAttribute(index) {
         if(confirm("Remove this slider rule?")) {
             currentAttributes.splice(index, 1);
             saveSettings();
             renderAttributes();
         }
-    };
+    }
 
-    // UPDATED: Now correctly targets all the multi-preview elements
     function updatePreviews() {
         const title = document.getElementById('style-title').value || 'Customer Reviews';
         const primary = document.getElementById('style-primary').value;
@@ -698,14 +696,12 @@
         const txt = document.getElementById('style-text').value + 'px';
         const cardStar = document.getElementById('card-star').value + 'px';
         
-        // Full Widget Updates
         document.getElementById('pre-title').innerText = title;
         document.querySelectorAll('.pre-color-primary').forEach(el => el.style.background = primary);
         document.querySelectorAll('.pre-color-star').forEach(el => el.style.color = star);
         document.querySelectorAll('.pre-color-text').forEach(el => el.style.fontSize = txt);
         document.querySelectorAll('.pre-color-text-brand').forEach(el => el.style.color = primary);
 
-        // Product Card Updates
         document.getElementById('pre-card-icon').style.fontSize = cardStar;
         document.getElementById('pre-card-count').style.display = document.getElementById('card-count').checked ? 'inline' : 'none';
     }
