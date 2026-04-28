@@ -651,24 +651,44 @@
         const condition = type === 'tag' ? document.getElementById('attr-rule-val-tag').value.trim() : document.getElementById('attr-rule-val-meta').value;
         const label = document.getElementById('attr-label').value.trim();
 
-        if (condition && label && currentAttributes.length < 8) {
-            currentAttributes.push({ type, condition, label });
+        // Strict check to prevent 'undefined'
+        if (!condition || condition === 'undefined' || !label) {
+            alert("Please fill out both the condition value and the slider name.");
+            return;
+        }
+
+        if (currentAttributes.length < 8) {
+            currentAttributes.push({ type: type, condition: condition, label: label });
             document.getElementById('attr-rule-val-tag').value = '';
             document.getElementById('attr-label').value = '';
             saveSettings();
             renderAttributes();
-        } else if (!condition || !label) {
-            alert("Please fill out both the condition value and the slider name.");
         } else {
             alert("Maximum of 8 slider rules allowed.");
         }
     }
 
-    function removeAttribute(index) {
-        currentAttributes.splice(index, 1);
-        saveSettings();
-        renderAttributes();
-    }
+    // Attach ENTER key functionality
+    document.addEventListener('DOMContentLoaded', () => {
+        const labelInput = document.getElementById('attr-label');
+        if (labelInput) {
+            labelInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addAttribute();
+                }
+            });
+        }
+    });
+
+    // Make removeAttribute globally available
+    window.removeAttribute = function(index) {
+        if(confirm("Remove this slider rule?")) {
+            currentAttributes.splice(index, 1);
+            saveSettings();
+            renderAttributes();
+        }
+    };
 
     // UPDATED: Now correctly targets all the multi-preview elements
     function updatePreviews() {
