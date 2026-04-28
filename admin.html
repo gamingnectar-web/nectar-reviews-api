@@ -35,6 +35,7 @@
         .post-btn { background: var(--primary); color: white; border: none; padding: 10px 20px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: 0.2s;}
         .post-btn:hover { opacity: 0.8; }
 
+        /* REVIEW CARDS */
         .review-card { background: var(--card); border: 2px solid var(--border); padding: 25px; margin-bottom: 20px; border-radius: 12px; display: flex; justify-content: space-between; gap: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); transition: all 0.2s;}
         .review-card:hover { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
         .status-border-pending { border-color: var(--border); }
@@ -84,9 +85,7 @@
         input:checked + .slider { background-color: var(--green); }
         input:checked + .slider:before { transform: translateX(20px); }
         
-        /* NEW: Attribute Pill Design */
-        .attr-pill { display: flex; justify-content: space-between; align-items: center; background: #fafafa; padding: 15px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; font-size: 14px;}
-        .attr-tag { background: var(--primary); color: white; padding: 3px 8px; border-radius: 4px; font-weight: 600; font-size: 12px; text-transform: uppercase; margin-right: 8px;}
+        .attr-pill { display: flex; justify-content: space-between; align-items: center; background: #fafafa; padding: 10px 15px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;}
     </style>
 </head>
 <body>
@@ -205,22 +204,14 @@
         </div>
 
         <div class="settings-panel">
-            <h3 style="margin-top: 0;">Smart Conditional Sliders</h3>
-            <p style="color: var(--text-light); font-size: 14px; margin-top: 0;">Create sliders that only appear when a product matches a specific Tag or Metafield (e.g. Tag: 'drink' shows a 'Sweetness' slider).</p>
+            <h3 style="margin-top: 0;">Custom Attribute Sliders</h3>
+            <p style="color: var(--text-light); font-size: 14px; margin-top: 0;">Add up to 4 custom traits (e.g., Quality, Fit, Taste) for customers to rate via sliders on the widget.</p>
             
             <div id="attributes-list" style="margin-bottom: 20px; margin-top: 15px;"></div>
             
-            <div style="background: #fafafa; padding: 20px; border-radius: 8px; border: 1px solid var(--border);">
-                <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
-                    <select id="attr-rule-type" class="filter-select" style="width: 150px;">
-                        <option value="tag">Product Tag</option>
-                        <option value="metafield">Metafield Key</option>
-                    </select>
-                    <input type="text" id="attr-rule-val" class="search-input" style="flex: 1; min-width: 150px;" placeholder="e.g. 'drink' or 'custom.flavor'">
-                    <span style="font-weight: 800; color: var(--text-light);">→</span>
-                    <input type="text" id="attr-label" class="search-input" style="flex: 1; min-width: 150px;" placeholder="Slider Name (e.g. Taste)">
-                    <button class="post-btn" onclick="addAttribute()">+ Create Rule</button>
-                </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="text" id="new-attr-input" class="search-input" style="max-width: 300px;" placeholder="E.g. Build Quality">
+                <button class="post-btn" onclick="addAttribute()">+ Add Attribute</button>
             </div>
         </div>
     </div>
@@ -235,7 +226,6 @@
                 </div>
                 <div id="ds-full" class="sub-view active">
                     <div class="settings-panel">
-                        <div class="setting-row"><span>Widget Title</span><input type="text" id="style-title" class="search-input" style="width:180px;" oninput="updatePreviews()"></div>
                         <div class="setting-row"><span>Brand Color</span><input type="color" id="style-primary" oninput="updatePreviews()"></div>
                         <div class="setting-row"><span>Star Color</span><input type="color" id="style-star" oninput="updatePreviews()"></div>
                         <div class="setting-row"><span>Text Size (px)</span><input type="number" id="style-text" class="search-input" style="width:70px" oninput="updatePreviews()"></div>
@@ -254,7 +244,7 @@
                 <h4 style="margin-top: 0; color: var(--text-light);">Live Preview</h4>
                 <div class="settings-panel" style="padding: 20px;">
                     <div style="display: flex; justify-content: space-between; align-items:center; margin-bottom: 20px;">
-                        <h3 id="pre-title" style="margin:0">Customer Reviews</h3>
+                        <h3 style="margin:0">Reviews</h3>
                         <button id="pre-btn" style="padding: 8px 16px; color:white; border:none; border-radius:4px; font-weight:600;">Write Review</button>
                     </div>
                     <div id="pre-stars" style="font-size: 20px; margin-bottom:10px;">★★★★★</div>
@@ -322,7 +312,6 @@
                     currentAttributes = config.attributeProfiles || [];
                     
                     if(config.widgetStyles) {
-                        document.getElementById('style-title').value = config.widgetStyles.widgetTitle || 'Customer Reviews';
                         document.getElementById('style-primary').value = config.widgetStyles.primaryColor || '#000000';
                         document.getElementById('style-star').value = config.widgetStyles.starColor || '#ffc700';
                         document.getElementById('style-text').value = config.widgetStyles.textSize || 15;
@@ -368,6 +357,7 @@
         const status = document.getElementById('status-filter').value;
         const starF = document.getElementById('star-filter').value;
         
+        // Active List Logic
         let active = data.filter(r => !r.isDeleted);
         if(status !== 'all') active = active.filter(r => r.status === status);
         if(starF !== 'all') active = active.filter(r => r.rating === parseInt(starF));
@@ -380,9 +370,12 @@
     }
 
     function buildCard(r, isTrash) {
-        let verifyHtml = r.verifiedPurchase 
-            ? `<div class="v-badge v-badge-yes" title="${r.verificationNote || 'Verified Purchase'}">✓ Verified Buyer</div>`
-            : `<div class="v-badge v-badge-no" title="Diagnostic: ${r.verificationNote || 'Could not verify.'}">⚠️ Unverified (Hover)</div>`;
+        let verifyHtml = '';
+        if (r.verifiedPurchase) {
+            verifyHtml = `<div class="v-badge v-badge-yes" title="${r.verificationNote || 'Verified Purchase'}">✓ Verified Buyer</div>`;
+        } else {
+            verifyHtml = `<div class="v-badge v-badge-no" title="Diagnostic: ${r.verificationNote || 'Could not verify.'}">⚠️ Unverified (Hover)</div>`;
+        }
 
         const customerBox = r.email 
             ? `<a href="https://admin.shopify.com/customers?query=${encodeURIComponent(r.email)}" target="_blank" class="customer-link" title="Open Customer Profile">${r.userId}</a>` 
@@ -429,7 +422,10 @@
                 </div>
 
                 <div style="padding-top: 20px;">
-                    ${isTrash ? `<button class="restore-btn" onclick="toggleBin('${r._id}', false)">↺ Restore Review</button>` : `<button class="delete-btn" onclick="toggleBin('${r._id}', true)">🗑️ Move to Trash</button>`}
+                    ${isTrash ? 
+                        `<button class="restore-btn" onclick="toggleBin('${r._id}', false)">↺ Restore Review</button>` : 
+                        `<button class="delete-btn" onclick="toggleBin('${r._id}', true)">🗑️ Move to Trash</button>`
+                    }
                 </div>
             </div>
         </div>`;
@@ -455,42 +451,31 @@
         if(window.shopify) window.shopify.toast.show('Reply published');
     }
 
-    // --- NEW: SMART ATTRIBUTE LOGIC ---
+    // --- ATTRIBUTE SLIDERS LOGIC ---
     function renderAttributes() {
         const container = document.getElementById('attributes-list');
         if (currentAttributes.length === 0) {
-            container.innerHTML = `<div style="color: var(--text-light); font-size: 13px;">No conditional rules created yet.</div>`;
+            container.innerHTML = `<div style="color: var(--text-light); font-size: 13px;">No custom attributes created yet.</div>`;
             return;
         }
         container.innerHTML = currentAttributes.map((attr, i) => `
             <div class="attr-pill">
-                <div style="display:flex; align-items:center;">
-                    <span class="attr-tag">${attr.type}</span>
-                    <span style="color: var(--text-light); font-family: monospace; margin-right: 15px;">${attr.condition}</span>
-                    <span style="font-weight: 800; color: var(--border); margin-right: 15px;">→</span>
-                    <span style="font-weight: 600;">Slider: '${attr.label}'</span>
-                </div>
+                <span style="font-weight: 600;">${attr}</span>
                 <button style="background: none; border: none; color: var(--red); cursor: pointer; font-weight: 600;" onclick="removeAttribute(${i})">✕ Remove</button>
             </div>
         `).join('');
     }
 
     function addAttribute() {
-        const type = document.getElementById('attr-rule-type').value;
-        const condition = document.getElementById('attr-rule-val').value.trim();
-        const label = document.getElementById('attr-label').value.trim();
-
-        if (condition && label && currentAttributes.length < 8) {
-            // Push the object array instead of a string
-            currentAttributes.push({ type, condition, label });
-            document.getElementById('attr-rule-val').value = '';
-            document.getElementById('attr-label').value = '';
+        const input = document.getElementById('new-attr-input');
+        const val = input.value.trim();
+        if (val && currentAttributes.length < 4 && !currentAttributes.includes(val)) {
+            currentAttributes.push(val);
+            input.value = '';
             saveSettings();
             renderAttributes();
-        } else if (!condition || !label) {
-            alert("Please fill out both the condition value and the slider name.");
-        } else {
-            alert("Maximum of 8 slider rules allowed.");
+        } else if (currentAttributes.length >= 4) {
+            alert("Maximum of 4 attribute sliders allowed per product.");
         }
     }
 
@@ -501,13 +486,11 @@
     }
 
     function updatePreviews() {
-        const title = document.getElementById('style-title').value || 'Customer Reviews';
         const primary = document.getElementById('style-primary').value;
         const star = document.getElementById('style-star').value;
         const txt = document.getElementById('style-text').value + 'px';
         const cardStar = document.getElementById('card-star').value + 'px';
         
-        document.getElementById('pre-title').innerText = title;
         document.getElementById('pre-btn').style.background = primary;
         document.getElementById('pre-stars').style.color = star;
         document.getElementById('pre-text').style.fontSize = txt;
@@ -523,9 +506,8 @@
             autoApproveEnabled: document.getElementById('set-auto-enable').checked,
             autoApproveType: document.getElementById('set-auto-type').value,
             autoApproveMinStars: parseInt(document.getElementById('set-min-stars').value),
-            attributeProfiles: currentAttributes, // Sends the new object array
+            attributeProfiles: currentAttributes,
             widgetStyles: {
-                widgetTitle: document.getElementById('style-title').value,
                 primaryColor: document.getElementById('style-primary').value,
                 starColor: document.getElementById('style-star').value,
                 textSize: parseInt(document.getElementById('style-text').value)
@@ -539,17 +521,26 @@
         if(window.shopify) window.shopify.toast.show('Saved!');
     }
 
-    // CSV IMPORT
-    let parsedCSVData = []; let csvHeaders = [];
+    let parsedCSVData = [];
+    let csvHeaders = [];
+
     function handleFileUpload() {
-        const file = document.getElementById('csv-file').files[0]; if (!file) return;
+        const file = document.getElementById('csv-file').files[0];
+        if (!file) return;
         document.getElementById('file-name').innerText = `📄 ${file.name} selected`;
-        Papa.parse(file, { header: true, skipEmptyLines: true, complete: function(results) { parsedCSVData = results.data; csvHeaders = results.meta.fields; buildMappingUI(); }});
+        Papa.parse(file, { header: true, skipEmptyLines: true, complete: function(results) {
+            parsedCSVData = results.data; csvHeaders = results.meta.fields; buildMappingUI();
+        }});
     }
 
     function buildMappingUI() {
         document.getElementById('mapping-ui').style.display = 'block';
-        const reqFields = [{ id: 'map-itemId', label: 'Product ID (Req)' }, { id: 'map-rating', label: 'Star Rating (Req)' }, { id: 'map-userId', label: 'Reviewer Name' }, { id: 'map-email', label: 'Reviewer Email' }, { id: 'map-headline', label: 'Review Title' }, { id: 'map-comment', label: 'Review Body' }, { id: 'map-date', label: 'Review Date' }];
+        const reqFields = [
+            { id: 'map-itemId', label: 'Product ID (Required)' }, { id: 'map-rating', label: 'Star Rating (Required)' },
+            { id: 'map-userId', label: 'Reviewer Name' }, { id: 'map-email', label: 'Reviewer Email' },
+            { id: 'map-headline', label: 'Review Title' }, { id: 'map-comment', label: 'Review Body' },
+            { id: 'map-date', label: 'Review Date' }
+        ];
         let html = '';
         reqFields.forEach(f => {
             let options = `<option value="">-- Ignore --</option>`;
@@ -576,7 +567,8 @@
         const payload = parsedCSVData.map(row => ({ itemId: row[map.itemId], rating: row[map.rating], userId: row[map.userId], email: row[map.email], headline: row[map.headline], comment: row[map.comment], createdAt: row[map.createdAt] }));
         try {
             const res = await fetch(`${API}/reviews/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shopDomain: SHOP_DOMAIN, reviews: payload }) });
-            if (res.ok) { alert(`🎉 Import successful!`); document.getElementById('mapping-ui').style.display = 'none'; load(); } else alert("Import failed.");
+            if (res.ok) { alert(`🎉 Import successful!`); document.getElementById('mapping-ui').style.display = 'none'; load(); } 
+            else alert("Import failed.");
         } catch(e) { alert("Error occurred."); } finally { btn.innerText = "Start Import"; btn.disabled = false; }
     }
 
