@@ -551,7 +551,7 @@
             : `<div class="v-badge v-badge-no" title="Diagnostic: ${r.verificationNote || 'Could not verify.'}">⚠️ Unverified (Hover)</div>`;
 
         const customerBox = r.email 
-            ? `<a href="https://admin.shopify.com/customers?query=${encodeURIComponent(r.email)}" target="_blank" class="customer-link" title="Open Customer Profile">${r.userId}</a>` 
+            ? `<a href="https://${SHOP_DOMAIN}/admin/customers?query=${encodeURIComponent(r.email)}" target="_blank" class="customer-link" title="Open Customer Profile">${r.userId}</a>` 
             : `<strong style="font-size: 1.1rem;">${r.userId}</strong>`;
 
         let attrHtml = '';
@@ -587,7 +587,13 @@
             
             <div class="card-side">
                 <div>
-                    <div style="font-size: 12px; color: var(--text-light); margin-bottom: 5px;">Product ID: ${r.itemId}</div>
+                    <div style="font-size: 12px; color: var(--text-light); margin-bottom: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                        <span>Product ID:</span>
+                        <a href="https://${SHOP_DOMAIN}/admin/products/${r.itemId}" target="_blank" style="color: var(--blue); font-weight: 700; text-decoration: none; padding: 4px 8px; background: #e0f2fe; border-radius: 6px; display: inline-block; transition: 0.2s;" onmouseover="this.style.background='#bae6fd'" onmouseout="this.style.background='#e0f2fe'" title="Open Product in Shopify Admin">
+                            ${r.itemId} ↗
+                        </a>
+                    </div>
+                    
                     <div style="font-size: 12px; color: var(--text-light); margin-bottom: 5px;">${new Date(r.createdAt).toLocaleDateString()}</div>
                     <div style="font-size: 13px; color: var(--primary); font-weight: 600; margin-bottom: 5px;">${r.email || 'No Email'}</div>
                     ${r.orderId ? `<div style="font-size: 13px; font-weight: 700; margin-bottom: 12px;">Order #${r.orderId}</div>` : '<div style="margin-bottom:12px;"></div>'}
