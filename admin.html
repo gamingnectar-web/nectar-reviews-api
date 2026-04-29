@@ -95,6 +95,17 @@
         .import-inst-box { background: #e0f2fe; border-left: 4px solid var(--blue); padding: 15px 20px; border-radius: 0 8px 8px 0; margin-bottom: 20px; font-size: 14px; line-height: 1.5; display: none; }
         .import-inst-box.active { display: block; }
         .import-inst-box strong { color: var(--blue); }
+
+        /* UPGRADED: Validation & Modal CSS */
+        .valid-green { border: 2px solid var(--green) !important; background-color: #f0fdf4 !important; color: var(--green); font-weight: 700; transition: 0.3s;}
+        .invalid-red { border: 2px solid var(--red) !important; background-color: #fef2f2 !important; color: var(--red); font-weight: 700; cursor: pointer; transition: 0.3s;}
+        .invalid-red:hover { background-color: #fee2e2 !important; }
+        
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+        .modal-card { background: white; padding: 30px; border-radius: 12px; width: 500px; max-width: 90%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2); animation: fadeIn 0.2s ease-out;}
+        .modal-result-item { display: flex; align-items: center; gap: 15px; padding: 12px; border-bottom: 1px solid var(--border); cursor: pointer; transition: 0.2s; border-radius: 8px; }
+        .modal-result-item:hover { background: #f8fafc; border-color: var(--blue); }
+        .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-light); }
     </style>
 </head>
 <body>
@@ -401,16 +412,6 @@
             
             <hr style="border: 0; border-top: 1px solid var(--border); margin: 30px 0;">
 
-            <h3 style="color: var(--blue);">3. Home Page Carousel</h3>
-            <p>Paste this into <code>sections/index.liquid</code> or anywhere on your homepage to show your top 5-star reviews globally:</p>
-            <div class="code-block">&lt;div class="rev-carousel" data-shop="&#123;&#123; shop.domain &#125;&#125;"&gt;&lt;/div&gt;</div>
-
-            <h3 style="color: var(--blue);">4. Dedicated "All Reviews" Page</h3>
-            <p>Create a new Page in Shopify (e.g. 'Happy Customers') and paste this into the HTML editor to show every accepted review on your store:</p>
-            <div class="code-block">&lt;div class="rev-global-page" data-shop="&#123;&#123; shop.domain &#125;&#125;"&gt;&lt;/div&gt;</div>
-
-            <hr style="border: 0; border-top: 1px solid var(--border); margin: 30px 0;">
-
             <h3 style="color: var(--green);">5. Google Rich Snippets (SEO)</h3>
             <p>Paste this inside the <code>&lt;head&gt;</code> tag of your <code>theme.liquid</code> file. This pulls the data pumped from our server directly into your HTML for instant Google indexing:</p>
             <div class="code-block" style="border-color: var(--green);">
@@ -440,7 +441,19 @@
 &#123;% endif %&#125;</div>
         </div>
     </div>
+</div>
 
+<div id="search-modal" class="modal-overlay" onclick="if(event.target===this) closeSearchModal()">
+    <div class="modal-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="margin: 0;">Map to Shopify Product</h3>
+            <button class="modal-close" onclick="closeSearchModal()">&times;</button>
+        </div>
+        <input type="text" id="modal-search-input" class="search-input" style="font-size: 16px; padding: 12px; margin-bottom: 20px;" placeholder="Search your store..." onkeyup="handleModalSearch(this.value)">
+        <div id="modal-results" style="max-height: 300px; overflow-y: auto;">
+            <p style="color: var(--text-light); text-align: center;">Start typing to search products...</p>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -451,15 +464,11 @@
     let chartInstance = null;
     let currentAttributes = [];
 
-    // Attach ENTER key listener for slider input
     document.addEventListener('DOMContentLoaded', () => {
         const labelInput = document.getElementById('attr-label');
         if (labelInput) {
             labelInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    addAttribute();
-                }
+                if (e.key === 'Enter') { e.preventDefault(); addAttribute(); }
             });
         }
     });
@@ -833,19 +842,19 @@
         let tableRows = mappedReviews.map((r, i) => `
             <tr style="border-bottom: 1px solid var(--border);">
                 <td style="padding: 12px; font-size: 13px;">${r.userId}</td>
-                <td style="padding: 12px; font-size: 13px;">${'★'.repeat(parseInt(r.rating) || 5)}</td>
+                <td style="padding: 12px; font-size: 13px; color: var(--star);">${'★'.repeat(parseInt(r.rating) || 5)}</td>
                 <td style="padding: 12px; font-size: 13px; max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${r.comment}">${r.comment}</td>
                 <td style="padding: 12px;">
-                    <input type="text" id="stage-item-${i}" class="search-input" style="padding: 6px 10px; font-size: 13px;" value="${r.itemId || ''}" placeholder="Paste Shopify Product ID">
+                    <input type="text" id="stage-item-${i}" class="search-input" style="padding: 8px 12px; font-size: 13px; font-family: monospace; cursor: pointer;" value="${r.itemId || ''}" placeholder="Click to search products..." onclick="openSearchModal(${i})" readonly>
                 </td>
             </tr>
         `).join('');
 
         const stagingHtml = `
-            <h3 style="margin-top: 40px; border-top: 1px solid var(--border); padding-top: 30px;">3. Map to Shopify Products</h3>
-            <p style="color: var(--text-light); font-size: 14px; margin-bottom: 20px;">Review your imported data. Ensure the <strong>Target Product ID</strong> column contains the actual numeric Shopify Product ID before clicking Go Live.</p>
+            <h3 style="margin-top: 40px; border-top: 1px solid var(--border); padding-top: 30px;">3. Smart Product Mapping</h3>
+            <p style="color: var(--text-light); font-size: 14px; margin-bottom: 20px;">The system is automatically searching your live Shopify store to find the exact Numeric IDs for these products. If a box turns <span style="color: var(--red); font-weight: bold;">Red</span>, click it to manually search and select the product.</p>
             
-            <div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 20px;">
+            <div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 20px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);">
                 <table style="width: 100%; text-align: left; border-collapse: collapse;">
                     <thead style="background: #f4f6f8; position: sticky; top: 0; z-index: 1;">
                         <tr>
@@ -859,7 +868,7 @@
                 </table>
             </div>
             
-            <button id="final-import-btn" class="post-btn" style="background: var(--blue); width: 100%;" onclick="processFinalImport()">🚀 Go Live (Import to Database)</button>
+            <button id="final-import-btn" class="post-btn" style="background: var(--blue); width: 100%; height: 50px; font-size: 16px;" onclick="processFinalImport()">🚀 Go Live (Import to Database)</button>
         `;
 
         let existingStaging = document.getElementById('staging-area');
@@ -869,8 +878,137 @@
             document.getElementById('mapping-ui').appendChild(existingStaging);
         }
         existingStaging.innerHTML = stagingHtml;
+
+        // Trigger the automatic background search to validate
+        validateStagingProducts();
     }
 
+    // ==========================================
+    // THE SMART AUTO-MAPPER
+    // ==========================================
+    async function validateStagingProducts() {
+        const btn = document.getElementById('final-import-btn');
+        btn.innerText = "Auto-Mapping Products...";
+        btn.disabled = true;
+
+        for (let i = 0; i < mappedReviews.length; i++) {
+            const input = document.getElementById(`stage-item-${i}`);
+            let query = input.value.trim();
+            if (!query) {
+                input.classList.add('invalid-red');
+                continue;
+            }
+
+            // If it's already a numeric ID, mark green immediately
+            if (/^\d{10,}$/.test(query)) {
+                input.classList.add('valid-green');
+                continue;
+            }
+
+            try {
+                // Strip brand names like "GFuel Energy | Sour Blue Chug Rug" -> "Sour Blue Chug Rug"
+                let cleanQuery = query.includes('|') ? query.split('|').pop().trim() : query;
+                
+                // Ping Shopify's public Storefront AJAX API
+                const res = await fetch(`https://${SHOP_DOMAIN}/search/suggest.json?q=${encodeURIComponent(cleanQuery)}&resources[type]=product`);
+                const data = await res.json();
+                const products = data.resources.results.products;
+
+                if (products.length > 0) {
+                    // We found a match! Grab the exact product JSON to get the numeric ID
+                    const cleanUrl = products[0].url.split('?')[0];
+                    const prodRes = await fetch(`https://${SHOP_DOMAIN}${cleanUrl}.js`);
+                    const prodData = await prodRes.json();
+                    
+                    input.value = prodData.id;
+                    input.classList.remove('invalid-red');
+                    input.classList.add('valid-green');
+                } else {
+                    input.classList.add('invalid-red');
+                }
+            } catch(e) {
+                input.classList.add('invalid-red');
+            }
+        }
+        
+        btn.innerText = "🚀 Go Live (Import to Database)";
+        btn.disabled = false;
+    }
+
+    // ==========================================
+    // MANUAL SEARCH MODAL LOGIC
+    // ==========================================
+    let activeStagingIndex = null;
+    let searchTimeout;
+
+    function openSearchModal(index) {
+        activeStagingIndex = index;
+        document.getElementById('search-modal').style.display = 'flex';
+        const searchBox = document.getElementById('modal-search-input');
+        searchBox.value = '';
+        document.getElementById('modal-results').innerHTML = '<p style="color: var(--text-light); text-align: center;">Start typing to search products...</p>';
+        searchBox.focus();
+    }
+
+    function closeSearchModal() {
+        document.getElementById('search-modal').style.display = 'none';
+    }
+
+    function handleModalSearch(query) {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(async () => {
+            if(!query.trim()) { 
+                document.getElementById('modal-results').innerHTML = '<p style="color: var(--text-light); text-align: center;">Start typing to search products...</p>'; 
+                return; 
+            }
+            
+            document.getElementById('modal-results').innerHTML = '<p style="text-align: center;">Searching...</p>';
+            
+            try {
+                const res = await fetch(`https://${SHOP_DOMAIN}/search/suggest.json?q=${encodeURIComponent(query)}&resources[type]=product`);
+                const data = await res.json();
+                const products = data.resources.results.products;
+
+                if(products.length === 0) {
+                    document.getElementById('modal-results').innerHTML = '<p style="text-align: center; color: var(--red);">No products found.</p>';
+                    return;
+                }
+
+                let html = '';
+                for(let p of products) {
+                    html += `
+                    <div class="modal-result-item" onclick="selectModalProduct('${p.url}')">
+                        <img src="${p.image}" width="40" height="40" style="border-radius:4px; object-fit:cover;">
+                        <div style="font-weight: 500;">${p.title}</div>
+                    </div>`;
+                }
+                document.getElementById('modal-results').innerHTML = html;
+            } catch(e) {
+                document.getElementById('modal-results').innerHTML = '<p style="text-align: center; color: var(--red);">Search failed.</p>';
+            }
+        }, 300);
+    }
+
+    async function selectModalProduct(url) {
+        document.getElementById('modal-results').innerHTML = '<p style="text-align: center;">Mapping product...</p>';
+        try {
+            const cleanUrl = url.split('?')[0];
+            const res = await fetch(`https://${SHOP_DOMAIN}${cleanUrl}.js`);
+            const prodData = await res.json();
+
+            const input = document.getElementById(`stage-item-${activeStagingIndex}`);
+            input.value = prodData.id;
+            input.classList.remove('invalid-red');
+            input.classList.add('valid-green');
+
+            closeSearchModal();
+        } catch(e) {
+            alert("Failed to map product ID.");
+            closeSearchModal();
+        }
+    }
+
+    // FINAL IMPORT
     async function processFinalImport() {
         const btn = document.getElementById('final-import-btn'); 
         btn.innerText = "Importing..."; 
