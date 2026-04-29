@@ -90,6 +90,10 @@
         
         .attr-pill { display: flex; justify-content: space-between; align-items: center; background: #fafafa; padding: 15px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; font-size: 14px;}
         .attr-tag { background: var(--primary); color: white; padding: 3px 8px; border-radius: 4px; font-weight: 600; font-size: 12px; text-transform: uppercase; margin-right: 8px;}
+
+        .import-inst-box { background: #e0f2fe; border-left: 4px solid var(--blue); padding: 15px 20px; border-radius: 0 8px 8px 0; margin-bottom: 20px; font-size: 14px; line-height: 1.5; display: none; }
+        .import-inst-box.active { display: block; }
+        .import-inst-box strong { color: var(--blue); }
     </style>
 </head>
 <body>
@@ -164,8 +168,38 @@
     <div id="v-imp" class="view">
         <h2>Importer Tool</h2>
         <div class="settings-panel">
-            <h3>Import from Yotpo, Loox, or Okendo</h3>
-            <p style="color: var(--text-light); font-size: 14px;">Upload your CSV file to map your columns automatically.</p>
+            <h3 style="margin-top: 0;">1. Export from your old platform</h3>
+            <p style="color: var(--text-light); font-size: 14px; margin-bottom: 15px;">Select the platform you are migrating from to see specific export instructions.</p>
+            
+            <select id="import-platform-select" class="filter-select" style="max-width: 300px; margin-bottom: 20px;" onchange="toggleImportInst()">
+                <option value="general">Generic / Other Format</option>
+                <option value="weebly">Weebly / Square</option>
+                <option value="yotpo">Yotpo</option>
+                <option value="loox">Loox</option>
+                <option value="okendo">Okendo</option>
+                <option value="shopify">Shopify Product Reviews (SPR)</option>
+            </select>
+
+            <div id="inst-general" class="import-inst-box active">
+                <strong>Generic CSV:</strong> Ensure your spreadsheet has columns for your <strong>Product ID</strong> (or handle), <strong>Star Rating</strong>, <strong>Reviewer Name</strong>, and <strong>Review Body</strong>. Upload the file below to map your custom columns to our system.
+            </div>
+            <div id="inst-weebly" class="import-inst-box">
+                <strong>Weebly / Square:</strong> Log into your Square dashboard. Navigate to <strong>Items > Reviews</strong> (or use a third-party app export if you were using a widget). Export your data to a CSV. <em>Note: Make sure your CSV contains the new Shopify Product ID so the reviews attach to the correct products!</em>
+            </div>
+            <div id="inst-yotpo" class="import-inst-box">
+                <strong>Yotpo:</strong> Log into your Yotpo Admin. Click the profile icon in the top right corner and select <strong>Account Settings</strong>. Click the <strong>Export Data</strong> tab, select 'Reviews', and download your CSV.
+            </div>
+            <div id="inst-loox" class="import-inst-box">
+                <strong>Loox:</strong> Log into your Shopify Admin and open the Loox app. Go to <strong>Settings > Export</strong> and click the <strong>Export Reviews</strong> button to download your CSV file.
+            </div>
+            <div id="inst-okendo" class="import-inst-box">
+                <strong>Okendo:</strong> Open the Okendo app in Shopify. Navigate to <strong>Settings > General > Export Data</strong>. Select 'Reviews' from the dropdown and download your CSV.
+            </div>
+            <div id="inst-shopify" class="import-inst-box">
+                <strong>Shopify Product Reviews:</strong> Open the Shopify Product Reviews app. Click <strong>Settings</strong> and look for the <strong>Export</strong> button to download your existing reviews.
+            </div>
+
+            <h3 style="margin-top: 30px; border-top: 1px solid var(--border); padding-top: 30px;">2. Upload and Map Columns</h3>
             <div style="border: 2px dashed #c9cccf; padding: 40px; text-align: center; border-radius: 12px; margin: 20px 0; background: #fafafa;">
                 <input type="file" id="csv-file" accept=".csv" style="display: none;" onchange="handleFileUpload()">
                 <button class="post-btn" onclick="document.getElementById('csv-file').click()">Select CSV File</button>
@@ -310,13 +344,11 @@
                         <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid var(--border); width: 200px; text-align: left;">
                             <div style="width: 100%; height: 120px; background: #f1f5f9; border-radius: 4px; margin-bottom: 15px;"></div>
                             <div style="font-weight: 600; font-size: 14px; margin-bottom: 8px;">Sample Product</div>
-                            
                             <div style="display: flex; align-items: center; gap: 5px; font-weight: 700;">
                                 <span id="pre-card-icon" class="pre-color-star">★</span> 
                                 <span style="font-size: 14px;">4.8</span> 
                                 <span id="pre-card-count" style="font-weight: 400; color: #666; font-size: 13px;">(12)</span>
                             </div>
-                            
                             <div style="font-weight: 600; font-size: 14px; margin-top: 8px;">$29.99</div>
                         </div>
                     </div>
@@ -439,7 +471,6 @@
         if(id === 'v-dash') loadStats();
     }
 
-    // Toggles the right-hand preview panel
     function subTab(controlId, previewId) {
         document.querySelectorAll('.sub-view, .sub-tab-btn').forEach(el => el.classList.remove('active'));
         document.getElementById(controlId).classList.add('active');
@@ -449,6 +480,13 @@
             document.querySelectorAll('.sub-preview').forEach(el => el.classList.remove('active'));
             document.getElementById(previewId).classList.add('active');
         }
+    }
+
+    // NEW: Toggles the dynamic import instructions
+    function toggleImportInst() {
+        const platform = document.getElementById('import-platform-select').value;
+        document.querySelectorAll('.import-inst-box').forEach(el => el.classList.remove('active'));
+        document.getElementById(`inst-${platform}`).classList.add('active');
     }
 
     async function fetchMetafields() {
@@ -664,7 +702,6 @@
         const condition = type === 'tag' ? document.getElementById('attr-rule-val-tag').value.trim() : document.getElementById('attr-rule-val-meta').value;
         const label = document.getElementById('attr-label').value.trim();
 
-        // Strict check to prevent 'undefined' or empty values
         if (!condition || condition === 'undefined' || !label) {
             alert("Please fill out both the condition value and the slider name.");
             return;
