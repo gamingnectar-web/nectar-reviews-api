@@ -439,6 +439,7 @@
         if(id === 'v-dash') loadStats();
     }
 
+    // Toggles the right-hand preview panel
     function subTab(controlId, previewId) {
         document.querySelectorAll('.sub-view, .sub-tab-btn').forEach(el => el.classList.remove('active'));
         document.getElementById(controlId).classList.add('active');
@@ -653,7 +654,7 @@
                     <span style="font-weight: 800; color: var(--border); margin-right: 15px;">→</span>
                     <span style="font-weight: 600;">Slider: '${attr.label}'</span>
                 </div>
-                <button style="background: none; border: none; color: var(--red); cursor: pointer; font-weight: 600;" onclick="removeAttribute(${i})">✕ Remove</button>
+                <button style="background: none; border: none; color: var(--red); cursor: pointer; font-weight: 600;" onclick="window.removeAttribute(${i})">✕ Remove</button>
             </div>
         `).join('');
     }
@@ -680,14 +681,14 @@
         }
     }
 
-    // Globally scoped so the inline HTML button can access it
-    function removeAttribute(index) {
-        if(confirm("Remove this slider rule?")) {
+    // EXPLICTLY scoped to the window so Shopify's iframe can't block the button click
+    window.removeAttribute = async function(index) {
+        if(confirm("Are you sure you want to remove this slider rule?")) {
             currentAttributes.splice(index, 1);
-            saveSettings();
             renderAttributes();
+            await saveSettings();
         }
-    }
+    };
 
     function updatePreviews() {
         const title = document.getElementById('style-title').value || 'Customer Reviews';
