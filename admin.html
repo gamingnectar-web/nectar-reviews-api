@@ -34,6 +34,7 @@
         .search-input, .filter-select { padding: 10px 14px; border-radius: 8px; border: 1px solid #c9cccf; font-size: 14px; background: #ffffff; width: 100%; box-sizing: border-box;}
         .post-btn { background: var(--primary); color: white; border: none; padding: 10px 20px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: 0.2s;}
         .post-btn:hover { opacity: 0.8; }
+        .post-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
         .review-card { background: var(--card); border: 2px solid var(--border); padding: 25px; margin-bottom: 20px; border-radius: 12px; display: flex; justify-content: space-between; gap: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); transition: all 0.2s;}
         .review-card:hover { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
@@ -173,7 +174,7 @@
             
             <select id="import-platform-select" class="filter-select" style="max-width: 300px; margin-bottom: 20px;" onchange="toggleImportInst()">
                 <option value="general">Generic / Other Format</option>
-                <option value="weebly">Weebly / Square</option>
+                <option value="weebly">Weebly / Square / Judge.me</option>
                 <option value="yotpo">Yotpo</option>
                 <option value="loox">Loox</option>
                 <option value="okendo">Okendo</option>
@@ -184,7 +185,7 @@
                 <strong>Generic CSV:</strong> Ensure your spreadsheet has columns for your <strong>Product ID</strong> (or handle), <strong>Star Rating</strong>, <strong>Reviewer Name</strong>, and <strong>Review Body</strong>. Upload the file below to map your custom columns to our system.
             </div>
             <div id="inst-weebly" class="import-inst-box">
-                <strong>Weebly / Square:</strong> Log into your Square dashboard. Navigate to <strong>Items > Reviews</strong> (or use a third-party app export if you were using a widget). Export your data to a CSV. <em>Note: Make sure your CSV contains the new Shopify Product ID so the reviews attach to the correct products!</em>
+                <strong>Weebly / Square / Image Hack:</strong> If you used the AI image-extraction trick, simply upload the CSV file here. The next step will create a staging area where you can manually assign each review to the correct Shopify Product ID before saving!
             </div>
             <div id="inst-yotpo" class="import-inst-box">
                 <strong>Yotpo:</strong> Log into your Yotpo Admin. Click the profile icon in the top right corner and select <strong>Account Settings</strong>. Click the <strong>Export Data</strong> tab, select 'Reviews', and download your CSV.
@@ -208,8 +209,10 @@
             <div id="mapping-ui" style="display: none; margin-top: 30px; padding-top: 30px; border-top: 1px solid var(--border);">
                 <h4>Map your columns</h4>
                 <div id="column-mappers" style="display: grid; gap: 20px; grid-template-columns: 1fr 1fr;"></div>
-                <button id="import-submit-btn" class="post-btn" style="background: var(--green); width: 100%; margin-top: 30px;" onclick="processImport()">Start Import</button>
+                <button id="import-submit-btn" class="post-btn" style="background: var(--blue); width: 100%; margin-top: 30px;" onclick="generateStagingArea()">Preview & Map Products</button>
             </div>
+
+            <div id="staging-area"></div>
         </div>
     </div>
 
@@ -441,7 +444,6 @@
 </div>
 
 <script>
-    // Because admin.html is served from the Render server itself, we use a relative path
     const API = '/api';
     const urlParams = new URLSearchParams(window.location.search);
     const SHOP_DOMAIN = urlParams.get('shop') || 'your-dev-store.myshopify.com';
@@ -482,7 +484,6 @@
         }
     }
 
-    // NEW: Toggles the dynamic import instructions
     function toggleImportInst() {
         const platform = document.getElementById('import-platform-select').value;
         document.querySelectorAll('.import-inst-box').forEach(el => el.classList.remove('active'));
@@ -718,7 +719,6 @@
         }
     }
 
-    // EXPLICTLY scoped to the window so Shopify's iframe can't block the button click
     window.removeAttribute = async function(index) {
         if(confirm("Are you sure you want to remove this slider rule?")) {
             currentAttributes.splice(index, 1);
@@ -773,12 +773,21 @@
         if(window.shopify) window.shopify.toast.show('Saved!');
     }
 
-    // CSV IMPORT
-    let parsedCSVData = []; let csvHeaders = [];
+    // ==========================================
+    // UPGRADED CSV IMPORT & STAGING AREA
+    // ==========================================
+    let parsedCSVData = []; 
+    let csvHeaders = [];
+    let mappedReviews = [];
+
     function handleFileUpload() {
         const file = document.getElementById('csv-file').files[0]; if (!file) return;
         document.getElementById('file-name').innerText = `📄 ${file.name} selected`;
-        Papa.parse(file, { header: true, skipEmptyLines: true, complete: function(results) { parsedCSVData = results.data; csvHeaders = results.meta.fields; buildMappingUI(); }});
+        Papa.parse(file, { header: true, skipEmptyLines: true, complete: function(results) { 
+            parsedCSVData = results.data; 
+            csvHeaders = results.meta.fields; 
+            buildMappingUI(); 
+        }});
     }
 
     function buildMappingUI() {
@@ -801,17 +810,94 @@
             html += `<div><label style="font-size:13px; font-weight:600; display:block; margin-bottom:5px;">${f.label}</label><select id="${f.id}" class="filter-select">${options}</select></div>`;
         });
         document.getElementById('column-mappers').innerHTML = html;
+        
+        const btn = document.getElementById('import-submit-btn');
+        btn.innerText = "Preview & Map Products";
+        btn.onclick = generateStagingArea;
     }
 
-    async function processImport() {
+    function generateStagingArea() {
         const map = { itemId: document.getElementById('map-itemId').value, rating: document.getElementById('map-rating').value, userId: document.getElementById('map-userId').value, email: document.getElementById('map-email').value, headline: document.getElementById('map-headline').value, comment: document.getElementById('map-comment').value, createdAt: document.getElementById('map-date').value };
         if (!map.itemId || !map.rating) { alert("Product ID and Star Rating must be mapped."); return; }
-        const btn = document.getElementById('import-submit-btn'); btn.innerText = "Importing..."; btn.disabled = true;
-        const payload = parsedCSVData.map(row => ({ itemId: row[map.itemId], rating: row[map.rating], userId: row[map.userId], email: row[map.email], headline: row[map.headline], comment: row[map.comment], createdAt: row[map.createdAt] }));
+        
+        mappedReviews = parsedCSVData.map(row => ({ 
+            itemId: row[map.itemId], 
+            rating: row[map.rating], 
+            userId: row[map.userId], 
+            email: row[map.email], 
+            headline: row[map.headline], 
+            comment: row[map.comment], 
+            createdAt: row[map.createdAt] 
+        }));
+
+        let tableRows = mappedReviews.map((r, i) => `
+            <tr style="border-bottom: 1px solid var(--border);">
+                <td style="padding: 12px; font-size: 13px;">${r.userId}</td>
+                <td style="padding: 12px; font-size: 13px;">${'★'.repeat(parseInt(r.rating) || 5)}</td>
+                <td style="padding: 12px; font-size: 13px; max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${r.comment}">${r.comment}</td>
+                <td style="padding: 12px;">
+                    <input type="text" id="stage-item-${i}" class="search-input" style="padding: 6px 10px; font-size: 13px;" value="${r.itemId || ''}" placeholder="Paste Shopify Product ID">
+                </td>
+            </tr>
+        `).join('');
+
+        const stagingHtml = `
+            <h3 style="margin-top: 40px; border-top: 1px solid var(--border); padding-top: 30px;">3. Map to Shopify Products</h3>
+            <p style="color: var(--text-light); font-size: 14px; margin-bottom: 20px;">Review your imported data. Ensure the <strong>Target Product ID</strong> column contains the actual numeric Shopify Product ID before clicking Go Live.</p>
+            
+            <div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 20px;">
+                <table style="width: 100%; text-align: left; border-collapse: collapse;">
+                    <thead style="background: #f4f6f8; position: sticky; top: 0; z-index: 1;">
+                        <tr>
+                            <th style="padding: 12px; font-size: 12px; color: var(--text-light); text-transform: uppercase;">Reviewer</th>
+                            <th style="padding: 12px; font-size: 12px; color: var(--text-light); text-transform: uppercase;">Rating</th>
+                            <th style="padding: 12px; font-size: 12px; color: var(--text-light); text-transform: uppercase;">Review</th>
+                            <th style="padding: 12px; font-size: 12px; color: var(--text-light); text-transform: uppercase; width: 250px;">Target Product ID</th>
+                        </tr>
+                    </thead>
+                    <tbody>${tableRows}</tbody>
+                </table>
+            </div>
+            
+            <button id="final-import-btn" class="post-btn" style="background: var(--blue); width: 100%;" onclick="processFinalImport()">🚀 Go Live (Import to Database)</button>
+        `;
+
+        let existingStaging = document.getElementById('staging-area');
+        if (!existingStaging) {
+            existingStaging = document.createElement('div');
+            existingStaging.id = 'staging-area';
+            document.getElementById('mapping-ui').appendChild(existingStaging);
+        }
+        existingStaging.innerHTML = stagingHtml;
+    }
+
+    async function processFinalImport() {
+        const btn = document.getElementById('final-import-btn'); 
+        btn.innerText = "Importing..."; 
+        btn.disabled = true;
+
+        const finalPayload = mappedReviews.map((r, i) => ({
+            ...r,
+            itemId: document.getElementById(`stage-item-${i}`).value.trim()
+        }));
+
         try {
-            const res = await fetch(`${API}/reviews/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shopDomain: SHOP_DOMAIN, reviews: payload }) });
-            if (res.ok) { alert(`🎉 Import successful!`); document.getElementById('mapping-ui').style.display = 'none'; load(); } else alert("Import failed.");
-        } catch(e) { alert("Error occurred."); } finally { btn.innerText = "Start Import"; btn.disabled = false; }
+            const res = await fetch(`${API}/reviews/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shopDomain: SHOP_DOMAIN, reviews: finalPayload }) });
+            if (res.ok) { 
+                alert(`🎉 Import successful! Reviews are now live.`); 
+                document.getElementById('mapping-ui').style.display = 'none'; 
+                document.getElementById('staging-area').innerHTML = '';
+                load(); 
+                tab('v-mgr');
+            } else {
+                alert("Import failed. Please check server logs.");
+            }
+        } catch(e) { 
+            alert("An error occurred during import."); 
+        } finally { 
+            btn.innerText = "🚀 Go Live (Import to Database)"; 
+            btn.disabled = false; 
+        }
     }
 
     load();
