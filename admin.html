@@ -443,18 +443,7 @@
     </div>
 </div>
 
-<div id="search-modal" class="modal-overlay" onclick="if(event.target===this) closeSearchModal()">
-    <div class="modal-card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h3 style="margin: 0;">Map to Shopify Product</h3>
-            <button class="modal-close" onclick="closeSearchModal()">&times;</button>
-        </div>
-        <input type="text" id="modal-search-input" class="search-input" style="font-size: 16px; padding: 12px; margin-bottom: 20px;" placeholder="Search your store..." onkeyup="handleModalSearch(this.value)">
-        <div id="modal-results" style="max-height: 300px; overflow-y: auto;">
-            <p style="color: var(--text-light); text-align: center;">Start typing to search products...</p>
-        </div>
-    </div>
-</div>
+
 
 <script>
     const API = '/api';
@@ -936,109 +925,37 @@
     }
 
     // ==========================================
-    // MANUAL SEARCH MODAL LOGIC
+    // NATIVE SHOPIFY APP BRIDGE RESOURCE PICKER
     // ==========================================
-    let activeStagingIndex = null;
-    let searchTimeout;
-
-    function openSearchModal(index) {
-        activeStagingIndex = index;
-        document.getElementById('search-modal').style.display = 'flex';
-        const searchBox = document.getElementById('modal-search-input');
-        searchBox.value = '';
-        document.getElementById('modal-results').innerHTML = '<p style="color: var(--text-light); text-align: center;">Start typing to search products...</p>';
-        searchBox.focus();
-    }
-
-    function closeSearchModal() {
-        document.getElementById('search-modal').style.display = 'none';
-    }
-
-    function handleModalSearch(query) {
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(async () => {
-            if(!query.trim()) { 
-                document.getElementById('modal-results').innerHTML = '<p style="color: var(--text-light); text-align: center;">Start typing to search products...</p>'; 
-                return; 
-            }
-            
-            document.getElementById('modal-results').innerHTML = '<p style="text-align: center;">Searching...</p>';
-            
+    async function openSearchModal(index) {
+        // Ensure Shopify App Bridge is loaded
+        if (window.shopify) {
             try {
-                const res = await fetch(`https://${SHOP_DOMAIN}/search/suggest.json?q=${encodeURIComponent(query)}&resources[type]=product`);
-                const data = await res.json();
-                const products = data.resources.results.products;
-
-                if(products.length === 0) {
-                    document.getElementById('modal-results').innerHTML = '<p style="text-align: center; color: var(--red);">No products found.</p>';
-                    return;
+                // Trigger Shopify's native internal product selector
+                const selected = await window.shopify.resourcePicker({ 
+                    type: 'product', 
+                    multiple: false 
+                });
+                
+                // If the user selects a product and clicks "Add"
+                if (selected && selected.length > 0) {
+                    // Shopify returns a Global ID (e.g., "gid://shopify/Product/123456789")
+                    // We split the string by '/' and pop off the last part to get the raw Numeric ID
+                    const numericId = selected[0].id.split('/').pop();
+                    
+                    // Inject it into the staging table and turn the box Green!
+                    const input = document.getElementById(`stage-item-${index}`);
+                    input.value = numericId;
+                    input.classList.remove('invalid-red');
+                    input.classList.add('valid-green');
                 }
-
-                let html = '';
-                for(let p of products) {
-                    html += `
-                    <div class="modal-result-item" onclick="selectModalProduct('${p.url}')">
-                        <img src="${p.image}" width="40" height="40" style="border-radius:4px; object-fit:cover;">
-                        <div style="font-weight: 500;">${p.title}</div>
-                    </div>`;
-                }
-                document.getElementById('modal-results').innerHTML = html;
             } catch(e) {
-                document.getElementById('modal-results').innerHTML = '<p style="text-align: center; color: var(--red);">Search failed.</p>';
+                console.log("Picker closed or failed", e);
             }
-        }, 300);
-    }
-
-    async function selectModalProduct(url) {
-        document.getElementById('modal-results').innerHTML = '<p style="text-align: center;">Mapping product...</p>';
-        try {
-            const cleanUrl = url.split('?')[0];
-            const res = await fetch(`https://${SHOP_DOMAIN}${cleanUrl}.js`);
-            const prodData = await res.json();
-
-            const input = document.getElementById(`stage-item-${activeStagingIndex}`);
-            input.value = prodData.id;
-            input.classList.remove('invalid-red');
-            input.classList.add('valid-green');
-
-            closeSearchModal();
-        } catch(e) {
-            alert("Failed to map product ID.");
-            closeSearchModal();
+        } else {
+            alert("Shopify interface not detected. Please paste the numeric Product ID manually.");
         }
     }
-
-    // FINAL IMPORT
-    async function processFinalImport() {
-        const btn = document.getElementById('final-import-btn'); 
-        btn.innerText = "Importing..."; 
-        btn.disabled = true;
-
-        const finalPayload = mappedReviews.map((r, i) => ({
-            ...r,
-            itemId: document.getElementById(`stage-item-${i}`).value.trim()
-        }));
-
-        try {
-            const res = await fetch(`${API}/reviews/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shopDomain: SHOP_DOMAIN, reviews: finalPayload }) });
-            if (res.ok) { 
-                alert(`🎉 Import successful! Reviews are now live.`); 
-                document.getElementById('mapping-ui').style.display = 'none'; 
-                document.getElementById('staging-area').innerHTML = '';
-                load(); 
-                tab('v-mgr');
-            } else {
-                alert("Import failed. Please check server logs.");
-            }
-        } catch(e) { 
-            alert("An error occurred during import."); 
-        } finally { 
-            btn.innerText = "🚀 Go Live (Import to Database)"; 
-            btn.disabled = false; 
-        }
-    }
-
-    load();
 </script>
 </body>
 </html>
