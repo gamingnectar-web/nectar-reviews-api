@@ -1,4 +1,4 @@
-const API = '/api';
+const API = 'https://nectar-reviews-api.onrender.com/api'; // Hardcoded for 100% reliable connection
 const urlParams = new URLSearchParams(window.location.search);
 const SHOP_DOMAIN = urlParams.get('shop') || 'your-dev-store.myshopify.com';
 let data = [];
@@ -75,7 +75,6 @@ async function load() {
         if(setRes.ok) {
             const config = await setRes.json();
             if(config) {
-                // Load Beta Mode
                 if(config.betaMode) {
                     document.getElementById('set-beta-enable').checked = config.betaMode.enabled || false;
                     document.getElementById('set-beta-email').value = config.betaMode.email || '';
@@ -122,7 +121,6 @@ async function loadStats() {
         document.getElementById('stat-total').innerText = (stats.sources.website + stats.sources.email + stats.sources.import) || 0;
         document.getElementById('stat-live').innerText = data.filter(r => r.status === 'accepted' && !r.isDeleted).length;
 
-        // TOP PRODUCT LOGIC
         const prodCardEl = document.getElementById('v-dash-prod-card');
         if (stats.topProduct && stats.topProduct.id !== "N/A") {
             const numericId = stats.topProduct.id;
@@ -233,8 +231,8 @@ function buildCard(r, isTrash) {
         : `<div class="v-badge v-badge-no" title="Diagnostic: ${r.verificationNote || 'Could not verify.'}">⚠️ Unverified</div>`;
 
     const customerBox = r.email 
-        ? `<a href="https://${SHOP_DOMAIN}/admin/customers?query=${encodeURIComponent(r.email)}" target="_blank" class="customer-link" title="Open Customer Profile">${r.userId}</a>` 
-        : `<strong style="font-size: 1.1rem;">${r.userId}</strong>`;
+        ? `<a href="https://${SHOP_DOMAIN}/admin/customers?query=${encodeURIComponent(r.email)}" target="_blank" class="customer-link" title="Open Customer Profile">${r.userId || 'Guest'}</a>` 
+        : `<strong style="font-size: 1.1rem;">${r.userId || 'Guest'}</strong>`;
 
     return `
     <div class="review-card status-border-${r.status}">
