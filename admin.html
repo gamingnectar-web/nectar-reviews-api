@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Reviews Admin</title>
+    <!-- PASTE YOUR SHOPIFY API KEY HERE -->
     <meta name="shopify-api-key" content="9b0bf096b37faf6dc0b19037b2d9d62a" />
     <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -10,45 +11,37 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style>
+        /* ALL YOUR EXISTING CSS STAYS HERE (Omitted for brevity, paste your CSS here) */
         :root { --bg: #f4f6f8; --card: #ffffff; --border: #ebebeb; --primary: #1a1a1a; --text: #202223; --text-light: #6d7175; --star: #ffc700; --green: #008060; --red: #d82c0d; --orange: #ea580c; --sidebar-bg: #ebebeb; --blue: #005bd3;}
         body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; min-height: 100vh;}
-        
         .app-sidebar { width: 240px; background: var(--sidebar-bg); padding: 30px 20px; border-right: 1px solid var(--border); position: fixed; height: 100vh; box-sizing: border-box;}
         .sidebar-title { font-size: 11px; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; padding-left: 12px;}
         .tab-btn { background: transparent; border: none; padding: 10px 12px; font-weight: 500; cursor: pointer; color: var(--text); font-size: 14px; text-align: left; border-radius: 8px; width: 100%; margin-bottom: 4px; transition: 0.2s;}
         .tab-btn:hover { background: rgba(0,0,0,0.05); }
         .tab-btn.active { background: #ffffff; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-
         .main-content { flex: 1; padding: 40px; margin-left: 240px; box-sizing: border-box; width: calc(100% - 240px);}
         .view { display: none; width: 100%; animation: fadeIn 0.2s ease-out; }
         .view.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-
         .settings-panel { background: var(--card); padding: 30px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);}
         .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid #f1f2f3; }
         .setting-row:last-child { border-bottom: none; }
-
         .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 30px; }
         .metric-card h1 { font-size: 40px; margin: 10px 0; color: var(--primary); }
-        
         .search-input, .filter-select { padding: 10px 14px; border-radius: 8px; border: 1px solid #c9cccf; font-size: 14px; background: #ffffff; width: 100%; box-sizing: border-box;}
         .post-btn { background: var(--primary); color: white; border: none; padding: 10px 20px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: 0.2s;}
         .post-btn:hover { opacity: 0.8; }
         .post-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
         .review-card { background: var(--card); border: 2px solid var(--border); padding: 25px; margin-bottom: 20px; border-radius: 12px; display: flex; justify-content: space-between; gap: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); transition: all 0.2s;}
         .review-card:hover { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
         .status-border-pending { border-color: var(--border); }
         .status-border-accepted { border-color: var(--green); }
         .status-border-rejected { border-color: var(--red); }
         .status-border-hold { border-color: var(--orange); }
-
         .card-main { flex: 1; }
         .card-side { text-align: right; border-left: 1px solid var(--border); padding-left: 30px; min-width: 240px; display: flex; flex-direction: column; justify-content: space-between;}
-        
         .customer-link { display: inline-block; padding: 4px 12px; border: 1px solid var(--text); border-radius: 6px; color: var(--text); font-weight: 700; text-decoration: none; font-size: 1.05rem; transition: 0.2s;}
         .customer-link:hover { background: var(--text); color: white; }
-
         .status-group { display: flex; gap: 8px; justify-content: flex-end;}
         .s-btn { width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer; background: white; font-size: 16px; transition: 0.2s; color: var(--text-light);}
         .s-btn:hover { transform: scale(1.05); }
@@ -58,54 +51,37 @@
         .s-btn.hld.active { background: var(--orange); color: white; }
         .s-btn.rej { border-color: var(--red); }
         .s-btn.rej.active { background: var(--red); color: white; }
-
         .v-badge { font-size: 0.8rem; padding: 6px 12px; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; letter-spacing: 0.5px;}
         .v-badge-yes { background: #e3f1df; color: #008060; border: 1px solid #bae0bc;}
         .v-badge-no { background: #ffebcd; color: #b45309; border: 1px solid #fde68a; cursor: help;}
-
         .reply-toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--blue); font-weight: 600; cursor: pointer; margin-top: 15px; border: none; background: none; font-size: 0.95rem; padding: 0;}
         .reply-toggle:hover { text-decoration: underline; }
         .reply-panel { margin-top: 15px; background: #f4f6f8; padding: 20px; border-radius: 8px; border: 1px solid var(--border); display: none;}
         .reply-input { width: 100%; min-height: 80px; padding: 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem; resize: vertical; margin-bottom: 10px; font-family: inherit;}
-        
         .delete-btn { background: none; border: none; color: var(--red); font-weight: 600; cursor: pointer; font-size: 0.9rem; text-decoration: underline; padding:0;}
         .restore-btn { background: none; border: none; color: var(--blue); font-weight: 600; cursor: pointer; font-size: 0.9rem; text-decoration: underline; padding:0;}
-
         .sub-tab-nav { display: flex; gap: 15px; border-bottom: 1px solid var(--border); margin-bottom: 25px; overflow-x: auto; padding-bottom: 5px;}
         .sub-tab-btn { background: none; border: none; padding: 10px 5px; font-weight: 600; cursor: pointer; color: var(--text-light); font-size: 14px; border-bottom: 2px solid transparent; white-space: nowrap;}
         .sub-tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
         .sub-view { display: none; }
         .sub-view.active { display: block; }
-        
         .sub-preview { display: none; animation: fadeIn 0.2s ease-out; }
         .sub-preview.active { display: block; }
-
         .code-block { background: #1a1a1a; color: #f4f6f8; padding: 20px; border-radius: 8px; font-family: monospace; font-size: 13px; overflow-x: auto; margin: 10px 0; border-left: 4px solid var(--blue);}
-        
         .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #c9cccf; transition: .3s; border-radius: 34px; }
         .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
         input:checked + .slider { background-color: var(--green); }
         input:checked + .slider:before { transform: translateX(20px); }
-        
         .attr-pill { display: flex; justify-content: space-between; align-items: center; background: #fafafa; padding: 15px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; font-size: 14px;}
         .attr-tag { background: var(--primary); color: white; padding: 3px 8px; border-radius: 4px; font-weight: 600; font-size: 12px; text-transform: uppercase; margin-right: 8px;}
-
         .import-inst-box { background: #e0f2fe; border-left: 4px solid var(--blue); padding: 15px 20px; border-radius: 0 8px 8px 0; margin-bottom: 20px; font-size: 14px; line-height: 1.5; display: none; }
         .import-inst-box.active { display: block; }
         .import-inst-box strong { color: var(--blue); }
-
-        /* UPGRADED: Validation & Modal CSS */
         .valid-green { border: 2px solid var(--green) !important; background-color: #f0fdf4 !important; color: var(--green); font-weight: 700; transition: 0.3s;}
         .invalid-red { border: 2px solid var(--red) !important; background-color: #fef2f2 !important; color: var(--red); font-weight: 700; cursor: pointer; transition: 0.3s;}
         .invalid-red:hover { background-color: #fee2e2 !important; }
-        
-        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
-        .modal-card { background: white; padding: 30px; border-radius: 12px; width: 500px; max-width: 90%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2); animation: fadeIn 0.2s ease-out;}
-        .modal-result-item { display: flex; align-items: center; gap: 15px; padding: 12px; border-bottom: 1px solid var(--border); cursor: pointer; transition: 0.2s; border-radius: 8px; }
-        .modal-result-item:hover { background: #f8fafc; border-color: var(--blue); }
-        .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-light); }
     </style>
 </head>
 <body>
@@ -138,7 +114,6 @@
                 <p style="color: var(--text-light); font-weight: 600; font-size: 12px; text-transform: uppercase; margin:0;">Live on Store</p>
                 <h1 id="stat-live">0</h1>
             </div>
-            <!-- UPGRADED TOP PRODUCT CARD SNAPSHOT AREA -->
             <div id="v-dash-prod-card" class="settings-panel" style="flex: 1 1 300px; display: flex; align-items: center; justify-content: center; min-height: 120px;">
                 <p style="color: var(--text-light); font-weight: 600; font-size: 12px; text-transform: uppercase; margin:0;">Loading Top Product Snapshot...</p>
             </div>
@@ -181,34 +156,16 @@
         <h2>Importer Tool</h2>
         <div class="settings-panel">
             <h3 style="margin-top: 0;">1. Export from your old platform</h3>
-            <p style="color: var(--text-light); font-size: 14px; margin-bottom: 15px;">Select the platform you are migrating from to see specific export instructions.</p>
-            
             <select id="import-platform-select" class="filter-select" style="max-width: 300px; margin-bottom: 20px;" onchange="toggleImportInst()">
                 <option value="general">Generic / Other Format</option>
                 <option value="weebly">Weebly / Square / Judge.me</option>
-                <option value="yotpo">Yotpo</option>
-                <option value="loox">Loox</option>
-                <option value="okendo">Okendo</option>
-                <option value="shopify">Shopify Product Reviews (SPR)</option>
             </select>
 
             <div id="inst-general" class="import-inst-box active">
-                <strong>Generic CSV:</strong> Ensure your spreadsheet has columns for your <strong>Product ID</strong> (or handle), <strong>Star Rating</strong>, <strong>Reviewer Name</strong>, and <strong>Review Body</strong>. Upload the file below to map your custom columns to our system.
+                <strong>Generic CSV:</strong> Ensure your spreadsheet has columns for your Product ID, Star Rating, Name, and Review Body.
             </div>
             <div id="inst-weebly" class="import-inst-box">
-                <strong>Weebly / Square / Image Hack:</strong> If you used the AI image-extraction trick, simply upload the CSV file here. The next step will create a staging area where you can manually assign each review to the correct Shopify Product ID before saving!
-            </div>
-            <div id="inst-yotpo" class="import-inst-box">
-                <strong>Yotpo:</strong> Log into your Yotpo Admin. Click the profile icon in the top right corner and select <strong>Account Settings</strong>. Click the <strong>Export Data</strong> tab, select 'Reviews', and download your CSV.
-            </div>
-            <div id="inst-loox" class="import-inst-box">
-                <strong>Loox:</strong> Log into your Shopify Admin and open the Loox app. Go to <strong>Settings > Export</strong> and click the <strong>Export Reviews</strong> button to download your CSV file.
-            </div>
-            <div id="inst-okendo" class="import-inst-box">
-                <strong>Okendo:</strong> Open the Okendo app in Shopify. Navigate to <strong>Settings > General > Export Data</strong>. Select 'Reviews' from the dropdown and download your CSV.
-            </div>
-            <div id="inst-shopify" class="import-inst-box">
-                <strong>Shopify Product Reviews:</strong> Open the Shopify Product Reviews app. Click <strong>Settings</strong> and look for the <strong>Export</strong> button to download your existing reviews.
+                <strong>Weebly / Square / Image Hack:</strong> Simply upload the CSV file here. The next step will create a staging area where you can map them.
             </div>
 
             <h3 style="margin-top: 30px; border-top: 1px solid var(--border); padding-top: 30px;">2. Upload and Map Columns</h3>
@@ -227,16 +184,27 @@
         </div>
     </div>
 
+    <!-- RULES & SETTINGS (THIS IS WHERE THE BETA TOGGLE IS) -->
     <div id="v-set" class="view">
         <h2>Rules & Settings</h2>
+
+        <div class="settings-panel">
+            <h3 style="margin-top: 0;">Developer Beta Mode</h3>
+            <p style="color: var(--text-light); font-size: 14px; margin-top: 0;">Hide the widget from the public while you test on your live theme.</p>
+            <div class="setting-row" style="border-top: 1px solid var(--border);">
+                <div><h4>Enable Beta Mode</h4></div>
+                <label class="switch"><input type="checkbox" id="set-beta-enable" onchange="saveSettings()"><span class="slider"></span></label>
+            </div>
+            <div class="setting-row" style="border: none;">
+                <div><h4>Beta Tester Email</h4><p style="color:var(--text-light); font-size:13px; margin:0;">Logged-in customer email allowed to see the widget.</p></div>
+                <input type="email" id="set-beta-email" class="search-input" style="width: 250px;" placeholder="you@store.com" onblur="saveSettings()">
+            </div>
+        </div>
         
         <div class="settings-panel">
             <div class="setting-row">
                 <div>
                     <h3 style="margin-top: 0;">Google Rich Snippets (SEO)</h3>
-                    <p style="color:var(--text-light); font-size:13px; margin:0; max-width: 500px;">
-                        Enable Server-Side Metafield injection. This pushes review averages directly to Shopify so Google can instantly index your gold stars.
-                    </p>
                 </div>
                 <label class="switch"><input type="checkbox" id="set-seo" onchange="saveSettings()"><span class="slider"></span></label>
             </div>
@@ -245,18 +213,18 @@
         <div class="settings-panel">
             <h3 style="margin-top: 0;">Automated Publishing</h3>
             <div class="setting-row">
-                <div><h4>Enable Auto-Approve</h4><p style="color:var(--text-light); font-size:13px; margin:0;">Allow the system to publish reviews instantly based on the rules below.</p></div>
+                <div><h4>Enable Auto-Approve</h4></div>
                 <label class="switch"><input type="checkbox" id="set-auto-enable" onchange="saveSettings()"><span class="slider"></span></label>
             </div>
             <div class="setting-row">
-                <div><h4>Which reviews are eligible?</h4><p style="color:var(--text-light); font-size:13px; margin:0;">Choose if you want to strictly auto-approve verified buyers.</p></div>
+                <div><h4>Which reviews are eligible?</h4></div>
                 <select id="set-auto-type" class="filter-select" style="width: auto; min-width: 200px;" onchange="saveSettings()">
                     <option value="verified">Verified Purchases Only</option>
                     <option value="all">All Reviews (Inc. Unverified)</option>
                 </select>
             </div>
             <div class="setting-row" style="border: none;">
-                <div><h4>Minimum Star Rating</h4><p style="color:var(--text-light); font-size:13px; margin:0;">Lower ratings will bypass the rule and sit in 'Pending'.</p></div>
+                <div><h4>Minimum Star Rating</h4></div>
                 <select id="set-min-stars" class="filter-select" style="width: auto; min-width: 200px;" onchange="saveSettings()">
                     <option value="5">5 Stars only</option>
                     <option value="4">4 Stars & up</option>
@@ -269,7 +237,6 @@
 
         <div class="settings-panel">
             <h3 style="margin-top: 0;">Smart Conditional Sliders</h3>
-            <p style="color: var(--text-light); font-size: 14px; margin-top: 0;">Create sliders that only appear when a product matches a specific Tag or Metafield.</p>
             <div id="attributes-list" style="margin-bottom: 20px; margin-top: 15px;"></div>
             <div style="background: #fafafa; padding: 20px; border-radius: 8px; border: 1px solid var(--border);">
                 <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
@@ -289,6 +256,7 @@
         </div>
     </div>
 
+    <!-- VISUAL CUSTOMIZER -->
     <div id="v-des" class="view">
         <h2>Visual Customizer</h2>
         <div style="display: flex; gap: 30px;">
@@ -337,7 +305,6 @@
             
             <div style="flex: 1;">
                 <h4 style="margin-top: 0; color: var(--text-light);">Live Preview</h4>
-                
                 <div id="prev-full" class="sub-preview active">
                     <div class="settings-panel" style="padding: 25px;">
                         <div style="display: flex; justify-content: space-between; align-items:center; margin-bottom: 20px; border-bottom: 2px solid var(--primary); padding-bottom: 15px;">
@@ -378,679 +345,25 @@
                                 <p style="margin: 0 0 12px 0; font-size: 13px; color: #555;">Best purchase I've made all year.</p>
                                 <div class="pre-color-text-brand" style="font-weight: 700; font-size: 12px;">Sarah M.</div>
                             </div>
-                            <div style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid var(--border); min-width: 220px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-                                <div class="pre-color-star" style="font-size: 18px; margin-bottom: 8px;">★★★★★</div>
-                                <h4 style="margin: 0 0 8px 0; font-size: 15px;">Highly recommend</h4>
-                                <p style="margin: 0 0 12px 0; font-size: 13px; color: #555;">Fast shipping and great support.</p>
-                                <div class="pre-color-text-brand" style="font-weight: 700; font-size: 12px;">Mike R.</div>
-                            </div>
                         </div>
                     </div>
                 </div>
-
             </div>
         </div>
     </div>
 
+    <!-- DEVELOPERS -->
     <div id="v-dev" class="view">
         <h2>Manual Installation</h2>
         <div class="settings-panel">
             <h3>1. Product Page Widget</h3>
-            <p>Paste this into <code>sections/main-product.liquid</code> to show reviews for a specific product:</p>
             <div class="code-block">&lt;div class="rev-widget" data-id="&#123;&#123; product.id &#125;&#125;" data-shop="&#123;&#123; shop.domain &#125;&#125;"&gt;&lt;/div&gt;</div>
-            
-            <h3>2. Collection Card Stars (Zero-JS)</h3>
-            <p>Paste this into <code>snippets/card-product.liquid</code>. It reads directly from Shopify Metafields for instant loading:</p>
-            <div class="code-block">
-&#123;% if product.metafields.reviews.rating_count.value > 0 %&#125;
-  &lt;div style="display: flex; align-items: center; gap: 4px; margin-top: 8px; font-size: 14px;"&gt;
-    &lt;span style="color: #ffc700;"&gt;★&lt;/span&gt;
-    &lt;span style="font-weight: 700; color: #000;"&gt;&#123;&#123; product.metafields.reviews.rating.value &#125;&#125;&lt;/span&gt;
-    &lt;span style="color: #666;"&gt;(&#123;&#123; product.metafields.reviews.rating_count.value &#125;&#125;)&lt;/span&gt;
-  &lt;/div&gt;
-&#123;% endif %&#125;</div>
-            
-            <hr style="border: 0; border-top: 1px solid var(--border); margin: 30px 0;">
-
-            <h3 style="color: var(--green);">5. Google Rich Snippets (SEO)</h3>
-            <p>Paste this inside the <code>&lt;head&gt;</code> tag of your <code>theme.liquid</code> file. This pulls the data pumped from our server directly into your HTML for instant Google indexing:</p>
-            <div class="code-block" style="border-color: var(--green);">
-&#123;% if template contains 'product' and product.metafields.reviews.rating_count.value > 0 %&#125;
-&lt;script type="application/ld+json"&gt;
-{
-  "@context": "https://schema.org/",
-  "@type": "Product",
-  "name": "&#123;&#123; product.title | escape &#125;&#125;",
-  "image": "&#123;&#123; product.featured_image | img_url: 'master' &#125;&#125;",
-  "description": "&#123;&#123; product.description | strip_html | escape &#125;&#125;",
-  "sku": "&#123;&#123; product.variants.first.sku &#125;&#125;",
-  "offers": {
-    "@type": "Offer",
-    "url": "&#123;&#123; shop.url &#125;&#125;&#123;&#123; product.url &#125;&#125;",
-    "priceCurrency": "&#123;&#123; cart.currency.iso_code &#125;&#125;",
-    "price": "&#123;&#123; product.price | money_without_currency &#125;&#125;",
-    "availability": "https://schema.org/&#123;% if product.available %&#125;InStock&#123;% else %&#125;OutOfStock&#123;% endif %&#125;"
-  },
-  "aggregateRating": {
-    "@type": "AggregateRating",
-    "ratingValue": "&#123;&#123; product.metafields.reviews.rating.value &#125;&#125;",
-    "reviewCount": "&#123;&#123; product.metafields.reviews.rating_count.value &#125;&#125;"
-  }
-}
-&lt;/script&gt;
-&#123;% endif %&#125;</div>
         </div>
     </div>
 </div>
 
+<!-- THIS PULLS IN THE JAVASCRIPT FILE SAFELY -->
+<script src="/admin.js"></script>
 
-
-<script>
-    const API = '/api';
-    const urlParams = new URLSearchParams(window.location.search);
-    const SHOP_DOMAIN = urlParams.get('shop') || 'your-dev-store.myshopify.com';
-    let data = [];
-    let chartInstance = null;
-    let currentAttributes = [];
-
-    document.addEventListener('DOMContentLoaded', () => {
-        const labelInput = document.getElementById('attr-label');
-        if (labelInput) {
-            labelInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') { e.preventDefault(); addAttribute(); }
-            });
-        }
-    });
-
-    function tab(id) {
-        const target = document.getElementById(id);
-        if(!target) return; 
-        document.querySelectorAll('.view, .tab-btn').forEach(el => el.classList.remove('active'));
-        target.classList.add('active');
-        event.currentTarget.classList.add('active');
-        if(id === 'v-dash') loadStats();
-    }
-
-    function subTab(controlId, previewId) {
-        document.querySelectorAll('.sub-view, .sub-tab-btn').forEach(el => el.classList.remove('active'));
-        document.getElementById(controlId).classList.add('active');
-        event.currentTarget.classList.add('active');
-        
-        if (previewId) {
-            document.querySelectorAll('.sub-preview').forEach(el => el.classList.remove('active'));
-            document.getElementById(previewId).classList.add('active');
-        }
-    }
-
-    function toggleImportInst() {
-        const platform = document.getElementById('import-platform-select').value;
-        document.querySelectorAll('.import-inst-box').forEach(el => el.classList.remove('active'));
-        document.getElementById(`inst-${platform}`).classList.add('active');
-    }
-
-    async function fetchMetafields() {
-        try {
-            const res = await fetch(`${API}/admin/metafields`);
-            if (res.ok) {
-                const metafields = await res.json();
-                const select = document.getElementById('attr-rule-val-meta');
-                if(metafields.length === 0) {
-                    select.innerHTML = '<option value="">No metafields found on this store</option>';
-                    return;
-                }
-                select.innerHTML = metafields.map(m => `<option value="${m.key}">${m.name} (${m.key})</option>`).join('');
-            }
-        } catch(e) { console.error(e); }
-    }
-
-    function toggleRuleInput() {
-        const type = document.getElementById('attr-rule-type').value;
-        if(type === 'tag') {
-            document.getElementById('attr-rule-val-tag').style.display = 'block';
-            document.getElementById('attr-rule-val-meta').style.display = 'none';
-        } else {
-            document.getElementById('attr-rule-val-tag').style.display = 'none';
-            document.getElementById('attr-rule-val-meta').style.display = 'block';
-            if(document.getElementById('attr-rule-val-meta').options.length <= 1) fetchMetafields();
-        }
-    }
-
-    async function load() {
-        try {
-            const res = await fetch(`${API}/admin/reviews?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
-            if(res.ok) data = await res.json();
-            
-            const setRes = await fetch(`${API}/admin/settings?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
-            if(setRes.ok) {
-                const config = await setRes.json();
-                if(config) {
-                    document.getElementById('set-auto-enable').checked = config.autoApproveEnabled || false;
-                    document.getElementById('set-auto-type').value = config.autoApproveType || 'verified';
-                    document.getElementById('set-min-stars').value = config.autoApproveMinStars || 4;
-                    document.getElementById('set-seo').checked = config.seo?.richSnippets !== false; 
-                    
-                    currentAttributes = config.attributeProfiles || [];
-                    
-                    if(config.widgetStyles) {
-                        document.getElementById('style-title').value = config.widgetStyles.widgetTitle || 'Customer Reviews';
-                        document.getElementById('style-primary').value = config.widgetStyles.primaryColor || '#000000';
-                        document.getElementById('style-star').value = config.widgetStyles.starColor || '#ffc700';
-                        document.getElementById('style-text').value = config.widgetStyles.textSize || 15;
-                    }
-                    if(config.cardStyles) {
-                        document.getElementById('card-star').value = config.cardStyles.starSize || 14;
-                        document.getElementById('card-count').checked = config.cardStyles.showCount !== false;
-                    }
-                    if(config.carouselStyles) {
-                        document.getElementById('car-layout').value = config.carouselStyles.layout || 'infinite';
-                        document.getElementById('car-autoplay').checked = config.carouselStyles.autoplay !== false;
-                        document.getElementById('car-delay').value = config.carouselStyles.delay || 4000;
-                        document.getElementById('car-arrows').checked = config.carouselStyles.showArrows || false;
-                    }
-                    updatePreviews();
-                    renderAttributes();
-                }
-            }
-            renderLists();
-            loadStats();
-        } catch(e) { console.error("Init error:", e); }
-    }
-
-    async function loadStats() {
-        try {
-            // 1. Fetch raw stats from our server
-            const res = await fetch(`${API}/admin/stats?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
-            if(!res.ok) return;
-            const stats = await res.json();
-            
-            // 2. Update the total/live review numbers
-            document.getElementById('stat-total').innerText = (stats.sources.website + stats.sources.email + stats.sources.import) || 0;
-            document.getElementById('stat-live').innerText = data.filter(r => r.status === 'accepted' && !r.isDeleted).length;
-
-            // --- UPGRADED: Dynamic Top Product Card ---
-            const prodCardEl = document.getElementById('v-dash-prod-card');
-            if (stats.topProduct && stats.topProduct.id !== "N/A") {
-                const numericId = stats.topProduct.id;
-                
-                // Set the card to "Loading" status while we fetch Shopify data
-                prodCardEl.innerHTML = `
-                    <div style="display: flex; align-items: center; gap: 20px;">
-                        <div style="width: 70px; height: 70px; background: #f4f6f8; border-radius: 8px;"></div>
-                        <div style="flex: 1;">
-                            <p style="color: var(--text-light); font-weight: 600; font-size: 12px; text-transform: uppercase; margin:0;">Top Product ID</p>
-                            <div style="width: 150px; height: 20px; background: #f4f6f8; margin: 5px 0; border-radius: 4px;"></div>
-                            <div style="width: 80px; height: 16px; background: #f4f6f8; border-radius: 4px;"></div>
-                        </div>
-                    </div>
-                `;
-
-                try {
-                    // SILENTLY FETCH PRODUCT DATA FROM SHOPIFY'S CUSTOMER-FACING API
-                    // We try to fetch the product by URL to get image, title, handles, etc.
-                    // If we only have the ID, we query the search suggest API.
-                    const shopRes = await fetch(`https://${SHOP_DOMAIN}/search/suggest.json?q=id:${numericId}&resources[type]=product&resources[limit]=1`);
-                    const shopData = await shopRes.json();
-                    const shopProd = shopData.resources.results.products[0];
-
-                    if (shopProd) {
-                        // WE FOUND IT! We can build the real card.
-                        const rawUrl = shopProd.url.split('?')[0]; // strip tracking
-                        
-                        // Grab the average rating metafield. This requires a second call.
-                        const metaRes = await fetch(`https://${SHOP_DOMAIN}${rawUrl}.json`);
-                        const metaData = await metaRes.json();
-                        
-                        // Extract avg rating and count from metafields if they exist.
-                        // We use fallbacks from our server stats just in case.
-                        const metafields = metaData.product.metafields;
-                        const finalAvg = metafields.reviews?.rating?.value || stats.topProduct.averageRating;
-                        const finalCount = metafields.reviews?.rating_count?.value || stats.topProduct.reviewCount;
-                        
-                        const avgNum = parseFloat(finalAvg);
-                        const fullStars = isNaN(avgNum) ? 0 : Math.round(avgNum);
-
-                        prodCardEl.innerHTML = `
-                            <div style="display: flex; align-items: center; gap: 20px;">
-                                <!-- PRODUCT IMAGE WITH ADMIN LINK -->
-                                <a href="https://${SHOP_DOMAIN}/admin/products/${numericId}" target="_blank" title="Open Product in Shopify Admin">
-                                    <img src="${shopProd.image}" style="width: 70px; height: 70px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                                </a>
-                                
-                                <div style="flex: 1;">
-                                    <p style="color: var(--text-light); font-weight: 600; font-size: 11px; text-transform: uppercase; margin:0; letter-spacing: 0.5px;">Most Reviewed Product</p>
-                                    
-                                    <!-- TITLE WITH ADMIN LINK -->
-                                    <a href="https://${SHOP_DOMAIN}/admin/products/${numericId}" target="_blank" style="text-decoration: none; display: block; margin: 2px 0 6px 0;" title="Open Product in Shopify Admin">
-                                        <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: var(--primary); -webkit-line-clamp: 2; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden; line-height: 1.2;">
-                                            ${shopProd.title}
-                                        </h3>
-                                    </a>
-                                    
-                                    <!-- STAR SNAPSHOT & REVIEWS COUNT -->
-                                    <div style="display: flex; align-items: center; gap: 6px;">
-                                        <span style="color: var(--star); font-size: 14px; letter-spacing: 1px;">
-                                            ${'★'.repeat(fullStars)}${'☆'.repeat(5-fullStars)}
-                                        </span>
-                                        <span style="font-weight: 700; font-size: 14px; color: var(--primary);">${avgNum.toFixed(1)}</span>
-                                        <span style="font-size: 13px; color: var(--text-light);">(${finalCount} reviews)</span>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    } else {
-                        // Match failed (Product might be draft, archvied, or deleted in Shopify)
-                        throw new Error("No match in Shopify suggest API.");
-                    }
-
-                } catch (shopifyError) {
-                    console.log("Could not fetch details from Shopify for card.", shopifyError);
-                    // Fallback: Just show the Numeric ID and our server's internal stats
-                    prodCardEl.innerHTML = `
-                        <p style="color: var(--text-light); font-weight: 600; font-size: 12px; text-transform: uppercase; margin:0;">Top Product ID</p>
-                        <h1 id="stat-prod" style="font-size: 24px;">ID: ${numericId}</h1>
-                        <p style="font-size: 13px; color: var(--text-light); margin-top: -10px;">(${stats.topProduct.reviewCount} total reviews, avg: ${stats.topProduct.averageRating})</p>
-                    `;
-                }
-
-            } else {
-                // No product is the "Top" product yet (maybe 0 total reviews)
-                prodCardEl.innerHTML = `
-                    <p style="color: var(--text-light); font-weight: 600; font-size: 12px; text-transform: uppercase; margin:0;">Top Product ID</p>
-                    <h1 style="font-size: 24px;">None Yet!</h1>
-                `;
-            }
-
-            // 3. Update the Sources Doughnut Chart
-            const ctx = document.getElementById('chartSources').getContext('2d');
-            if(chartInstance) chartInstance.destroy();
-            chartInstance = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Website Widget', 'Email Link', 'Imported CSV'],
-                    datasets: [{ data: [stats.sources.website, stats.sources.email, stats.sources.import], backgroundColor: ['#008060', '#005bd3', '#ffc700'] }]
-                },
-                options: { cutout: '75%', plugins: { legend: { position: 'bottom' } } }
-            });
-        } catch(e) { console.error("Stats fetch error:", e); }
-    }
-
-    function renderLists() {
-        const query = document.getElementById('search-bar').value.toLowerCase();
-        const status = document.getElementById('status-filter').value;
-        const starF = document.getElementById('star-filter').value;
-        
-        let active = data.filter(r => !r.isDeleted);
-        if(status !== 'all') active = active.filter(r => r.status === status);
-        if(starF !== 'all') active = active.filter(r => r.rating === parseInt(starF));
-        if(query) active = active.filter(r => (r.userId || '').toLowerCase().includes(query) || (r.comment || '').toLowerCase().includes(query));
-
-        const trash = data.filter(r => r.isDeleted);
-
-        document.getElementById('mgr-list').innerHTML = active.length ? active.map(r => buildCard(r, false)).join('') : '<p style="text-align:center; padding: 40px; color:#999;">No reviews match this filter.</p>';
-        document.getElementById('trash-list').innerHTML = trash.length ? trash.map(r => buildCard(r, true)).join('') : '<p style="text-align:center; padding: 40px; color:#999;">Trash is empty.</p>';
-    }
-
-    function buildCard(r, isTrash) {
-        let verifyHtml = r.verifiedPurchase 
-            ? `<div class="v-badge v-badge-yes" title="${r.verificationNote || 'Verified Purchase'}">✓ Verified Buyer</div>`
-            : `<div class="v-badge v-badge-no" title="Diagnostic: ${r.verificationNote || 'Could not verify.'}">⚠️ Unverified (Hover)</div>`;
-
-        const customerBox = r.email 
-            ? `<a href="https://${SHOP_DOMAIN}/admin/customers?query=${encodeURIComponent(r.email)}" target="_blank" class="customer-link" title="Open Customer Profile">${r.userId}</a>` 
-            : `<strong style="font-size: 1.1rem;">${r.userId}</strong>`;
-
-        let attrHtml = '';
-        if (r.attributes && Object.keys(r.attributes).length > 0) {
-            attrHtml = `<div style="margin-top: 15px; font-size: 12px; color: var(--text-light); background: #fafafa; padding: 10px; border-radius: 6px; border: 1px solid var(--border);">
-                <strong>Attribute Profile:</strong> ${Object.entries(r.attributes).map(([k, v]) => `${k}: ${v}/10`).join(' • ')}
-            </div>`;
-        }
-
-        return `
-        <div class="review-card status-border-${r.status}">
-            <div class="card-main">
-                <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
-                    <div>${customerBox}</div>
-                    <div class="status-group">
-                        <button onclick="updateStatus('${r._id}', 'accepted')" class="s-btn acc ${r.status==='accepted'?'active':''}" title="Accept">✓</button>
-                        <button onclick="updateStatus('${r._id}', 'hold')" class="s-btn hld ${r.status==='hold'?'active':''}" title="Hold">⏸</button>
-                        <button onclick="updateStatus('${r._id}', 'rejected')" class="s-btn rej ${r.status==='rejected'?'active':''}" title="Reject">✕</button>
-                    </div>
-                </div>
-
-                <div style="color:var(--star); margin-bottom:10px; font-size: 18px;">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
-                <div style="font-weight:700; margin-bottom:8px; font-size: 18px;">${r.headline || 'No Headline'}</div>
-                <div style="color:#444; line-height:1.6; font-size: 15px;">${r.comment}</div>
-                ${attrHtml}
-                
-                <button class="reply-toggle" onclick="document.getElementById('reply-box-${r._id}').style.display = 'block'">💬 Reply to Customer</button>
-                <div id="reply-box-${r._id}" class="reply-panel" style="display: ${r.reply ? 'block' : 'none'};">
-                    <textarea id="reply-text-${r._id}" class="reply-input" placeholder="Type your public reply...">${r.reply || ''}</textarea>
-                    <button class="post-btn" onclick="saveReply('${r._id}')">Publish Reply</button>
-                </div>
-            </div>
-            
-            <div class="card-side">
-                <div>
-                    <div style="font-size: 12px; color: var(--text-light); margin-bottom: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
-                        <span>Product ID:</span>
-                        <a href="https://${SHOP_DOMAIN}/admin/products/${r.itemId}" target="_blank" style="color: var(--blue); font-weight: 700; text-decoration: none; padding: 4px 8px; background: #e0f2fe; border-radius: 6px; display: inline-block; transition: 0.2s;" onmouseover="this.style.background='#bae6fd'" onmouseout="this.style.background='#e0f2fe'" title="Open Product in Shopify Admin">
-                            ${r.itemId} ↗
-                        </a>
-                    </div>
-                    
-                    <div style="font-size: 12px; color: var(--text-light); margin-bottom: 5px;">${new Date(r.createdAt).toLocaleDateString()}</div>
-                    <div style="font-size: 13px; color: var(--primary); font-weight: 600; margin-bottom: 5px;">${r.email || 'No Email'}</div>
-                    ${r.orderId ? `<div style="font-size: 13px; font-weight: 700; margin-bottom: 12px;">Order #${r.orderId}</div>` : '<div style="margin-bottom:12px;"></div>'}
-                    ${verifyHtml}
-                </div>
-
-                <div style="padding-top: 20px;">
-                    ${isTrash ? `<button class="restore-btn" onclick="toggleBin('${r._id}', false)">↺ Restore Review</button>` : `<button class="delete-btn" onclick="toggleBin('${r._id}', true)">🗑️ Move to Trash</button>`}
-                </div>
-            </div>
-        </div>`;
-    }
-
-    async function updateStatus(id, status) {
-        const r = data.find(x => x._id === id); if(r) r.status = status;
-        renderLists();
-        fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({status}) });
-    }
-
-    async function toggleBin(id, isDeleted) {
-        if(isDeleted && !confirm('Move to trash? It will be permanently deleted in 28 days.')) return;
-        const r = data.find(x => x._id === id); if(r) r.isDeleted = isDeleted;
-        renderLists();
-        fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({isDeleted}) });
-    }
-
-    async function saveReply(id) {
-        const text = document.getElementById(`reply-text-${id}`).value;
-        const r = data.find(x => x._id === id); if(r) r.reply = text;
-        await fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({reply: text}) });
-        if(window.shopify) window.shopify.toast.show('Reply published');
-    }
-
-    function renderAttributes() {
-        const container = document.getElementById('attributes-list');
-        if (currentAttributes.length === 0) {
-            container.innerHTML = `<div style="color: var(--text-light); font-size: 13px;">No conditional rules created yet.</div>`;
-            return;
-        }
-        container.innerHTML = currentAttributes.map((attr, i) => `
-            <div class="attr-pill">
-                <div style="display:flex; align-items:center;">
-                    <span class="attr-tag">${attr.type}</span>
-                    <span style="color: var(--text-light); font-family: monospace; margin-right: 15px;">${attr.condition}</span>
-                    <span style="font-weight: 800; color: var(--border); margin-right: 15px;">→</span>
-                    <span style="font-weight: 600;">Slider: '${attr.label}'</span>
-                </div>
-                <button style="background: none; border: none; color: var(--red); cursor: pointer; font-weight: 600;" onclick="window.removeAttribute(${i})">✕ Remove</button>
-            </div>
-        `).join('');
-    }
-
-    function addAttribute() {
-        const type = document.getElementById('attr-rule-type').value;
-        const condition = type === 'tag' ? document.getElementById('attr-rule-val-tag').value.trim() : document.getElementById('attr-rule-val-meta').value;
-        const label = document.getElementById('attr-label').value.trim();
-
-        if (!condition || condition === 'undefined' || !label) {
-            alert("Please fill out both the condition value and the slider name.");
-            return;
-        }
-
-        if (currentAttributes.length < 8) {
-            currentAttributes.push({ type: type, condition: condition, label: label });
-            document.getElementById('attr-rule-val-tag').value = '';
-            document.getElementById('attr-label').value = '';
-            saveSettings();
-            renderAttributes();
-        } else {
-            alert("Maximum of 8 slider rules allowed.");
-        }
-    }
-
-    window.removeAttribute = async function(index) {
-        if(confirm("Are you sure you want to remove this slider rule?")) {
-            currentAttributes.splice(index, 1);
-            renderAttributes();
-            await saveSettings();
-        }
-    };
-
-    function updatePreviews() {
-        const title = document.getElementById('style-title').value || 'Customer Reviews';
-        const primary = document.getElementById('style-primary').value;
-        const star = document.getElementById('style-star').value;
-        const txt = document.getElementById('style-text').value + 'px';
-        const cardStar = document.getElementById('card-star').value + 'px';
-        
-        document.getElementById('pre-title').innerText = title;
-        document.querySelectorAll('.pre-color-primary').forEach(el => el.style.background = primary);
-        document.querySelectorAll('.pre-color-star').forEach(el => el.style.color = star);
-        document.querySelectorAll('.pre-color-text').forEach(el => el.style.fontSize = txt);
-        document.querySelectorAll('.pre-color-text-brand').forEach(el => el.style.color = primary);
-
-        document.getElementById('pre-card-icon').style.fontSize = cardStar;
-        document.getElementById('pre-card-count').style.display = document.getElementById('card-count').checked ? 'inline' : 'none';
-    }
-
-    async function saveSettings() {
-        const payload = {
-            shopDomain: SHOP_DOMAIN,
-            autoApproveEnabled: document.getElementById('set-auto-enable').checked,
-            autoApproveType: document.getElementById('set-auto-type').value,
-            autoApproveMinStars: parseInt(document.getElementById('set-min-stars').value),
-            attributeProfiles: currentAttributes,
-            seo: { richSnippets: document.getElementById('set-seo').checked },
-            widgetStyles: {
-                widgetTitle: document.getElementById('style-title').value,
-                primaryColor: document.getElementById('style-primary').value,
-                starColor: document.getElementById('style-star').value,
-                textSize: parseInt(document.getElementById('style-text').value)
-            },
-            cardStyles: {
-                starSize: parseInt(document.getElementById('card-star').value),
-                showCount: document.getElementById('card-count').checked
-            },
-            carouselStyles: {
-                layout: document.getElementById('car-layout').value,
-                autoplay: document.getElementById('car-autoplay').checked,
-                delay: parseInt(document.getElementById('car-delay').value) || 4000,
-                showArrows: document.getElementById('car-arrows').checked
-            }
-        };
-        await fetch(`${API}/admin/settings`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-        if(window.shopify) window.shopify.toast.show('Saved!');
-    }
-
-    // ==========================================
-    // UPGRADED CSV IMPORT & STAGING AREA
-    // ==========================================
-    let parsedCSVData = []; 
-    let csvHeaders = [];
-    let mappedReviews = [];
-
-    function handleFileUpload() {
-        const file = document.getElementById('csv-file').files[0]; if (!file) return;
-        document.getElementById('file-name').innerText = `📄 ${file.name} selected`;
-        Papa.parse(file, { header: true, skipEmptyLines: true, complete: function(results) { 
-            parsedCSVData = results.data; 
-            csvHeaders = results.meta.fields; 
-            buildMappingUI(); 
-        }});
-    }
-
-    function buildMappingUI() {
-        document.getElementById('mapping-ui').style.display = 'block';
-        const reqFields = [{ id: 'map-itemId', label: 'Product ID (Req)' }, { id: 'map-rating', label: 'Star Rating (Req)' }, { id: 'map-userId', label: 'Reviewer Name' }, { id: 'map-email', label: 'Reviewer Email' }, { id: 'map-headline', label: 'Review Title' }, { id: 'map-comment', label: 'Review Body' }, { id: 'map-date', label: 'Review Date' }];
-        let html = '';
-        reqFields.forEach(f => {
-            let options = `<option value="">-- Ignore --</option>`;
-            csvHeaders.forEach(h => {
-                let s = ''; let hL = h.toLowerCase();
-                if (f.id === 'map-itemId' && (hL.includes('product') || hL.includes('id'))) s = 'selected';
-                if (f.id === 'map-rating' && (hL.includes('score') || hL.includes('rating'))) s = 'selected';
-                if (f.id === 'map-userId' && (hL.includes('name') || hL.includes('user'))) s = 'selected';
-                if (f.id === 'map-email' && hL.includes('email')) s = 'selected';
-                if (f.id === 'map-headline' && hL.includes('title')) s = 'selected';
-                if (f.id === 'map-comment' && (hL.includes('body') || hL.includes('content'))) s = 'selected';
-                if (f.id === 'map-date' && hL.includes('date')) s = 'selected';
-                options += `<option value="${h}" ${s}>${h}</option>`;
-            });
-            html += `<div><label style="font-size:13px; font-weight:600; display:block; margin-bottom:5px;">${f.label}</label><select id="${f.id}" class="filter-select">${options}</select></div>`;
-        });
-        document.getElementById('column-mappers').innerHTML = html;
-        
-        const btn = document.getElementById('import-submit-btn');
-        btn.innerText = "Preview & Map Products";
-        btn.onclick = generateStagingArea;
-    }
-
-    function generateStagingArea() {
-        const map = { itemId: document.getElementById('map-itemId').value, rating: document.getElementById('map-rating').value, userId: document.getElementById('map-userId').value, email: document.getElementById('map-email').value, headline: document.getElementById('map-headline').value, comment: document.getElementById('map-comment').value, createdAt: document.getElementById('map-date').value };
-        if (!map.itemId || !map.rating) { alert("Product ID and Star Rating must be mapped."); return; }
-        
-        mappedReviews = parsedCSVData.map(row => ({ 
-            itemId: row[map.itemId], 
-            rating: row[map.rating], 
-            userId: row[map.userId], 
-            email: row[map.email], 
-            headline: row[map.headline], 
-            comment: row[map.comment], 
-            createdAt: row[map.createdAt] 
-        }));
-
-        let tableRows = mappedReviews.map((r, i) => `
-            <tr style="border-bottom: 1px solid var(--border);">
-                <td style="padding: 12px; font-size: 13px;">${r.userId}</td>
-                <td style="padding: 12px; font-size: 13px; color: var(--star);">${'★'.repeat(parseInt(r.rating) || 5)}</td>
-                <td style="padding: 12px; font-size: 13px; max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${r.comment}">${r.comment}</td>
-                <td style="padding: 12px;">
-                    <input type="text" id="stage-item-${i}" class="search-input" style="padding: 8px 12px; font-size: 13px; font-family: monospace; cursor: pointer;" value="${r.itemId || ''}" placeholder="Click to search products..." onclick="openSearchModal(${i})" readonly>
-                </td>
-            </tr>
-        `).join('');
-
-        const stagingHtml = `
-            <h3 style="margin-top: 40px; border-top: 1px solid var(--border); padding-top: 30px;">3. Smart Product Mapping</h3>
-            <p style="color: var(--text-light); font-size: 14px; margin-bottom: 20px;">The system is automatically searching your live Shopify store to find the exact Numeric IDs for these products. If a box turns <span style="color: var(--red); font-weight: bold;">Red</span>, click it to manually search and select the product.</p>
-            
-            <div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 20px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);">
-                <table style="width: 100%; text-align: left; border-collapse: collapse;">
-                    <thead style="background: #f4f6f8; position: sticky; top: 0; z-index: 1;">
-                        <tr>
-                            <th style="padding: 12px; font-size: 12px; color: var(--text-light); text-transform: uppercase;">Reviewer</th>
-                            <th style="padding: 12px; font-size: 12px; color: var(--text-light); text-transform: uppercase;">Rating</th>
-                            <th style="padding: 12px; font-size: 12px; color: var(--text-light); text-transform: uppercase;">Review</th>
-                            <th style="padding: 12px; font-size: 12px; color: var(--text-light); text-transform: uppercase; width: 250px;">Target Product ID</th>
-                        </tr>
-                    </thead>
-                    <tbody>${tableRows}</tbody>
-                </table>
-            </div>
-            
-            <button id="final-import-btn" class="post-btn" style="background: var(--blue); width: 100%; height: 50px; font-size: 16px;" onclick="processFinalImport()">🚀 Go Live (Import to Database)</button>
-        `;
-
-        let existingStaging = document.getElementById('staging-area');
-        if (!existingStaging) {
-            existingStaging = document.createElement('div');
-            existingStaging.id = 'staging-area';
-            document.getElementById('mapping-ui').appendChild(existingStaging);
-        }
-        existingStaging.innerHTML = stagingHtml;
-
-        // Trigger the automatic background search to validate
-        validateStagingProducts();
-    }
-
-    // ==========================================
-    // THE SMART AUTO-MAPPER
-    // ==========================================
-    async function validateStagingProducts() {
-        const btn = document.getElementById('final-import-btn');
-        btn.innerText = "Auto-Mapping Products...";
-        btn.disabled = true;
-
-        for (let i = 0; i < mappedReviews.length; i++) {
-            const input = document.getElementById(`stage-item-${i}`);
-            let query = input.value.trim();
-            if (!query) {
-                input.classList.add('invalid-red');
-                continue;
-            }
-
-            // If it's already a numeric ID, mark green immediately
-            if (/^\d{10,}$/.test(query)) {
-                input.classList.add('valid-green');
-                continue;
-            }
-
-            try {
-                // Strip brand names like "GFuel Energy | Sour Blue Chug Rug" -> "Sour Blue Chug Rug"
-                let cleanQuery = query.includes('|') ? query.split('|').pop().trim() : query;
-                
-                // Ping Shopify's public Storefront AJAX API
-                const res = await fetch(`https://${SHOP_DOMAIN}/search/suggest.json?q=${encodeURIComponent(cleanQuery)}&resources[type]=product`);
-                const data = await res.json();
-                const products = data.resources.results.products;
-
-                if (products.length > 0) {
-                    // We found a match! Grab the exact product JSON to get the numeric ID
-                    const cleanUrl = products[0].url.split('?')[0];
-                    const prodRes = await fetch(`https://${SHOP_DOMAIN}${cleanUrl}.js`);
-                    const prodData = await prodRes.json();
-                    
-                    input.value = prodData.id;
-                    input.classList.remove('invalid-red');
-                    input.classList.add('valid-green');
-                } else {
-                    input.classList.add('invalid-red');
-                }
-            } catch(e) {
-                input.classList.add('invalid-red');
-            }
-        }
-        
-        btn.innerText = "🚀 Go Live (Import to Database)";
-        btn.disabled = false;
-    }
-
-    // ==========================================
-    // NATIVE SHOPIFY APP BRIDGE RESOURCE PICKER
-    // ==========================================
-    async function openSearchModal(index) {
-        // Ensure Shopify App Bridge is loaded
-        if (window.shopify) {
-            try {
-                // Trigger Shopify's native internal product selector
-                const selected = await window.shopify.resourcePicker({ 
-                    type: 'product', 
-                    multiple: false 
-                });
-                
-                // If the user selects a product and clicks "Add"
-                if (selected && selected.length > 0) {
-                    // Shopify returns a Global ID (e.g., "gid://shopify/Product/123456789")
-                    // We split the string by '/' and pop off the last part to get the raw Numeric ID
-                    const numericId = selected[0].id.split('/').pop();
-                    
-                    // Inject it into the staging table and turn the box Green!
-                    const input = document.getElementById(`stage-item-${index}`);
-                    input.value = numericId;
-                    input.classList.remove('invalid-red');
-                    input.classList.add('valid-green');
-                }
-            } catch(e) {
-                console.log("Picker closed or failed", e);
-            }
-        } else {
-            alert("Shopify interface not detected. Please paste the numeric Product ID manually.");
-        }
-    }
-</script>
 </body>
 </html>
