@@ -138,9 +138,9 @@
                 <p style="color: var(--text-light); font-weight: 600; font-size: 12px; text-transform: uppercase; margin:0;">Live on Store</p>
                 <h1 id="stat-live">0</h1>
             </div>
-            <div class="settings-panel metric-card">
-                <p style="color: var(--text-light); font-weight: 600; font-size: 12px; text-transform: uppercase; margin:0;">Top Product ID</p>
-                <h1 id="stat-prod" style="font-size: 24px;">Loading...</h1>
+            <!-- UPGRADED TOP PRODUCT CARD SNAPSHOT AREA -->
+            <div id="v-dash-prod-card" class="settings-panel" style="flex: 1 1 300px; display: flex; align-items: center; justify-content: center; min-height: 120px;">
+                <p style="color: var(--text-light); font-weight: 600; font-size: 12px; text-transform: uppercase; margin:0;">Loading Top Product Snapshot...</p>
             </div>
         </div>
         <div class="settings-panel" style="max-width: 500px;">
@@ -558,14 +558,109 @@
 
     async function loadStats() {
         try {
+            // 1. Fetch raw stats from our server
             const res = await fetch(`${API}/admin/stats?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
             if(!res.ok) return;
             const stats = await res.json();
             
+            // 2. Update the total/live review numbers
             document.getElementById('stat-total').innerText = (stats.sources.website + stats.sources.email + stats.sources.import) || 0;
             document.getElementById('stat-live').innerText = data.filter(r => r.status === 'accepted' && !r.isDeleted).length;
-            document.getElementById('stat-prod').innerText = stats.topProduct.id !== "N/A" ? `ID: ${stats.topProduct.id}` : "None";
 
+            // --- UPGRADED: Dynamic Top Product Card ---
+            const prodCardEl = document.getElementById('v-dash-prod-card');
+            if (stats.topProduct && stats.topProduct.id !== "N/A") {
+                const numericId = stats.topProduct.id;
+                
+                // Set the card to "Loading" status while we fetch Shopify data
+                prodCardEl.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 20px;">
+                        <div style="width: 70px; height: 70px; background: #f4f6f8; border-radius: 8px;"></div>
+                        <div style="flex: 1;">
+                            <p style="color: var(--text-light); font-weight: 600; font-size: 12px; text-transform: uppercase; margin:0;">Top Product ID</p>
+                            <div style="width: 150px; height: 20px; background: #f4f6f8; margin: 5px 0; border-radius: 4px;"></div>
+                            <div style="width: 80px; height: 16px; background: #f4f6f8; border-radius: 4px;"></div>
+                        </div>
+                    </div>
+                `;
+
+                try {
+                    // SILENTLY FETCH PRODUCT DATA FROM SHOPIFY'S CUSTOMER-FACING API
+                    // We try to fetch the product by URL to get image, title, handles, etc.
+                    // If we only have the ID, we query the search suggest API.
+                    const shopRes = await fetch(`https://${SHOP_DOMAIN}/search/suggest.json?q=id:${numericId}&resources[type]=product&resources[limit]=1`);
+                    const shopData = await shopRes.json();
+                    const shopProd = shopData.resources.results.products[0];
+
+                    if (shopProd) {
+                        // WE FOUND IT! We can build the real card.
+                        const rawUrl = shopProd.url.split('?')[0]; // strip tracking
+                        
+                        // Grab the average rating metafield. This requires a second call.
+                        const metaRes = await fetch(`https://${SHOP_DOMAIN}${rawUrl}.json`);
+                        const metaData = await metaRes.json();
+                        
+                        // Extract avg rating and count from metafields if they exist.
+                        // We use fallbacks from our server stats just in case.
+                        const metafields = metaData.product.metafields;
+                        const finalAvg = metafields.reviews?.rating?.value || stats.topProduct.averageRating;
+                        const finalCount = metafields.reviews?.rating_count?.value || stats.topProduct.reviewCount;
+                        
+                        const avgNum = parseFloat(finalAvg);
+                        const fullStars = isNaN(avgNum) ? 0 : Math.round(avgNum);
+
+                        prodCardEl.innerHTML = `
+                            <div style="display: flex; align-items: center; gap: 20px;">
+                                <!-- PRODUCT IMAGE WITH ADMIN LINK -->
+                                <a href="https://${SHOP_DOMAIN}/admin/products/${numericId}" target="_blank" title="Open Product in Shopify Admin">
+                                    <img src="${shopProd.image}" style="width: 70px; height: 70px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                                </a>
+                                
+                                <div style="flex: 1;">
+                                    <p style="color: var(--text-light); font-weight: 600; font-size: 11px; text-transform: uppercase; margin:0; letter-spacing: 0.5px;">Most Reviewed Product</p>
+                                    
+                                    <!-- TITLE WITH ADMIN LINK -->
+                                    <a href="https://${SHOP_DOMAIN}/admin/products/${numericId}" target="_blank" style="text-decoration: none; display: block; margin: 2px 0 6px 0;" title="Open Product in Shopify Admin">
+                                        <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: var(--primary); -webkit-line-clamp: 2; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden; line-height: 1.2;">
+                                            ${shopProd.title}
+                                        </h3>
+                                    </a>
+                                    
+                                    <!-- STAR SNAPSHOT & REVIEWS COUNT -->
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        <span style="color: var(--star); font-size: 14px; letter-spacing: 1px;">
+                                            ${'★'.repeat(fullStars)}${'☆'.repeat(5-fullStars)}
+                                        </span>
+                                        <span style="font-weight: 700; font-size: 14px; color: var(--primary);">${avgNum.toFixed(1)}</span>
+                                        <span style="font-size: 13px; color: var(--text-light);">(${finalCount} reviews)</span>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        // Match failed (Product might be draft, archvied, or deleted in Shopify)
+                        throw new Error("No match in Shopify suggest API.");
+                    }
+
+                } catch (shopifyError) {
+                    console.log("Could not fetch details from Shopify for card.", shopifyError);
+                    // Fallback: Just show the Numeric ID and our server's internal stats
+                    prodCardEl.innerHTML = `
+                        <p style="color: var(--text-light); font-weight: 600; font-size: 12px; text-transform: uppercase; margin:0;">Top Product ID</p>
+                        <h1 id="stat-prod" style="font-size: 24px;">ID: ${numericId}</h1>
+                        <p style="font-size: 13px; color: var(--text-light); margin-top: -10px;">(${stats.topProduct.reviewCount} total reviews, avg: ${stats.topProduct.averageRating})</p>
+                    `;
+                }
+
+            } else {
+                // No product is the "Top" product yet (maybe 0 total reviews)
+                prodCardEl.innerHTML = `
+                    <p style="color: var(--text-light); font-weight: 600; font-size: 12px; text-transform: uppercase; margin:0;">Top Product ID</p>
+                    <h1 style="font-size: 24px;">None Yet!</h1>
+                `;
+            }
+
+            // 3. Update the Sources Doughnut Chart
             const ctx = document.getElementById('chartSources').getContext('2d');
             if(chartInstance) chartInstance.destroy();
             chartInstance = new Chart(ctx, {
@@ -576,7 +671,7 @@
                 },
                 options: { cutout: '75%', plugins: { legend: { position: 'bottom' } } }
             });
-        } catch(e) {}
+        } catch(e) { console.error("Stats fetch error:", e); }
     }
 
     function renderLists() {
