@@ -17,16 +17,32 @@ document.addEventListener('DOMContentLoaded', () => {
 function tab(id) {
     const target = document.getElementById(id);
     if(!target) return; 
+    
+    // 1. Remove active states
     document.querySelectorAll('.view, .tab-btn').forEach(el => el.classList.remove('active'));
+    
+    // 2. Make the view active
     target.classList.add('active');
-    event.currentTarget.classList.add('active');
+    
+    // 3. Find the specific button that was clicked and make it active (Replaces event.currentTarget)
+    const activeBtn = document.querySelector(`button[onclick="tab('${id}')"]`);
+    if(activeBtn) activeBtn.classList.add('active');
+    
     if(id === 'v-dash') loadStats();
 }
 
 function subTab(controlId, previewId) {
+    // 1. Remove active states
     document.querySelectorAll('.sub-view, .sub-tab-btn').forEach(el => el.classList.remove('active'));
+    
+    // 2. Make the sub-view active
     document.getElementById(controlId).classList.add('active');
     
+    // 3. Make the clicked button active
+    const activeBtn = document.querySelector(`button[onclick="subTab('${controlId}', '${previewId}')"]`);
+    if(activeBtn) activeBtn.classList.add('active');
+    
+    // 4. Update the preview window
     if (previewId) {
         document.querySelectorAll('.sub-preview').forEach(el => el.classList.remove('active'));
         document.getElementById(previewId).classList.add('active');
@@ -228,11 +244,32 @@ function renderLists() {
 function buildCard(r, isTrash) {
     let verifyHtml = r.verifiedPurchase 
         ? `<div class="v-badge v-badge-yes" title="${r.verificationNote || 'Verified Purchase'}">✓ Verified Buyer</div>`
-        : `<div class="v-badge v-badge-no" title="Diagnostic: ${r.verificationNote || 'Could not verify.'}">⚠️ Unverified</div>`;
+        : `<div style="display: flex; align-items: center; gap: 8px;">
+             <div class="v-badge v-badge-no" title="Diagnostic: ${r.verificationNote || 'Could not verify.'}">⚠️ Unverified</div>
+             <button onclick="manuallyVerify('${r._id}')" style="background: none; border: 1px solid var(--border); padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 600; color: var(--blue);">Verify</button>
+           </div>`;
 
     const customerBox = r.email 
         ? `<a href="https://${SHOP_DOMAIN}/admin/customers?query=${encodeURIComponent(r.email)}" target="_blank" class="customer-link" title="Open Customer Profile">${r.userId || 'Guest'}</a>` 
         : `<strong style="font-size: 1.1rem;">${r.userId || 'Guest'}</strong>`;
+
+    let attrHtml = '';
+    if (r.attributes && Object.keys(r.attributes).length > 0) {
+        attrHtml = `<div style="margin-top: 15px; border-top: 1px dashed var(--border); padding-top: 15px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">`;
+        for (const [key, val] of Object.entries(r.attributes)) {
+            attrHtml += `
+                <div>
+                    <div style="display:flex; justify-content:space-between; font-size: 10px; font-weight:700; color:var(--text-light); text-transform:uppercase; margin-bottom:6px;">
+                        <span>${key}</span><span>${val}/10</span>
+                    </div>
+                    <div style="width:100%; height:6px; background:#e2e8f0; border-radius:3px; position:relative;">
+                        <div style="position:absolute; left:${(val/10)*100}%; top:50%; transform:translate(-50%, -50%); width:25px; height:10px; background:#000; border-radius:2px;"></div>
+                    </div>
+                </div>
+            `;
+        }
+        attrHtml += `</div>`;
+    }
 
     return `
     <div class="review-card status-border-${r.status}">
@@ -249,6 +286,8 @@ function buildCard(r, isTrash) {
             <div style="color:var(--star); margin-bottom:10px; font-size: 18px;">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
             <div style="font-weight:700; margin-bottom:8px; font-size: 18px;">${r.headline || 'No Headline'}</div>
             <div style="color:#444; line-height:1.6; font-size: 15px;">${r.comment}</div>
+            
+            ${attrHtml}
             
             <button class="reply-toggle" onclick="document.getElementById('reply-box-${r._id}').style.display = 'block'">💬 Reply to Customer</button>
             <div id="reply-box-${r._id}" class="reply-panel" style="display: ${r.reply ? 'block' : 'none'};">
@@ -276,6 +315,24 @@ function buildCard(r, isTrash) {
             </div>
         </div>
     </div>`;
+}
+
+async function manuallyVerify(id) {
+    if(!confirm('Manually mark this review as a Verified Purchase?')) return;
+    const r = data.find(x => x._id === id); 
+    if(r) {
+        r.verifiedPurchase = true;
+        r.verificationNote = "Manually verified by admin";
+    }
+    renderLists();
+    
+    await fetch(`${API}/reviews/${id}`, { 
+        method: 'PATCH', 
+        headers: {'Content-Type':'application/json'}, 
+        body: JSON.stringify({ verifiedPurchase: true, verificationNote: "Manually verified by admin" }) 
+    });
+    
+    if(window.shopify) window.shopify.toast.show('Review Verified');
 }
 
 async function updateStatus(id, status) {
