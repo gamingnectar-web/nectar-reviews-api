@@ -75,10 +75,14 @@ const settingsSchema = new mongoose.Schema({
         limit: { type: Number, default: 10 }
     },
     messaging: {
+        flowDelayDays: { type: Number, default: 14 },
+        emailMode: { type: String, enum: ['visual', 'html'], default: 'visual' },
         emailSubject: { type: String, default: 'How did we do?' },
         emailLogo: { type: String, default: '' },
         emailColor: { type: String, default: '#000000' },
         emailBody: { type: String, default: "Hi {{ customer_name }}, we hope you are loving your {{ product_name }}! We'd love to hear your thoughts." },
+        emailHtml: { type: String, default: '<div style="text-align:center;">Hi {{ customer_name }}, please review {{ product_name }}.</div>' },
+        includeStars: { type: Boolean, default: true },
         smsText: { type: String, default: "Hi {{ customer_name }}, how is your new {{ product_name }}? Leave a review here: {{ review_link }}" }
     }
 });
@@ -309,7 +313,7 @@ app.get('/api/widget/config', async (req, res) => {
 });
 
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'admin.html')));
-app.get('/admin.js', (req, res) => res.sendFile(path.join(__dirname, 'admin.js'))); // Ensures admin.js loads properly
+app.get('/admin.js', (req, res) => res.sendFile(path.join(__dirname, 'admin.js')));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Port ${PORT}`));
