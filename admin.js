@@ -49,84 +49,6 @@ function subTab(controlId, previewId) {
     }
 }
 
-function toggleEmailMode(mode) {
-    document.getElementById('msg-email-mode').value = mode;
-    
-    document.getElementById('btn-mode-visual').style.background = mode === 'visual' ? 'var(--blue)' : '#e2e8f0';
-    document.getElementById('btn-mode-visual').style.color = mode === 'visual' ? 'white' : '#111';
-    
-    document.getElementById('btn-mode-html').style.background = mode === 'html' ? 'var(--blue)' : '#e2e8f0';
-    document.getElementById('btn-mode-html').style.color = mode === 'html' ? 'white' : '#111';
-
-    document.getElementById('visual-email-controls').style.display = mode === 'visual' ? 'block' : 'none';
-    document.getElementById('html-email-controls').style.display = mode === 'html' ? 'block' : 'none';
-
-    updateMsgPreview();
-}
-
-async function pickShopifyImage() {
-    if (window.shopify) {
-        try {
-            const selected = await window.shopify.resourcePicker({ type: 'image', multiple: false });
-            if (selected && selected.length > 0) {
-                document.getElementById('msg-email-logo').value = selected[0].originalSrc;
-                updateMsgPreview();
-            }
-        } catch (e) { console.log("Picker closed"); }
-    } else {
-        alert("Shopify interface not detected. Please paste the direct image URL.");
-    }
-}
-
-function updateMsgPreview() {
-    const mode = document.getElementById('msg-email-mode').value;
-    const subject = document.getElementById('msg-email-subject').value;
-    
-    if (mode === 'visual') {
-        document.getElementById('preview-wrapper-visual').style.display = 'flex';
-        document.getElementById('preview-wrapper-html').style.display = 'none';
-
-        const logo = document.getElementById('msg-email-logo').value;
-        const color = document.getElementById('msg-email-color').value;
-        const showStars = document.getElementById('msg-include-stars').checked;
-        
-        let eBody = document.getElementById('msg-email-body').value;
-        eBody = eBody.replace(/{{ customer_name }}/g, 'John');
-        eBody = eBody.replace(/{{ product_name }}/g, 'Super Widget');
-        
-        document.getElementById('prev-email-subject-text').innerText = subject;
-        document.getElementById('prev-email-body-text').innerText = eBody;
-        document.getElementById('prev-email-btn').style.background = color;
-        
-        document.getElementById('prev-email-product-block').style.display = showStars ? 'block' : 'none';
-
-        const logoImg = document.getElementById('prev-email-logo-img');
-        const logoPlaceholder = document.getElementById('prev-email-logo-placeholder');
-        if(logo) {
-            logoImg.src = logo;
-            logoImg.style.display = 'inline-block';
-            logoPlaceholder.style.display = 'none';
-        } else {
-            logoImg.style.display = 'none';
-            logoPlaceholder.style.display = 'block';
-        }
-    } else {
-        document.getElementById('preview-wrapper-visual').style.display = 'none';
-        document.getElementById('preview-wrapper-html').style.display = 'block';
-        
-        let rawHtml = document.getElementById('msg-email-html').value;
-        rawHtml = rawHtml.replace(/{{ customer_name }}/g, 'John');
-        rawHtml = rawHtml.replace(/{{ product_name }}/g, 'Super Widget');
-        document.getElementById('html-render-target').innerHTML = rawHtml;
-    }
-
-    let sBody = document.getElementById('msg-sms-body').value;
-    sBody = sBody.replace(/{{ customer_name }}/g, 'John');
-    sBody = sBody.replace(/{{ product_name }}/g, 'Super Widget');
-    sBody = sBody.replace(/{{ review_link }}/g, 'https://link.co');
-    document.getElementById('prev-sms-bubble').innerText = sBody;
-}
-
 function toggleImportInst() {
     const platform = document.getElementById('import-platform-select').value;
     document.querySelectorAll('.import-inst-box').forEach(el => el.classList.remove('active'));
@@ -197,21 +119,7 @@ async function load() {
                     document.getElementById('car-delay').value = config.carouselStyles.delay || 4000;
                     document.getElementById('car-limit').value = config.carouselStyles.limit || 10;
                 }
-                if (config.messaging) {
-                    document.getElementById('msg-flow-delay').value = config.messaging.flowDelayDays || 14;
-                    document.getElementById('msg-email-subject').value = config.messaging.emailSubject || 'How did we do?';
-                    document.getElementById('msg-email-logo').value = config.messaging.emailLogo || '';
-                    document.getElementById('msg-email-color').value = config.messaging.emailColor || '#000000';
-                    document.getElementById('msg-email-body').value = config.messaging.emailBody || "Hi {{ customer_name }}, we hope you are loving your {{ product_name }}! We'd love to hear your thoughts.";
-                    document.getElementById('msg-email-html').value = config.messaging.emailHtml || "";
-                    document.getElementById('msg-include-stars').checked = config.messaging.includeStars !== false;
-                    document.getElementById('msg-sms-body').value = config.messaging.smsText || "Hi {{ customer_name }}, how is your new {{ product_name }}? Leave a review here: {{ review_link }}";
-                    
-                    toggleEmailMode(config.messaging.emailMode || 'visual');
-                }
-
                 updatePreviews();
-                updateMsgPreview();
                 renderAttributes();
             }
         }
@@ -514,18 +422,7 @@ async function saveSettings() {
             autoplay: document.getElementById('car-autoplay').checked,
             delay: parseInt(document.getElementById('car-delay').value) || 4000,
             showArrows: document.getElementById('car-arrows').checked,
-            limit: parseInt(document.getElementById('car-limit')?.value) || 10
-        },
-        messaging: {
-            flowDelayDays: parseInt(document.getElementById('msg-flow-delay').value) || 14,
-            emailMode: document.getElementById('msg-email-mode').value,
-            emailSubject: document.getElementById('msg-email-subject').value,
-            emailLogo: document.getElementById('msg-email-logo').value,
-            emailColor: document.getElementById('msg-email-color').value,
-            emailBody: document.getElementById('msg-email-body').value,
-            emailHtml: document.getElementById('msg-email-html').value,
-            includeStars: document.getElementById('msg-include-stars').checked,
-            smsText: document.getElementById('msg-sms-body').value
+            limit: parseInt(document.getElementById('car-limit').value) || 10
         }
     };
     await fetch(`${API}/admin/settings`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
