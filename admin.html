@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Reviews Admin</title>
+    <!-- PASTE YOUR SHOPIFY API KEY HERE -->
     <meta name="shopify-api-key" content="9b0bf096b37faf6dc0b19037b2d9d62a" />
     <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -91,10 +92,12 @@
     <button class="tab-btn" onclick="tab('v-trash')">Trash 🗑️</button>
     <button class="tab-btn" onclick="tab('v-imp')">Import CSV 📥</button>
     
+    <div class="sidebar-title" style="margin-top: 20px;">Growth & Outreach</div>
+    <button class="tab-btn" onclick="tab('v-msg')">Messaging & Flow ✉️</button>
+
     <div class="sidebar-title" style="margin-top: 20px;">Configuration</div>
     <button class="tab-btn" onclick="tab('v-set')">Rules & Settings</button> 
     <button class="tab-btn" onclick="tab('v-des')">Visual Customizer</button>
-    <button class="tab-btn" onclick="tab('v-msg')">Messaging ✉️</button>
     
     <div class="sidebar-title" style="margin-top: 20px;">Developers</div>
     <button class="tab-btn" onclick="tab('v-dev')">Manual Setup</button>
@@ -102,6 +105,7 @@
 
 <div class="main-content">
     
+    <!-- DASHBOARD -->
     <div id="v-dash" class="view active">
         <h2>Performance Dashboard</h2>
         <div class="metrics-grid">
@@ -123,6 +127,7 @@
         </div>
     </div>
 
+    <!-- REVIEW MANAGER -->
     <div id="v-mgr" class="view">
         <h2>Review Manager</h2>
         <div class="settings-panel" style="display: flex; gap: 15px; margin-bottom: 20px; padding: 15px;">
@@ -145,12 +150,14 @@
         <div id="mgr-list">Loading reviews...</div>
     </div>
 
+    <!-- TRASH -->
     <div id="v-trash" class="view">
         <h2>Trash Bin</h2>
         <p style="color: var(--text-light); margin-bottom: 20px;">Reviews here will be permanently deleted after 28 days.</p>
         <div id="trash-list">Loading...</div>
     </div>
 
+    <!-- IMPORTER -->
     <div id="v-imp" class="view">
         <h2>Importer Tool</h2>
         <div class="settings-panel">
@@ -180,6 +187,142 @@
             </div>
 
             <div id="staging-area"></div>
+        </div>
+    </div>
+
+    <!-- MESSAGING & FLOW -->
+    <div id="v-msg" class="view">
+        <h2>Messaging & Follow-ups</h2>
+        <p style="color: var(--text-light); margin-bottom: 25px;">Design the automated emails and texts sent to customers requesting reviews via Shopify Flow.</p>
+
+        <div style="display: flex; gap: 30px;">
+            <div style="flex: 1;">
+                <div class="sub-tab-nav">
+                    <button class="sub-tab-btn active" onclick="subTab('msg-email', 'prev-email-msg')">Email Template</button>
+                    <button class="sub-tab-btn" onclick="subTab('msg-sms', 'prev-sms-msg')">SMS Template</button>
+                    <button class="sub-tab-btn" onclick="subTab('msg-flow', 'prev-email-msg')">Shopify Flow Setup</button>
+                </div>
+
+                <div id="msg-email" class="sub-view active">
+                    <div class="settings-panel">
+                        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                            <button id="btn-mode-visual" class="post-btn" style="flex:1; background: var(--blue);" onclick="toggleEmailMode('visual')">Visual Builder</button>
+                            <button id="btn-mode-html" class="post-btn" style="flex:1; background: #e2e8f0; color: #111;" onclick="toggleEmailMode('html')">Custom HTML Code</button>
+                        </div>
+                        <input type="hidden" id="msg-email-mode" value="visual">
+
+                        <div class="setting-row"><span>Email Subject</span><input type="text" id="msg-email-subject" class="search-input" style="width: 250px;" oninput="updateMsgPreview()" value="How did we do?"></div>
+                        
+                        <div id="visual-email-controls">
+                            <div class="setting-row">
+                                <span>Logo URL</span>
+                                <div style="display: flex; gap: 10px;">
+                                    <input type="text" id="msg-email-logo" class="search-input" style="width: 180px;" oninput="updateMsgPreview()" placeholder="https://...">
+                                    <button class="post-btn" style="padding: 10px; background: #f4f6f8; color: var(--text); border: 1px solid var(--border);" onclick="pickShopifyImage()">Browse</button>
+                                </div>
+                            </div>
+                            <div class="setting-row"><span>Button Color</span><input type="color" id="msg-email-color" oninput="updateMsgPreview()" value="#000000"></div>
+                            <div class="setting-row"><span>Include Interactive Stars</span><label class="switch"><input type="checkbox" id="msg-include-stars" onchange="updateMsgPreview()" checked><span class="slider"></span></label></div>
+                            <div style="margin-top: 15px;">
+                                <span style="display:block; margin-bottom:8px; font-weight:600;">Email Message</span>
+                                <textarea id="msg-email-body" class="search-input" style="min-height: 120px; resize: vertical;" oninput="updateMsgPreview()">Hi {{ customer_name }}, we hope you are loving your {{ product_name }}! We'd love to hear your thoughts.</textarea>
+                            </div>
+                        </div>
+
+                        <div id="html-email-controls" style="display: none; margin-top: 15px;">
+                            <span style="display:block; margin-bottom:8px; font-weight:600;">Raw HTML Template</span>
+                            <p style="font-size: 12px; color: var(--text-light); margin-bottom: 10px;">Warning: Advanced users only. Liquid logic will not process here.</p>
+                            <textarea id="msg-email-html" class="code-block" style="width: 100%; min-height: 300px; resize: vertical; border: none; outline: none; margin: 0; box-sizing: border-box;" oninput="updateMsgPreview()"></textarea>
+                        </div>
+
+                        <p style="font-size: 12px; color: var(--text-light); margin-top: 15px;">Available tags: <code>{{ customer_name }}</code>, <code>{{ product_name }}</code>, <code>{{ product_image }}</code>, <code>{{ review_link }}</code></p>
+                        <button class="post-btn" style="width:100%; margin-top:20px;" onclick="saveSettings()">Save Template</button>
+                    </div>
+                </div>
+
+                <div id="msg-sms" class="sub-view">
+                    <div class="settings-panel">
+                        <p style="font-size: 13px; color: var(--text-light); margin-bottom: 20px;">Keep it short! SMS are sent automatically via your integrated provider.</p>
+                        <div style="margin-top: 15px;">
+                            <span style="display:block; margin-bottom:8px; font-weight:600;">Text Message</span>
+                            <textarea id="msg-sms-body" class="search-input" style="min-height: 100px; resize: vertical;" oninput="updateMsgPreview()">Hi {{ customer_name }}, how is your new {{ product_name }}? Leave a review here: {{ review_link }}</textarea>
+                            <p style="font-size: 12px; color: var(--text-light); margin-top: 8px;">Available tags: <code>{{ customer_name }}</code>, <code>{{ product_name }}</code>, <code>{{ review_link }}</code></p>
+                        </div>
+                        <button class="post-btn" style="width:100%; margin-top:20px;" onclick="saveSettings()">Save SMS Template</button>
+                    </div>
+                </div>
+
+                <div id="msg-flow" class="sub-view">
+                    <div class="settings-panel">
+                        <h3 style="margin-top: 0;">Shopify Flow Automation</h3>
+                        <p style="font-size: 13px; color: var(--text-light); margin-bottom: 20px;">Configure when the review requests are sent after an order is fulfilled.</p>
+                        
+                        <div class="setting-row" style="border-top: 1px solid var(--border);">
+                            <div>
+                                <h4>Delay after Fulfillment</h4>
+                                <p style="font-size: 12px; color: var(--text-light); margin: 0;">Give customers time to receive and use the product.</p>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <input type="number" id="msg-flow-delay" class="search-input" style="width: 70px;" value="14">
+                                <span style="font-weight: 600;">Days</span>
+                            </div>
+                        </div>
+                        
+                        <div class="import-inst-box active" style="margin-top: 20px; display: block; border-left-color: var(--green); background: #f0fdf4;">
+                            <strong>Flow Integration Active:</strong> When you save this setting, our API automatically updates your Shopify Flow trigger payload. If you haven't installed our default Flow template yet, you can download it below.
+                        </div>
+                        
+                        <button class="post-btn" style="width:100%; margin-top:20px; background: white; color: var(--text); border: 2px solid var(--border);">Download Flow Template (.flow)</button>
+                        <button class="post-btn" style="width:100%; margin-top:10px;" onclick="saveSettings()">Save Delay Settings</button>
+                    </div>
+                </div>
+            </div>
+
+            <div style="flex: 1;">
+                <h4 style="margin-top: 0; color: var(--text-light);">Live Preview</h4>
+                
+                <div id="prev-email-msg" class="sub-preview active">
+                    <!-- Visual Builder Preview -->
+                    <div id="preview-wrapper-visual" style="background: #f4f6f8; padding: 40px; border-radius: 12px; border: 1px solid var(--border); display: flex; justify-content: center;">
+                        <div style="background: #fff; width: 100%; max-width: 400px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden;">
+                            <div style="background: #fafafa; padding: 20px; text-align: center; border-bottom: 1px solid #ebebeb;">
+                                <img id="prev-email-logo-img" src="" alt="Logo" style="max-height: 40px; display: none;">
+                                <div id="prev-email-logo-placeholder" style="font-weight: 800; font-size: 20px; color: #333;">Your Brand</div>
+                            </div>
+                            <div style="padding: 30px 20px; text-align: center;">
+                                <h2 id="prev-email-subject-text" style="margin-top: 0; font-size: 20px;">How did we do?</h2>
+                                <p id="prev-email-body-text" style="color: #555; line-height: 1.6; font-size: 15px; margin-bottom: 25px;">Hi John, we hope you are loving your Super Widget! We'd love to hear your thoughts.</p>
+                                
+                                <!-- In-Email Product Block -->
+                                <div id="prev-email-product-block" style="background: #f9fafb; border: 1px solid #ebebeb; border-radius: 8px; padding: 15px; margin-bottom: 25px;">
+                                    <div style="width: 80px; height: 80px; background: #e2e8f0; border-radius: 6px; margin: 0 auto 10px auto;"></div>
+                                    <div style="font-weight: 600; font-size: 14px; margin-bottom: 10px;">Super Widget</div>
+                                    <!-- In-Email Stars -->
+                                    <div id="prev-email-stars" style="color: #ffc700; font-size: 28px; letter-spacing: 2px; cursor: pointer;">★★★★★</div>
+                                </div>
+
+                                <div style="display: inline-block; padding: 12px 24px; color: #fff; font-weight: 600; text-decoration: none; border-radius: 6px; cursor: default;" id="prev-email-btn">Leave a Review</div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- HTML Raw Preview -->
+                    <div id="preview-wrapper-html" style="display: none; background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; min-height: 400px; position: relative;">
+                        <div style="background: #f4f6f8; padding: 10px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text-light); text-align: center;">Raw HTML Render Output</div>
+                        <div id="html-render-target" style="padding: 20px; width: 100%; height: 100%; box-sizing: border-box; overflow-y: auto;"></div>
+                    </div>
+                </div>
+
+                <div id="prev-sms-msg" class="sub-preview">
+                    <div style="background: #f4f6f8; padding: 40px; border-radius: 12px; border: 1px solid var(--border); display: flex; justify-content: center;">
+                        <div style="background: #e5e5ea; width: 280px; padding: 15px; border-radius: 20px; height: 300px; position: relative;">
+                            <div style="background: #007aff; color: white; padding: 12px 16px; border-radius: 18px 18px 4px 18px; font-size: 14px; line-height: 1.4; max-width: 85%; float: right;" id="prev-sms-bubble">
+                                Hi John, how is your new Super Widget? Leave a review here: https://link.co
+                            </div>
+                            <div style="clear: both;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -345,78 +488,6 @@
                                 <p style="margin: 0 0 12px 0; font-size: 13px; color: #555;">Best purchase I've made all year.</p>
                                 <div class="pre-color-text-brand" style="font-weight: 700; font-size: 12px;">Sarah M.</div>
                             </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- MESSAGING TAB -->
-    <div id="v-msg" class="view">
-        <h2>Messaging & Follow-ups</h2>
-        <p style="color: var(--text-light); margin-bottom: 25px;">Design the automated emails and texts sent to customers requesting reviews.</p>
-
-        <div style="display: flex; gap: 30px;">
-            <div style="flex: 1;">
-                <div class="sub-tab-nav">
-                    <button class="sub-tab-btn active" onclick="subTab('msg-email', 'prev-email-msg')">Email Template</button>
-                    <button class="sub-tab-btn" onclick="subTab('msg-sms', 'prev-sms-msg')">SMS Template</button>
-                </div>
-
-                <div id="msg-email" class="sub-view active">
-                    <div class="settings-panel">
-                        <p style="font-size: 13px; color: var(--text-light); margin-bottom: 20px;">Emails are triggered automatically via Shopify Flow after fulfillment.</p>
-                        <div class="setting-row"><span>Email Subject</span><input type="text" id="msg-email-subject" class="search-input" style="width: 250px;" oninput="updateMsgPreview()" value="How did we do?"></div>
-                        <div class="setting-row"><span>Logo URL</span><input type="text" id="msg-email-logo" class="search-input" style="width: 250px;" oninput="updateMsgPreview()" placeholder="https://..."></div>
-                        <div class="setting-row"><span>Button Color</span><input type="color" id="msg-email-color" oninput="updateMsgPreview()" value="#000000"></div>
-                        <div style="margin-top: 15px;">
-                            <span style="display:block; margin-bottom:8px; font-weight:600;">Email Message</span>
-                            <textarea id="msg-email-body" class="search-input" style="min-height: 120px; resize: vertical;" oninput="updateMsgPreview()">Hi {{ customer_name }}, we hope you are loving your {{ product_name }}! We'd love to hear your thoughts.</textarea>
-                            <p style="font-size: 12px; color: var(--text-light); margin-top: 8px;">Available tags: <code>{{ customer_name }}</code>, <code>{{ product_name }}</code></p>
-                        </div>
-                        <button class="post-btn" style="width:100%; margin-top:20px;" onclick="saveSettings()">Save Template</button>
-                    </div>
-                </div>
-
-                <div id="msg-sms" class="sub-view">
-                    <div class="settings-panel">
-                        <p style="font-size: 13px; color: var(--text-light); margin-bottom: 20px;">Keep it short! SMS are sent automatically via your integrated provider.</p>
-                        <div style="margin-top: 15px;">
-                            <span style="display:block; margin-bottom:8px; font-weight:600;">Text Message</span>
-                            <textarea id="msg-sms-body" class="search-input" style="min-height: 100px; resize: vertical;" oninput="updateMsgPreview()">Hi {{ customer_name }}, how is your new {{ product_name }}? Leave a review here: {{ review_link }}</textarea>
-                            <p style="font-size: 12px; color: var(--text-light); margin-top: 8px;">Available tags: <code>{{ customer_name }}</code>, <code>{{ product_name }}</code>, <code>{{ review_link }}</code></p>
-                        </div>
-                        <button class="post-btn" style="width:100%; margin-top:20px;" onclick="saveSettings()">Save SMS Template</button>
-                    </div>
-                </div>
-            </div>
-
-            <div style="flex: 1;">
-                <h4 style="margin-top: 0; color: var(--text-light);">Live Preview</h4>
-                <div id="prev-email-msg" class="sub-preview active">
-                    <div style="background: #f4f6f8; padding: 40px; border-radius: 12px; border: 1px solid var(--border); display: flex; justify-content: center;">
-                        <div style="background: #fff; width: 100%; max-width: 400px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden;">
-                            <div style="background: #fafafa; padding: 20px; text-align: center; border-bottom: 1px solid #ebebeb;">
-                                <img id="prev-email-logo-img" src="" alt="Logo" style="max-height: 40px; display: none;">
-                                <div id="prev-email-logo-placeholder" style="font-weight: 800; font-size: 20px; color: #333;">Your Brand</div>
-                            </div>
-                            <div style="padding: 30px 20px; text-align: center;">
-                                <h2 id="prev-email-subject-text" style="margin-top: 0; font-size: 20px;">How did we do?</h2>
-                                <p id="prev-email-body-text" style="color: #555; line-height: 1.6; font-size: 15px; margin-bottom: 25px;">Hi John, we hope you are loving your Super Widget! We'd love to hear your thoughts.</p>
-                                <div style="display: inline-block; padding: 12px 24px; color: #fff; font-weight: 600; text-decoration: none; border-radius: 6px; cursor: default;" id="prev-email-btn">Leave a Review</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="prev-sms-msg" class="sub-preview">
-                    <div style="background: #f4f6f8; padding: 40px; border-radius: 12px; border: 1px solid var(--border); display: flex; justify-content: center;">
-                        <div style="background: #e5e5ea; width: 280px; padding: 15px; border-radius: 20px; height: 300px; position: relative;">
-                            <div style="background: #007aff; color: white; padding: 12px 16px; border-radius: 18px 18px 4px 18px; font-size: 14px; line-height: 1.4; max-width: 85%; float: right;" id="prev-sms-bubble">
-                                Hi John, how is your new Super Widget? Leave a review here: https://link.co
-                            </div>
-                            <div style="clear: both;"></div>
                         </div>
                     </div>
                 </div>
