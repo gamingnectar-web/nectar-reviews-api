@@ -140,66 +140,44 @@ async function loadStats() {
         const prodCardEl = document.getElementById('v-dash-prod-card');
         if (stats.topProduct && stats.topProduct.id !== "N/A") {
             const numericId = stats.topProduct.id;
+            const count = stats.topProduct.count;
+            const avgNum = parseFloat(stats.topProduct.averageRating);
+            const fullStars = isNaN(avgNum) ? 0 : Math.round(avgNum);
             
-            prodCardEl.innerHTML = `
-                <div style="display: flex; align-items: center; gap: 20px;">
-                    <div style="width: 70px; height: 70px; background: #f4f6f8; border-radius: 8px;"></div>
-                    <div style="flex: 1;">
-                        <p style="color: var(--text-light); font-weight: 600; font-size: 12px; text-transform: uppercase; margin:0;">Top Product ID</p>
-                        <div style="width: 150px; height: 20px; background: #f4f6f8; margin: 5px 0; border-radius: 4px;"></div>
-                        <div style="width: 80px; height: 16px; background: #f4f6f8; border-radius: 4px;"></div>
-                    </div>
-                </div>
-            `;
-
-            try {
-                const shopRes = await fetch(`https://${SHOP_DOMAIN}/search/suggest.json?q=id:${numericId}&resources[type]=product&resources[limit]=1`);
-                const shopData = await shopRes.json();
-                const shopProd = shopData.resources.results.products[0];
-
-                if (shopProd) {
-                    const rawUrl = shopProd.url.split('?')[0];
-                    const metaRes = await fetch(`https://${SHOP_DOMAIN}${rawUrl}.json`);
-                    const metaData = await metaRes.json();
-                    
-                    const metafields = metaData.product.metafields;
-                    const finalAvg = metafields.reviews?.rating?.value || stats.topProduct.averageRating;
-                    const finalCount = metafields.reviews?.rating_count?.value || stats.topProduct.reviewCount;
-                    
-                    const avgNum = parseFloat(finalAvg);
-                    const fullStars = isNaN(avgNum) ? 0 : Math.round(avgNum);
-
-                    prodCardEl.innerHTML = `
-                        <div style="display: flex; align-items: center; gap: 20px; width: 100%;">
-                            <a href="https://${SHOP_DOMAIN}/admin/products/${numericId}" target="_blank" title="Open Product in Shopify Admin">
-                                <img src="${shopProd.image}" style="width: 70px; height: 70px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+            if (stats.topProduct.title) {
+                prodCardEl.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 20px; width: 100%;">
+                        <a href="https://${SHOP_DOMAIN}/admin/products/${numericId}" target="_blank" title="Open Product in Shopify Admin">
+                            <img src="${stats.topProduct.image || 'https://cdn.shopify.com/s/images/admin/no-image-large.gif'}" style="width: 70px; height: 70px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                        </a>
+                        <div style="flex: 1;">
+                            <p style="color: var(--text-light); font-weight: 600; font-size: 11px; text-transform: uppercase; margin:0; letter-spacing: 0.5px;">Most Reviewed Product</p>
+                            <a href="https://${SHOP_DOMAIN}/admin/products/${numericId}" target="_blank" style="text-decoration: none; display: block; margin: 2px 0 6px 0;">
+                                <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: var(--primary); -webkit-line-clamp: 2; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden; line-height: 1.2;">
+                                    ${stats.topProduct.title}
+                                </h3>
                             </a>
-                            <div style="flex: 1;">
-                                <p style="color: var(--text-light); font-weight: 600; font-size: 11px; text-transform: uppercase; margin:0; letter-spacing: 0.5px;">Most Reviewed Product</p>
-                                <a href="https://${SHOP_DOMAIN}/admin/products/${numericId}" target="_blank" style="text-decoration: none; display: block; margin: 2px 0 6px 0;">
-                                    <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: var(--primary); -webkit-line-clamp: 2; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden; line-height: 1.2;">
-                                        ${shopProd.title}
-                                    </h3>
-                                </a>
-                                <div style="display: flex; align-items: center; gap: 6px;">
-                                    <span style="color: var(--star); font-size: 14px; letter-spacing: 1px;">
-                                        ${'★'.repeat(fullStars)}${'☆'.repeat(5-fullStars)}
-                                    </span>
-                                    <span style="font-weight: 700; font-size: 14px; color: var(--primary);">${avgNum.toFixed(1)}</span>
-                                    <span style="font-size: 13px; color: var(--text-light);">(${finalCount} reviews)</span>
-                                </div>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <span style="color: var(--star); font-size: 14px; letter-spacing: 1px;">
+                                    ${'★'.repeat(fullStars)}${'☆'.repeat(5-fullStars)}
+                                </span>
+                                <span style="font-weight: 700; font-size: 14px; color: var(--primary);">${avgNum.toFixed(1)}</span>
+                                <span style="font-size: 13px; color: var(--text-light);">(${count} reviews)</span>
                             </div>
                         </div>
-                    `;
-                } else {
-                    throw new Error("No match in Shopify suggest API.");
-                }
-            } catch (shopifyError) {
+                    </div>
+                `;
+            } else {
                 prodCardEl.innerHTML = `
                     <div style="width: 100%;">
                         <p style="color: var(--text-light); font-weight: 600; font-size: 12px; text-transform: uppercase; margin:0;">Top Product ID</p>
-                        <h1 id="stat-prod" style="font-size: 24px; margin: 5px 0;">ID: ${numericId}</h1>
-                        <p style="font-size: 13px; color: var(--text-light); margin: 0;">(${stats.topProduct.reviewCount} reviews, avg: ${stats.topProduct.averageRating})</p>
+                        <h1 id="stat-prod" style="font-size: 24px; margin: 5px 0;">
+                            <a href="https://${SHOP_DOMAIN}/admin/products/${numericId}" target="_blank" style="color: var(--primary); text-decoration: none;">ID: ${numericId} ↗</a>
+                        </h1>
+                        <div style="display: flex; align-items: center; gap: 6px; margin-top: 5px;">
+                            <span style="color: var(--star); font-size: 14px;">${'★'.repeat(fullStars)}${'☆'.repeat(5-fullStars)}</span>
+                            <span style="font-size: 13px; color: var(--text-light);">(${count} reviews, avg: ${avgNum.toFixed(1)})</span>
+                        </div>
                     </div>
                 `;
             }
