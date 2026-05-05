@@ -282,5 +282,8 @@ app.get('/api/widget/config', async (req, res) => {
 
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'admin.html')));
 
+// Add this right next to your '/admin' route
+app.get('/admin.js', (req, res) => res.sendFile(path.join(__dirname, 'admin.js')));
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Port ${PORT}`));
