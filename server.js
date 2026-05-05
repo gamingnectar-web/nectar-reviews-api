@@ -49,6 +49,10 @@ const Review = mongoose.model('Review', reviewSchema, 'reviews');
 
 const settingsSchema = new mongoose.Schema({
     shopDomain: { type: String, required: true, unique: true },
+    betaMode: { 
+        enabled: { type: Boolean, default: false },
+        email: { type: String, default: '' }
+    },
     emailsSentTotal: { type: Number, default: 0 }, 
     autoApproveEnabled: { type: Boolean, default: false },
     autoApproveType: { type: String, enum: ['verified', 'all'], default: 'verified' },
@@ -267,7 +271,13 @@ app.patch('/api/admin/settings', async (req, res) => {
 
 app.get('/api/widget/config', async (req, res) => {
     const config = await Settings.findOne({ shopDomain: req.query.shopDomain });
-    res.json({ styles: config?.widgetStyles, cardStyles: config?.cardStyles, carouselStyles: config?.carouselStyles, profiles: config?.attributeProfiles });
+    res.json({ 
+        styles: config?.widgetStyles, 
+        cardStyles: config?.cardStyles, 
+        carouselStyles: config?.carouselStyles, 
+        profiles: config?.attributeProfiles,
+        betaMode: config?.betaMode 
+    });
 });
 
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'admin.html')));
