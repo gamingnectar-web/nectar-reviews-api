@@ -8,7 +8,6 @@ const app = express();
 app.use(cors()); 
 app.use(express.json());
 
-// CRITICAL: This allows your server to host the widget.js file for storefronts
 app.use(express.static('public'));
 
 app.use((req, res, next) => {
@@ -20,9 +19,6 @@ mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ DB Connected'))
   .catch((err) => console.error('❌ DB Connection Error:', err));
 
-// ==========================================
-// SCHEMAS 
-// ==========================================
 const reviewSchema = new mongoose.Schema({
     shopDomain: { type: String, required: true },
     itemId: { type: String, required: true },
@@ -44,7 +40,7 @@ const reviewSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 });
 
-reviewSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 2419200 }); // 28-day auto-delete
+reviewSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 2419200 }); 
 const Review = mongoose.model('Review', reviewSchema, 'reviews');
 
 const settingsSchema = new mongoose.Schema({
@@ -80,9 +76,6 @@ const settingsSchema = new mongoose.Schema({
 });
 const Settings = mongoose.model('Settings', settingsSchema, 'settings');
 
-// ==========================================
-// ENTERPRISE SEO METAFIELD SYNC
-// ==========================================
 async function syncShopifyMetafields(shopDomain, productId) {
     const config = await Settings.findOne({ shopDomain });
     if (!config || !config.seo?.richSnippets) return; 
@@ -132,9 +125,6 @@ async function syncShopifyMetafields(shopDomain, productId) {
     }
 }
 
-// ==========================================
-// CACHE & VERIFICATION LOGIC
-// ==========================================
 let metafieldCache = { data: null, timestamp: 0 };
 app.get('/api/admin/metafields', async (req, res) => {
     if (metafieldCache.data && (Date.now() - metafieldCache.timestamp < 300000)) return res.json(metafieldCache.data);
@@ -176,9 +166,9 @@ async function verifyShopifyOrder(orderId, email, productId) {
     return { verified: false, note: "Order ID not found." };
 }
 
-// ==========================================
-// API ROUTES
-// ==========================================
+// ----------------------------------------
+// ADMIN STATS ENDPOINT (Dashboard Fixes)
+// ----------------------------------------
 app.get('/api/admin/stats', async (req, res) => {
     const { shopDomain } = req.query;
     try {
@@ -186,11 +176,45 @@ app.get('/api/admin/stats', async (req, res) => {
         const config = await Settings.findOne({ shopDomain });
         const sources = { website: 0, email: 0, import: 0 };
         const products = {};
-        reviews.forEach(r => { sources[r.source || 'website']++; products[r.itemId] = (products[r.itemId] || 0) + 1; });
-        const topProduct = Object.entries(products).sort((a,b) => b[1]-a[1])[0] || ["N/A", 0];
+        
+        reviews.forEach(r => { 
+            sources[r.source || 'website']++; 
+            if (!products[r.itemId]) products[r.itemId] = { count: 0, sum: 0 };
+            products[r.itemId].count++;
+            products[r.itemId].sum += r.rating;
+        });
+        
+        let topProduct = { id: "N/A", count: 0, averageRating: "0.0", title: null, image: null };
+        const sortedProducts = Object.entries(products).sort((a,b) => b[1].count - a[1].count);
+        
+        if (sortedProducts.length > 0) {
+            const top = sortedProducts[0];
+            topProduct.id = top[0];
+            topProduct.count = top[1].count;
+            topProduct.averageRating = (top[1].sum / top[1].count).toFixed(1);
+            
+            // Securely fetch Product Image & Title server-side bypassing CORS
+            const STORE_URL = process.env.SHOPIFY_STORE_URL; 
+            const CLIENT_ID = process.env.SHOPIFY_API_KEY; 
+            const CLIENT_SECRET = process.env.SHOPIFY_API_SECRET;
+            if (STORE_URL && CLIENT_ID && CLIENT_SECRET) {
+                const authString = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
+                try {
+                    const prodRes = await fetch(`https://${STORE_URL}/admin/api/2024-01/products/${topProduct.id}.json?fields=id,title,image`, { 
+                        headers: { 'Authorization': `Basic ${authString}`, 'Content-Type': 'application/json' } 
+                    });
+                    const prodData = await prodRes.json();
+                    if (prodData.product) {
+                        topProduct.title = prodData.product.title;
+                        topProduct.image = prodData.product.image ? prodData.product.image.src : null;
+                    }
+                } catch(e) { console.error("Could not fetch top product details", e); }
+            }
+        }
+        
         const sent = config?.emailsSentTotal || 0;
         const rate = sent > 0 ? ((sources.email / sent) * 100).toFixed(1) : 0;
-        res.json({ sources, topProduct: { id: topProduct[0], count: topProduct[1] }, emailStats: { sent, completed: sources.email, rate } });
+        res.json({ sources, topProduct, emailStats: { sent, completed: sources.email, rate } });
     } catch (e) { res.status(500).send(e.message); }
 });
 
@@ -281,9 +305,7 @@ app.get('/api/widget/config', async (req, res) => {
 });
 
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'admin.html')));
-
-// Add this right next to your '/admin' route
-app.get('/admin.js', (req, res) => res.sendFile(path.join(__dirname, 'admin.js')));
+app.get('/admin.js', (req, res) => res.sendFile(path.join(__dirname, 'admin.js'))); // Ensures admin.js loads properly
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Port ${PORT}`));
