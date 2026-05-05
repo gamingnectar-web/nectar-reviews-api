@@ -72,18 +72,7 @@ const settingsSchema = new mongoose.Schema({
         autoplay: { type: Boolean, default: true },
         delay: { type: Number, default: 4000 },
         showArrows: { type: Boolean, default: false },
-        limit: { type: Number, default: 10 }
-    },
-    messaging: {
-        flowDelayDays: { type: Number, default: 14 },
-        emailMode: { type: String, enum: ['visual', 'html'], default: 'visual' },
-        emailSubject: { type: String, default: 'How did we do?' },
-        emailLogo: { type: String, default: '' },
-        emailColor: { type: String, default: '#000000' },
-        emailBody: { type: String, default: "Hi {{ customer_name }}, we hope you are loving your {{ product_name }}! We'd love to hear your thoughts." },
-        emailHtml: { type: String, default: '<div style="text-align:center;">Hi {{ customer_name }}, please review {{ product_name }}.</div>' },
-        includeStars: { type: Boolean, default: true },
-        smsText: { type: String, default: "Hi {{ customer_name }}, how is your new {{ product_name }}? Leave a review here: {{ review_link }}" }
+        limit: { type: Number, default: 10 } // <-- Added Limit Control
     }
 });
 const Settings = mongoose.model('Settings', settingsSchema, 'settings');
