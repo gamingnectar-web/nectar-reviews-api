@@ -117,9 +117,18 @@ async function load() {
                     document.getElementById('car-layout').value = config.carouselStyles.layout || 'infinite';
                     document.getElementById('car-autoplay').checked = config.carouselStyles.autoplay !== false;
                     document.getElementById('car-delay').value = config.carouselStyles.delay || 4000;
-                    document.getElementById('car-arrows').checked = config.carouselStyles.showArrows || false;
+                    document.getElementById('car-limit').value = config.carouselStyles.limit || 10;
                 }
+                if (config.messaging) {
+                    document.getElementById('msg-email-subject').value = config.messaging.emailSubject || 'How did we do?';
+                    document.getElementById('msg-email-logo').value = config.messaging.emailLogo || '';
+                    document.getElementById('msg-email-color').value = config.messaging.emailColor || '#000000';
+                    document.getElementById('msg-email-body').value = config.messaging.emailBody || "Hi {{ customer_name }}, we hope you are loving your {{ product_name }}! We'd love to hear your thoughts.";
+                    document.getElementById('msg-sms-body').value = config.messaging.smsText || "Hi {{ customer_name }}, how is your new {{ product_name }}? Leave a review here: {{ review_link }}";
+                }
+
                 updatePreviews();
+                updateMsgPreview();
                 renderAttributes();
             }
         }
@@ -395,6 +404,37 @@ function updatePreviews() {
     document.getElementById('pre-card-count').style.display = document.getElementById('card-count').checked ? 'inline' : 'none';
 }
 
+function updateMsgPreview() {
+    const subject = document.getElementById('msg-email-subject').value;
+    const logo = document.getElementById('msg-email-logo').value;
+    const color = document.getElementById('msg-email-color').value;
+    
+    let eBody = document.getElementById('msg-email-body').value;
+    eBody = eBody.replace(/{{ customer_name }}/g, 'John');
+    eBody = eBody.replace(/{{ product_name }}/g, 'Super Widget');
+    
+    let sBody = document.getElementById('msg-sms-body').value;
+    sBody = sBody.replace(/{{ customer_name }}/g, 'John');
+    sBody = sBody.replace(/{{ product_name }}/g, 'Super Widget');
+    sBody = sBody.replace(/{{ review_link }}/g, 'https://link.co');
+
+    document.getElementById('prev-email-subject-text').innerText = subject;
+    document.getElementById('prev-email-body-text').innerText = eBody;
+    document.getElementById('prev-email-btn').style.background = color;
+    document.getElementById('prev-sms-bubble').innerText = sBody;
+
+    const logoImg = document.getElementById('prev-email-logo-img');
+    const logoPlaceholder = document.getElementById('prev-email-logo-placeholder');
+    if(logo) {
+        logoImg.src = logo;
+        logoImg.style.display = 'inline-block';
+        logoPlaceholder.style.display = 'none';
+    } else {
+        logoImg.style.display = 'none';
+        logoPlaceholder.style.display = 'block';
+    }
+}
+
 async function saveSettings() {
     const payload = {
         shopDomain: SHOP_DOMAIN,
@@ -421,7 +461,15 @@ async function saveSettings() {
             layout: document.getElementById('car-layout').value,
             autoplay: document.getElementById('car-autoplay').checked,
             delay: parseInt(document.getElementById('car-delay').value) || 4000,
-            showArrows: document.getElementById('car-arrows').checked
+            showArrows: document.getElementById('car-arrows').checked,
+            limit: parseInt(document.getElementById('car-limit')?.value) || 10
+        },
+        messaging: {
+            emailSubject: document.getElementById('msg-email-subject').value,
+            emailLogo: document.getElementById('msg-email-logo').value,
+            emailColor: document.getElementById('msg-email-color').value,
+            emailBody: document.getElementById('msg-email-body').value,
+            smsText: document.getElementById('msg-sms-body').value
         }
     };
     await fetch(`${API}/admin/settings`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
