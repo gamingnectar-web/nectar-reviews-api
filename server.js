@@ -71,7 +71,15 @@ const settingsSchema = new mongoose.Schema({
         layout: { type: String, enum: ['grid', 'infinite', 'masonry'], default: 'infinite' },
         autoplay: { type: Boolean, default: true },
         delay: { type: Number, default: 4000 },
-        showArrows: { type: Boolean, default: false }
+        showArrows: { type: Boolean, default: false },
+        limit: { type: Number, default: 10 }
+    },
+    messaging: {
+        emailSubject: { type: String, default: 'How did we do?' },
+        emailLogo: { type: String, default: '' },
+        emailColor: { type: String, default: '#000000' },
+        emailBody: { type: String, default: "Hi {{ customer_name }}, we hope you are loving your {{ product_name }}! We'd love to hear your thoughts." },
+        smsText: { type: String, default: "Hi {{ customer_name }}, how is your new {{ product_name }}? Leave a review here: {{ review_link }}" }
     }
 });
 const Settings = mongoose.model('Settings', settingsSchema, 'settings');
@@ -166,9 +174,6 @@ async function verifyShopifyOrder(orderId, email, productId) {
     return { verified: false, note: "Order ID not found." };
 }
 
-// ----------------------------------------
-// ADMIN STATS ENDPOINT (Dashboard Fixes)
-// ----------------------------------------
 app.get('/api/admin/stats', async (req, res) => {
     const { shopDomain } = req.query;
     try {
@@ -193,7 +198,6 @@ app.get('/api/admin/stats', async (req, res) => {
             topProduct.count = top[1].count;
             topProduct.averageRating = (top[1].sum / top[1].count).toFixed(1);
             
-            // Securely fetch Product Image & Title server-side bypassing CORS
             const STORE_URL = process.env.SHOPIFY_STORE_URL; 
             const CLIENT_ID = process.env.SHOPIFY_API_KEY; 
             const CLIENT_SECRET = process.env.SHOPIFY_API_SECRET;
