@@ -32,6 +32,7 @@ const reviewSchema = new mongoose.Schema({
   comment: { type: String },
   reply: { type: String, default: '' },
   attributes: { type: Map, of: Number },
+  productTags: { type: Array, default: [] },
   source: { type: String, enum: ['website', 'email', 'import'], default: 'website' },
   status: { type: String, enum: ['pending', 'accepted', 'rejected', 'hold', 'spam'], default: 'pending' },
   verifiedPurchase: { type: Boolean, default: false },
@@ -183,34 +184,115 @@ app.get('/api/admin/metafields', async (req, res) => {
   }
 });
 
-async function verifyShopifyOrder(orderId, email, productId) {
-  if (!email || !orderId) return { verified: false, note: 'Missing details.' };
+async function fetchProductContext(productId) {
+  if (!productId) return { tags: [], image: '', title: '' };
 
-  const rawNumber = String(orderId).replace(/\D/g, '');
+  try {
+    const productData = await shopifyFetch(`/admin/api/2024-01/products/${encodeURIComponent(productId)}.json?fields=id,title,image,tags`);
+    const product = productData.product;
+    if (!product) return { tags: [], image: '', title: '' };
+
+    return {
+      title: product.title || '',
+      image: product.image && product.image.src ? product.image.src : '',
+      tags: typeof product.tags === 'string'
+        ? product.tags.split(',').map((tag) => tag.trim()).filter(Boolean)
+        : []
+    };
+  } catch (error) {
+    console.error('Could not fetch product context:', error.message);
+    return { tags: [], image: '', title: '' };
+  }
+}
+
+function orderMatchesNumber(order, rawNumber) {
+  return String(order.order_number) === String(rawNumber) || order.name === `#${rawNumber}` || order.name === String(rawNumber);
+}
+
+function orderEmailMatches(order, email) {
+  const target = String(email || '').trim().toLowerCase();
+  if (!target) return false;
+
+  const candidates = [
+    order.email,
+    order.contact_email,
+    order.customer && order.customer.email
+  ].filter(Boolean).map((value) => String(value).trim().toLowerCase());
+
+  return candidates.includes(target);
+}
+
+function orderContainsProduct(order, productId) {
+  if (!productId) return true;
+
+  return (order.line_items || []).some((item) => (
+    String(item.product_id) === String(productId) ||
+    String(item.variant_id) === String(productId)
+  ));
+}
+
+async function findShopifyOrderByNumber(orderId) {
+  const rawNumber = String(orderId || '').replace(/\D/g, '');
+  if (!rawNumber) return null;
+
   const searchTerms = [`#${rawNumber}`, rawNumber];
 
   for (const term of searchTerms) {
-    try {
-      const data = await shopifyFetch(`/admin/api/2024-01/orders.json?name=${encodeURIComponent(term)}&status=any`);
-      const order = data.orders?.find((o) => String(o.order_number) === rawNumber || o.name === `#${rawNumber}` || o.name === rawNumber);
-      if (!order) continue;
-
-      if (!order.email || order.email.toLowerCase() !== email.toLowerCase()) {
-        return { verified: false, note: 'Placed under a different email.' };
-      }
-
-      if (productId) {
-        const boughtProduct = order.line_items.some((item) => String(item.product_id) === String(productId) || String(item.variant_id) === String(productId));
-        if (!boughtProduct) return { verified: false, note: "Product wasn't in the order." };
-      }
-
-      return { verified: true, note: 'Verified.' };
-    } catch (error) {
-      console.error(error);
-    }
+    const data = await shopifyFetch(`/admin/api/2024-01/orders.json?name=${encodeURIComponent(term)}&status=any&limit=10`);
+    const order = data.orders?.find((candidate) => orderMatchesNumber(candidate, rawNumber));
+    if (order) return order;
   }
 
-  return { verified: false, note: 'Order ID not found.' };
+  return null;
+}
+
+async function verifyShopifyOrder(orderId, email, productId) {
+  if (!email || !orderId) return { verified: false, note: 'Missing email or order number.' };
+
+  try {
+    const order = await findShopifyOrderByNumber(orderId);
+
+    if (!order) return { verified: false, note: 'Order number not found.' };
+
+    if (!orderEmailMatches(order, email)) {
+      return { verified: false, note: 'Order was placed under a different email.' };
+    }
+
+    if (!orderContainsProduct(order, productId)) {
+      return { verified: false, note: "Product was not found in this order." };
+    }
+
+    return { verified: true, note: 'Verified by Shopify order and email.' };
+  } catch (error) {
+    console.error('Order verification failed:', error);
+    return { verified: false, note: 'Could not verify order with Shopify.' };
+  }
+}
+
+async function verifyCustomerBoughtProduct(email, productId) {
+  if (!email || !productId) return { verified: false, note: 'Missing email or product.' };
+
+  try {
+    // Used for logged-in customer reviews where the storefront has an email but no order number.
+    // We search recent orders for that email and only verify if this exact product/variant was purchased.
+    const data = await shopifyFetch(`/admin/api/2024-01/orders.json?email=${encodeURIComponent(email)}&status=any&limit=250`);
+    const order = data.orders?.find((candidate) => orderEmailMatches(candidate, email) && orderContainsProduct(candidate, productId));
+
+    if (!order) {
+      return { verified: false, note: 'No matching Shopify order found for this customer and product.' };
+    }
+
+    return { verified: true, note: `Verified by customer purchase history (${order.name || 'order'}).` };
+  } catch (error) {
+    console.error('Customer purchase verification failed:', error);
+    return { verified: false, note: 'Could not verify customer purchase history.' };
+  }
+}
+
+async function resolveReviewVerification({ orderId, email, itemId }) {
+  if (!email) return { verified: false, note: 'Email is required for review verification.' };
+  if (orderId) return verifyShopifyOrder(orderId, email, itemId);
+  return verifyCustomerBoughtProduct(email, itemId);
 }
 
 app.get('/api/magic-link/order', async (req, res) => {
@@ -218,27 +300,32 @@ app.get('/api/magic-link/order', async (req, res) => {
   if (!shopDomain || !orderId || !email) return res.status(400).json({ error: 'Missing order details' });
 
   try {
-    const rawNumber = String(orderId).replace(/\D/g, '');
-    const data = await shopifyFetch(`/admin/api/2024-01/orders.json?name=${encodeURIComponent(`#${rawNumber}`)}&status=any`);
-    const order = data.orders?.find((o) => String(o.order_number) === rawNumber || o.name === `#${rawNumber}` || o.name === rawNumber);
+    const order = await findShopifyOrderByNumber(orderId);
 
-    if (!order || !order.email || order.email.toLowerCase() !== String(email).toLowerCase()) {
+    if (!order || !orderEmailMatches(order, email)) {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    const products = (order.line_items || []).map((item) => ({
-      productId: String(item.product_id || ''),
-      variantId: String(item.variant_id || ''),
-      name: item.title || item.name || 'Product',
-      quantity: item.quantity || 1,
-      tags: [],
-      metafields: {}
+    const products = await Promise.all((order.line_items || []).map(async (item) => {
+      const productId = String(item.product_id || '');
+      const productContext = await fetchProductContext(productId);
+
+      return {
+        productId,
+        variantId: String(item.variant_id || ''),
+        name: item.title || item.name || productContext.title || 'Product',
+        quantity: item.quantity || 1,
+        image: productContext.image,
+        tags: productContext.tags,
+        metafields: {}
+      };
     }));
 
     res.json({
-      orderId: order.name || `#${rawNumber}`,
-      orderNumber: rawNumber,
+      orderId: order.name || `#${String(orderId).replace(/\D/g, '')}`,
+      orderNumber: String(order.order_number || orderId).replace(/\D/g, ''),
       customerName: order.customer?.first_name || order.billing_address?.first_name || 'Verified Customer',
+      email: order.email || email,
       products
     });
   } catch (error) {
@@ -327,22 +414,27 @@ function getAutoStatus(config, isVerified, rating) {
 app.post('/api/reviews', async (req, res) => {
   try {
     const isTestReview = req.body.testMode === true || req.body.isTestReview === true;
-    let isVerified = Boolean(req.body.verifiedPurchase);
-    let vNote = 'Verified automatically by Shopify.';
+    const email = String(req.body.email || '').trim();
+
+    if (!isTestReview && !email) {
+      return res.status(400).json({ error: 'Email is required to submit a review.' });
+    }
+
+    let isVerified = false;
+    let vNote = 'Unverified review.';
     let finalStatus = 'pending';
 
     if (isTestReview) {
-      isVerified = false;
       vNote = 'Test review submitted from review page preview.';
       finalStatus = 'spam';
     } else {
-      if (!isVerified && req.body.orderId && req.body.email) {
-        const checkResult = await verifyShopifyOrder(req.body.orderId, req.body.email, req.body.itemId);
-        isVerified = checkResult.verified;
-        vNote = checkResult.note;
-      } else if (!isVerified && !req.body.orderId) {
-        vNote = 'No Order ID provided by customer.';
-      }
+      const checkResult = await resolveReviewVerification({
+        orderId: req.body.orderId,
+        email,
+        itemId: req.body.itemId
+      });
+      isVerified = checkResult.verified;
+      vNote = checkResult.note;
 
       const config = await Settings.findOne({ shopDomain: req.body.shopDomain });
       finalStatus = getAutoStatus(config, isVerified, req.body.rating);
@@ -350,6 +442,7 @@ app.post('/api/reviews', async (req, res) => {
 
     const newReview = new Review({
       ...req.body,
+      email,
       source: req.body.source || 'email',
       isTestReview,
       testMode: isTestReview,
@@ -371,25 +464,36 @@ app.post('/api/reviews', async (req, res) => {
 
 app.post('/api/reviews/bulk', async (req, res) => {
   try {
-    const { shopDomain, orderId, email, reviews, testMode } = req.body;
+    const { shopDomain, orderId, reviews, testMode } = req.body;
+    const email = String(req.body.email || '').trim();
+
     if (!shopDomain || !Array.isArray(reviews) || !reviews.length) {
       return res.status(400).json({ error: 'Invalid payload.' });
     }
 
-    const config = await Settings.findOne({ shopDomain });
     const isTestReview = testMode === true;
+
+    if (!isTestReview && !email) {
+      return res.status(400).json({ error: 'Email is required to submit reviews.' });
+    }
+
+    const config = await Settings.findOne({ shopDomain });
     const savedReviews = [];
 
     for (const review of reviews) {
       let isVerified = false;
-      let verificationNote = 'No verification attempted.';
+      let verificationNote = 'Unverified review.';
       let status = 'pending';
 
       if (isTestReview) {
         verificationNote = 'Test review submitted from review page preview.';
         status = 'spam';
       } else {
-        const checkResult = await verifyShopifyOrder(orderId, email, review.itemId);
+        const checkResult = await resolveReviewVerification({
+          orderId,
+          email,
+          itemId: review.itemId
+        });
         isVerified = checkResult.verified;
         verificationNote = checkResult.note;
         status = getAutoStatus(config, isVerified, review.rating);
