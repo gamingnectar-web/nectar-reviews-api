@@ -14,13 +14,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// CUSTOM GUARANTEED NATIVE TOAST 
 window.showToast = function(msg) {
+    if (window.shopify && window.shopify.toast) {
+        window.shopify.toast.show(msg);
+    }
     const toast = document.getElementById('custom-toast');
     if(!toast) return;
     toast.innerText = msg;
-    toast.style.bottom = '30px';
-    setTimeout(() => { toast.style.bottom = '-100px'; }, 3000);
+    toast.style.top = '30px';
+    setTimeout(() => { toast.style.top = '-100px'; }, 3000);
 };
 
 window.tab = function(id) {
@@ -147,6 +149,7 @@ window.load = async function() {
         }
         window.renderLists();
         window.loadStats();
+        window.generateFlowCode();
     } catch(e) { console.error("Init error:", e); }
 };
 
@@ -309,7 +312,6 @@ window.buildCard = function(r, isTrash) {
             </div>
         </div>
         
-        <!-- FULL WIDTH REPLY BOX OUTSIDE OF CARD SPLIT -->
         <div style="width: 100%; margin-top: 15px; border-top: 1px dashed var(--border); padding-top: 15px;">
             <button class="reply-toggle" style="margin-top:0;" onclick="window.toggleReplyBox('${r._id}')">💬 Reply to Customer</button>
             <div id="reply-box-${r._id}" class="reply-panel" style="display: ${r.reply ? 'block' : 'none'}; margin-top: 15px;">
@@ -342,7 +344,7 @@ window.manuallyVerify = async function(id) {
         body: JSON.stringify({ verifiedPurchase: true, verificationNote: "Manually verified by admin" }) 
     });
     
-    window.showToast('Review Verified');
+    window.showToast('Review Verified!');
 };
 
 window.updateStatus = async function(id, status) {
@@ -480,12 +482,8 @@ window.saveSettings = async function() {
         }
     };
     await fetch(`${API}/admin/settings`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-    window.showToast('Settings Saved');
+    window.showToast('Settings Saved successfully!');
 };
-
-let parsedCSVData = []; 
-let csvHeaders = [];
-let mappedReviews = [];
 
 window.handleFileUpload = function() {
     const file = document.getElementById('csv-file').files[0]; if (!file) return;
@@ -668,6 +666,43 @@ window.processFinalImport = async function() {
         btn.innerText = "🚀 Go Live (Import to Database)"; 
         btn.disabled = false; 
     }
+};
+
+window.generateFlowCode = function() {
+    const logo = document.getElementById('flow-logo').value.trim();
+    const color = document.getElementById('flow-color').value;
+    const heading = document.getElementById('flow-heading').value;
+    const shopUrl = `https://${SHOP_DOMAIN}`;
+
+    const logoHtml = logo ? `<img src="${logo}" alt="Logo" style="max-width: 150px; margin-bottom: 20px;">` : '';
+
+    const flowHtml = `
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; text-align: center; padding: 20px; background: #ffffff;">
+    ${logoHtml}
+    <h2 style="color: #111827; margin-bottom: 15px;">${heading}</h2>
+    <p style="color: #4b5563; font-size: 16px; line-height: 1.5;">Hi {{ order.customer.firstName | default: "there" }},</p>
+    <p style="color: #4b5563; font-size: 16px; line-height: 1.5;">We hope you're loving your recent purchase! Could you take 60 seconds to leave a quick review?</p>
+    
+    <div style="margin-top: 30px; text-align: left;">
+        {% for lineItems_item in order.lineItems %}
+        <div style="border: 1px solid #ebebeb; border-radius: 8px; padding: 15px; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between;">
+            <strong style="color: #111827; font-size: 14px; max-width: 60%; display: block;">{{ lineItems_item.name }}</strong>
+            <a href="${shopUrl}/pages/leave-review?product={{ lineItems_item.product.id | split: '/' | last }}&order={{ order.name | replace: '#', '' }}&email={{ order.customer.email }}" style="background: ${color}; color: #ffffff; padding: 10px 16px; text-decoration: none; font-size: 13px; font-weight: bold; border-radius: 4px; white-space: nowrap;">Leave Review</a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+    `.trim();
+
+    const output = document.getElementById('flow-code-output');
+    if(output) output.value = flowHtml;
+};
+
+window.copyFlowCode = function() {
+    const output = document.getElementById('flow-code-output');
+    output.select();
+    document.execCommand('copy');
+    window.showToast('Copied to clipboard!');
 };
 
 window.load();
