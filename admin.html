@@ -87,25 +87,21 @@
 
 <div class="app-sidebar">
     <div class="sidebar-title">Manage</div>
-    <button class="tab-btn active" onclick="tab('v-dash')">Dashboard</button>
-    <button class="tab-btn" onclick="tab('v-mgr')">Review Manager</button>
-    <button class="tab-btn" onclick="tab('v-trash')">Trash 🗑️</button>
-    <button class="tab-btn" onclick="tab('v-imp')">Import CSV 📥</button>
+    <button class="tab-btn active" onclick="window.tab('v-dash')">Dashboard</button>
+    <button class="tab-btn" onclick="window.tab('v-mgr')">Review Manager</button>
+    <button class="tab-btn" onclick="window.tab('v-trash')">Trash 🗑️</button>
+    <button class="tab-btn" onclick="window.tab('v-imp')">Import CSV 📥</button>
     
-    <div class="sidebar-title" style="margin-top: 20px;">Growth & Outreach</div>
-    <button class="tab-btn" onclick="tab('v-msg')">Messaging & Flow ✉️</button>
-
     <div class="sidebar-title" style="margin-top: 20px;">Configuration</div>
-    <button class="tab-btn" onclick="tab('v-set')">Rules & Settings</button> 
-    <button class="tab-btn" onclick="tab('v-des')">Visual Customizer</button>
+    <button class="tab-btn" onclick="window.tab('v-set')">Rules & Settings</button> 
+    <button class="tab-btn" onclick="window.tab('v-des')">Visual Customiser</button>
     
     <div class="sidebar-title" style="margin-top: 20px;">Developers</div>
-    <button class="tab-btn" onclick="tab('v-dev')">Manual Setup</button>
+    <button class="tab-btn" onclick="window.tab('v-dev')">Manual Setup</button>
 </div>
 
 <div class="main-content">
     
-    <!-- DASHBOARD -->
     <div id="v-dash" class="view active">
         <h2>Performance Dashboard</h2>
         <div class="metrics-grid">
@@ -127,12 +123,11 @@
         </div>
     </div>
 
-    <!-- REVIEW MANAGER -->
     <div id="v-mgr" class="view">
         <h2>Review Manager</h2>
         <div class="settings-panel" style="display: flex; gap: 15px; margin-bottom: 20px; padding: 15px;">
-            <input type="text" id="search-bar" class="search-input" style="flex: 1;" placeholder="Search reviews..." onkeyup="renderLists()">
-            <select id="star-filter" class="filter-select" style="width: 150px;" onchange="renderLists()">
+            <input type="text" id="search-bar" class="search-input" style="flex: 1;" placeholder="Search reviews..." onkeyup="window.renderLists()">
+            <select id="star-filter" class="filter-select" style="width: 150px;" onchange="window.renderLists()">
                 <option value="all">All Stars</option>
                 <option value="5">5 Stars</option>
                 <option value="4">4 Stars</option>
@@ -140,7 +135,7 @@
                 <option value="2">2 Stars</option>
                 <option value="1">1 Star</option>
             </select>
-            <select id="status-filter" class="filter-select" style="width: 200px;" onchange="renderLists()">
+            <select id="status-filter" class="filter-select" style="width: 200px;" onchange="window.renderLists()">
                 <option value="all">All Statuses</option>
                 <option value="pending">Pending</option>
                 <option value="accepted">Accepted</option>
@@ -150,19 +145,17 @@
         <div id="mgr-list">Loading reviews...</div>
     </div>
 
-    <!-- TRASH -->
     <div id="v-trash" class="view">
         <h2>Trash Bin</h2>
         <p style="color: var(--text-light); margin-bottom: 20px;">Reviews here will be permanently deleted after 28 days.</p>
         <div id="trash-list">Loading...</div>
     </div>
 
-    <!-- IMPORTER -->
     <div id="v-imp" class="view">
         <h2>Importer Tool</h2>
         <div class="settings-panel">
             <h3 style="margin-top: 0;">1. Export from your old platform</h3>
-            <select id="import-platform-select" class="filter-select" style="max-width: 300px; margin-bottom: 20px;" onchange="toggleImportInst()">
+            <select id="import-platform-select" class="filter-select" style="max-width: 300px; margin-bottom: 20px;" onchange="window.toggleImportInst()">
                 <option value="general">Generic / Other Format</option>
                 <option value="weebly">Weebly / Square / Judge.me</option>
             </select>
@@ -176,153 +169,17 @@
 
             <h3 style="margin-top: 30px; border-top: 1px solid var(--border); padding-top: 30px;">2. Upload and Map Columns</h3>
             <div style="border: 2px dashed #c9cccf; padding: 40px; text-align: center; border-radius: 12px; margin: 20px 0; background: #fafafa;">
-                <input type="file" id="csv-file" accept=".csv" style="display: none;" onchange="handleFileUpload()">
+                <input type="file" id="csv-file" accept=".csv" style="display: none;" onchange="window.handleFileUpload()">
                 <button class="post-btn" onclick="document.getElementById('csv-file').click()">Select CSV File</button>
                 <div id="file-name" style="margin-top: 15px; font-weight: 600; color: var(--blue);"></div>
             </div>
             <div id="mapping-ui" style="display: none; margin-top: 30px; padding-top: 30px; border-top: 1px solid var(--border);">
                 <h4>Map your columns</h4>
                 <div id="column-mappers" style="display: grid; gap: 20px; grid-template-columns: 1fr 1fr;"></div>
-                <button id="import-submit-btn" class="post-btn" style="background: var(--blue); width: 100%; margin-top: 30px;" onclick="generateStagingArea()">Preview & Map Products</button>
+                <button id="import-submit-btn" class="post-btn" style="background: var(--blue); width: 100%; margin-top: 30px;" onclick="window.generateStagingArea()">Preview & Map Products</button>
             </div>
 
             <div id="staging-area"></div>
-        </div>
-    </div>
-
-    <!-- MESSAGING & FLOW -->
-    <div id="v-msg" class="view">
-        <h2>Messaging & Follow-ups</h2>
-        <p style="color: var(--text-light); margin-bottom: 25px;">Design the automated emails and texts sent to customers requesting reviews via Shopify Flow.</p>
-
-        <div style="display: flex; gap: 30px;">
-            <div style="flex: 1;">
-                <div class="sub-tab-nav">
-                    <button class="sub-tab-btn active" onclick="subTab('msg-email', 'prev-email-msg')">Email Template</button>
-                    <button class="sub-tab-btn" onclick="subTab('msg-sms', 'prev-sms-msg')">SMS Template</button>
-                    <button class="sub-tab-btn" onclick="subTab('msg-flow', 'prev-email-msg')">Shopify Flow Setup</button>
-                </div>
-
-                <div id="msg-email" class="sub-view active">
-                    <div class="settings-panel">
-                        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                            <button id="btn-mode-visual" class="post-btn" style="flex:1; background: var(--blue);" onclick="toggleEmailMode('visual')">Visual Builder</button>
-                            <button id="btn-mode-html" class="post-btn" style="flex:1; background: #e2e8f0; color: #111;" onclick="toggleEmailMode('html')">Custom HTML Code</button>
-                        </div>
-                        <input type="hidden" id="msg-email-mode" value="visual">
-
-                        <div class="setting-row"><span>Email Subject</span><input type="text" id="msg-email-subject" class="search-input" style="width: 250px;" oninput="updateMsgPreview()" value="How did we do?"></div>
-                        
-                        <div id="visual-email-controls">
-                            <div class="setting-row">
-                                <span>Logo URL</span>
-                                <div style="display: flex; gap: 10px;">
-                                    <input type="text" id="msg-email-logo" class="search-input" style="width: 180px;" oninput="updateMsgPreview()" placeholder="https://...">
-                                    <button class="post-btn" style="padding: 10px; background: #f4f6f8; color: var(--text); border: 1px solid var(--border);" onclick="pickShopifyImage()">Browse</button>
-                                </div>
-                            </div>
-                            <div class="setting-row"><span>Button Color</span><input type="color" id="msg-email-color" oninput="updateMsgPreview()" value="#000000"></div>
-                            <div class="setting-row"><span>Include Interactive Stars</span><label class="switch"><input type="checkbox" id="msg-include-stars" onchange="updateMsgPreview()" checked><span class="slider"></span></label></div>
-                            <div style="margin-top: 15px;">
-                                <span style="display:block; margin-bottom:8px; font-weight:600;">Email Message</span>
-                                <textarea id="msg-email-body" class="search-input" style="min-height: 120px; resize: vertical;" oninput="updateMsgPreview()">Hi {{ customer_name }}, we hope you are loving your {{ product_name }}! We'd love to hear your thoughts.</textarea>
-                            </div>
-                        </div>
-
-                        <div id="html-email-controls" style="display: none; margin-top: 15px;">
-                            <span style="display:block; margin-bottom:8px; font-weight:600;">Raw HTML Template</span>
-                            <p style="font-size: 12px; color: var(--text-light); margin-bottom: 10px;">Warning: Advanced users only. Liquid logic will not process here.</p>
-                            <textarea id="msg-email-html" class="code-block" style="width: 100%; min-height: 300px; resize: vertical; border: none; outline: none; margin: 0; box-sizing: border-box;" oninput="updateMsgPreview()"></textarea>
-                        </div>
-
-                        <p style="font-size: 12px; color: var(--text-light); margin-top: 15px;">Available tags: <code>{{ customer_name }}</code>, <code>{{ product_name }}</code>, <code>{{ product_image }}</code>, <code>{{ review_link }}</code></p>
-                        <button class="post-btn" style="width:100%; margin-top:20px;" onclick="saveSettings()">Save Template</button>
-                    </div>
-                </div>
-
-                <div id="msg-sms" class="sub-view">
-                    <div class="settings-panel">
-                        <p style="font-size: 13px; color: var(--text-light); margin-bottom: 20px;">Keep it short! SMS are sent automatically via your integrated provider.</p>
-                        <div style="margin-top: 15px;">
-                            <span style="display:block; margin-bottom:8px; font-weight:600;">Text Message</span>
-                            <textarea id="msg-sms-body" class="search-input" style="min-height: 100px; resize: vertical;" oninput="updateMsgPreview()">Hi {{ customer_name }}, how is your new {{ product_name }}? Leave a review here: {{ review_link }}</textarea>
-                            <p style="font-size: 12px; color: var(--text-light); margin-top: 8px;">Available tags: <code>{{ customer_name }}</code>, <code>{{ product_name }}</code>, <code>{{ review_link }}</code></p>
-                        </div>
-                        <button class="post-btn" style="width:100%; margin-top:20px;" onclick="saveSettings()">Save SMS Template</button>
-                    </div>
-                </div>
-
-                <div id="msg-flow" class="sub-view">
-                    <div class="settings-panel">
-                        <h3 style="margin-top: 0;">Shopify Flow Automation</h3>
-                        <p style="font-size: 13px; color: var(--text-light); margin-bottom: 20px;">Configure when the review requests are sent after an order is fulfilled.</p>
-                        
-                        <div class="setting-row" style="border-top: 1px solid var(--border);">
-                            <div>
-                                <h4>Delay after Fulfillment</h4>
-                                <p style="font-size: 12px; color: var(--text-light); margin: 0;">Give customers time to receive and use the product.</p>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <input type="number" id="msg-flow-delay" class="search-input" style="width: 70px;" value="14">
-                                <span style="font-weight: 600;">Days</span>
-                            </div>
-                        </div>
-                        
-                        <div class="import-inst-box active" style="margin-top: 20px; display: block; border-left-color: var(--green); background: #f0fdf4;">
-                            <strong>Flow Integration Active:</strong> When you save this setting, our API automatically updates your Shopify Flow trigger payload. If you haven't installed our default Flow template yet, you can download it below.
-                        </div>
-                        
-                        <button class="post-btn" style="width:100%; margin-top:20px; background: white; color: var(--text); border: 2px solid var(--border);">Download Flow Template (.flow)</button>
-                        <button class="post-btn" style="width:100%; margin-top:10px;" onclick="saveSettings()">Save Delay Settings</button>
-                    </div>
-                </div>
-            </div>
-
-            <div style="flex: 1;">
-                <h4 style="margin-top: 0; color: var(--text-light);">Live Preview</h4>
-                
-                <div id="prev-email-msg" class="sub-preview active">
-                    <!-- Visual Builder Preview -->
-                    <div id="preview-wrapper-visual" style="background: #f4f6f8; padding: 40px; border-radius: 12px; border: 1px solid var(--border); display: flex; justify-content: center;">
-                        <div style="background: #fff; width: 100%; max-width: 400px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden;">
-                            <div style="background: #fafafa; padding: 20px; text-align: center; border-bottom: 1px solid #ebebeb;">
-                                <img id="prev-email-logo-img" src="" alt="Logo" style="max-height: 40px; display: none;">
-                                <div id="prev-email-logo-placeholder" style="font-weight: 800; font-size: 20px; color: #333;">Your Brand</div>
-                            </div>
-                            <div style="padding: 30px 20px; text-align: center;">
-                                <h2 id="prev-email-subject-text" style="margin-top: 0; font-size: 20px;">How did we do?</h2>
-                                <p id="prev-email-body-text" style="color: #555; line-height: 1.6; font-size: 15px; margin-bottom: 25px;">Hi John, we hope you are loving your Super Widget! We'd love to hear your thoughts.</p>
-                                
-                                <!-- In-Email Product Block -->
-                                <div id="prev-email-product-block" style="background: #f9fafb; border: 1px solid #ebebeb; border-radius: 8px; padding: 15px; margin-bottom: 25px;">
-                                    <div style="width: 80px; height: 80px; background: #e2e8f0; border-radius: 6px; margin: 0 auto 10px auto;"></div>
-                                    <div style="font-weight: 600; font-size: 14px; margin-bottom: 10px;">Super Widget</div>
-                                    <!-- In-Email Stars -->
-                                    <div id="prev-email-stars" style="color: #ffc700; font-size: 28px; letter-spacing: 2px; cursor: pointer;">★★★★★</div>
-                                </div>
-
-                                <div style="display: inline-block; padding: 12px 24px; color: #fff; font-weight: 600; text-decoration: none; border-radius: 6px; cursor: default;" id="prev-email-btn">Leave a Review</div>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- HTML Raw Preview -->
-                    <div id="preview-wrapper-html" style="display: none; background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; min-height: 400px; position: relative;">
-                        <div style="background: #f4f6f8; padding: 10px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text-light); text-align: center;">Raw HTML Render Output</div>
-                        <div id="html-render-target" style="padding: 20px; width: 100%; height: 100%; box-sizing: border-box; overflow-y: auto;"></div>
-                    </div>
-                </div>
-
-                <div id="prev-sms-msg" class="sub-preview">
-                    <div style="background: #f4f6f8; padding: 40px; border-radius: 12px; border: 1px solid var(--border); display: flex; justify-content: center;">
-                        <div style="background: #e5e5ea; width: 280px; padding: 15px; border-radius: 20px; height: 300px; position: relative;">
-                            <div style="background: #007aff; color: white; padding: 12px 16px; border-radius: 18px 18px 4px 18px; font-size: 14px; line-height: 1.4; max-width: 85%; float: right;" id="prev-sms-bubble">
-                                Hi John, how is your new Super Widget? Leave a review here: https://link.co
-                            </div>
-                            <div style="clear: both;"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -335,11 +192,11 @@
             <p style="color: var(--text-light); font-size: 14px; margin-top: 0;">Hide the widget from the public while you test on your live theme.</p>
             <div class="setting-row" style="border-top: 1px solid var(--border);">
                 <div><h4>Enable Beta Mode</h4></div>
-                <label class="switch"><input type="checkbox" id="set-beta-enable" onchange="saveSettings()"><span class="slider"></span></label>
+                <label class="switch"><input type="checkbox" id="set-beta-enable" onchange="window.saveSettings()"><span class="slider"></span></label>
             </div>
             <div class="setting-row" style="border: none;">
                 <div><h4>Beta Tester Email</h4><p style="color:var(--text-light); font-size:13px; margin:0;">Logged-in customer email allowed to see the widget.</p></div>
-                <input type="email" id="set-beta-email" class="search-input" style="width: 250px;" placeholder="you@store.com" onblur="saveSettings()">
+                <input type="email" id="set-beta-email" class="search-input" style="width: 250px;" placeholder="you@store.com" onblur="window.saveSettings()">
             </div>
         </div>
         
@@ -348,7 +205,7 @@
                 <div>
                     <h3 style="margin-top: 0;">Google Rich Snippets (SEO)</h3>
                 </div>
-                <label class="switch"><input type="checkbox" id="set-seo" onchange="saveSettings()"><span class="slider"></span></label>
+                <label class="switch"><input type="checkbox" id="set-seo" onchange="window.saveSettings()"><span class="slider"></span></label>
             </div>
         </div>
 
@@ -356,18 +213,18 @@
             <h3 style="margin-top: 0;">Automated Publishing</h3>
             <div class="setting-row">
                 <div><h4>Enable Auto-Approve</h4></div>
-                <label class="switch"><input type="checkbox" id="set-auto-enable" onchange="saveSettings()"><span class="slider"></span></label>
+                <label class="switch"><input type="checkbox" id="set-auto-enable" onchange="window.saveSettings()"><span class="slider"></span></label>
             </div>
             <div class="setting-row">
                 <div><h4>Which reviews are eligible?</h4></div>
-                <select id="set-auto-type" class="filter-select" style="width: auto; min-width: 200px;" onchange="saveSettings()">
+                <select id="set-auto-type" class="filter-select" style="width: auto; min-width: 200px;" onchange="window.saveSettings()">
                     <option value="verified">Verified Purchases Only</option>
                     <option value="all">All Reviews (Inc. Unverified)</option>
                 </select>
             </div>
             <div class="setting-row" style="border: none;">
                 <div><h4>Minimum Star Rating</h4></div>
-                <select id="set-min-stars" class="filter-select" style="width: auto; min-width: 200px;" onchange="saveSettings()">
+                <select id="set-min-stars" class="filter-select" style="width: auto; min-width: 200px;" onchange="window.saveSettings()">
                     <option value="5">5 Stars only</option>
                     <option value="4">4 Stars & up</option>
                     <option value="3">3 Stars & up</option>
@@ -382,7 +239,7 @@
             <div id="attributes-list" style="margin-bottom: 20px; margin-top: 15px;"></div>
             <div style="background: #fafafa; padding: 20px; border-radius: 8px; border: 1px solid var(--border);">
                 <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
-                    <select id="attr-rule-type" class="filter-select" style="width: 150px;" onchange="toggleRuleInput()">
+                    <select id="attr-rule-type" class="filter-select" style="width: 150px;" onchange="window.toggleRuleInput()">
                         <option value="tag">Product Tag</option>
                         <option value="metafield">Metafield Key</option>
                     </select>
@@ -392,38 +249,38 @@
                     </select>
                     <span style="font-weight: 800; color: var(--text-light);">→</span>
                     <input type="text" id="attr-label" class="search-input" style="flex: 1; min-width: 150px;" placeholder="Slider Name (e.g. Taste)">
-                    <button class="post-btn" onclick="addAttribute()">+ Create Rule</button>
+                    <button class="post-btn" onclick="window.addAttribute()">+ Create Rule</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- VISUAL CUSTOMIZER -->
+    <!-- VISUAL CUSTOMISER -->
     <div id="v-des" class="view">
-        <h2>Visual Customizer</h2>
+        <h2>Visual Customiser</h2>
         <div style="display: flex; gap: 30px;">
             <div style="flex: 1;">
                 <div class="sub-tab-nav">
-                    <button class="sub-tab-btn active" onclick="subTab('ds-full', 'prev-full')">Product Widget</button>
-                    <button class="sub-tab-btn" onclick="subTab('ds-card', 'prev-card')">Product Card Stars</button>
-                    <button class="sub-tab-btn" onclick="subTab('ds-carousel', 'prev-carousel')">Global Carousel</button>
+                    <button class="sub-tab-btn active" onclick="window.subTab('ds-full', 'prev-full')">Product Widget</button>
+                    <button class="sub-tab-btn" onclick="window.subTab('ds-card', 'prev-card')">Product Card Stars</button>
+                    <button class="sub-tab-btn" onclick="window.subTab('ds-carousel', 'prev-carousel')">Global Carousel</button>
                 </div>
                 
                 <div id="ds-full" class="sub-view active">
                     <div class="settings-panel">
-                        <div class="setting-row"><span>Widget Title</span><input type="text" id="style-title" class="search-input" style="width:180px;" oninput="updatePreviews()"></div>
-                        <div class="setting-row"><span>Brand Color</span><input type="color" id="style-primary" oninput="updatePreviews()"></div>
-                        <div class="setting-row"><span>Star Color</span><input type="color" id="style-star" oninput="updatePreviews()"></div>
-                        <div class="setting-row"><span>Text Size (px)</span><input type="number" id="style-text" class="search-input" style="width:70px" oninput="updatePreviews()"></div>
-                        <button class="post-btn" style="width:100%; margin-top:20px;" onclick="saveSettings()">Publish Styles</button>
+                        <div class="setting-row"><span>Widget Title</span><input type="text" id="style-title" class="search-input" style="width:180px;" oninput="window.updatePreviews()"></div>
+                        <div class="setting-row"><span>Brand Color</span><input type="color" id="style-primary" oninput="window.updatePreviews()"></div>
+                        <div class="setting-row"><span>Star Color</span><input type="color" id="style-star" oninput="window.updatePreviews()"></div>
+                        <div class="setting-row"><span>Text Size (px)</span><input type="number" id="style-text" class="search-input" style="width:70px" oninput="window.updatePreviews()"></div>
+                        <button class="post-btn" style="width:100%; margin-top:20px;" onclick="window.saveSettings()">Publish Styles</button>
                     </div>
                 </div>
                 
                 <div id="ds-card" class="sub-view">
                     <div class="settings-panel">
-                        <div class="setting-row"><span>Star Size (px)</span><input type="number" id="card-star" class="search-input" style="width:70px" oninput="updatePreviews()"></div>
-                        <div class="setting-row"><span>Show Count (12)</span><label class="switch"><input type="checkbox" id="card-count" onchange="updatePreviews()"><span class="slider"></span></label></div>
-                        <button class="post-btn" style="width:100%; margin-top:20px;" onclick="saveSettings()">Publish Styles</button>
+                        <div class="setting-row"><span>Star Size (px)</span><input type="number" id="card-star" class="search-input" style="width:70px" oninput="window.updatePreviews()"></div>
+                        <div class="setting-row"><span>Show Count</span><label class="switch"><input type="checkbox" id="card-count" onchange="window.updatePreviews()"><span class="slider"></span></label></div>
+                        <button class="post-btn" style="width:100%; margin-top:20px;" onclick="window.saveSettings()">Publish Styles</button>
                     </div>
                 </div>
 
@@ -431,66 +288,78 @@
                     <div class="settings-panel">
                         <div class="setting-row">
                             <span>Layout Style</span>
-                            <select id="car-layout" class="filter-select" style="width: 150px;" onchange="saveSettings()">
+                            <select id="car-layout" class="filter-select" style="width: 150px;" onchange="window.saveSettings()">
                                 <option value="infinite">Infinite Auto-Scroll</option>
                                 <option value="grid">Standard Grid</option>
                                 <option value="masonry">Pinterest Masonry</option>
                             </select>
                         </div>
-                        <div class="setting-row"><span>Max Reviews</span><input type="number" id="car-limit" class="search-input" style="width:70px" value="10"></div>
                         <div class="setting-row"><span>Auto-Play Carousel</span><label class="switch"><input type="checkbox" id="car-autoplay"><span class="slider"></span></label></div>
                         <div class="setting-row"><span>Slide Delay (ms)</span><input type="number" id="car-delay" class="search-input" style="width:90px" value="4000"></div>
                         <div class="setting-row"><span>Show Arrows</span><label class="switch"><input type="checkbox" id="car-arrows"><span class="slider"></span></label></div>
-                        <button class="post-btn" style="width:100%; margin-top:20px;" onclick="saveSettings()">Publish Styles</button>
+                        <div class="setting-row"><span>Max Reviews</span><input type="number" id="car-limit" class="search-input" style="width:70px" value="10"></div>
+                        <button class="post-btn" style="width:100%; margin-top:20px;" onclick="window.saveSettings()">Publish Styles</button>
                     </div>
                 </div>
             </div>
             
             <div style="flex: 1;">
-                <h4 style="margin-top: 0; color: var(--text-light);">Live Preview</h4>
-                <div id="prev-full" class="sub-preview active">
-                    <div class="settings-panel" style="padding: 25px;">
-                        <div style="display: flex; justify-content: space-between; align-items:center; margin-bottom: 20px; border-bottom: 2px solid var(--primary); padding-bottom: 15px;">
-                            <h3 id="pre-title" style="margin:0; font-size: 24px;">Customer Reviews</h3>
-                            <button class="pre-color-primary" style="padding: 10px 20px; color:white; border:none; border-radius:6px; font-weight:600;">Write Review</button>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h4 style="margin-top: 0; color: var(--text-light);">Live Preview</h4>
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                        <button class="sub-tab-btn active" id="btn-desk-prev" onclick="window.setPreviewMode('desktop')" style="padding: 5px 10px;">🖥️ Desktop</button>
+                        <button class="sub-tab-btn" id="btn-mob-prev" onclick="window.setPreviewMode('mobile')" style="padding: 5px 10px;">📱 Mobile</button>
+                    </div>
+                </div>
+
+                <!-- DYNAMIC WRAPPER FOR DESKTOP/MOBILE PREVIEW -->
+                <div id="preview-container-wrap" style="transition: all 0.3s ease; background: transparent;">
+                    
+                    <div id="prev-full" class="sub-preview active">
+                        <div class="settings-panel" style="padding: 25px; box-sizing: border-box;">
+                            <div style="display: flex; justify-content: space-between; align-items:center; margin-bottom: 20px; border-bottom: 2px solid var(--primary); padding-bottom: 15px;">
+                                <h3 id="pre-title" style="margin:0; font-size: clamp(16px, 4vw, 24px);">Customer Reviews</h3>
+                                <button class="pre-color-primary" style="padding: 10px 15px; color:white; border:none; border-radius:0px; font-weight:600; font-size: 13px;">Write Review</button>
+                            </div>
+                            <div style="margin-bottom: 15px;">
+                                <div class="pre-color-star" style="font-size: 22px; margin-bottom:10px;">★★★★★</div>
+                                <div style="font-weight: 700; margin-bottom: 5px;">Amazing Quality</div>
+                                <p class="pre-color-text" style="color: #444; line-height: 1.6; margin:0;">This product is absolutely amazing! The quality is top notch and it arrived perfectly.</p>
+                                <div style="margin-top: 10px; font-size: 13px; color: var(--text-light);"><strong>Jane Doe</strong> ✓ Verified</div>
+                            </div>
                         </div>
-                        <div style="margin-bottom: 15px;">
-                            <div class="pre-color-star" style="font-size: 22px; margin-bottom:10px;">★★★★★</div>
-                            <div style="font-weight: 700; margin-bottom: 5px;">Amazing Quality</div>
-                            <p class="pre-color-text" style="color: #444; line-height: 1.6; margin:0;">This product is absolutely amazing! The quality is top notch and it arrived perfectly.</p>
-                            <div style="margin-top: 10px; font-size: 13px; color: var(--text-light);"><strong>Jane Doe</strong> ✓ Verified</div>
+                    </div>
+
+                    <div id="prev-card" class="sub-preview">
+                        <div class="settings-panel" style="padding: 30px; display: flex; align-items: center; justify-content: center; background: #fafafa;">
+                            <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid var(--border); width: 200px; text-align: left;">
+                                <div style="width: 100%; height: 120px; background: #f1f5f9; border-radius: 4px; margin-bottom: 15px;"></div>
+                                <div style="font-weight: 600; font-size: 14px; margin-bottom: 8px;">Sample Product</div>
+                                <div style="display: flex; align-items: center; gap: 5px; font-weight: 700;">
+                                    <span id="pre-card-icon" class="pre-color-star">★</span> 
+                                    <span style="font-size: 14px;">4.8</span> 
+                                    <span id="pre-card-count" style="font-weight: 400; color: #666; font-size: 13px;">(12)</span>
+                                </div>
+                                <div style="font-weight: 600; font-size: 14px; margin-top: 8px;">$29.99</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="prev-carousel" class="sub-preview">
+                        <div class="settings-panel" style="padding: 20px; background: #f8fafc; overflow: hidden;">
+                            <p style="font-size: 11px; text-transform: uppercase; color: #999; margin-top: 0; margin-bottom: 15px;">Carousel Mockup</p>
+                            <div style="display: flex; gap: 15px;">
+                                <div style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid var(--border); min-width: 220px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                                    <div class="pre-color-star" style="font-size: 18px; margin-bottom: 8px;">★★★★★</div>
+                                    <h4 style="margin: 0 0 8px 0; font-size: 15px;">Incredible!</h4>
+                                    <p style="margin: 0 0 12px 0; font-size: 13px; color: #555;">Best purchase I've made all year.</p>
+                                    <div class="pre-color-text-brand" style="font-weight: 700; font-size: 12px;">Sarah M.</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div id="prev-card" class="sub-preview">
-                    <div class="settings-panel" style="padding: 30px; display: flex; align-items: center; justify-content: center; background: #fafafa;">
-                        <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid var(--border); width: 200px; text-align: left;">
-                            <div style="width: 100%; height: 120px; background: #f1f5f9; border-radius: 4px; margin-bottom: 15px;"></div>
-                            <div style="font-weight: 600; font-size: 14px; margin-bottom: 8px;">Sample Product</div>
-                            <div style="display: flex; align-items: center; gap: 5px; font-weight: 700;">
-                                <span id="pre-card-icon" class="pre-color-star">★</span> 
-                                <span style="font-size: 14px;">4.8</span> 
-                                <span id="pre-card-count" style="font-weight: 400; color: #666; font-size: 13px;">(12)</span>
-                            </div>
-                            <div style="font-weight: 600; font-size: 14px; margin-top: 8px;">$29.99</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="prev-carousel" class="sub-preview">
-                    <div class="settings-panel" style="padding: 20px; background: #f8fafc; overflow: hidden;">
-                        <p style="font-size: 11px; text-transform: uppercase; color: #999; margin-top: 0; margin-bottom: 15px;">Carousel Mockup</p>
-                        <div style="display: flex; gap: 15px;">
-                            <div style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid var(--border); min-width: 220px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-                                <div class="pre-color-star" style="font-size: 18px; margin-bottom: 8px;">★★★★★</div>
-                                <h4 style="margin: 0 0 8px 0; font-size: 15px;">Incredible!</h4>
-                                <p style="margin: 0 0 12px 0; font-size: 13px; color: #555;">Best purchase I've made all year.</p>
-                                <div class="pre-color-text-brand" style="font-weight: 700; font-size: 12px;">Sarah M.</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
