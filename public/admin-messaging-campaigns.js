@@ -109,6 +109,7 @@
       .review-test-product img { width:52px; height:52px; object-fit:cover; border-radius:8px; background:#f3f4f6; border:1px solid var(--border, #ebebeb); }
       .review-test-product strong { display:block; color:var(--primary, #1a1a1a); font-size:13px; line-height:1.3; }
       .review-test-product span { display:block; color:var(--text-light, #6d7175); font-size:12px; margin-top:2px; }
+      .review-test-tags { grid-column:2 / 3; margin-top:4px !important; width:100%; padding:8px 10px !important; border-radius:8px !important; font-size:12px !important; }
       .review-test-product button { width:30px; height:30px; border-radius:8px; border:1px solid var(--border, #ebebeb); background:#fff; color:#bf0711; cursor:pointer; font-weight:900; }
       .review-test-url { margin-top:12px; width:100%; min-height:72px !important; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important; font-size:12px !important; background:#f9fafb !important; }
 
@@ -512,7 +513,9 @@
       title: product && product.title ? product.title : `Sample Product ${index + 1}`,
       handle: product && product.handle ? product.handle : `sample-product-${index + 1}`,
       image: getProductImage(product),
-      quantity: 1
+      quantity: 1,
+      productTags: Array.isArray(product && product.tags) ? product.tags : (typeof (product && product.tags) === 'string' ? product.tags.split(',').map(tag => tag.trim()).filter(Boolean) : []),
+      metafields: product && product.metafields ? product.metafields : {}
     };
   }
 
@@ -525,7 +528,9 @@
       title: `Sample Product ${index + 1}`,
       handle: `sample-product-${index + 1}`,
       image: '',
-      quantity: 1
+      quantity: 1,
+      productTags: index === 0 ? ['snowboard'] : [],
+      metafields: {}
     }));
 
     renderReviewTestProducts();
@@ -585,13 +590,25 @@
           <strong>${escapeHtml(product.title)}</strong>
           <span>Product ID: ${escapeHtml(product.id)}</span>
           ${product.variantId ? `<span>Variant ID: ${escapeHtml(product.variantId)}</span>` : ''}
+          <span>Tags are used to test conditional sliders.</span>
         </div>
         <button type="button" data-review-test-remove="${index}" aria-label="Remove ${escapeHtml(product.title)}">×</button>
+        <input class="review-test-tags" type="text" data-review-test-tags="${index}" value="${escapeHtml((product.productTags || product.tags || []).join(', '))}" placeholder="Tags for conditional sliders, e.g. snowboard, waterproof">
       </div>
     `).join('');
 
     container.querySelectorAll('[data-review-test-remove]').forEach(button => {
       button.addEventListener('click', () => removeReviewTestProduct(parseInt(button.dataset.reviewTestRemove, 10)));
+    });
+
+    container.querySelectorAll('[data-review-test-tags]').forEach(input => {
+      input.addEventListener('input', () => {
+        const index = parseInt(input.dataset.reviewTestTags, 10);
+        if (!reviewTestProducts[index]) return;
+        reviewTestProducts[index].productTags = input.value.split(',').map(tag => tag.trim()).filter(Boolean);
+        reviewTestProducts[index].tags = reviewTestProducts[index].productTags;
+        updateReviewTestUrl();
+      });
     });
   }
 
@@ -620,7 +637,9 @@
         title: `Sample Product ${index + 1}`,
         handle: `sample-product-${index + 1}`,
         image: '',
-        quantity: 1
+        quantity: 1,
+        productTags: index === 0 ? ['snowboard'] : [],
+        metafields: {}
       }));
       renderReviewTestProducts();
     }
