@@ -684,12 +684,7 @@ window.generateFlowCode = function() {
     <p style="color: #4b5563; font-size: 16px; line-height: 1.5;">We hope you're loving your recent purchase! Could you take 60 seconds to leave a quick review?</p>
     
     <div style="margin-top: 30px; text-align: left;">
-        {% for lineItems_item in order.lineItems %}
-        <div style="border: 1px solid #ebebeb; border-radius: 8px; padding: 15px; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between;">
-            <strong style="color: #111827; font-size: 14px; max-width: 60%; display: block;">{{ lineItems_item.name }}</strong>
-            <a href="${shopUrl}/pages/leave-review?product={{ lineItems_item.product.id | split: '/' | last }}&order={{ order.name | replace: '#', '' }}&email={{ order.customer.email }}" style="background: ${color}; color: #ffffff; padding: 10px 16px; text-decoration: none; font-size: 13px; font-weight: bold; border-radius: 4px; white-space: nowrap;">Leave Review</a>
-        </div>
-        {% endfor %}
+        <a href="${shopUrl}/pages/leave-review?order={{ order.name | replace: '#', '' }}&email={{ order.customer.email }}" style="display: block; text-align: center; background: ${color}; color: #ffffff; padding: 14px 20px; text-decoration: none; font-size: 16px; font-weight: bold; border-radius: 4px;">Review Your Order</a>
     </div>
 </div>
     `.trim();
