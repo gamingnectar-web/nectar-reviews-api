@@ -72,7 +72,7 @@ const settingsSchema = new mongoose.Schema({
         autoplay: { type: Boolean, default: true },
         delay: { type: Number, default: 4000 },
         showArrows: { type: Boolean, default: false },
-        limit: { type: Number, default: 10 } // <-- Added Limit Control
+        limit: { type: Number, default: 10 }
     }
 });
 const Settings = mongoose.model('Settings', settingsSchema, 'settings');
