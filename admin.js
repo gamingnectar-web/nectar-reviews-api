@@ -14,7 +14,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Explicitly bind all UI functions to the global window to prevent scoping errors inside Shopify Iframe
+// CUSTOM GUARANTEED NATIVE TOAST 
+window.showToast = function(msg) {
+    const toast = document.getElementById('custom-toast');
+    if(!toast) return;
+    toast.innerText = msg;
+    toast.style.bottom = '30px';
+    setTimeout(() => { toast.style.bottom = '-100px'; }, 3000);
+};
+
 window.tab = function(id) {
     const target = document.getElementById(id);
     if(!target) return; 
@@ -265,45 +273,50 @@ window.buildCard = function(r, isTrash) {
 
     return `
     <div class="review-card status-border-${r.status}">
-        <div class="card-main">
-            <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
-                <div>${customerBox}</div>
-                <div class="status-group">
-                    <button onclick="window.updateStatus('${r._id}', 'accepted')" class="s-btn acc ${r.status==='accepted'?'active':''}" title="Accept">✓</button>
-                    <button onclick="window.updateStatus('${r._id}', 'hold')" class="s-btn hld ${r.status==='hold'?'active':''}" title="Hold">⏸</button>
-                    <button onclick="window.updateStatus('${r._id}', 'rejected')" class="s-btn rej ${r.status==='rejected'?'active':''}" title="Reject">✕</button>
+        <div style="display:flex; justify-content:space-between; gap:40px; width: 100%;">
+            <div class="card-main" style="flex:1;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
+                    <div>${customerBox}</div>
+                    <div class="status-group">
+                        <button onclick="window.updateStatus('${r._id}', 'accepted')" class="s-btn acc ${r.status==='accepted'?'active':''}" title="Accept">✓</button>
+                        <button onclick="window.updateStatus('${r._id}', 'hold')" class="s-btn hld ${r.status==='hold'?'active':''}" title="Hold">⏸</button>
+                        <button onclick="window.updateStatus('${r._id}', 'rejected')" class="s-btn rej ${r.status==='rejected'?'active':''}" title="Reject">✕</button>
+                    </div>
                 </div>
-            </div>
 
-            <div style="color:var(--star); margin-bottom:10px; font-size: 18px;">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
-            <div style="font-weight:700; margin-bottom:8px; font-size: 18px;">${r.headline || 'No Headline'}</div>
-            <div style="color:#444; line-height:1.6; font-size: 15px;">${r.comment}</div>
+                <div style="color:var(--star); margin-bottom:10px; font-size: 18px;">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
+                <div style="font-weight:700; margin-bottom:8px; font-size: 18px;">${r.headline || 'No Headline'}</div>
+                <div style="color:#444; line-height:1.6; font-size: 15px;">${r.comment}</div>
+                
+                ${attrHtml}
+            </div>
             
-            ${attrHtml}
-            
-            <button class="reply-toggle" onclick="window.toggleReplyBox('${r._id}')">💬 Reply to Customer</button>
-            <div id="reply-box-${r._id}" class="reply-panel" style="display: ${r.reply ? 'block' : 'none'};">
-                <textarea id="reply-text-${r._id}" class="reply-input" placeholder="Type your public reply...">${r.reply || ''}</textarea>
-                <button id="reply-btn-${r._id}" class="post-btn" onclick="window.saveReply('${r._id}')">Publish Reply</button>
+            <div class="card-side" style="min-width: 240px; text-align:right; border-left: 1px solid var(--border); padding-left: 30px; display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                    <div style="font-size: 12px; color: var(--text-light); margin-bottom: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                        <span>Product ID:</span>
+                        <a href="https://${SHOP_DOMAIN}/admin/products/${r.itemId}" target="_blank" style="color: var(--blue); font-weight: 700; text-decoration: none; padding: 4px 8px; background: #e0f2fe; border-radius: 6px; display: inline-block;">
+                            ${r.itemId} ↗
+                        </a>
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-light); margin-bottom: 5px;">${new Date(r.createdAt).toLocaleDateString()}</div>
+                    <div style="font-size: 13px; color: var(--primary); font-weight: 600; margin-bottom: 5px;">${r.email || 'No Email'}</div>
+                    ${verifyHtml}
+                </div>
+                <div style="padding-top: 20px;">
+                    ${isTrash ? `<button class="restore-btn" onclick="window.toggleBin('${r._id}', false)">↺ Restore</button>` : `<button class="delete-btn" onclick="window.toggleBin('${r._id}', true)">🗑️ Trash</button>`}
+                </div>
             </div>
         </div>
         
-        <div class="card-side">
-            <div>
-                <div style="font-size: 12px; color: var(--text-light); margin-bottom: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
-                    <span>Product ID:</span>
-                    <a href="https://${SHOP_DOMAIN}/admin/products/${r.itemId}" target="_blank" style="color: var(--blue); font-weight: 700; text-decoration: none; padding: 4px 8px; background: #e0f2fe; border-radius: 6px; display: inline-block;">
-                        ${r.itemId} ↗
-                    </a>
+        <!-- FULL WIDTH REPLY BOX OUTSIDE OF CARD SPLIT -->
+        <div style="width: 100%; margin-top: 15px; border-top: 1px dashed var(--border); padding-top: 15px;">
+            <button class="reply-toggle" style="margin-top:0;" onclick="window.toggleReplyBox('${r._id}')">💬 Reply to Customer</button>
+            <div id="reply-box-${r._id}" class="reply-panel" style="display: ${r.reply ? 'block' : 'none'}; margin-top: 15px;">
+                <textarea id="reply-text-${r._id}" class="reply-input" placeholder="Type your public reply..." style="max-width: 100%;">${r.reply || ''}</textarea>
+                <div style="text-align: right;">
+                    <button id="reply-btn-${r._id}" class="post-btn" onclick="window.saveReply('${r._id}')">Publish Reply</button>
                 </div>
-                
-                <div style="font-size: 12px; color: var(--text-light); margin-bottom: 5px;">${new Date(r.createdAt).toLocaleDateString()}</div>
-                <div style="font-size: 13px; color: var(--primary); font-weight: 600; margin-bottom: 5px;">${r.email || 'No Email'}</div>
-                ${verifyHtml}
-            </div>
-
-            <div style="padding-top: 20px;">
-                ${isTrash ? `<button class="restore-btn" onclick="window.toggleBin('${r._id}', false)">↺ Restore</button>` : `<button class="delete-btn" onclick="window.toggleBin('${r._id}', true)">🗑️ Trash</button>`}
             </div>
         </div>
     </div>`;
@@ -329,13 +342,14 @@ window.manuallyVerify = async function(id) {
         body: JSON.stringify({ verifiedPurchase: true, verificationNote: "Manually verified by admin" }) 
     });
     
-    if(window.shopify && window.shopify.toast) window.shopify.toast.show('Review Verified');
+    window.showToast('Review Verified');
 };
 
 window.updateStatus = async function(id, status) {
     const r = data.find(x => x._id === id); if(r) r.status = status;
     window.renderLists();
     fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({status}) });
+    window.showToast(`Status updated to ${status}`);
 };
 
 window.toggleBin = async function(id, isDeleted) {
@@ -343,6 +357,7 @@ window.toggleBin = async function(id, isDeleted) {
     const r = data.find(x => x._id === id); if(r) r.isDeleted = isDeleted;
     window.renderLists();
     fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({isDeleted}) });
+    window.showToast(isDeleted ? 'Moved to Trash' : 'Restored from Trash');
 };
 
 window.saveReply = async function(id) {
@@ -358,12 +373,11 @@ window.saveReply = async function(id) {
         await fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({reply: text}) });
         
         btn.innerText = 'Published!';
-        if(window.shopify && window.shopify.toast) window.shopify.toast.show('Reply published');
+        window.showToast('Reply published successfully');
         
         setTimeout(() => {
             btn.innerText = originalText;
             btn.disabled = false;
-            window.toggleReplyBox(id);
         }, 1500);
     } catch(e) {
         btn.innerText = 'Error saving';
@@ -406,6 +420,7 @@ window.addAttribute = function() {
         document.getElementById('attr-label').value = '';
         window.saveSettings();
         window.renderAttributes();
+        window.showToast('Attribute Saved');
     }
 };
 
@@ -414,6 +429,7 @@ window.removeAttribute = async function(index) {
         currentAttributes.splice(index, 1);
         window.renderAttributes();
         await window.saveSettings();
+        window.showToast('Attribute Removed');
     }
 };
 
@@ -464,7 +480,7 @@ window.saveSettings = async function() {
         }
     };
     await fetch(`${API}/admin/settings`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-    if(window.shopify && window.shopify.toast) window.shopify.toast.show('Saved!');
+    window.showToast('Settings Saved');
 };
 
 let parsedCSVData = []; 
@@ -638,16 +654,16 @@ window.processFinalImport = async function() {
     try {
         const res = await fetch(`${API}/reviews/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shopDomain: SHOP_DOMAIN, reviews: finalPayload }) });
         if (res.ok) { 
-            alert(`🎉 Import successful! Reviews are now live.`); 
+            window.showToast(`🎉 Import successful!`); 
             document.getElementById('mapping-ui').style.display = 'none'; 
             document.getElementById('staging-area').innerHTML = '';
             window.load(); 
             window.tab('v-mgr');
         } else {
-            alert("Import failed. Please check server logs.");
+            window.showToast("Import failed. Check logs.");
         }
     } catch(e) { 
-        alert("An error occurred during import."); 
+        window.showToast("An error occurred during import."); 
     } finally { 
         btn.innerText = "🚀 Go Live (Import to Database)"; 
         btn.disabled = false; 
