@@ -1,4 +1,4 @@
-const API = 'https://nectar-reviews-api.onrender.com/api'; // Hardcoded for 100% reliable connection
+const API = 'https://nectar-reviews-api.onrender.com/api'; 
 const urlParams = new URLSearchParams(window.location.search);
 const SHOP_DOMAIN = urlParams.get('shop') || 'your-dev-store.myshopify.com';
 let data = [];
@@ -9,53 +9,67 @@ document.addEventListener('DOMContentLoaded', () => {
     const labelInput = document.getElementById('attr-label');
     if (labelInput) {
         labelInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') { e.preventDefault(); addAttribute(); }
+            if (e.key === 'Enter') { e.preventDefault(); window.addAttribute(); }
         });
     }
 });
 
-function tab(id) {
+// Explicitly bind all UI functions to the global window to prevent scoping errors inside Shopify Iframe
+window.tab = function(id) {
     const target = document.getElementById(id);
     if(!target) return; 
     
-    // 1. Remove active states
     document.querySelectorAll('.view, .tab-btn').forEach(el => el.classList.remove('active'));
-    
-    // 2. Make the view active
     target.classList.add('active');
     
-    // 3. Find the specific button that was clicked and make it active (Replaces event.currentTarget)
-    const activeBtn = document.querySelector(`button[onclick="tab('${id}')"]`);
+    const activeBtn = document.querySelector(`button[onclick="window.tab('${id}')"]`);
     if(activeBtn) activeBtn.classList.add('active');
     
-    if(id === 'v-dash') loadStats();
-}
+    if(id === 'v-dash') window.loadStats();
+};
 
-function subTab(controlId, previewId) {
-    // 1. Remove active states
+window.subTab = function(controlId, previewId) {
     document.querySelectorAll('.sub-view, .sub-tab-btn').forEach(el => el.classList.remove('active'));
-    
-    // 2. Make the sub-view active
     document.getElementById(controlId).classList.add('active');
     
-    // 3. Make the clicked button active
-    const activeBtn = document.querySelector(`button[onclick="subTab('${controlId}', '${previewId}')"]`);
+    const activeBtn = document.querySelector(`button[onclick="window.subTab('${controlId}', '${previewId}')"]`);
     if(activeBtn) activeBtn.classList.add('active');
     
-    // 4. Update the preview window
     if (previewId) {
         document.querySelectorAll('.sub-preview').forEach(el => el.classList.remove('active'));
         document.getElementById(previewId).classList.add('active');
     }
-}
+};
 
-function toggleImportInst() {
+window.setPreviewMode = function(mode) {
+    document.getElementById('btn-desk-prev').classList.toggle('active', mode === 'desktop');
+    document.getElementById('btn-mob-prev').classList.toggle('active', mode === 'mobile');
+    
+    const prevContainer = document.getElementById('preview-container-wrap');
+    if (mode === 'mobile') {
+        prevContainer.style.maxWidth = '375px';
+        prevContainer.style.margin = '0 auto';
+        prevContainer.style.border = '12px solid #1a1a1a';
+        prevContainer.style.borderRadius = '32px';
+        prevContainer.style.overflow = 'hidden';
+        prevContainer.style.backgroundColor = '#ffffff';
+    } else {
+        prevContainer.style.maxWidth = '100%';
+        prevContainer.style.margin = '0';
+        prevContainer.style.border = 'none';
+        prevContainer.style.borderRadius = '0';
+        prevContainer.style.overflow = 'visible';
+        prevContainer.style.backgroundColor = 'transparent';
+    }
+};
+
+window.toggleImportInst = function() {
     const platform = document.getElementById('import-platform-select').value;
     document.querySelectorAll('.import-inst-box').forEach(el => el.classList.remove('active'));
     document.getElementById(`inst-${platform}`).classList.add('active');
-}
+};
 
-async function fetchMetafields() {
+window.fetchMetafields = async function() {
     try {
         const res = await fetch(`${API}/admin/metafields`);
         if (res.ok) {
@@ -68,9 +82,9 @@ async function fetchMetafields() {
             select.innerHTML = metafields.map(m => `<option value="${m.key}">${m.name} (${m.key})</option>`).join('');
         }
     } catch(e) { console.error(e); }
-}
+};
 
-function toggleRuleInput() {
+window.toggleRuleInput = function() {
     const type = document.getElementById('attr-rule-type').value;
     if(type === 'tag') {
         document.getElementById('attr-rule-val-tag').style.display = 'block';
@@ -78,11 +92,11 @@ function toggleRuleInput() {
     } else {
         document.getElementById('attr-rule-val-tag').style.display = 'none';
         document.getElementById('attr-rule-val-meta').style.display = 'block';
-        if(document.getElementById('attr-rule-val-meta').options.length <= 1) fetchMetafields();
+        if(document.getElementById('attr-rule-val-meta').options.length <= 1) window.fetchMetafields();
     }
-}
+};
 
-async function load() {
+window.load = async function() {
     try {
         const res = await fetch(`${API}/admin/reviews?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
         if(res.ok) data = await res.json();
@@ -119,16 +133,16 @@ async function load() {
                     document.getElementById('car-delay').value = config.carouselStyles.delay || 4000;
                     document.getElementById('car-limit').value = config.carouselStyles.limit || 10;
                 }
-                updatePreviews();
-                renderAttributes();
+                window.updatePreviews();
+                window.renderAttributes();
             }
         }
-        renderLists();
-        loadStats();
+        window.renderLists();
+        window.loadStats();
     } catch(e) { console.error("Init error:", e); }
-}
+};
 
-async function loadStats() {
+window.loadStats = async function() {
     try {
         const res = await fetch(`${API}/admin/stats?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
         if(!res.ok) return;
@@ -201,9 +215,9 @@ async function loadStats() {
             options: { cutout: '75%', plugins: { legend: { position: 'bottom' } } }
         });
     } catch(e) {}
-}
+};
 
-function renderLists() {
+window.renderLists = function() {
     const query = document.getElementById('search-bar').value.toLowerCase();
     const status = document.getElementById('status-filter').value;
     const starF = document.getElementById('star-filter').value;
@@ -215,16 +229,16 @@ function renderLists() {
 
     const trash = data.filter(r => r.isDeleted);
 
-    document.getElementById('mgr-list').innerHTML = active.length ? active.map(r => buildCard(r, false)).join('') : '<p style="text-align:center; padding: 40px; color:#999;">No reviews match this filter.</p>';
-    document.getElementById('trash-list').innerHTML = trash.length ? trash.map(r => buildCard(r, true)).join('') : '<p style="text-align:center; padding: 40px; color:#999;">Trash is empty.</p>';
-}
+    document.getElementById('mgr-list').innerHTML = active.length ? active.map(r => window.buildCard(r, false)).join('') : '<p style="text-align:center; padding: 40px; color:#999;">No reviews match this filter.</p>';
+    document.getElementById('trash-list').innerHTML = trash.length ? trash.map(r => window.buildCard(r, true)).join('') : '<p style="text-align:center; padding: 40px; color:#999;">Trash is empty.</p>';
+};
 
-function buildCard(r, isTrash) {
+window.buildCard = function(r, isTrash) {
     let verifyHtml = r.verifiedPurchase 
         ? `<div class="v-badge v-badge-yes" title="${r.verificationNote || 'Verified Purchase'}">✓ Verified Buyer</div>`
         : `<div style="display: flex; align-items: center; gap: 8px;">
              <div class="v-badge v-badge-no" title="Diagnostic: ${r.verificationNote || 'Could not verify.'}">⚠️ Unverified</div>
-             <button onclick="manuallyVerify('${r._id}')" style="background: none; border: 1px solid var(--border); padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 600; color: var(--blue);">Verify</button>
+             <button onclick="window.manuallyVerify('${r._id}')" style="background: none; border: 1px solid var(--border); padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 600; color: var(--blue);">Verify</button>
            </div>`;
 
     const customerBox = r.email 
@@ -255,9 +269,9 @@ function buildCard(r, isTrash) {
             <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
                 <div>${customerBox}</div>
                 <div class="status-group">
-                    <button onclick="updateStatus('${r._id}', 'accepted')" class="s-btn acc ${r.status==='accepted'?'active':''}" title="Accept">✓</button>
-                    <button onclick="updateStatus('${r._id}', 'hold')" class="s-btn hld ${r.status==='hold'?'active':''}" title="Hold">⏸</button>
-                    <button onclick="updateStatus('${r._id}', 'rejected')" class="s-btn rej ${r.status==='rejected'?'active':''}" title="Reject">✕</button>
+                    <button onclick="window.updateStatus('${r._id}', 'accepted')" class="s-btn acc ${r.status==='accepted'?'active':''}" title="Accept">✓</button>
+                    <button onclick="window.updateStatus('${r._id}', 'hold')" class="s-btn hld ${r.status==='hold'?'active':''}" title="Hold">⏸</button>
+                    <button onclick="window.updateStatus('${r._id}', 'rejected')" class="s-btn rej ${r.status==='rejected'?'active':''}" title="Reject">✕</button>
                 </div>
             </div>
 
@@ -267,10 +281,10 @@ function buildCard(r, isTrash) {
             
             ${attrHtml}
             
-            <button class="reply-toggle" onclick="document.getElementById('reply-box-${r._id}').style.display = 'block'">💬 Reply to Customer</button>
+            <button class="reply-toggle" onclick="window.toggleReplyBox('${r._id}')">💬 Reply to Customer</button>
             <div id="reply-box-${r._id}" class="reply-panel" style="display: ${r.reply ? 'block' : 'none'};">
                 <textarea id="reply-text-${r._id}" class="reply-input" placeholder="Type your public reply...">${r.reply || ''}</textarea>
-                <button class="post-btn" onclick="saveReply('${r._id}')">Publish Reply</button>
+                <button id="reply-btn-${r._id}" class="post-btn" onclick="window.saveReply('${r._id}')">Publish Reply</button>
             </div>
         </div>
         
@@ -289,20 +303,25 @@ function buildCard(r, isTrash) {
             </div>
 
             <div style="padding-top: 20px;">
-                ${isTrash ? `<button class="restore-btn" onclick="toggleBin('${r._id}', false)">↺ Restore</button>` : `<button class="delete-btn" onclick="toggleBin('${r._id}', true)">🗑️ Trash</button>`}
+                ${isTrash ? `<button class="restore-btn" onclick="window.toggleBin('${r._id}', false)">↺ Restore</button>` : `<button class="delete-btn" onclick="window.toggleBin('${r._id}', true)">🗑️ Trash</button>`}
             </div>
         </div>
     </div>`;
-}
+};
 
-async function manuallyVerify(id) {
+window.toggleReplyBox = function(id) {
+    const box = document.getElementById(`reply-box-${id}`);
+    if(box) box.style.display = box.style.display === 'none' ? 'block' : 'none';
+};
+
+window.manuallyVerify = async function(id) {
     if(!confirm('Manually mark this review as a Verified Purchase?')) return;
     const r = data.find(x => x._id === id); 
     if(r) {
         r.verifiedPurchase = true;
         r.verificationNote = "Manually verified by admin";
     }
-    renderLists();
+    window.renderLists();
     
     await fetch(`${API}/reviews/${id}`, { 
         method: 'PATCH', 
@@ -310,30 +329,49 @@ async function manuallyVerify(id) {
         body: JSON.stringify({ verifiedPurchase: true, verificationNote: "Manually verified by admin" }) 
     });
     
-    if(window.shopify) window.shopify.toast.show('Review Verified');
-}
+    if(window.shopify && window.shopify.toast) window.shopify.toast.show('Review Verified');
+};
 
-async function updateStatus(id, status) {
+window.updateStatus = async function(id, status) {
     const r = data.find(x => x._id === id); if(r) r.status = status;
-    renderLists();
+    window.renderLists();
     fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({status}) });
-}
+};
 
-async function toggleBin(id, isDeleted) {
+window.toggleBin = async function(id, isDeleted) {
     if(isDeleted && !confirm('Move to trash? It will be permanently deleted in 28 days.')) return;
     const r = data.find(x => x._id === id); if(r) r.isDeleted = isDeleted;
-    renderLists();
+    window.renderLists();
     fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({isDeleted}) });
-}
+};
 
-async function saveReply(id) {
+window.saveReply = async function(id) {
+    const btn = document.getElementById(`reply-btn-${id}`);
+    const originalText = btn.innerText;
+    btn.innerText = 'Publishing...';
+    btn.disabled = true;
+
     const text = document.getElementById(`reply-text-${id}`).value;
     const r = data.find(x => x._id === id); if(r) r.reply = text;
-    await fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({reply: text}) });
-    if(window.shopify) window.shopify.toast.show('Reply published');
-}
+    
+    try {
+        await fetch(`${API}/reviews/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({reply: text}) });
+        
+        btn.innerText = 'Published!';
+        if(window.shopify && window.shopify.toast) window.shopify.toast.show('Reply published');
+        
+        setTimeout(() => {
+            btn.innerText = originalText;
+            btn.disabled = false;
+            window.toggleReplyBox(id);
+        }, 1500);
+    } catch(e) {
+        btn.innerText = 'Error saving';
+        setTimeout(() => { btn.innerText = originalText; btn.disabled = false; }, 2000);
+    }
+};
 
-function renderAttributes() {
+window.renderAttributes = function() {
     const container = document.getElementById('attributes-list');
     if (currentAttributes.length === 0) {
         container.innerHTML = `<div style="color: var(--text-light); font-size: 13px;">No conditional rules created yet.</div>`;
@@ -350,9 +388,9 @@ function renderAttributes() {
             <button style="background: none; border: none; color: var(--red); cursor: pointer; font-weight: 600;" onclick="window.removeAttribute(${i})">✕ Remove</button>
         </div>
     `).join('');
-}
+};
 
-function addAttribute() {
+window.addAttribute = function() {
     const type = document.getElementById('attr-rule-type').value;
     const condition = type === 'tag' ? document.getElementById('attr-rule-val-tag').value.trim() : document.getElementById('attr-rule-val-meta').value;
     const label = document.getElementById('attr-label').value.trim();
@@ -366,20 +404,20 @@ function addAttribute() {
         currentAttributes.push({ type: type, condition: condition, label: label });
         document.getElementById('attr-rule-val-tag').value = '';
         document.getElementById('attr-label').value = '';
-        saveSettings();
-        renderAttributes();
+        window.saveSettings();
+        window.renderAttributes();
     }
-}
+};
 
 window.removeAttribute = async function(index) {
     if(confirm("Are you sure you want to remove this slider rule?")) {
         currentAttributes.splice(index, 1);
-        renderAttributes();
-        await saveSettings();
+        window.renderAttributes();
+        await window.saveSettings();
     }
 };
 
-function updatePreviews() {
+window.updatePreviews = function() {
     const title = document.getElementById('style-title').value || 'Customer Reviews';
     const primary = document.getElementById('style-primary').value;
     const star = document.getElementById('style-star').value;
@@ -393,9 +431,9 @@ function updatePreviews() {
     document.querySelectorAll('.pre-color-text-brand').forEach(el => el.style.color = primary);
     document.getElementById('pre-card-icon').style.fontSize = cardStar;
     document.getElementById('pre-card-count').style.display = document.getElementById('card-count').checked ? 'inline' : 'none';
-}
+};
 
-async function saveSettings() {
+window.saveSettings = async function() {
     const payload = {
         shopDomain: SHOP_DOMAIN,
         betaMode: {
@@ -426,24 +464,24 @@ async function saveSettings() {
         }
     };
     await fetch(`${API}/admin/settings`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-    if(window.shopify) window.shopify.toast.show('Saved!');
-}
+    if(window.shopify && window.shopify.toast) window.shopify.toast.show('Saved!');
+};
 
 let parsedCSVData = []; 
 let csvHeaders = [];
 let mappedReviews = [];
 
-function handleFileUpload() {
+window.handleFileUpload = function() {
     const file = document.getElementById('csv-file').files[0]; if (!file) return;
     document.getElementById('file-name').innerText = `📄 ${file.name} selected`;
     Papa.parse(file, { header: true, skipEmptyLines: true, complete: function(results) { 
         parsedCSVData = results.data; 
         csvHeaders = results.meta.fields; 
-        buildMappingUI(); 
+        window.buildMappingUI(); 
     }});
-}
+};
 
-function buildMappingUI() {
+window.buildMappingUI = function() {
     document.getElementById('mapping-ui').style.display = 'block';
     const reqFields = [{ id: 'map-itemId', label: 'Product ID (Req)' }, { id: 'map-rating', label: 'Star Rating (Req)' }, { id: 'map-userId', label: 'Reviewer Name' }, { id: 'map-email', label: 'Reviewer Email' }, { id: 'map-headline', label: 'Review Title' }, { id: 'map-comment', label: 'Review Body' }, { id: 'map-date', label: 'Review Date' }];
     let html = '';
@@ -466,10 +504,10 @@ function buildMappingUI() {
     
     const btn = document.getElementById('import-submit-btn');
     btn.innerText = "Preview & Map Products";
-    btn.onclick = generateStagingArea;
-}
+    btn.onclick = window.generateStagingArea;
+};
 
-function generateStagingArea() {
+window.generateStagingArea = function() {
     const map = { itemId: document.getElementById('map-itemId').value, rating: document.getElementById('map-rating').value, userId: document.getElementById('map-userId').value, email: document.getElementById('map-email').value, headline: document.getElementById('map-headline').value, comment: document.getElementById('map-comment').value, createdAt: document.getElementById('map-date').value };
     if (!map.itemId || !map.rating) { alert("Product ID and Star Rating must be mapped."); return; }
     
@@ -489,7 +527,7 @@ function generateStagingArea() {
             <td style="padding: 12px; font-size: 13px; color: var(--star);">${'★'.repeat(parseInt(r.rating) || 5)}</td>
             <td style="padding: 12px; font-size: 13px; max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${r.comment}">${r.comment}</td>
             <td style="padding: 12px;">
-                <input type="text" id="stage-item-${i}" class="search-input" style="padding: 8px 12px; font-size: 13px; font-family: monospace; cursor: pointer;" value="${r.itemId || ''}" placeholder="Click to search products..." onclick="openSearchModal(${i})" readonly>
+                <input type="text" id="stage-item-${i}" class="search-input" style="padding: 8px 12px; font-size: 13px; font-family: monospace; cursor: pointer;" value="${r.itemId || ''}" placeholder="Click to search products..." onclick="window.openSearchModal(${i})" readonly>
             </td>
         </tr>
     `).join('');
@@ -512,7 +550,7 @@ function generateStagingArea() {
             </table>
         </div>
         
-        <button id="final-import-btn" class="post-btn" style="background: var(--blue); width: 100%; height: 50px; font-size: 16px;" onclick="processFinalImport()">🚀 Go Live (Import to Database)</button>
+        <button id="final-import-btn" class="post-btn" style="background: var(--blue); width: 100%; height: 50px; font-size: 16px;" onclick="window.processFinalImport()">🚀 Go Live (Import to Database)</button>
     `;
 
     let existingStaging = document.getElementById('staging-area');
@@ -523,10 +561,10 @@ function generateStagingArea() {
     }
     existingStaging.innerHTML = stagingHtml;
 
-    validateStagingProducts();
-}
+    window.validateStagingProducts();
+};
 
-async function validateStagingProducts() {
+window.validateStagingProducts = async function() {
     const btn = document.getElementById('final-import-btn');
     btn.innerText = "Auto-Mapping Products...";
     btn.disabled = true;
@@ -568,9 +606,9 @@ async function validateStagingProducts() {
     
     btn.innerText = "🚀 Go Live (Import to Database)";
     btn.disabled = false;
-}
+};
 
-async function openSearchModal(index) {
+window.openSearchModal = async function(index) {
     if (window.shopify) {
         try {
             const selected = await window.shopify.resourcePicker({ type: 'product', multiple: false });
@@ -585,9 +623,9 @@ async function openSearchModal(index) {
     } else {
         alert("Shopify interface not detected. Please paste the numeric Product ID manually.");
     }
-}
+};
 
-async function processFinalImport() {
+window.processFinalImport = async function() {
     const btn = document.getElementById('final-import-btn'); 
     btn.innerText = "Importing..."; 
     btn.disabled = true;
@@ -603,8 +641,8 @@ async function processFinalImport() {
             alert(`🎉 Import successful! Reviews are now live.`); 
             document.getElementById('mapping-ui').style.display = 'none'; 
             document.getElementById('staging-area').innerHTML = '';
-            load(); 
-            tab('v-mgr');
+            window.load(); 
+            window.tab('v-mgr');
         } else {
             alert("Import failed. Please check server logs.");
         }
@@ -614,6 +652,6 @@ async function processFinalImport() {
         btn.innerText = "🚀 Go Live (Import to Database)"; 
         btn.disabled = false; 
     }
-}
+};
 
-load();
+window.load();
