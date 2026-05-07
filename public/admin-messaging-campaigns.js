@@ -1,13 +1,14 @@
 /*
-  Nectar Reviews — Messaging & Campaigns with Merchant Email Settings
+  Nectar Reviews — Messaging fixes
   File: public/admin-messaging-campaigns.js
 
-  Adds:
-  - MESSAGING - ADMIN
-  - MESSAGING TEMPLATE
-  - MESSAGING TEST PAGES
-  - Merchant-owned SMTP settings for Gmail / Google Workspace, Microsoft 365, SendGrid, Postmark, Custom SMTP
-  - Send Test Email using saved shop SMTP settings
+  Fixes:
+  - "Send Test Email" no longer sits on "Sending..." forever.
+  - Adds a 25 second timeout and clear success/error messages.
+  - Shows provider/backend errors returned by /api/admin/test-email.
+  - Keeps the manual mail draft fallback when backend sending is not available.
+  - Adds a manual product selector fallback when Shopify resourcePicker is unavailable.
+  - Adds product search fallback via /api/admin/products/search when backend route is installed.
 */
 
 (function () {
@@ -21,60 +22,12 @@
   let emailSettingsLoaded = false;
 
   const providerPresets = {
-    none: {
-      smtpHost: '',
-      smtpPort: '',
-      secureMode: 'starttls',
-      smtpUser: '',
-      fromName: '',
-      fromEmail: '',
-      replyToEmail: ''
-    },
-    gmail: {
-      smtpHost: 'smtp.gmail.com',
-      smtpPort: '587',
-      secureMode: 'starttls',
-      smtpUser: '',
-      fromName: '',
-      fromEmail: '',
-      replyToEmail: ''
-    },
-    outlook: {
-      smtpHost: 'smtp.office365.com',
-      smtpPort: '587',
-      secureMode: 'starttls',
-      smtpUser: '',
-      fromName: '',
-      fromEmail: '',
-      replyToEmail: ''
-    },
-    sendgrid: {
-      smtpHost: 'smtp.sendgrid.net',
-      smtpPort: '587',
-      secureMode: 'starttls',
-      smtpUser: 'apikey',
-      fromName: '',
-      fromEmail: '',
-      replyToEmail: ''
-    },
-    postmark: {
-      smtpHost: 'smtp.postmarkapp.com',
-      smtpPort: '587',
-      secureMode: 'starttls',
-      smtpUser: '',
-      fromName: '',
-      fromEmail: '',
-      replyToEmail: ''
-    },
-    custom: {
-      smtpHost: '',
-      smtpPort: '587',
-      secureMode: 'starttls',
-      smtpUser: '',
-      fromName: '',
-      fromEmail: '',
-      replyToEmail: ''
-    }
+    none: { smtpHost: '', smtpPort: '', secureMode: 'starttls', smtpUser: '', fromName: '', fromEmail: '', replyToEmail: '' },
+    gmail: { smtpHost: 'smtp.gmail.com', smtpPort: '587', secureMode: 'starttls', smtpUser: '', fromName: '', fromEmail: '', replyToEmail: '' },
+    outlook: { smtpHost: 'smtp.office365.com', smtpPort: '587', secureMode: 'starttls', smtpUser: '', fromName: '', fromEmail: '', replyToEmail: '' },
+    sendgrid: { smtpHost: 'smtp.sendgrid.net', smtpPort: '587', secureMode: 'starttls', smtpUser: 'apikey', fromName: '', fromEmail: '', replyToEmail: '' },
+    postmark: { smtpHost: 'smtp.postmarkapp.com', smtpPort: '587', secureMode: 'starttls', smtpUser: '', fromName: '', fromEmail: '', replyToEmail: '' },
+    custom: { smtpHost: '', smtpPort: '587', secureMode: 'starttls', smtpUser: '', fromName: '', fromEmail: '', replyToEmail: '' }
   };
 
   function escapeHtml(value) {
@@ -122,6 +75,14 @@
       return;
     }
     console.log(message);
+  }
+
+  function fetchWithTimeout(url, options = {}, timeoutMs = 25000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    return fetch(url, { ...options, signal: controller.signal })
+      .finally(() => clearTimeout(timer));
   }
 
   function injectStyles() {
@@ -173,6 +134,7 @@
       .nr-msg-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
       .nr-msg-btn, .nr-msg-secondary-btn { min-height:44px; border-radius:10px; padding:12px 16px; font-weight:850; cursor:pointer; }
       .nr-msg-btn { border:0; background:var(--primary,#111827); color:#fff; }
+      .nr-msg-btn:disabled, .nr-msg-secondary-btn:disabled { opacity:.6; cursor:not-allowed; }
       .nr-msg-secondary-btn { border:1px solid var(--border,#e5e7eb); background:#f3f4f6; color:var(--primary,#111827); }
 
       .nr-msg-provider-status { display:inline-flex; align-items:center; gap:8px; min-height:30px; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:850; }
@@ -204,6 +166,39 @@
       .nr-test-email-result.success { display:block; background:#ecfdf5; color:#047857; border:1px solid #a7f3d0; }
       .nr-test-email-result.warn { display:block; background:#fffbeb; color:#92400e; border:1px solid #fde68a; }
       .nr-test-email-result.error { display:block; background:#fff1f2; color:#be123c; border:1px solid #fecdd3; }
+
+      .nr-manual-product-row {
+        padding:12px;
+        border:1px dashed var(--border,#e5e7eb);
+        border-radius:12px;
+        background:#fff;
+        margin-top:10px;
+      }
+
+      .nr-product-search-results {
+        margin-top:10px;
+        display:grid;
+        gap:8px;
+      }
+
+      .nr-product-search-result {
+        display:grid;
+        grid-template-columns:42px 1fr auto;
+        gap:10px;
+        align-items:center;
+        padding:9px;
+        border:1px solid var(--border,#e5e7eb);
+        border-radius:10px;
+        background:#fff;
+      }
+
+      .nr-product-search-result img {
+        width:42px;
+        height:42px;
+        border-radius:8px;
+        object-fit:cover;
+        background:#e5e7eb;
+      }
 
       @media (max-width:1100px) {
         .nr-msg-hero, .nr-msg-preview-head, .nr-msg-code-head { flex-direction:column; align-items:stretch; }
@@ -481,6 +476,15 @@
             <select id="review-test-type"><option value="order">Review full order</option><option value="product">Review one product</option></select>
             <label for="review-test-count">How many products?</label>
             <input id="review-test-count" type="number" min="1" max="10" value="2">
+
+            <label for="nr-product-search">Search products <em>optional</em></label>
+            <input id="nr-product-search" type="text" placeholder="Search product title or handle">
+            <div class="nr-msg-actions">
+              <button class="nr-msg-secondary-btn" type="button" data-nr-action="search-products">Search Products</button>
+              <button class="nr-msg-secondary-btn" type="button" data-nr-action="manual-product">Add Manual Product</button>
+            </div>
+            <div id="nr-product-search-results" class="nr-product-search-results"></div>
+
             <div class="nr-review-test-actions">
               <button class="nr-msg-secondary-btn" type="button" data-nr-action="pick-products">Select Products</button>
               <button class="nr-msg-secondary-btn" type="button" data-nr-action="sample-products">Use Sample Products</button>
@@ -498,7 +502,7 @@
             <label for="test-email-order">Order number shown in links</label>
             <input id="test-email-order" type="text" value="1001">
             <div class="nr-msg-help">This uses the current template and your saved Email Sending Provider settings. If the provider is not configured, the app opens a manual draft fallback.</div>
-            <button class="nr-msg-btn" type="button" style="width:100%; margin-top:16px;" data-nr-action="send-test-email">Send Test Email</button>
+            <button id="nr-send-test-email-btn" class="nr-msg-btn" type="button" style="width:100%; margin-top:16px;" data-nr-action="send-test-email">Send Test Email</button>
             <div id="nr-test-email-result" class="nr-test-email-result"></div>
           </section>
         </aside>
@@ -531,9 +535,6 @@
     setValue('email-smtp-port', preset.smtpPort);
     setValue('email-secure-mode', preset.secureMode);
     setValue('email-smtp-user', preset.smtpUser);
-    if (preset.fromName) setValue('email-from-name', preset.fromName);
-    if (preset.fromEmail) setValue('email-from-email', preset.fromEmail);
-    if (preset.replyToEmail) setValue('email-reply-to', preset.replyToEmail);
     setValue('email-smtp-pass', '');
     updateProviderHelp();
   }
@@ -553,7 +554,7 @@
 
   async function loadEmailSettings() {
     try {
-      const res = await fetch(`/api/admin/email-settings?shopDomain=${encodeURIComponent(SHOP_DOMAIN)}&t=${Date.now()}`);
+      const res = await fetchWithTimeout(`/api/admin/email-settings?shopDomain=${encodeURIComponent(SHOP_DOMAIN)}&t=${Date.now()}`, {}, 12000);
       if (!res.ok) throw new Error('Email settings endpoint not installed');
       const data = await res.json();
 
@@ -571,7 +572,7 @@
       if (savedNote) savedNote.style.display = data.smtpPasswordSet ? 'block' : 'none';
 
       if (data.provider && data.provider !== 'none' && data.smtpPasswordSet) {
-        updateProviderStatus('connected', 'Credentials saved');
+        updateProviderStatus('connected', data.lastTestStatus === 'failed' ? 'Credentials saved — last test failed' : 'Credentials saved');
       } else {
         updateProviderStatus('not-configured', 'Not configured');
       }
@@ -582,7 +583,7 @@
       console.warn(error);
       updateProviderStatus('failed', 'Settings endpoint missing');
       const help = document.getElementById('email-provider-help');
-      if (help) help.textContent = 'The backend email settings endpoint is not installed yet. Install the server addon before saving credentials.';
+      if (help) help.textContent = 'The backend email settings endpoint is not installed yet. Install the server update before saving credentials.';
     }
   }
 
@@ -613,11 +614,11 @@
 
     try {
       updateProviderStatus('not-configured', 'Saving...');
-      const res = await fetch('/api/admin/email-settings', {
+      const res = await fetchWithTimeout('/api/admin/email-settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
-      });
+      }, 20000);
 
       const result = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(result.error || 'Could not save email settings');
@@ -639,11 +640,11 @@
     if (!confirm('Clear saved email credentials for this shop?')) return;
 
     try {
-      const res = await fetch('/api/admin/email-settings', {
+      const res = await fetchWithTimeout('/api/admin/email-settings', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ shopDomain: SHOP_DOMAIN })
-      });
+      }, 12000);
 
       const result = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(result.error || 'Could not clear settings');
@@ -879,12 +880,21 @@
     sampleProducts(getTestCount(), true);
   }
 
+  function addProductToTest(product) {
+    if (!product || !product.id) return;
+
+    const exists = reviewTestProducts.some((p) => String(p.id) === String(product.id));
+    if (!exists) reviewTestProducts.push(product);
+
+    renderTestProducts();
+    updateAllMessaging();
+  }
+
   async function pickProducts() {
     const count = getTestCount();
 
     if (!window.shopify || !window.shopify.resourcePicker) {
-      toast('Shopify product picker unavailable. Using sample products.');
-      generateSampleProducts();
+      toast('Shopify product picker unavailable here. Use product search or manual product instead.');
       return;
     }
 
@@ -915,6 +925,75 @@
     }
   }
 
+  async function searchProducts() {
+    const query = value('nr-product-search');
+    const resultsEl = document.getElementById('nr-product-search-results');
+
+    if (!resultsEl) return;
+    if (!query) {
+      resultsEl.innerHTML = '<div class="nr-msg-help">Enter a product title or handle to search.</div>';
+      return;
+    }
+
+    resultsEl.innerHTML = '<div class="nr-msg-help">Searching products...</div>';
+
+    try {
+      const response = await fetchWithTimeout(`/api/admin/products/search?shopDomain=${encodeURIComponent(SHOP_DOMAIN)}&q=${encodeURIComponent(query)}`, {}, 15000);
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) throw new Error(result.error || 'Product search backend route is not installed yet.');
+
+      const products = Array.isArray(result.products) ? result.products : [];
+
+      if (!products.length) {
+        resultsEl.innerHTML = '<div class="nr-msg-help">No matching products found.</div>';
+        return;
+      }
+
+      resultsEl.innerHTML = products.map((product, index) => `
+        <div class="nr-product-search-result">
+          ${product.image ? `<img src="${escapeHtml(product.image)}" alt="">` : '<div class="nr-review-test-placeholder" style="width:42px;height:42px;"></div>'}
+          <div>
+            <strong>${escapeHtml(product.title)}</strong>
+            <span style="display:block;color:#6b7280;font-size:12px;">ID: ${escapeHtml(product.id)}</span>
+          </div>
+          <button class="nr-msg-secondary-btn" type="button" data-nr-add-search-product="${index}">Add</button>
+        </div>
+      `).join('');
+
+      window.__nrProductSearchResults = products;
+    } catch (error) {
+      console.error(error);
+      resultsEl.innerHTML = `
+        <div class="nr-msg-help">
+          Product search is not available yet. You can still use <strong>Add Manual Product</strong>.
+          <br>Error: ${escapeHtml(error.message)}
+        </div>
+      `;
+    }
+  }
+
+  function addManualProduct() {
+    const title = prompt('Product title for the preview:', 'Manual Preview Product');
+    if (!title) return;
+
+    const id = prompt('Product ID for the preview:', `manual-${Date.now()}`);
+    if (!id) return;
+
+    const variantId = prompt('Variant ID, optional:', '') || '';
+
+    addProductToTest({
+      id,
+      variantId,
+      title,
+      handle: '',
+      image: '',
+      quantity: 1,
+      tags: [],
+      metafields: {}
+    });
+  }
+
   function renderTestProducts() {
     const container = document.getElementById('review-test-products');
     if (!container) return;
@@ -924,13 +1003,14 @@
       return;
     }
 
-    container.innerHTML = reviewTestProducts.map((product) => `
+    container.innerHTML = reviewTestProducts.map((product, index) => `
       <div class="nr-review-test-product">
         ${product.image ? `<img src="${escapeHtml(product.image)}" alt="">` : '<div class="nr-review-test-placeholder"></div>'}
         <div>
           <strong>${escapeHtml(product.title)}</strong>
           <span>Product ID: ${escapeHtml(product.id)}</span>
           ${product.variantId ? `<span>Variant ID: ${escapeHtml(product.variantId)}</span>` : ''}
+          <button type="button" style="margin-top:6px; border:0; background:transparent; color:#d72c0d; cursor:pointer; font-weight:800; padding:0;" data-nr-remove-product="${index}">Remove</button>
         </div>
       </div>
     `).join('');
@@ -996,6 +1076,7 @@
   async function sendTestEmail() {
     const options = getTemplateOptions();
     const to = value('test-email-to');
+    const btn = document.getElementById('nr-send-test-email-btn');
 
     if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
       setTestEmailResult('error', 'Please enter a valid test email address.');
@@ -1005,25 +1086,45 @@
     const subject = options.subject || 'How did we do?';
     const html = buildEmailHtml(options, 'test');
 
-    setTestEmailResult('warn', 'Sending test email...');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Sending...';
+    }
+
+    setTestEmailResult('warn', 'Sending test email. This can take a few seconds...');
 
     try {
-      const response = await fetch('/api/admin/test-email', {
+      const response = await fetchWithTimeout('/api/admin/test-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ shopDomain: SHOP_DOMAIN, to, subject, html, previewData: getPreviewPayload() })
-      });
+      }, 25000);
 
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || 'The test email endpoint is not installed yet.');
 
-      setTestEmailResult('success', `Test email sent to <strong>${escapeHtml(to)}</strong>.`);
+      if (!response.ok) {
+        throw new Error(result.error || `Send failed with status ${response.status}`);
+      }
+
+      setTestEmailResult('success', `Test email sent to <strong>${escapeHtml(to)}</strong>. Check inbox and spam/junk.`);
       toast('Test email sent.');
+      loadEmailSettings();
     } catch (error) {
-      console.warn(error);
-      const plainText = [subject, '', 'The app could not send directly, so this opened a manual email draft.', '', html].join('\n');
-      window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainText.slice(0, 1800))}`;
-      setTestEmailResult('warn', 'The app could not send directly, so I opened a manual email draft instead. Save email provider credentials to send directly from the app.');
+      console.error(error);
+
+      const message = error.name === 'AbortError'
+        ? 'The email send timed out after 25 seconds. Check Render logs and Gmail app-password settings.'
+        : error.message || 'Could not send test email.';
+
+      setTestEmailResult(
+        'error',
+        `${escapeHtml(message)}<br><br>If this is Gmail, check that you used a Google App Password and that From Email matches the authenticated mailbox or a valid send-as alias.`
+      );
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Send Test Email';
+      }
     }
   }
 
@@ -1061,6 +1162,23 @@
     });
 
     shell.addEventListener('click', (event) => {
+      const addSearchButton = event.target.closest('[data-nr-add-search-product]');
+      if (addSearchButton) {
+        const index = parseInt(addSearchButton.dataset.nrAddSearchProduct, 10);
+        const product = window.__nrProductSearchResults && window.__nrProductSearchResults[index];
+        addProductToTest(product);
+        return;
+      }
+
+      const removeButton = event.target.closest('[data-nr-remove-product]');
+      if (removeButton) {
+        const index = parseInt(removeButton.dataset.nrRemoveProduct, 10);
+        reviewTestProducts.splice(index, 1);
+        renderTestProducts();
+        updateAllMessaging();
+        return;
+      }
+
       const tabButton = event.target.closest('[data-msg-tab]');
       if (tabButton) {
         switchTab(tabButton.dataset.msgTab);
@@ -1086,6 +1204,8 @@
       if (action === 'send-test-email') sendTestEmail();
       if (action === 'save-email-settings') saveEmailSettings();
       if (action === 'clear-email-settings') clearEmailSettings();
+      if (action === 'search-products') searchProducts();
+      if (action === 'manual-product') addManualProduct();
     });
   }
 
@@ -1105,7 +1225,7 @@
     updateAllMessaging();
     loadEmailSettings();
 
-    console.log('[Nectar Reviews] Messaging + merchant email settings mounted.');
+    console.log('[Nectar Reviews] Messaging fixes mounted.');
   }
 
   window.generateFlowCode = updateAllMessaging;
