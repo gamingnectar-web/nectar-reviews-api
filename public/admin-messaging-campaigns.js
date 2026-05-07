@@ -1,22 +1,13 @@
 /*
-  Nectar Reviews — Messaging & Campaigns
+  Nectar Reviews — Messaging & Campaigns with Merchant Email Settings
   File: public/admin-messaging-campaigns.js
 
-  This replaces the Messaging & Campaigns tab with:
+  Adds:
   - MESSAGING - ADMIN
   - MESSAGING TEMPLATE
   - MESSAGING TEST PAGES
-
-  It also adds:
-  - Shopify Flow email HTML generator
-  - Review page tester
-  - Test email sender
-
-  The test email sender posts to:
-  POST /api/admin/test-email
-
-  If that endpoint is not installed yet, it falls back to opening a mailto draft
-  so the merchant can still preview/send the email manually.
+  - Merchant-owned SMTP settings for Gmail / Google Workspace, Microsoft 365, SendGrid, Postmark, Custom SMTP
+  - Send Test Email using saved shop SMTP settings
 */
 
 (function () {
@@ -27,6 +18,64 @@
 
   let reviewTestProducts = [];
   let currentMsgTab = 'admin';
+  let emailSettingsLoaded = false;
+
+  const providerPresets = {
+    none: {
+      smtpHost: '',
+      smtpPort: '',
+      secureMode: 'starttls',
+      smtpUser: '',
+      fromName: '',
+      fromEmail: '',
+      replyToEmail: ''
+    },
+    gmail: {
+      smtpHost: 'smtp.gmail.com',
+      smtpPort: '587',
+      secureMode: 'starttls',
+      smtpUser: '',
+      fromName: '',
+      fromEmail: '',
+      replyToEmail: ''
+    },
+    outlook: {
+      smtpHost: 'smtp.office365.com',
+      smtpPort: '587',
+      secureMode: 'starttls',
+      smtpUser: '',
+      fromName: '',
+      fromEmail: '',
+      replyToEmail: ''
+    },
+    sendgrid: {
+      smtpHost: 'smtp.sendgrid.net',
+      smtpPort: '587',
+      secureMode: 'starttls',
+      smtpUser: 'apikey',
+      fromName: '',
+      fromEmail: '',
+      replyToEmail: ''
+    },
+    postmark: {
+      smtpHost: 'smtp.postmarkapp.com',
+      smtpPort: '587',
+      secureMode: 'starttls',
+      smtpUser: '',
+      fromName: '',
+      fromEmail: '',
+      replyToEmail: ''
+    },
+    custom: {
+      smtpHost: '',
+      smtpPort: '587',
+      secureMode: 'starttls',
+      smtpUser: '',
+      fromName: '',
+      fromEmail: '',
+      replyToEmail: ''
+    }
+  };
 
   function escapeHtml(value) {
     return String(value || '')
@@ -40,6 +89,21 @@
   function value(id, fallback = '') {
     const el = document.getElementById(id);
     return el ? (el.value || '').trim() || fallback : fallback;
+  }
+
+  function checked(id) {
+    const el = document.getElementById(id);
+    return !!(el && el.checked);
+  }
+
+  function setValue(id, nextValue) {
+    const el = document.getElementById(id);
+    if (el) el.value = nextValue || '';
+  }
+
+  function setChecked(id, nextValue) {
+    const el = document.getElementById(id);
+    if (el) el.checked = !!nextValue;
   }
 
   function cleanHandle(handle) {
@@ -66,452 +130,92 @@
     const style = document.createElement('style');
     style.id = 'nr-messaging-tabs-style';
     style.textContent = `
-      .nr-msg-shell {
-        width: 100%;
-        box-sizing: border-box;
+      .nr-msg-shell { width:100%; box-sizing:border-box; }
+      .nr-msg-hero { display:flex; justify-content:space-between; align-items:flex-start; gap:24px; margin-bottom:22px; }
+      .nr-msg-kicker { margin:0 0 6px; color:var(--blue,#005bd3); font-size:12px; font-weight:850; letter-spacing:.08em; text-transform:uppercase; }
+      .nr-msg-hero h1 { margin:0; color:var(--primary,#111827); font-size:clamp(30px,3vw,44px); line-height:1.05; letter-spacing:-.045em; }
+      .nr-msg-hero p { margin:10px 0 0; max-width:760px; color:var(--text-light,#6b7280); font-size:15px; line-height:1.6; }
+      .nr-msg-chip { min-width:270px; padding:14px 16px; border:1px solid var(--border,#e5e7eb); border-radius:16px; background:#fff; box-shadow:0 1px 3px rgba(17,24,39,.06); }
+      .nr-msg-chip span { display:block; margin-bottom:4px; color:var(--text-light,#6b7280); font-size:12px; font-weight:850; text-transform:uppercase; letter-spacing:.04em; }
+      .nr-msg-chip strong { display:block; color:var(--primary,#111827); font-size:13px; line-height:1.5; }
+
+      .nr-msg-tabs { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px; border-bottom:1px solid var(--border,#e5e7eb); }
+      .nr-msg-tab-btn { border:0; background:transparent; color:var(--text-light,#6b7280); padding:14px 4px 13px; margin-right:22px; border-bottom:3px solid transparent; font-weight:850; cursor:pointer; letter-spacing:-.01em; }
+      .nr-msg-tab-btn.active { color:var(--blue,#005bd3); border-bottom-color:var(--blue,#005bd3); }
+      .nr-msg-tab-panel { display:none; }
+      .nr-msg-tab-panel.active { display:block; }
+
+      .nr-msg-grid { display:grid; grid-template-columns:minmax(320px,430px) minmax(0,1fr); gap:24px; align-items:start; }
+      .nr-msg-grid-one { display:grid; gap:18px; }
+      .nr-msg-card { background:#fff; border:1px solid var(--border,#e5e7eb); border-radius:18px; box-shadow:0 1px 3px rgba(17,24,39,.06); overflow:hidden; }
+      .nr-msg-card-pad { padding:22px; }
+      .nr-msg-card-title { display:flex; gap:12px; align-items:flex-start; margin-bottom:18px; }
+      .nr-msg-step { width:30px; height:30px; flex:0 0 30px; display:grid; place-items:center; border-radius:999px; background:var(--primary,#111827); color:#fff; font-weight:900; font-size:13px; }
+      .nr-msg-card h2, .nr-msg-card h3 { margin:0; color:var(--primary,#111827); font-size:18px; line-height:1.2; letter-spacing:-.025em; }
+      .nr-msg-card p { color:var(--text-light,#6b7280); font-size:13px; line-height:1.5; }
+      .nr-msg-card-title p { margin:4px 0 0; }
+
+      .nr-msg-card label { display:block; margin:14px 0 6px; color:var(--primary,#111827); font-size:13px; font-weight:850; }
+      .nr-msg-card label em { color:var(--text-light,#6b7280); font-style:normal; font-weight:650; }
+      .nr-msg-card input, .nr-msg-card select, .nr-msg-card textarea {
+        width:100%; box-sizing:border-box; min-height:44px; border:1px solid #d1d5db; border-radius:10px; background:#fff; color:var(--primary,#111827);
+        padding:11px 12px; font-size:14px; outline:none;
+      }
+      .nr-msg-card textarea { min-height:94px; resize:vertical; font-family:inherit; line-height:1.5; }
+      .nr-msg-card input[type="color"] { height:44px; padding:4px; cursor:pointer; }
+      .nr-msg-card input:focus, .nr-msg-card select:focus, .nr-msg-card textarea:focus, #flow-code-output:focus {
+        border-color:var(--blue,#005bd3); box-shadow:0 0 0 3px rgba(0,91,211,.14);
       }
 
-      .nr-msg-hero {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 24px;
-        margin-bottom: 22px;
-      }
+      .nr-msg-two { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+      .nr-msg-help { margin-top:16px; padding:12px; border:1px solid var(--border,#e5e7eb); border-radius:12px; background:#f9fafb; color:var(--text-light,#6b7280); font-size:13px; line-height:1.5; }
+      .nr-msg-help code { color:var(--primary,#111827); font-weight:800; }
+      .nr-msg-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
+      .nr-msg-btn, .nr-msg-secondary-btn { min-height:44px; border-radius:10px; padding:12px 16px; font-weight:850; cursor:pointer; }
+      .nr-msg-btn { border:0; background:var(--primary,#111827); color:#fff; }
+      .nr-msg-secondary-btn { border:1px solid var(--border,#e5e7eb); background:#f3f4f6; color:var(--primary,#111827); }
 
-      .nr-msg-kicker {
-        margin: 0 0 6px;
-        color: var(--blue, #005bd3);
-        font-size: 12px;
-        font-weight: 850;
-        letter-spacing: .08em;
-        text-transform: uppercase;
-      }
+      .nr-msg-provider-status { display:inline-flex; align-items:center; gap:8px; min-height:30px; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:850; }
+      .nr-msg-provider-status.not-configured { background:#f3f4f6; color:#6b7280; }
+      .nr-msg-provider-status.connected { background:#dcfce7; color:#047857; }
+      .nr-msg-provider-status.failed { background:#fee2e2; color:#b91c1c; }
 
-      .nr-msg-hero h1 {
-        margin: 0;
-        color: var(--primary, #111827);
-        font-size: clamp(30px, 3vw, 44px);
-        line-height: 1.05;
-        letter-spacing: -.045em;
-      }
-
-      .nr-msg-hero p {
-        margin: 10px 0 0;
-        max-width: 760px;
-        color: var(--text-light, #6b7280);
-        font-size: 15px;
-        line-height: 1.6;
-      }
-
-      .nr-msg-chip {
-        min-width: 270px;
-        padding: 14px 16px;
-        border: 1px solid var(--border, #e5e7eb);
-        border-radius: 16px;
-        background: #fff;
-        box-shadow: 0 1px 3px rgba(17,24,39,.06);
-      }
-
-      .nr-msg-chip span {
-        display: block;
-        margin-bottom: 4px;
-        color: var(--text-light, #6b7280);
-        font-size: 12px;
-        font-weight: 850;
-        text-transform: uppercase;
-        letter-spacing: .04em;
-      }
-
-      .nr-msg-chip strong {
-        display: block;
-        color: var(--primary, #111827);
-        font-size: 13px;
-        line-height: 1.5;
-      }
-
-      .nr-msg-tabs {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin-bottom: 20px;
-        border-bottom: 1px solid var(--border, #e5e7eb);
-      }
-
-      .nr-msg-tab-btn {
-        border: 0;
-        background: transparent;
-        color: var(--text-light, #6b7280);
-        padding: 14px 4px 13px;
-        margin-right: 22px;
-        border-bottom: 3px solid transparent;
-        font-weight: 850;
-        cursor: pointer;
-        letter-spacing: -.01em;
-      }
-
-      .nr-msg-tab-btn.active {
-        color: var(--blue, #005bd3);
-        border-bottom-color: var(--blue, #005bd3);
-      }
-
-      .nr-msg-tab-panel {
-        display: none;
-      }
-
-      .nr-msg-tab-panel.active {
-        display: block;
-      }
-
-      .nr-msg-grid {
-        display: grid;
-        grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
-        gap: 24px;
-        align-items: start;
-      }
-
-      .nr-msg-grid-one {
-        display: grid;
-        gap: 18px;
-      }
-
-      .nr-msg-card {
-        background: #fff;
-        border: 1px solid var(--border, #e5e7eb);
-        border-radius: 18px;
-        box-shadow: 0 1px 3px rgba(17,24,39,.06);
-        overflow: hidden;
-      }
-
-      .nr-msg-card-pad {
-        padding: 22px;
-      }
-
-      .nr-msg-card-title {
-        display: flex;
-        gap: 12px;
-        align-items: flex-start;
-        margin-bottom: 18px;
-      }
-
-      .nr-msg-step {
-        width: 30px;
-        height: 30px;
-        flex: 0 0 30px;
-        display: grid;
-        place-items: center;
-        border-radius: 999px;
-        background: var(--primary, #111827);
-        color: #fff;
-        font-weight: 900;
-        font-size: 13px;
-      }
-
-      .nr-msg-card h2,
-      .nr-msg-card h3 {
-        margin: 0;
-        color: var(--primary, #111827);
-        font-size: 18px;
-        line-height: 1.2;
-        letter-spacing: -.025em;
-      }
-
-      .nr-msg-card p {
-        color: var(--text-light, #6b7280);
-        font-size: 13px;
-        line-height: 1.5;
-      }
-
-      .nr-msg-card-title p {
-        margin: 4px 0 0;
-      }
-
-      .nr-msg-card label {
-        display: block;
-        margin: 14px 0 6px;
-        color: var(--primary, #111827);
-        font-size: 13px;
-        font-weight: 850;
-      }
-
-      .nr-msg-card label em {
-        color: var(--text-light, #6b7280);
-        font-style: normal;
-        font-weight: 650;
-      }
-
-      .nr-msg-card input,
-      .nr-msg-card select,
-      .nr-msg-card textarea {
-        width: 100%;
-        box-sizing: border-box;
-        min-height: 44px;
-        border: 1px solid #d1d5db;
-        border-radius: 10px;
-        background: #fff;
-        color: var(--primary, #111827);
-        padding: 11px 12px;
-        font-size: 14px;
-        outline: none;
-      }
-
-      .nr-msg-card textarea {
-        min-height: 94px;
-        resize: vertical;
-        font-family: inherit;
-        line-height: 1.5;
-      }
-
-      .nr-msg-card input[type="color"] {
-        height: 44px;
-        padding: 4px;
-        cursor: pointer;
-      }
-
-      .nr-msg-card input:focus,
-      .nr-msg-card select:focus,
-      .nr-msg-card textarea:focus,
-      #flow-code-output:focus {
-        border-color: var(--blue, #005bd3);
-        box-shadow: 0 0 0 3px rgba(0,91,211,.14);
-      }
-
-      .nr-msg-two {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 12px;
-      }
-
-      .nr-msg-help {
-        margin-top: 16px;
-        padding: 12px;
-        border: 1px solid var(--border, #e5e7eb);
-        border-radius: 12px;
-        background: #f9fafb;
-        color: var(--text-light, #6b7280);
-        font-size: 13px;
-        line-height: 1.5;
-      }
-
-      .nr-msg-help code {
-        color: var(--primary, #111827);
-        font-weight: 800;
-      }
-
-      .nr-msg-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin-top: 16px;
-      }
-
-      .nr-msg-btn,
-      .nr-msg-secondary-btn {
-        min-height: 44px;
-        border-radius: 10px;
-        padding: 12px 16px;
-        font-weight: 850;
-        cursor: pointer;
-      }
-
-      .nr-msg-btn {
-        border: 0;
-        background: var(--primary, #111827);
-        color: #fff;
-      }
-
-      .nr-msg-secondary-btn {
-        border: 1px solid var(--border, #e5e7eb);
-        background: #f3f4f6;
-        color: var(--primary, #111827);
-      }
-
-      .nr-msg-preview-head,
-      .nr-msg-code-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 16px;
-        padding: 18px;
-        border-bottom: 1px solid var(--border, #e5e7eb);
-      }
-
-      .nr-msg-toggle {
-        display: inline-flex;
-        padding: 4px;
-        border: 1px solid var(--border, #e5e7eb);
-        border-radius: 999px;
-        background: #f9fafb;
-      }
-
-      .nr-msg-toggle button {
-        border: 0;
-        border-radius: 999px;
-        background: transparent;
-        color: var(--text-light, #6b7280);
-        padding: 9px 14px;
-        font-weight: 850;
-        cursor: pointer;
-      }
-
-      .nr-msg-toggle button.active {
-        background: var(--primary, #111827);
-        color: #fff;
-      }
-
-      .nr-msg-preview-stage {
-        padding: 28px;
-        overflow: auto;
-        background: #f9fafb;
-        border-radius: 0 0 18px 18px;
-      }
-
-      .nr-msg-preview-wrap {
-        transition: max-width .25s ease, border .25s ease, border-radius .25s ease;
-      }
-
-      .nr-msg-preview-wrap.mobile {
-        max-width: 390px;
-        margin: 0 auto;
-        border: 12px solid #111827;
-        border-radius: 34px;
-        overflow: hidden;
-        background: #fff;
-      }
-
-      #flow-email-preview {
-        min-height: 320px;
-      }
-
+      .nr-msg-preview-head, .nr-msg-code-head { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:18px; border-bottom:1px solid var(--border,#e5e7eb); }
+      .nr-msg-toggle { display:inline-flex; padding:4px; border:1px solid var(--border,#e5e7eb); border-radius:999px; background:#f9fafb; }
+      .nr-msg-toggle button { border:0; border-radius:999px; background:transparent; color:var(--text-light,#6b7280); padding:9px 14px; font-weight:850; cursor:pointer; }
+      .nr-msg-toggle button.active { background:var(--primary,#111827); color:#fff; }
+      .nr-msg-preview-stage { padding:28px; overflow:auto; background:#f9fafb; border-radius:0 0 18px 18px; }
+      .nr-msg-preview-wrap { transition:max-width .25s ease,border .25s ease,border-radius .25s ease; }
+      .nr-msg-preview-wrap.mobile { max-width:390px; margin:0 auto; border:12px solid #111827; border-radius:34px; overflow:hidden; background:#fff; }
+      #flow-email-preview { min-height:320px; }
       #flow-code-output {
-        display: block;
-        width: 100%;
-        min-height: 430px;
-        box-sizing: border-box;
-        border: 0;
-        background: #18181b;
-        color: #fff;
-        padding: 18px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        font-size: 12px;
-        line-height: 1.55;
-        resize: vertical;
-        outline: none;
+        display:block; width:100%; min-height:430px; box-sizing:border-box; border:0; background:#18181b; color:#fff; padding:18px;
+        font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:12px; line-height:1.55; resize:vertical; outline:none;
       }
 
-      .nr-review-test-actions {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-        margin-top: 14px;
+      .nr-review-test-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; }
+      .nr-review-test-products { margin-top:14px; display:grid; gap:8px; }
+      .nr-review-test-product { display:grid; grid-template-columns:54px 1fr; gap:12px; align-items:center; padding:10px; border:1px solid var(--border,#e5e7eb); border-radius:12px; background:#fff; }
+      .nr-review-test-product img, .nr-review-test-placeholder { width:54px; height:54px; object-fit:cover; border-radius:10px; background:#e5e7eb; }
+      .nr-review-test-product strong { display:block; color:var(--primary,#111827); font-size:13px; line-height:1.35; }
+      .nr-review-test-product span { display:block; color:var(--text-light,#6b7280); font-size:12px; margin-top:2px; }
+
+      .nr-test-email-result { display:none; margin-top:14px; padding:12px; border-radius:12px; font-size:13px; line-height:1.5; }
+      .nr-test-email-result.success { display:block; background:#ecfdf5; color:#047857; border:1px solid #a7f3d0; }
+      .nr-test-email-result.warn { display:block; background:#fffbeb; color:#92400e; border:1px solid #fde68a; }
+      .nr-test-email-result.error { display:block; background:#fff1f2; color:#be123c; border:1px solid #fecdd3; }
+
+      @media (max-width:1100px) {
+        .nr-msg-hero, .nr-msg-preview-head, .nr-msg-code-head { flex-direction:column; align-items:stretch; }
+        .nr-msg-chip { min-width:0; }
+        .nr-msg-grid { grid-template-columns:1fr; }
       }
 
-      .nr-review-test-products {
-        margin-top: 14px;
-        display: grid;
-        gap: 8px;
-      }
-
-      .nr-review-test-product {
-        display: grid;
-        grid-template-columns: 54px 1fr;
-        gap: 12px;
-        align-items: center;
-        padding: 10px;
-        border: 1px solid var(--border, #e5e7eb);
-        border-radius: 12px;
-        background: #fff;
-      }
-
-      .nr-review-test-product img,
-      .nr-review-test-placeholder {
-        width: 54px;
-        height: 54px;
-        object-fit: cover;
-        border-radius: 10px;
-        background: #e5e7eb;
-      }
-
-      .nr-review-test-product strong {
-        display: block;
-        color: var(--primary, #111827);
-        font-size: 13px;
-        line-height: 1.35;
-      }
-
-      .nr-review-test-product span {
-        display: block;
-        color: var(--text-light, #6b7280);
-        font-size: 12px;
-        margin-top: 2px;
-      }
-
-      .nr-test-email-result {
-        display: none;
-        margin-top: 14px;
-        padding: 12px;
-        border-radius: 12px;
-        font-size: 13px;
-        line-height: 1.5;
-      }
-
-      .nr-test-email-result.success {
-        display: block;
-        background: #ecfdf5;
-        color: #047857;
-        border: 1px solid #a7f3d0;
-      }
-
-      .nr-test-email-result.warn {
-        display: block;
-        background: #fffbeb;
-        color: #92400e;
-        border: 1px solid #fde68a;
-      }
-
-      .nr-test-email-result.error {
-        display: block;
-        background: #fff1f2;
-        color: #be123c;
-        border: 1px solid #fecdd3;
-      }
-
-      @media (max-width: 1100px) {
-        .nr-msg-hero,
-        .nr-msg-preview-head,
-        .nr-msg-code-head {
-          flex-direction: column;
-          align-items: stretch;
-        }
-
-        .nr-msg-chip {
-          min-width: 0;
-        }
-
-        .nr-msg-grid {
-          grid-template-columns: 1fr;
-        }
-      }
-
-      @media (max-width: 640px) {
-        .nr-msg-two,
-        .nr-review-test-actions {
-          grid-template-columns: 1fr;
-        }
-
-        .nr-msg-preview-stage {
-          padding: 14px;
-        }
-
-        .nr-msg-toggle,
-        .nr-msg-btn,
-        .nr-msg-secondary-btn {
-          width: 100%;
-        }
-
-        .nr-msg-toggle button {
-          flex: 1;
-        }
+      @media (max-width:640px) {
+        .nr-msg-two, .nr-review-test-actions { grid-template-columns:1fr; }
+        .nr-msg-preview-stage { padding:14px; }
+        .nr-msg-toggle, .nr-msg-btn, .nr-msg-secondary-btn { width:100%; }
+        .nr-msg-toggle button { flex:1; }
       }
     `;
     document.head.appendChild(style);
@@ -537,7 +241,7 @@
             <p class="nr-msg-kicker">Messaging & Campaigns</p>
             <h1>Review Request Messaging</h1>
             <p>
-              Build your review email, copy the Shopify Flow HTML, preview your review landing page, and send yourself a test email before going live.
+              Build your review email, save merchant-owned email credentials, preview the review page, and send a test email before going live.
             </p>
           </div>
 
@@ -553,17 +257,9 @@
           <button type="button" class="nr-msg-tab-btn" data-msg-tab="tests">MESSAGING TEST PAGES</button>
         </div>
 
-        <section id="nr-msg-tab-admin" class="nr-msg-tab-panel active">
-          ${renderAdminTab()}
-        </section>
-
-        <section id="nr-msg-tab-template" class="nr-msg-tab-panel">
-          ${renderTemplateTab()}
-        </section>
-
-        <section id="nr-msg-tab-tests" class="nr-msg-tab-panel">
-          ${renderTestsTab()}
-        </section>
+        <section id="nr-msg-tab-admin" class="nr-msg-tab-panel active">${renderAdminTab()}</section>
+        <section id="nr-msg-tab-template" class="nr-msg-tab-panel">${renderTemplateTab()}</section>
+        <section id="nr-msg-tab-tests" class="nr-msg-tab-panel">${renderTestsTab()}</section>
       </div>
     `;
   }
@@ -575,6 +271,83 @@
           <section class="nr-msg-card nr-msg-card-pad">
             <div class="nr-msg-card-title">
               <span class="nr-msg-step">1</span>
+              <div>
+                <h2>Email Sending Provider</h2>
+                <p>Let each merchant use their own Gmail, Outlook, SendGrid, Postmark, or custom SMTP account.</p>
+              </div>
+            </div>
+
+            <div style="margin-bottom:14px;">
+              <span id="nr-provider-status" class="nr-msg-provider-status not-configured">Not configured</span>
+            </div>
+
+            <label for="email-provider">Provider</label>
+            <select id="email-provider">
+              <option value="none">Not configured</option>
+              <option value="gmail">Gmail / Google Workspace</option>
+              <option value="outlook">Microsoft 365 / Outlook</option>
+              <option value="sendgrid">SendGrid</option>
+              <option value="postmark">Postmark</option>
+              <option value="custom">Custom SMTP</option>
+            </select>
+
+            <div class="nr-msg-help" id="email-provider-help">
+              Choose a provider. Gmail / Google Workspace is the easiest no-extra-cost option for low volume.
+            </div>
+
+            <div class="nr-msg-two">
+              <div>
+                <label for="email-smtp-host">SMTP host</label>
+                <input id="email-smtp-host" type="text" placeholder="smtp.gmail.com">
+              </div>
+              <div>
+                <label for="email-smtp-port">SMTP port</label>
+                <input id="email-smtp-port" type="number" placeholder="587">
+              </div>
+            </div>
+
+            <label for="email-secure-mode">Security</label>
+            <select id="email-secure-mode">
+              <option value="starttls">STARTTLS / TLS on port 587</option>
+              <option value="ssl">SSL on port 465</option>
+              <option value="none">None</option>
+            </select>
+
+            <label for="email-smtp-user">SMTP username</label>
+            <input id="email-smtp-user" type="text" autocomplete="off" placeholder="you@yourdomain.com">
+
+            <label for="email-smtp-pass">SMTP password / app password / API key</label>
+            <input id="email-smtp-pass" type="password" autocomplete="new-password" placeholder="Leave blank to keep existing saved password">
+            <p id="email-password-saved-note" style="display:none; margin:6px 0 0; color:#047857; font-weight:750;">A password is already saved. Leave this blank to keep it.</p>
+
+            <div class="nr-msg-two">
+              <div>
+                <label for="email-from-name">From name</label>
+                <input id="email-from-name" type="text" placeholder="Your Store">
+              </div>
+              <div>
+                <label for="email-from-email">From email</label>
+                <input id="email-from-email" type="email" placeholder="reviews@yourdomain.com">
+              </div>
+            </div>
+
+            <label for="email-reply-to">Reply-to email <em>optional</em></label>
+            <input id="email-reply-to" type="email" placeholder="support@yourdomain.com">
+
+            <label style="display:flex; gap:10px; align-items:center;">
+              <input id="email-provider-enabled" type="checkbox" checked style="width:auto; min-height:auto;">
+              Enable sending through this provider
+            </label>
+
+            <div class="nr-msg-actions">
+              <button class="nr-msg-btn" type="button" data-nr-action="save-email-settings">Save Email Settings</button>
+              <button class="nr-msg-secondary-btn" type="button" data-nr-action="clear-email-settings">Clear Credentials</button>
+            </div>
+          </section>
+
+          <section class="nr-msg-card nr-msg-card-pad">
+            <div class="nr-msg-card-title">
+              <span class="nr-msg-step">2</span>
               <div>
                 <h2>Shopify Flow instructions</h2>
                 <p>Use this when installing the email into Shopify Flow.</p>
@@ -599,20 +372,6 @@
               <button class="nr-msg-secondary-btn" type="button" data-nr-action="go-tests">Send Test Email</button>
             </div>
           </section>
-
-          <section class="nr-msg-card nr-msg-card-pad">
-            <div class="nr-msg-card-title">
-              <span class="nr-msg-step">2</span>
-              <div>
-                <h2>Email tracking note</h2>
-                <p>Open/click tracking works when the email enhancer script is installed.</p>
-              </div>
-            </div>
-
-            <div class="nr-msg-help" style="margin-top:0;">
-              The generated email can include open pixels and tracked links. For sent counts, add a Shopify Flow HTTP request step before sending the email.
-            </div>
-          </section>
         </div>
 
         <section class="nr-msg-card">
@@ -634,100 +393,51 @@
       <div class="nr-msg-grid">
         <aside class="nr-msg-grid-one">
           <section class="nr-msg-card nr-msg-card-pad">
-            <div class="nr-msg-card-title">
-              <span class="nr-msg-step">1</span>
-              <div>
-                <h2>Brand</h2>
-                <p>Logo, colours, and button styling.</p>
-              </div>
-            </div>
-
+            <div class="nr-msg-card-title"><span class="nr-msg-step">1</span><div><h2>Brand</h2><p>Logo, colours, and button styling.</p></div></div>
             <label for="flow-logo">Brand logo URL <em>optional</em></label>
             <input id="flow-logo" type="url" placeholder="https://cdn.shopify.com/.../logo.png">
-
             <div class="nr-msg-two">
-              <div>
-                <label for="flow-color">Button colour</label>
-                <input id="flow-color" type="color" value="#111827">
-              </div>
-              <div>
-                <label for="flow-button-radius">Button radius</label>
-                <input id="flow-button-radius" type="number" min="0" max="40" value="8">
-              </div>
+              <div><label for="flow-color">Button colour</label><input id="flow-color" type="color" value="#111827"></div>
+              <div><label for="flow-button-radius">Button radius</label><input id="flow-button-radius" type="number" min="0" max="40" value="8"></div>
             </div>
-
             <div class="nr-msg-two">
-              <div>
-                <label for="flow-bg-color">Email background</label>
-                <input id="flow-bg-color" type="color" value="#f3f4f6">
-              </div>
-              <div>
-                <label for="flow-card-color">Email card</label>
-                <input id="flow-card-color" type="color" value="#ffffff">
-              </div>
+              <div><label for="flow-bg-color">Email background</label><input id="flow-bg-color" type="color" value="#f3f4f6"></div>
+              <div><label for="flow-card-color">Email card</label><input id="flow-card-color" type="color" value="#ffffff"></div>
             </div>
           </section>
 
           <section class="nr-msg-card nr-msg-card-pad">
-            <div class="nr-msg-card-title">
-              <span class="nr-msg-step">2</span>
-              <div>
-                <h2>Email copy</h2>
-                <p>Editable copy for merchants.</p>
-              </div>
-            </div>
-
+            <div class="nr-msg-card-title"><span class="nr-msg-step">2</span><div><h2>Email copy</h2><p>Editable copy for merchants.</p></div></div>
             <label for="flow-subject">Email subject</label>
             <input id="flow-subject" type="text" value="How did we do?">
-
             <label for="flow-heading">Heading</label>
             <input id="flow-heading" type="text" value="How did we do?">
-
             <label for="flow-intro">Intro line</label>
             <input id="flow-intro" type="text" value='Hi {{ order.customer.firstName | default: "there" }},'>
-
             <label for="flow-body">Main message</label>
             <textarea id="flow-body" rows="4">We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?</textarea>
-
             <label for="flow-signoff">Footer note</label>
             <input id="flow-signoff" type="text" value="Your feedback helps other customers make confident choices.">
           </section>
 
           <section class="nr-msg-card nr-msg-card-pad">
-            <div class="nr-msg-card-title">
-              <span class="nr-msg-step">3</span>
-              <div>
-                <h2>Review links</h2>
-                <p>Choose how customers leave reviews.</p>
-              </div>
-            </div>
-
+            <div class="nr-msg-card-title"><span class="nr-msg-step">3</span><div><h2>Review links</h2><p>Choose how customers leave reviews.</p></div></div>
             <label for="flow-link-mode">Review link style</label>
             <select id="flow-link-mode">
               <option value="both">Order button + individual product links</option>
               <option value="order">Review entire order only</option>
               <option value="products">Review each product only</option>
             </select>
-
             <label for="flow-main-button-text">Main button text</label>
             <input id="flow-main-button-text" type="text" value="Review Your Order">
-
             <label for="flow-product-button-text">Product button text</label>
             <input id="flow-product-button-text" type="text" value="Review This Item">
-
             <label for="flow-page-handle">Review landing page handle</label>
             <input id="flow-page-handle" type="text" value="leave-review">
           </section>
 
           <section class="nr-msg-card nr-msg-card-pad">
-            <div class="nr-msg-card-title">
-              <span class="nr-msg-step">4</span>
-              <div>
-                <h2>Flow setup</h2>
-                <p>The wait step happens in Shopify Flow.</p>
-              </div>
-            </div>
-
+            <div class="nr-msg-card-title"><span class="nr-msg-step">4</span><div><h2>Flow setup</h2><p>The wait step happens in Shopify Flow.</p></div></div>
             <label for="flow-delay-days">Recommended wait after fulfilment</label>
             <select id="flow-delay-days">
               <option value="7">7 days</option>
@@ -742,20 +452,13 @@
         <main class="nr-msg-grid-one">
           <section class="nr-msg-card">
             <div class="nr-msg-preview-head">
-              <div>
-                <h2>Live preview</h2>
-                <p>Check the customer email on desktop and mobile.</p>
-              </div>
+              <div><h2>Live preview</h2><p>Check the customer email on desktop and mobile.</p></div>
               <div class="nr-msg-toggle">
                 <button type="button" id="flow-preview-desktop" class="active" data-nr-preview="desktop">Desktop</button>
                 <button type="button" id="flow-preview-mobile" data-nr-preview="mobile">Mobile</button>
               </div>
             </div>
-            <div class="nr-msg-preview-stage">
-              <div id="flow-preview-wrap" class="nr-msg-preview-wrap">
-                <div id="flow-email-preview"></div>
-              </div>
-            </div>
+            <div class="nr-msg-preview-stage"><div id="flow-preview-wrap" class="nr-msg-preview-wrap"><div id="flow-email-preview"></div></div></div>
           </section>
         </main>
       </div>
@@ -767,70 +470,35 @@
       <div class="nr-msg-grid">
         <aside class="nr-msg-grid-one">
           <section class="nr-msg-card nr-msg-card-pad">
-            <div class="nr-msg-card-title">
-              <span class="nr-msg-step">1</span>
-              <div>
-                <h2>Review test page</h2>
-                <p>Open your review landing page with fake order/product data.</p>
-              </div>
-            </div>
-
+            <div class="nr-msg-card-title"><span class="nr-msg-step">1</span><div><h2>Review test page</h2><p>Open your review landing page with fake order/product data.</p></div></div>
             <label for="review-test-name">Customer name</label>
             <input id="review-test-name" type="text" value="Alex">
-
             <label for="review-test-email">Customer email</label>
             <input id="review-test-email" type="email" value="alex@example.com">
-
             <label for="review-test-order">Order number</label>
             <input id="review-test-order" type="text" value="1001">
-
             <label for="review-test-type">Review mode</label>
-            <select id="review-test-type">
-              <option value="order">Review full order</option>
-              <option value="product">Review one product</option>
-            </select>
-
+            <select id="review-test-type"><option value="order">Review full order</option><option value="product">Review one product</option></select>
             <label for="review-test-count">How many products?</label>
             <input id="review-test-count" type="number" min="1" max="10" value="2">
-
             <div class="nr-review-test-actions">
               <button class="nr-msg-secondary-btn" type="button" data-nr-action="pick-products">Select Products</button>
               <button class="nr-msg-secondary-btn" type="button" data-nr-action="sample-products">Use Sample Products</button>
             </div>
-
             <div id="review-test-products" class="nr-review-test-products"></div>
-
-            <button class="nr-msg-btn" type="button" style="width:100%; margin-top:16px;" data-nr-action="open-review-test">
-              Open Test Review Page
-            </button>
+            <button class="nr-msg-btn" type="button" style="width:100%; margin-top:16px;" data-nr-action="open-review-test">Open Test Review Page</button>
           </section>
 
           <section class="nr-msg-card nr-msg-card-pad">
-            <div class="nr-msg-card-title">
-              <span class="nr-msg-step">2</span>
-              <div>
-                <h2>Send test email</h2>
-                <p>Send the generated email to yourself before installing Flow.</p>
-              </div>
-            </div>
-
+            <div class="nr-msg-card-title"><span class="nr-msg-step">2</span><div><h2>Send test email</h2><p>Send the generated email using the saved provider credentials.</p></div></div>
             <label for="test-email-to">Send to</label>
             <input id="test-email-to" type="email" placeholder="you@example.com">
-
             <label for="test-email-name">Customer name shown in preview</label>
             <input id="test-email-name" type="text" value="Alex">
-
             <label for="test-email-order">Order number shown in links</label>
             <input id="test-email-order" type="text" value="1001">
-
-            <div class="nr-msg-help">
-              This uses the same email HTML and review page handle from your Messaging Template tab.
-            </div>
-
-            <button class="nr-msg-btn" type="button" style="width:100%; margin-top:16px;" data-nr-action="send-test-email">
-              Send Test Email
-            </button>
-
+            <div class="nr-msg-help">This uses the current template and your saved Email Sending Provider settings. If the provider is not configured, the app opens a manual draft fallback.</div>
+            <button class="nr-msg-btn" type="button" style="width:100%; margin-top:16px;" data-nr-action="send-test-email">Send Test Email</button>
             <div id="nr-test-email-result" class="nr-test-email-result"></div>
           </section>
         </aside>
@@ -838,19 +506,159 @@
         <main class="nr-msg-grid-one">
           <section class="nr-msg-card">
             <div class="nr-msg-preview-head">
-              <div>
-                <h2>Test email preview</h2>
-                <p>This is the email that will be sent or opened as a draft.</p>
-              </div>
+              <div><h2>Test email preview</h2><p>This is the email that will be sent or opened as a draft.</p></div>
               <button class="nr-msg-secondary-btn" type="button" data-nr-action="go-template">Edit Template</button>
             </div>
-            <div class="nr-msg-preview-stage">
-              <div id="flow-email-preview-test"></div>
-            </div>
+            <div class="nr-msg-preview-stage"><div id="flow-email-preview-test"></div></div>
           </section>
         </main>
       </div>
     `;
+  }
+
+  function providerHelp(provider) {
+    if (provider === 'gmail') return 'Gmail / Google Workspace: use smtp.gmail.com, port 587, STARTTLS. Use a Google App Password, not your normal Google password.';
+    if (provider === 'outlook') return 'Microsoft 365 / Outlook: use smtp.office365.com, port 587, STARTTLS. SMTP AUTH may need to be enabled for the mailbox.';
+    if (provider === 'sendgrid') return 'SendGrid: use smtp.sendgrid.net, port 587, username apikey, and your SendGrid API key as the password. Sender must be verified in SendGrid.';
+    if (provider === 'postmark') return 'Postmark: use smtp.postmarkapp.com, port 587. Use your Postmark Server API Token for username and password.';
+    if (provider === 'custom') return 'Custom SMTP: enter the host, port, security type, username, password, and sender details from your email provider.';
+    return 'Choose a provider. Gmail / Google Workspace is the easiest no-extra-cost option for low volume.';
+  }
+
+  function applyProviderPreset(provider) {
+    const preset = providerPresets[provider] || providerPresets.none;
+    setValue('email-smtp-host', preset.smtpHost);
+    setValue('email-smtp-port', preset.smtpPort);
+    setValue('email-secure-mode', preset.secureMode);
+    setValue('email-smtp-user', preset.smtpUser);
+    if (preset.fromName) setValue('email-from-name', preset.fromName);
+    if (preset.fromEmail) setValue('email-from-email', preset.fromEmail);
+    if (preset.replyToEmail) setValue('email-reply-to', preset.replyToEmail);
+    setValue('email-smtp-pass', '');
+    updateProviderHelp();
+  }
+
+  function updateProviderHelp() {
+    const provider = value('email-provider', 'none');
+    const help = document.getElementById('email-provider-help');
+    if (help) help.textContent = providerHelp(provider);
+  }
+
+  function updateProviderStatus(status, text) {
+    const el = document.getElementById('nr-provider-status');
+    if (!el) return;
+    el.className = `nr-msg-provider-status ${status}`;
+    el.textContent = text;
+  }
+
+  async function loadEmailSettings() {
+    try {
+      const res = await fetch(`/api/admin/email-settings?shopDomain=${encodeURIComponent(SHOP_DOMAIN)}&t=${Date.now()}`);
+      if (!res.ok) throw new Error('Email settings endpoint not installed');
+      const data = await res.json();
+
+      setValue('email-provider', data.provider || 'none');
+      setChecked('email-provider-enabled', data.enabled !== false);
+      setValue('email-smtp-host', data.smtpHost || '');
+      setValue('email-smtp-port', data.smtpPort || '');
+      setValue('email-secure-mode', data.secureMode || 'starttls');
+      setValue('email-smtp-user', data.smtpUser || '');
+      setValue('email-from-name', data.fromName || '');
+      setValue('email-from-email', data.fromEmail || '');
+      setValue('email-reply-to', data.replyToEmail || '');
+
+      const savedNote = document.getElementById('email-password-saved-note');
+      if (savedNote) savedNote.style.display = data.smtpPasswordSet ? 'block' : 'none';
+
+      if (data.provider && data.provider !== 'none' && data.smtpPasswordSet) {
+        updateProviderStatus('connected', 'Credentials saved');
+      } else {
+        updateProviderStatus('not-configured', 'Not configured');
+      }
+
+      updateProviderHelp();
+      emailSettingsLoaded = true;
+    } catch (error) {
+      console.warn(error);
+      updateProviderStatus('failed', 'Settings endpoint missing');
+      const help = document.getElementById('email-provider-help');
+      if (help) help.textContent = 'The backend email settings endpoint is not installed yet. Install the server addon before saving credentials.';
+    }
+  }
+
+  async function saveEmailSettings() {
+    const payload = {
+      shopDomain: SHOP_DOMAIN,
+      enabled: checked('email-provider-enabled'),
+      provider: value('email-provider', 'none'),
+      smtpHost: value('email-smtp-host'),
+      smtpPort: parseInt(value('email-smtp-port', '587'), 10) || 587,
+      secureMode: value('email-secure-mode', 'starttls'),
+      smtpUser: value('email-smtp-user'),
+      smtpPass: value('email-smtp-pass'),
+      fromName: value('email-from-name'),
+      fromEmail: value('email-from-email'),
+      replyToEmail: value('email-reply-to')
+    };
+
+    if (payload.provider === 'none') {
+      toast('Choose an email provider first.');
+      return;
+    }
+
+    if (!payload.smtpHost || !payload.smtpUser || !payload.fromEmail) {
+      toast('SMTP host, username, and from email are required.');
+      return;
+    }
+
+    try {
+      updateProviderStatus('not-configured', 'Saving...');
+      const res = await fetch('/api/admin/email-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.error || 'Could not save email settings');
+
+      setValue('email-smtp-pass', '');
+      const savedNote = document.getElementById('email-password-saved-note');
+      if (savedNote) savedNote.style.display = 'block';
+
+      updateProviderStatus('connected', 'Credentials saved');
+      toast('Email settings saved.');
+    } catch (error) {
+      console.error(error);
+      updateProviderStatus('failed', 'Save failed');
+      toast(error.message || 'Could not save email settings.');
+    }
+  }
+
+  async function clearEmailSettings() {
+    if (!confirm('Clear saved email credentials for this shop?')) return;
+
+    try {
+      const res = await fetch('/api/admin/email-settings', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopDomain: SHOP_DOMAIN })
+      });
+
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.error || 'Could not clear settings');
+
+      applyProviderPreset('none');
+      setValue('email-provider', 'none');
+      setChecked('email-provider-enabled', false);
+      const savedNote = document.getElementById('email-password-saved-note');
+      if (savedNote) savedNote.style.display = 'none';
+      updateProviderStatus('not-configured', 'Not configured');
+      toast('Email credentials cleared.');
+    } catch (error) {
+      console.error(error);
+      toast(error.message || 'Could not clear credentials.');
+    }
   }
 
   function getTemplateOptions() {
@@ -880,17 +688,9 @@
     const customerName = value('test-email-name', 'Alex');
     const orderNumber = value('test-email-order', '1001').replace(/^#/, '');
 
-    const intro = isTest
-      ? `Hi ${escapeHtml(customerName)},`
-      : options.intro;
-
-    const orderValue = isTest
-      ? encodeURIComponent(orderNumber)
-      : `{{ order.name | remove: '#' | url_encode }}`;
-
-    const emailValue = isTest
-      ? encodeURIComponent(value('test-email-to', 'test@example.com'))
-      : `{{ order.customer.email | url_encode }}`;
+    const intro = isTest ? `Hi ${escapeHtml(customerName)},` : options.intro;
+    const orderValue = isTest ? encodeURIComponent(orderNumber) : `{{ order.name | remove: '#' | url_encode }}`;
+    const emailValue = isTest ? encodeURIComponent(value('test-email-to', 'test@example.com')) : `{{ order.customer.email | url_encode }}`;
 
     const logoHtml = options.logo ? `
                             <tr>
@@ -986,38 +786,28 @@
                             ${logoHtml}
                             <tr>
                                 <td align="center" style="padding:0 0 12px 0;">
-                                    <h1 style="margin:0; color:#111827; font-size:26px; line-height:1.25; font-weight:700;">
-                                        ${escapeHtml(options.heading)}
-                                    </h1>
+                                    <h1 style="margin:0; color:#111827; font-size:26px; line-height:1.25; font-weight:700;">${escapeHtml(options.heading)}</h1>
                                 </td>
                             </tr>
                             <tr>
                                 <td align="center" style="padding:0 0 10px 0;">
-                                    <p style="margin:0; color:#4b5563; font-size:16px; line-height:1.6;">
-                                        ${intro}
-                                    </p>
+                                    <p style="margin:0; color:#4b5563; font-size:16px; line-height:1.6;">${intro}</p>
                                 </td>
                             </tr>
                             <tr>
                                 <td align="center" style="padding:0 0 8px 0;">
-                                    <p style="margin:0; color:#4b5563; font-size:16px; line-height:1.6;">
-                                        ${escapeHtml(options.body)}
-                                    </p>
+                                    <p style="margin:0; color:#4b5563; font-size:16px; line-height:1.6;">${escapeHtml(options.body)}</p>
                                 </td>
                             </tr>
                             ${reviewLinks}
                             <tr>
                                 <td align="center" style="padding:24px 0 0 0;">
-                                    <p style="margin:0; color:#6b7280; font-size:13px; line-height:1.5;">
-                                        ${escapeHtml(options.signoff)}
-                                    </p>
+                                    <p style="margin:0; color:#6b7280; font-size:13px; line-height:1.5;">${escapeHtml(options.signoff)}</p>
                                 </td>
                             </tr>
                             <tr>
                                 <td align="center" style="padding:20px 0 0 0;">
-                                    <p style="margin:0; color:#9ca3af; font-size:12px; line-height:1.5;">
-                                        Sent by ${isTest ? escapeHtml(SHOP_DOMAIN) : '{{ shop.name }}'}.
-                                    </p>
+                                    <p style="margin:0; color:#9ca3af; font-size:12px; line-height:1.5;">Sent by ${isTest ? escapeHtml(SHOP_DOMAIN) : '{{ shop.name }}'}.</p>
                                 </td>
                             </tr>
                         </table>
@@ -1029,16 +819,10 @@
 </table>`.trim();
   }
 
-  function buildPreviewHtml(options, mode = 'template') {
-    const previewHtml = buildEmailHtml(options, mode === 'test' ? 'test' : 'test');
-    return previewHtml;
-  }
-
   function setPreviewMode(mode) {
     const wrap = document.getElementById('flow-preview-wrap');
     const desktopBtn = document.getElementById('flow-preview-desktop');
     const mobileBtn = document.getElementById('flow-preview-mobile');
-
     if (wrap) wrap.classList.toggle('mobile', mode === 'mobile');
     if (desktopBtn) desktopBtn.classList.toggle('active', mode === 'desktop');
     if (mobileBtn) mobileBtn.classList.toggle('active', mode === 'mobile');
@@ -1050,9 +834,6 @@
     const pageHandlePreviewAdmin = document.getElementById('flow-page-handle-preview-admin');
     if (pageHandlePreviewAdmin) pageHandlePreviewAdmin.textContent = options.pageHandle;
 
-    const pageHandlePreview = document.getElementById('flow-page-handle-preview');
-    if (pageHandlePreview) pageHandlePreview.textContent = options.pageHandle;
-
     const delayPreview = document.getElementById('flow-delay-preview');
     if (delayPreview) delayPreview.textContent = options.delayDays;
 
@@ -1063,10 +844,10 @@
     if (flowOutput) flowOutput.value = buildEmailHtml(options, 'liquid');
 
     const flowPreview = document.getElementById('flow-email-preview');
-    if (flowPreview) flowPreview.innerHTML = buildPreviewHtml(options, 'template');
+    if (flowPreview) flowPreview.innerHTML = buildEmailHtml(options, 'test');
 
     const testPreview = document.getElementById('flow-email-preview-test');
-    if (testPreview) testPreview.innerHTML = buildPreviewHtml(options, 'test');
+    if (testPreview) testPreview.innerHTML = buildEmailHtml(options, 'test');
   }
 
   function sampleProducts(count, shouldRender = true) {
@@ -1108,17 +889,12 @@
     }
 
     try {
-      const selected = await window.shopify.resourcePicker({
-        type: 'product',
-        multiple: true
-      });
-
+      const selected = await window.shopify.resourcePicker({ type: 'product', multiple: true });
       if (!selected || !selected.length) return;
 
       reviewTestProducts = selected.slice(0, count).map((product, index) => {
         const firstVariant = product.variants && product.variants[0];
         const firstImage = product.images && product.images[0];
-
         return {
           id: String(product.id || '').split('/').pop() || `selected-product-${index + 1}`,
           variantId: firstVariant ? String(firstVariant.id || '').split('/').pop() : '',
@@ -1198,7 +974,6 @@
   async function copyFlowCode() {
     const output = document.getElementById('flow-code-output');
     if (!output) return;
-
     output.select();
     output.setSelectionRange(0, 999999);
 
@@ -1214,7 +989,6 @@
   function setTestEmailResult(type, message) {
     const box = document.getElementById('nr-test-email-result');
     if (!box) return;
-
     box.className = `nr-test-email-result ${type}`;
     box.innerHTML = message;
   }
@@ -1237,42 +1011,19 @@
       const response = await fetch('/api/admin/test-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shopDomain: SHOP_DOMAIN,
-          to,
-          subject,
-          html,
-          previewData: getPreviewPayload()
-        })
+        body: JSON.stringify({ shopDomain: SHOP_DOMAIN, to, subject, html, previewData: getPreviewPayload() })
       });
 
       const result = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(result.error || 'The test email endpoint is not installed yet.');
-      }
+      if (!response.ok) throw new Error(result.error || 'The test email endpoint is not installed yet.');
 
       setTestEmailResult('success', `Test email sent to <strong>${escapeHtml(to)}</strong>.`);
       toast('Test email sent.');
     } catch (error) {
       console.warn(error);
-
-      const plainText = [
-        subject,
-        '',
-        'Your test email sender endpoint is not available yet, so this opened a manual email draft.',
-        '',
-        'HTML preview:',
-        html
-      ].join('\n');
-
-      const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainText.slice(0, 1800))}`;
-      window.location.href = mailto;
-
-      setTestEmailResult(
-        'warn',
-        'The server email sender is not installed yet, so I opened a manual email draft instead. Add the backend test email endpoint to send directly from the app.'
-      );
+      const plainText = [subject, '', 'The app could not send directly, so this opened a manual email draft.', '', html].join('\n');
+      window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainText.slice(0, 1800))}`;
+      setTestEmailResult('warn', 'The app could not send directly, so I opened a manual email draft instead. Save email provider credentials to send directly from the app.');
     }
   }
 
@@ -1288,6 +1039,10 @@
     });
 
     updateAllMessaging();
+
+    if (tab === 'admin' && !emailSettingsLoaded) {
+      loadEmailSettings();
+    }
   }
 
   function bindEvents() {
@@ -1299,6 +1054,9 @@
     });
 
     shell.addEventListener('change', (event) => {
+      if (event.target.id === 'email-provider') {
+        applyProviderPreset(event.target.value);
+      }
       if (event.target.matches('input, textarea, select')) updateAllMessaging();
     });
 
@@ -1326,6 +1084,8 @@
       if (action === 'sample-products') generateSampleProducts();
       if (action === 'open-review-test') openReviewTestPage();
       if (action === 'send-test-email') sendTestEmail();
+      if (action === 'save-email-settings') saveEmailSettings();
+      if (action === 'clear-email-settings') clearEmailSettings();
     });
   }
 
@@ -1343,8 +1103,9 @@
     generateSampleProducts();
     switchTab(currentMsgTab);
     updateAllMessaging();
+    loadEmailSettings();
 
-    console.log('[Nectar Reviews] Messaging tabs + test email builder mounted.');
+    console.log('[Nectar Reviews] Messaging + merchant email settings mounted.');
   }
 
   window.generateFlowCode = updateAllMessaging;
