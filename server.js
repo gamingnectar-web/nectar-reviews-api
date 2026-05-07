@@ -4,11 +4,13 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
 app.use((req, res, next) => {
@@ -47,6 +49,8 @@ const reviewSchema = new mongoose.Schema({
 });
 
 reviewSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 2419200 });
+reviewSchema.index({ shopDomain: 1, createdAt: -1 });
+reviewSchema.index({ shopDomain: 1, itemId: 1, status: 1 });
 
 const Review = mongoose.model('Review', reviewSchema, 'reviews');
 
@@ -85,6 +89,33 @@ const settingsSchema = new mongoose.Schema({
 
 const Settings = mongoose.model('Settings', settingsSchema, 'settings');
 
+const campaignEventSchema = new mongoose.Schema({
+  shopDomain: { type: String, required: true, index: true },
+  campaign: { type: String, default: 'review_request' },
+  eventType: { type: String, enum: ['sent', 'open', 'click'], required: true, index: true },
+  orderId: { type: String, default: '' },
+  email: { type: String, default: '' },
+  itemId: { type: String, default: '' },
+  url: { type: String, default: '' },
+  token: { type: String, default: '' },
+  userAgent: { type: String, default: '' },
+  ipHash: { type: String, default: '' },
+  createdAt: { type: Date, default: Date.now, index: true }
+});
+
+campaignEventSchema.index({ shopDomain: 1, eventType: 1, createdAt: -1 });
+campaignEventSchema.index({ shopDomain: 1, token: 1, eventType: 1 });
+
+const CampaignEvent = mongoose.model('CampaignEvent', campaignEventSchema, 'campaign_events');
+
+function hashIp(ip) {
+  return crypto.createHash('sha256').update(String(ip || '')).digest('hex').slice(0, 24);
+}
+
+function cleanShopDomain(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
 async function shopifyFetch(pathname, options = {}) {
   const STORE_URL = process.env.SHOPIFY_STORE_URL;
   const CLIENT_ID = process.env.SHOPIFY_API_KEY;
@@ -110,9 +141,7 @@ async function shopifyFetch(pathname, options = {}) {
 async function syncShopifyMetafields(shopDomain, productId) {
   const config = await Settings.findOne({ shopDomain });
   if (!config || !config.seo?.richSnippets) return;
-
-  const STORE_URL = process.env.SHOPIFY_STORE_URL;
-  if (!STORE_URL || !process.env.SHOPIFY_API_KEY || !process.env.SHOPIFY_API_SECRET) return;
+  if (!process.env.SHOPIFY_STORE_URL || !process.env.SHOPIFY_API_KEY || !process.env.SHOPIFY_API_SECRET) return;
 
   try {
     const reviews = await Review.find({
@@ -186,18 +215,14 @@ app.get('/api/admin/metafields', async (req, res) => {
 
 async function fetchProductContext(productId) {
   if (!productId) return { tags: [], image: '', title: '' };
-
   try {
     const productData = await shopifyFetch(`/admin/api/2024-01/products/${encodeURIComponent(productId)}.json?fields=id,title,image,tags`);
     const product = productData.product;
     if (!product) return { tags: [], image: '', title: '' };
-
     return {
       title: product.title || '',
       image: product.image && product.image.src ? product.image.src : '',
-      tags: typeof product.tags === 'string'
-        ? product.tags.split(',').map((tag) => tag.trim()).filter(Boolean)
-        : []
+      tags: typeof product.tags === 'string' ? product.tags.split(',').map((tag) => tag.trim()).filter(Boolean) : []
     };
   } catch (error) {
     console.error('Could not fetch product context:', error.message);
@@ -212,22 +237,16 @@ function orderMatchesNumber(order, rawNumber) {
 function orderEmailMatches(order, email) {
   const target = String(email || '').trim().toLowerCase();
   if (!target) return false;
-
-  const candidates = [
-    order.email,
-    order.contact_email,
-    order.customer && order.customer.email
-  ].filter(Boolean).map((value) => String(value).trim().toLowerCase());
-
+  const candidates = [order.email, order.contact_email, order.customer && order.customer.email]
+    .filter(Boolean)
+    .map((value) => String(value).trim().toLowerCase());
   return candidates.includes(target);
 }
 
 function orderContainsProduct(order, productId) {
   if (!productId) return true;
-
   return (order.line_items || []).some((item) => (
-    String(item.product_id) === String(productId) ||
-    String(item.variant_id) === String(productId)
+    String(item.product_id) === String(productId) || String(item.variant_id) === String(productId)
   ));
 }
 
@@ -236,32 +255,21 @@ async function findShopifyOrderByNumber(orderId) {
   if (!rawNumber) return null;
 
   const searchTerms = [`#${rawNumber}`, rawNumber];
-
   for (const term of searchTerms) {
     const data = await shopifyFetch(`/admin/api/2024-01/orders.json?name=${encodeURIComponent(term)}&status=any&limit=10`);
     const order = data.orders?.find((candidate) => orderMatchesNumber(candidate, rawNumber));
     if (order) return order;
   }
-
   return null;
 }
 
 async function verifyShopifyOrder(orderId, email, productId) {
   if (!email || !orderId) return { verified: false, note: 'Missing email or order number.' };
-
   try {
     const order = await findShopifyOrderByNumber(orderId);
-
     if (!order) return { verified: false, note: 'Order number not found.' };
-
-    if (!orderEmailMatches(order, email)) {
-      return { verified: false, note: 'Order was placed under a different email.' };
-    }
-
-    if (!orderContainsProduct(order, productId)) {
-      return { verified: false, note: "Product was not found in this order." };
-    }
-
+    if (!orderEmailMatches(order, email)) return { verified: false, note: 'Order was placed under a different email.' };
+    if (!orderContainsProduct(order, productId)) return { verified: false, note: 'Product was not found in this order.' };
     return { verified: true, note: 'Verified by Shopify order and email.' };
   } catch (error) {
     console.error('Order verification failed:', error);
@@ -271,17 +279,10 @@ async function verifyShopifyOrder(orderId, email, productId) {
 
 async function verifyCustomerBoughtProduct(email, productId) {
   if (!email || !productId) return { verified: false, note: 'Missing email or product.' };
-
   try {
-    // Used for logged-in customer reviews where the storefront has an email but no order number.
-    // We search recent orders for that email and only verify if this exact product/variant was purchased.
     const data = await shopifyFetch(`/admin/api/2024-01/orders.json?email=${encodeURIComponent(email)}&status=any&limit=250`);
     const order = data.orders?.find((candidate) => orderEmailMatches(candidate, email) && orderContainsProduct(candidate, productId));
-
-    if (!order) {
-      return { verified: false, note: 'No matching Shopify order found for this customer and product.' };
-    }
-
+    if (!order) return { verified: false, note: 'No matching Shopify order found for this customer and product.' };
     return { verified: true, note: `Verified by customer purchase history (${order.name || 'order'}).` };
   } catch (error) {
     console.error('Customer purchase verification failed:', error);
@@ -295,21 +296,146 @@ async function resolveReviewVerification({ orderId, email, itemId }) {
   return verifyCustomerBoughtProduct(email, itemId);
 }
 
+function getAutoStatus(config, isVerified, rating) {
+  if (!config || !config.autoApproveEnabled) return 'pending';
+  const meetsVerificationReq = config.autoApproveType === 'all' || (config.autoApproveType === 'verified' && isVerified);
+  return meetsVerificationReq && Number(rating) >= Number(config.autoApproveMinStars || 4) ? 'accepted' : 'pending';
+}
+
+function periodStart(days) {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() - (days - 1));
+  return d;
+}
+
+function dayKey(date) {
+  return new Date(date).toISOString().slice(0, 10);
+}
+
+function buildDailySeries(items, days, getDate = (x) => x.createdAt) {
+  const start = periodStart(days);
+  const map = new Map();
+  for (let i = 0; i < days; i++) {
+    const d = new Date(start);
+    d.setUTCDate(start.getUTCDate() + i);
+    map.set(dayKey(d), 0);
+  }
+  items.forEach((item) => {
+    const key = dayKey(getDate(item));
+    if (map.has(key)) map.set(key, map.get(key) + 1);
+  });
+  return Array.from(map.entries()).map(([date, count]) => ({ date, count }));
+}
+
+function monthKey(date) {
+  return new Date(date).toISOString().slice(0, 7);
+}
+
+function buildMonthlySeries(items, months, getDate = (x) => x.createdAt) {
+  const now = new Date();
+  const map = new Map();
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    map.set(monthKey(d), 0);
+  }
+  items.forEach((item) => {
+    const key = monthKey(getDate(item));
+    if (map.has(key)) map.set(key, map.get(key) + 1);
+  });
+  return Array.from(map.entries()).map(([month, count]) => ({ month, count }));
+}
+
+function averageRating(reviews) {
+  if (!reviews.length) return 0;
+  return Number((reviews.reduce((acc, r) => acc + Number(r.rating || 0), 0) / reviews.length).toFixed(2));
+}
+
+function uniqueEventCount(events, eventType) {
+  const set = new Set();
+  events.filter((event) => event.eventType === eventType).forEach((event) => {
+    set.add(event.token || `${event.email}|${event.orderId}|${event.itemId}|${event.createdAt.toISOString()}`);
+  });
+  return set.size;
+}
+
+async function buildCampaignAnalytics(shopDomain) {
+  const safeShop = cleanShopDomain(shopDomain);
+  const since90 = periodStart(90);
+  const since30 = periodStart(30);
+  const since7 = periodStart(7);
+
+  const [reviews, settings, events] = await Promise.all([
+    Review.find({ shopDomain: safeShop, isDeleted: false, isTestReview: { $ne: true } }).sort({ createdAt: -1 }).lean(),
+    Settings.findOne({ shopDomain: safeShop }).lean(),
+    CampaignEvent.find({ shopDomain: safeShop, createdAt: { $gte: since90 } }).sort({ createdAt: -1 }).lean()
+  ]);
+
+  const visibleReviews = reviews.filter((review) => review.status === 'accepted');
+  const emailReviews = reviews.filter((review) => review.source === 'email');
+  const visibleEmailReviews = visibleReviews.filter((review) => review.source === 'email');
+  const reviews30 = reviews.filter((review) => new Date(review.createdAt) >= since30);
+  const reviews7 = reviews.filter((review) => new Date(review.createdAt) >= since7);
+
+  const ratingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  visibleReviews.forEach((review) => {
+    const rating = Math.max(1, Math.min(5, parseInt(review.rating, 10) || 0));
+    if (ratingDistribution[rating] !== undefined) ratingDistribution[rating] += 1;
+  });
+
+  const sentFromEvents = events.filter((event) => event.eventType === 'sent').length;
+  const sent = sentFromEvents || settings?.emailsSentTotal || 0;
+  const opens = uniqueEventCount(events, 'open');
+  const clicks = uniqueEventCount(events, 'click');
+
+  return {
+    summary: {
+      totalReviews: reviews.length,
+      liveReviews: visibleReviews.length,
+      pendingReviews: reviews.filter((review) => review.status === 'pending').length,
+      heldReviews: reviews.filter((review) => review.status === 'hold').length,
+      spamReviews: reviews.filter((review) => review.status === 'spam').length,
+      averageRating: averageRating(visibleReviews),
+      reviewsThisWeek: reviews7.length,
+      reviewsThisMonth: reviews30.length
+    },
+    email: {
+      sent,
+      opened: opens,
+      clicked: clicks,
+      reviews: emailReviews.length,
+      liveReviews: visibleEmailReviews.length,
+      openRate: sent ? Number(((opens / sent) * 100).toFixed(1)) : 0,
+      clickRate: sent ? Number(((clicks / sent) * 100).toFixed(1)) : 0,
+      reviewRate: sent ? Number(((emailReviews.length / sent) * 100).toFixed(1)) : 0,
+      note: sentFromEvents ? 'Sent count is tracked from Shopify Flow HTTP events.' : 'Sent count is using settings.emailsSentTotal until Flow sent tracking is enabled.'
+    },
+    ratings: {
+      average: averageRating(visibleReviews),
+      distribution: ratingDistribution
+    },
+    time: {
+      dailyReviews: buildDailySeries(reviews, 30),
+      dailyEmailReviews: buildDailySeries(emailReviews, 30),
+      monthlyReviews: buildMonthlySeries(reviews, 12),
+      monthlyEmailReviews: buildMonthlySeries(emailReviews, 12),
+      dailyOpens: buildDailySeries(events.filter((event) => event.eventType === 'open'), 30),
+      dailyClicks: buildDailySeries(events.filter((event) => event.eventType === 'click'), 30)
+    }
+  };
+}
+
 app.get('/api/magic-link/order', async (req, res) => {
   const { shopDomain, orderId, email } = req.query;
   if (!shopDomain || !orderId || !email) return res.status(400).json({ error: 'Missing order details' });
 
   try {
     const order = await findShopifyOrderByNumber(orderId);
-
-    if (!order || !orderEmailMatches(order, email)) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
+    if (!order || !orderEmailMatches(order, email)) return res.status(404).json({ error: 'Order not found' });
 
     const products = await Promise.all((order.line_items || []).map(async (item) => {
       const productId = String(item.product_id || '');
       const productContext = await fetchProductContext(productId);
-
       return {
         productId,
         variantId: String(item.variant_id || ''),
@@ -336,7 +462,6 @@ app.get('/api/magic-link/order', async (req, res) => {
 
 app.get('/api/admin/stats', async (req, res) => {
   const { shopDomain } = req.query;
-
   try {
     const reviews = await Review.find({ shopDomain, isDeleted: false, isTestReview: { $ne: true } });
     const config = await Settings.findOne({ shopDomain });
@@ -358,7 +483,6 @@ app.get('/api/admin/stats', async (req, res) => {
       topProduct.id = top[0];
       topProduct.count = top[1].count;
       topProduct.averageRating = (top[1].sum / top[1].count).toFixed(1);
-
       try {
         const prodData = await shopifyFetch(`/admin/api/2024-01/products/${topProduct.id}.json?fields=id,title,image`);
         if (prodData.product) {
@@ -378,6 +502,96 @@ app.get('/api/admin/stats', async (req, res) => {
   }
 });
 
+app.get('/api/admin/campaign-analytics', async (req, res) => {
+  try {
+    const shopDomain = cleanShopDomain(req.query.shopDomain);
+    if (!shopDomain) return res.status(400).json({ error: 'Missing shopDomain.' });
+    const analytics = await buildCampaignAnalytics(shopDomain);
+    res.json(analytics);
+  } catch (error) {
+    console.error('Campaign analytics error:', error);
+    res.status(500).json({ error: 'Failed to load campaign analytics.' });
+  }
+});
+
+app.post('/api/campaign-events/sent', async (req, res) => {
+  try {
+    const shopDomain = cleanShopDomain(req.body.shopDomain || req.query.shopDomain);
+    if (!shopDomain) return res.status(400).json({ error: 'Missing shopDomain.' });
+
+    const token = String(req.body.token || req.query.token || `${Date.now()}-${Math.random()}`);
+    await CampaignEvent.create({
+      shopDomain,
+      campaign: req.body.campaign || 'review_request',
+      eventType: 'sent',
+      orderId: String(req.body.orderId || ''),
+      email: String(req.body.email || '').toLowerCase(),
+      token,
+      userAgent: req.get('user-agent') || '',
+      ipHash: hashIp(req.ip)
+    });
+
+    await Settings.findOneAndUpdate({ shopDomain }, { $inc: { emailsSentTotal: 1 } }, { upsert: true, new: true });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Campaign sent event error:', error);
+    res.status(500).json({ error: 'Failed to record sent event.' });
+  }
+});
+
+app.get('/api/campaign-events/open.gif', async (req, res) => {
+  try {
+    const shopDomain = cleanShopDomain(req.query.shopDomain);
+    if (shopDomain) {
+      await CampaignEvent.create({
+        shopDomain,
+        campaign: req.query.campaign || 'review_request',
+        eventType: 'open',
+        orderId: String(req.query.orderId || ''),
+        email: String(req.query.email || '').toLowerCase(),
+        itemId: String(req.query.itemId || ''),
+        token: String(req.query.token || ''),
+        userAgent: req.get('user-agent') || '',
+        ipHash: hashIp(req.ip)
+      });
+    }
+  } catch (error) {
+    console.error('Campaign open event error:', error);
+  }
+
+  const pixel = Buffer.from('R0lGODlhAQABAPAAAP///wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==', 'base64');
+  res.setHeader('Content-Type', 'image/gif');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.end(pixel);
+});
+
+app.get('/api/campaign-events/click', async (req, res) => {
+  const fallbackUrl = `https://${req.query.shopDomain || ''}`;
+  const targetUrl = String(req.query.url || fallbackUrl);
+
+  try {
+    const shopDomain = cleanShopDomain(req.query.shopDomain);
+    if (shopDomain) {
+      await CampaignEvent.create({
+        shopDomain,
+        campaign: req.query.campaign || 'review_request',
+        eventType: 'click',
+        orderId: String(req.query.orderId || ''),
+        email: String(req.query.email || '').toLowerCase(),
+        itemId: String(req.query.itemId || ''),
+        token: String(req.query.token || ''),
+        url: targetUrl,
+        userAgent: req.get('user-agent') || '',
+        ipHash: hashIp(req.ip)
+      });
+    }
+  } catch (error) {
+    console.error('Campaign click event error:', error);
+  }
+
+  res.redirect(targetUrl);
+});
+
 app.get('/api/global-reviews', async (req, res) => {
   try {
     const reviews = await Review.find({
@@ -386,7 +600,6 @@ app.get('/api/global-reviews', async (req, res) => {
       isDeleted: false,
       isTestReview: { $ne: true }
     }).sort({ rating: -1, createdAt: -1 }).limit(100);
-
     res.json(reviews);
   } catch (error) {
     res.status(500).json({ error: 'Fetch error' });
@@ -401,24 +614,15 @@ app.get('/api/reviews/:itemId', async (req, res) => {
     isDeleted: false,
     isTestReview: { $ne: true }
   }).sort({ createdAt: -1 });
-
   res.json(reviews);
 });
-
-function getAutoStatus(config, isVerified, rating) {
-  if (!config || !config.autoApproveEnabled) return 'pending';
-  const meetsVerificationReq = config.autoApproveType === 'all' || (config.autoApproveType === 'verified' && isVerified);
-  return meetsVerificationReq && Number(rating) >= Number(config.autoApproveMinStars || 4) ? 'accepted' : 'pending';
-}
 
 app.post('/api/reviews', async (req, res) => {
   try {
     const isTestReview = req.body.testMode === true || req.body.isTestReview === true;
     const email = String(req.body.email || '').trim();
 
-    if (!isTestReview && !email) {
-      return res.status(400).json({ error: 'Email is required to submit a review.' });
-    }
+    if (!isTestReview && !email) return res.status(400).json({ error: 'Email is required to submit a review.' });
 
     let isVerified = false;
     let vNote = 'Unverified review.';
@@ -428,14 +632,9 @@ app.post('/api/reviews', async (req, res) => {
       vNote = 'Test review submitted from review page preview.';
       finalStatus = 'spam';
     } else {
-      const checkResult = await resolveReviewVerification({
-        orderId: req.body.orderId,
-        email,
-        itemId: req.body.itemId
-      });
+      const checkResult = await resolveReviewVerification({ orderId: req.body.orderId, email, itemId: req.body.itemId });
       isVerified = checkResult.verified;
       vNote = checkResult.note;
-
       const config = await Settings.findOne({ shopDomain: req.body.shopDomain });
       finalStatus = getAutoStatus(config, isVerified, req.body.rating);
     }
@@ -454,7 +653,6 @@ app.post('/api/reviews', async (req, res) => {
 
     const saved = await newReview.save();
     res.status(201).json(saved);
-
     if (!isTestReview && finalStatus === 'accepted') syncShopifyMetafields(req.body.shopDomain, req.body.itemId);
   } catch (error) {
     console.error(error);
@@ -467,15 +665,10 @@ app.post('/api/reviews/bulk', async (req, res) => {
     const { shopDomain, orderId, reviews, testMode } = req.body;
     const email = String(req.body.email || '').trim();
 
-    if (!shopDomain || !Array.isArray(reviews) || !reviews.length) {
-      return res.status(400).json({ error: 'Invalid payload.' });
-    }
+    if (!shopDomain || !Array.isArray(reviews) || !reviews.length) return res.status(400).json({ error: 'Invalid payload.' });
 
     const isTestReview = testMode === true;
-
-    if (!isTestReview && !email) {
-      return res.status(400).json({ error: 'Email is required to submit reviews.' });
-    }
+    if (!isTestReview && !email) return res.status(400).json({ error: 'Email is required to submit reviews.' });
 
     const config = await Settings.findOne({ shopDomain });
     const savedReviews = [];
@@ -489,11 +682,7 @@ app.post('/api/reviews/bulk', async (req, res) => {
         verificationNote = 'Test review submitted from review page preview.';
         status = 'spam';
       } else {
-        const checkResult = await resolveReviewVerification({
-          orderId,
-          email,
-          itemId: review.itemId
-        });
+        const checkResult = await resolveReviewVerification({ orderId, email, itemId: review.itemId });
         isVerified = checkResult.verified;
         verificationNote = checkResult.note;
         status = getAutoStatus(config, isVerified, review.rating);
@@ -522,7 +711,6 @@ app.post('/api/reviews/bulk', async (req, res) => {
 
       const saved = await doc.save();
       savedReviews.push(saved);
-
       if (!isTestReview && status === 'accepted') syncShopifyMetafields(shopDomain, review.itemId);
     }
 
@@ -559,7 +747,6 @@ app.post('/api/reviews/import', async (req, res) => {
 
     await Review.insertMany(importData);
     res.status(201).json({ message: `Imported ${importData.length} reviews.` });
-
     [...new Set(importData.map((r) => r.itemId))].forEach((id) => syncShopifyMetafields(shopDomain, id));
   } catch (error) {
     console.error(error);
@@ -576,15 +763,45 @@ app.patch('/api/reviews/:id', async (req, res) => {
   try {
     const updateData = { ...req.body };
     if (req.body.isDeleted !== undefined) updateData.deletedAt = req.body.isDeleted ? new Date() : null;
-
     const updated = await Review.findByIdAndUpdate(req.params.id, updateData, { new: true });
     res.json(updated);
-
     if (updated && !updated.isTestReview && (req.body.status !== undefined || req.body.isDeleted !== undefined)) {
       syncShopifyMetafields(updated.shopDomain, updated.itemId);
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/reviews/:id/verify', async (req, res) => {
+  try {
+    const review = await Review.findById(req.params.id);
+    if (!review) return res.status(404).json({ error: 'Review not found.' });
+
+    if (req.body.mode === 'manual') {
+      review.verifiedPurchase = true;
+      review.verificationNote = 'Manually verified by admin.';
+    } else {
+      const check = await resolveReviewVerification({ orderId: review.orderId, email: review.email, itemId: review.itemId });
+      review.verifiedPurchase = check.verified;
+      review.verificationNote = check.note;
+    }
+
+    await review.save();
+    res.json(review);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to verify review.' });
+  }
+});
+
+app.get('/api/admin/reviews/changes', async (req, res) => {
+  try {
+    const shopDomain = req.query.shopDomain;
+    const since = req.query.since ? new Date(req.query.since) : new Date(Date.now() - 5 * 60 * 1000);
+    const count = await Review.countDocuments({ shopDomain, createdAt: { $gt: since }, isDeleted: false });
+    res.json({ count, since });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to check changes.' });
   }
 });
 

@@ -1,78 +1,60 @@
 /*
-  Nectar Reviews — public score notch helper
-  Adds black notch markers to visible customer-consensus / attribute bars when a review display template only renders a grey track and a "8/10" style value.
+  Nectar Reviews — public/admin score notch safety net
+  File: public/nectar-score-notch-fix.js
 
-  Safe to include after review widgets. It does not change data, only presentation.
+  This is intentionally generic. It adds black score notches to common Nectar attribute bars
+  when the bar exposes a score via data-score, aria-valuenow, or nearby /10 text.
 */
 (function () {
   'use strict';
 
-  function findTrackNearValue(valueEl) {
-    const row = valueEl.closest('.rev-attribute, .review-attribute, .attribute-row, .nr-attribute, .nectar-attribute, div');
-    if (!row) return null;
-
-    const candidates = Array.from(row.querySelectorAll('div, span')).filter((el) => {
-      const rect = el.getBoundingClientRect();
-      const style = window.getComputedStyle(el);
-      const bg = style.backgroundColor || '';
-      return rect.width > 60 && rect.height > 2 && rect.height <= 12 && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent';
-    });
-
-    return candidates.find((el) => !el.classList.contains('nr-score-notch')) || null;
+  function addStyles() {
+    if (document.getElementById('nectar-score-notch-fix-style')) return;
+    const style = document.createElement('style');
+    style.id = 'nectar-score-notch-fix-style';
+    style.textContent = `
+      .nectar-score-notch-host { position: relative !important; overflow: visible !important; }
+      .nectar-score-notch-host .nectar-score-notch {
+        position: absolute; top: 50%; transform: translate(-50%, -50%); width: 24px; height: 9px;
+        border-radius: 2px; background: #000; pointer-events: none; z-index: 2;
+      }
+    `;
+    document.head.appendChild(style);
   }
 
-  function addNotch(track, score) {
-    if (!track || track.dataset.nrNotched === 'true') return;
+  function parseScore(el) {
+    const attrs = ['data-score', 'data-value', 'aria-valuenow'];
+    for (const attr of attrs) {
+      const val = el.getAttribute(attr);
+      if (val && !Number.isNaN(Number(val))) return Number(val);
+    }
 
-    track.dataset.nrNotched = 'true';
-    track.style.position = track.style.position || 'relative';
-    track.style.overflow = 'visible';
+    const parentText = (el.parentElement && el.parentElement.textContent) || '';
+    const match = parentText.match(/(\d+(?:\.\d+)?)\s*\/\s*10/);
+    if (match) return Number(match[1]);
 
+    return null;
+  }
+
+  function enhanceBar(el) {
+    if (!el || el.querySelector('.nectar-score-notch')) return;
+    const score = parseScore(el);
+    if (score === null) return;
+    const pct = Math.max(0, Math.min(100, (score / 10) * 100));
+    el.classList.add('nectar-score-notch-host');
     const notch = document.createElement('span');
-    notch.className = 'nr-score-notch';
-    notch.style.position = 'absolute';
-    notch.style.left = `${Math.max(0, Math.min(100, score * 10))}%`;
-    notch.style.top = '50%';
-    notch.style.width = '24px';
-    notch.style.height = '10px';
-    notch.style.borderRadius = '3px';
-    notch.style.background = '#000';
-    notch.style.transform = 'translate(-50%, -50%)';
-    notch.style.boxShadow = '0 1px 2px rgba(0,0,0,0.22)';
-    notch.style.pointerEvents = 'none';
-
-    track.appendChild(notch);
+    notch.className = 'nectar-score-notch';
+    notch.style.left = `${pct}%`;
+    el.appendChild(notch);
   }
 
   function scan() {
-    const textNodes = [];
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    let node;
-    while ((node = walker.nextNode())) {
-      if (/\b(10|[0-9](?:\.\d+)?)\s*\/\s*10\b/.test(node.nodeValue || '')) textNodes.push(node);
-    }
-
-    textNodes.forEach((node) => {
-      const match = String(node.nodeValue || '').match(/\b(10|[0-9](?:\.\d+)?)\s*\/\s*10\b/);
-      if (!match) return;
-
-      const valueEl = node.parentElement;
-      const track = findTrackNearValue(valueEl);
-      if (track) addNotch(track, parseFloat(match[1]));
-    });
+    addStyles();
+    document.querySelectorAll('[data-score], [aria-valuenow], .nr-attr-bar, .attr-bar, .review-attribute-bar, .nectar-attr-bar').forEach(enhanceBar);
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setTimeout(scan, 250));
-  } else {
-    setTimeout(scan, 250);
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scan);
+  else scan();
 
-  let timer = null;
-  const observer = new MutationObserver(() => {
-    clearTimeout(timer);
-    timer = setTimeout(scan, 250);
-  });
-
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
 })();
