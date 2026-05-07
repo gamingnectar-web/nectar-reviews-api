@@ -1,42 +1,35 @@
 /*
   Nectar Reviews — Messaging & Campaigns
-  New file name: admin-messaging-campaigns.js
+  File: public/admin-messaging-campaigns.js
 
-  Add this AFTER your existing admin.js script in admin.html:
-  <script src="/admin.js?v=2"></script>
-  <script src="/admin-messaging-campaigns.js?v=1"></script>
+  This replaces the Messaging & Campaigns tab with:
+  - MESSAGING - ADMIN
+  - MESSAGING TEMPLATE
+  - MESSAGING TEST PAGES
 
-  This file replaces the existing #v-msg content and overrides the old
-  generateFlowCode/copyFlowCode functions with the enhanced email builder.
+  It also adds:
+  - Shopify Flow email HTML generator
+  - Review page tester
+  - Test email sender
+
+  The test email sender posts to:
+  POST /api/admin/test-email
+
+  If that endpoint is not installed yet, it falls back to opening a mailto draft
+  so the merchant can still preview/send the email manually.
 */
 
 (function () {
-  const DEFAULT_PAGE_HANDLE = 'leave-review';
+  'use strict';
 
-  function getShopDomain() {
-    const params = new URLSearchParams(window.location.search);
-    return window.SHOP_DOMAIN || params.get('shop') || 'your-dev-store.myshopify.com';
-  }
+  const params = new URLSearchParams(window.location.search);
+  const SHOP_DOMAIN = window.SHOP_DOMAIN || params.get('shop') || 'your-dev-store.myshopify.com';
 
-  function showToast(message) {
-    if (window.shopify && window.shopify.toast) {
-      window.shopify.toast.show(message);
-    }
+  let reviewTestProducts = [];
+  let currentMsgTab = 'admin';
 
-    if (typeof window.showToast === 'function') {
-      window.showToast(message);
-      return;
-    }
-
-    const toast = document.getElementById('custom-toast');
-    if (!toast) return;
-    toast.innerText = message;
-    toast.style.top = '30px';
-    setTimeout(() => { toast.style.top = '-100px'; }, 3000);
-  }
-
-  function escapeHtml(str) {
-    return String(str || '')
+  function escapeHtml(value) {
+    return String(value || '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -44,255 +37,861 @@
       .replace(/'/g, '&#039;');
   }
 
+  function value(id, fallback = '') {
+    const el = document.getElementById(id);
+    return el ? (el.value || '').trim() || fallback : fallback;
+  }
+
   function cleanHandle(handle) {
-    return String(handle || DEFAULT_PAGE_HANDLE)
+    return String(handle || 'leave-review')
       .trim()
       .replace(/^\/pages\//, '')
       .replace(/^\//, '')
       .replace(/[^a-zA-Z0-9-_]/g, '-')
       .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '') || DEFAULT_PAGE_HANDLE;
+      .replace(/^-|-$/g, '') || 'leave-review';
+  }
+
+  function toast(message) {
+    if (typeof window.showToast === 'function') {
+      window.showToast(message);
+      return;
+    }
+    console.log(message);
   }
 
   function injectStyles() {
-    if (document.getElementById('nr-messaging-campaigns-styles')) return;
+    if (document.getElementById('nr-messaging-tabs-style')) return;
 
     const style = document.createElement('style');
-    style.id = 'nr-messaging-campaigns-styles';
-    style.innerHTML = `
-      .flow-builder-shell { width: 100%; }
-      .flow-builder-header { display:flex; justify-content:space-between; align-items:flex-start; gap:24px; margin-bottom:24px; }
-      .flow-kicker { margin:0 0 6px; color:var(--blue, #005bd3); font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
-      .flow-builder-header h2 { margin:0; font-size:30px; letter-spacing:-.04em; color:var(--primary, #1a1a1a); }
-      .flow-subtext { margin:8px 0 0; max-width:680px; color:var(--text-light, #6d7175); font-size:15px; line-height:1.6; }
-      .flow-status-card { min-width:260px; padding:14px 16px; border:1px solid var(--border, #ebebeb); border-radius:14px; background:#fff; box-shadow:0 1px 3px rgba(17,24,39,.06); }
-      .flow-status-card span { display:block; margin-bottom:4px; color:var(--text-light, #6d7175); font-size:12px; font-weight:700; text-transform:uppercase; }
-      .flow-status-card strong { display:block; color:var(--primary, #1a1a1a); font-size:13px; line-height:1.5; }
-      .flow-builder-grid { display:grid; grid-template-columns:minmax(320px, 420px) minmax(0, 1fr); gap:24px; align-items:start; }
-      .flow-controls, .flow-preview-column { display:grid; gap:18px; }
-      .flow-panel, .flow-preview-card, .flow-code-card { background:#fff; border:1px solid var(--border, #ebebeb); border-radius:16px; box-shadow:0 1px 3px rgba(17,24,39,.06); }
-      .flow-panel { padding:22px; }
-      .flow-panel-title { display:flex; align-items:flex-start; gap:12px; margin-bottom:18px; }
-      .flow-panel-title span { width:30px; height:30px; flex:0 0 30px; display:grid; place-items:center; border-radius:999px; background:var(--primary, #1a1a1a); color:#fff; font-size:13px; font-weight:800; }
-      .flow-panel-title h3, .flow-preview-toolbar h3, .flow-code-header h3 { margin:0; font-size:18px; color:var(--primary, #1a1a1a); }
-      .flow-panel-title p, .flow-preview-toolbar p, .flow-code-header p { margin:4px 0 0; color:var(--text-light, #6d7175); font-size:13px; line-height:1.5; }
-      .flow-panel label { display:block; margin:14px 0 6px; color:var(--primary, #1a1a1a); font-size:13px; font-weight:750; }
-      .flow-panel label em { color:var(--text-light, #6d7175); font-style:normal; font-weight:600; }
-      .flow-panel input, .flow-panel select, .flow-panel textarea { width:100%; box-sizing:border-box; border:1px solid #c9cccf; border-radius:10px; background:#fff; color:var(--primary, #1a1a1a); padding:11px 12px; font-size:14px; font-family:inherit; outline:none; }
-      .flow-panel input:focus, .flow-panel select:focus, .flow-panel textarea:focus, #flow-code-output:focus { border-color:var(--blue, #005bd3); box-shadow:0 0 0 3px rgba(0,91,211,.12); }
-      .flow-panel input[type="color"] { height:44px; padding:4px; cursor:pointer; }
-      .flow-panel textarea { min-height:94px; resize:vertical; line-height:1.5; }
-      .flow-two-col { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-      .flow-help-box { margin-top:16px; padding:12px; border:1px solid var(--border, #ebebeb); border-radius:12px; background:#f9fafb; color:var(--text-light, #6d7175); font-size:13px; line-height:1.5; }
-      .flow-help-box code { color:var(--primary, #1a1a1a); font-weight:700; }
-      .flow-steps { display:grid; gap:8px; margin-top:16px; }
-      .flow-steps div { display:flex; justify-content:space-between; gap:12px; padding:11px 12px; border:1px solid var(--border, #ebebeb); border-radius:10px; background:#f9fafb; font-size:13px; }
-      .flow-steps span { color:var(--text-light, #6d7175); }
-      .flow-preview-toolbar, .flow-code-header { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:18px; border-bottom:1px solid var(--border, #ebebeb); }
-      .flow-preview-toggle { display:inline-flex; padding:4px; border:1px solid var(--border, #ebebeb); border-radius:999px; background:#f9fafb; }
-      .flow-preview-toggle button { border:0; border-radius:999px; background:transparent; color:var(--text-light, #6d7175); padding:9px 14px; font-weight:750; cursor:pointer; }
-      .flow-preview-toggle button.active { background:var(--primary, #1a1a1a); color:#fff; }
-      .flow-preview-stage { padding:28px; overflow:auto; background:#f9fafb; border-radius:0 0 16px 16px; }
-      .flow-preview-wrap { transition:max-width .25s ease, border .25s ease, border-radius .25s ease; }
-      .flow-preview-wrap.mobile { max-width:390px; margin:0 auto; border:12px solid #111827; border-radius:34px; overflow:hidden; background:#fff; }
-      #flow-email-preview { min-height:320px; }
-      .flow-code-header button { flex:0 0 auto; border:0; border-radius:10px; background:var(--primary, #1a1a1a); color:#fff; padding:12px 16px; font-weight:800; cursor:pointer; }
-      #flow-code-output { display:block; width:100%; min-height:390px; box-sizing:border-box; border:0; background:#18181b; color:#fff; padding:18px; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size:12px; line-height:1.55; resize:vertical; outline:none; }
+    style.id = 'nr-messaging-tabs-style';
+    style.textContent = `
+      .nr-msg-shell {
+        width: 100%;
+        box-sizing: border-box;
+      }
 
-      .review-test-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; }
-      .review-test-actions button, .review-test-main-btn, .review-test-copy-btn { border:0; border-radius:10px; background:var(--primary, #1a1a1a); color:#fff; padding:12px 14px; font-weight:800; cursor:pointer; font-family:inherit; }
-      .review-test-actions button { background:#f9fafb; color:var(--primary, #1a1a1a); border:1px solid var(--border, #ebebeb); }
-      .review-test-main-btn { width:100%; margin-top:16px; }
-      .review-test-copy-btn { width:100%; margin-top:10px; background:#f9fafb; color:var(--primary, #1a1a1a); border:1px solid var(--border, #ebebeb); }
-      .review-test-products { margin-top:14px; display:grid; gap:8px; }
-      .review-test-product { display:grid; grid-template-columns:52px 1fr auto; gap:12px; align-items:center; padding:10px; border:1px solid var(--border, #ebebeb); border-radius:10px; background:#fff; }
-      .review-test-product img { width:52px; height:52px; object-fit:cover; border-radius:8px; background:#f3f4f6; border:1px solid var(--border, #ebebeb); }
-      .review-test-product strong { display:block; color:var(--primary, #1a1a1a); font-size:13px; line-height:1.3; }
-      .review-test-product span { display:block; color:var(--text-light, #6d7175); font-size:12px; margin-top:2px; }
-      .review-test-tags { grid-column:2 / 3; margin-top:4px !important; width:100%; padding:8px 10px !important; border-radius:8px !important; font-size:12px !important; }
-      .review-test-product button { width:30px; height:30px; border-radius:8px; border:1px solid var(--border, #ebebeb); background:#fff; color:#bf0711; cursor:pointer; font-weight:900; }
-      .review-test-url { margin-top:12px; width:100%; min-height:72px !important; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important; font-size:12px !important; background:#f9fafb !important; }
+      .nr-msg-hero {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 24px;
+        margin-bottom: 22px;
+      }
 
-      @media (max-width:1100px) { .flow-builder-header, .flow-preview-toolbar, .flow-code-header { flex-direction:column; align-items:stretch; } .flow-status-card { min-width:0; } .flow-builder-grid { grid-template-columns:1fr; } }
-      @media (max-width:640px) { .flow-two-col, .review-test-actions { grid-template-columns:1fr; } .flow-preview-stage { padding:14px; } .flow-preview-toggle, .flow-code-header button { width:100%; } .flow-preview-toggle button { flex:1; } }
+      .nr-msg-kicker {
+        margin: 0 0 6px;
+        color: var(--blue, #005bd3);
+        font-size: 12px;
+        font-weight: 850;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+      }
+
+      .nr-msg-hero h1 {
+        margin: 0;
+        color: var(--primary, #111827);
+        font-size: clamp(30px, 3vw, 44px);
+        line-height: 1.05;
+        letter-spacing: -.045em;
+      }
+
+      .nr-msg-hero p {
+        margin: 10px 0 0;
+        max-width: 760px;
+        color: var(--text-light, #6b7280);
+        font-size: 15px;
+        line-height: 1.6;
+      }
+
+      .nr-msg-chip {
+        min-width: 270px;
+        padding: 14px 16px;
+        border: 1px solid var(--border, #e5e7eb);
+        border-radius: 16px;
+        background: #fff;
+        box-shadow: 0 1px 3px rgba(17,24,39,.06);
+      }
+
+      .nr-msg-chip span {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--text-light, #6b7280);
+        font-size: 12px;
+        font-weight: 850;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+      }
+
+      .nr-msg-chip strong {
+        display: block;
+        color: var(--primary, #111827);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .nr-msg-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 20px;
+        border-bottom: 1px solid var(--border, #e5e7eb);
+      }
+
+      .nr-msg-tab-btn {
+        border: 0;
+        background: transparent;
+        color: var(--text-light, #6b7280);
+        padding: 14px 4px 13px;
+        margin-right: 22px;
+        border-bottom: 3px solid transparent;
+        font-weight: 850;
+        cursor: pointer;
+        letter-spacing: -.01em;
+      }
+
+      .nr-msg-tab-btn.active {
+        color: var(--blue, #005bd3);
+        border-bottom-color: var(--blue, #005bd3);
+      }
+
+      .nr-msg-tab-panel {
+        display: none;
+      }
+
+      .nr-msg-tab-panel.active {
+        display: block;
+      }
+
+      .nr-msg-grid {
+        display: grid;
+        grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
+        gap: 24px;
+        align-items: start;
+      }
+
+      .nr-msg-grid-one {
+        display: grid;
+        gap: 18px;
+      }
+
+      .nr-msg-card {
+        background: #fff;
+        border: 1px solid var(--border, #e5e7eb);
+        border-radius: 18px;
+        box-shadow: 0 1px 3px rgba(17,24,39,.06);
+        overflow: hidden;
+      }
+
+      .nr-msg-card-pad {
+        padding: 22px;
+      }
+
+      .nr-msg-card-title {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        margin-bottom: 18px;
+      }
+
+      .nr-msg-step {
+        width: 30px;
+        height: 30px;
+        flex: 0 0 30px;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--primary, #111827);
+        color: #fff;
+        font-weight: 900;
+        font-size: 13px;
+      }
+
+      .nr-msg-card h2,
+      .nr-msg-card h3 {
+        margin: 0;
+        color: var(--primary, #111827);
+        font-size: 18px;
+        line-height: 1.2;
+        letter-spacing: -.025em;
+      }
+
+      .nr-msg-card p {
+        color: var(--text-light, #6b7280);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .nr-msg-card-title p {
+        margin: 4px 0 0;
+      }
+
+      .nr-msg-card label {
+        display: block;
+        margin: 14px 0 6px;
+        color: var(--primary, #111827);
+        font-size: 13px;
+        font-weight: 850;
+      }
+
+      .nr-msg-card label em {
+        color: var(--text-light, #6b7280);
+        font-style: normal;
+        font-weight: 650;
+      }
+
+      .nr-msg-card input,
+      .nr-msg-card select,
+      .nr-msg-card textarea {
+        width: 100%;
+        box-sizing: border-box;
+        min-height: 44px;
+        border: 1px solid #d1d5db;
+        border-radius: 10px;
+        background: #fff;
+        color: var(--primary, #111827);
+        padding: 11px 12px;
+        font-size: 14px;
+        outline: none;
+      }
+
+      .nr-msg-card textarea {
+        min-height: 94px;
+        resize: vertical;
+        font-family: inherit;
+        line-height: 1.5;
+      }
+
+      .nr-msg-card input[type="color"] {
+        height: 44px;
+        padding: 4px;
+        cursor: pointer;
+      }
+
+      .nr-msg-card input:focus,
+      .nr-msg-card select:focus,
+      .nr-msg-card textarea:focus,
+      #flow-code-output:focus {
+        border-color: var(--blue, #005bd3);
+        box-shadow: 0 0 0 3px rgba(0,91,211,.14);
+      }
+
+      .nr-msg-two {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      .nr-msg-help {
+        margin-top: 16px;
+        padding: 12px;
+        border: 1px solid var(--border, #e5e7eb);
+        border-radius: 12px;
+        background: #f9fafb;
+        color: var(--text-light, #6b7280);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .nr-msg-help code {
+        color: var(--primary, #111827);
+        font-weight: 800;
+      }
+
+      .nr-msg-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      .nr-msg-btn,
+      .nr-msg-secondary-btn {
+        min-height: 44px;
+        border-radius: 10px;
+        padding: 12px 16px;
+        font-weight: 850;
+        cursor: pointer;
+      }
+
+      .nr-msg-btn {
+        border: 0;
+        background: var(--primary, #111827);
+        color: #fff;
+      }
+
+      .nr-msg-secondary-btn {
+        border: 1px solid var(--border, #e5e7eb);
+        background: #f3f4f6;
+        color: var(--primary, #111827);
+      }
+
+      .nr-msg-preview-head,
+      .nr-msg-code-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 18px;
+        border-bottom: 1px solid var(--border, #e5e7eb);
+      }
+
+      .nr-msg-toggle {
+        display: inline-flex;
+        padding: 4px;
+        border: 1px solid var(--border, #e5e7eb);
+        border-radius: 999px;
+        background: #f9fafb;
+      }
+
+      .nr-msg-toggle button {
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--text-light, #6b7280);
+        padding: 9px 14px;
+        font-weight: 850;
+        cursor: pointer;
+      }
+
+      .nr-msg-toggle button.active {
+        background: var(--primary, #111827);
+        color: #fff;
+      }
+
+      .nr-msg-preview-stage {
+        padding: 28px;
+        overflow: auto;
+        background: #f9fafb;
+        border-radius: 0 0 18px 18px;
+      }
+
+      .nr-msg-preview-wrap {
+        transition: max-width .25s ease, border .25s ease, border-radius .25s ease;
+      }
+
+      .nr-msg-preview-wrap.mobile {
+        max-width: 390px;
+        margin: 0 auto;
+        border: 12px solid #111827;
+        border-radius: 34px;
+        overflow: hidden;
+        background: #fff;
+      }
+
+      #flow-email-preview {
+        min-height: 320px;
+      }
+
+      #flow-code-output {
+        display: block;
+        width: 100%;
+        min-height: 430px;
+        box-sizing: border-box;
+        border: 0;
+        background: #18181b;
+        color: #fff;
+        padding: 18px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.55;
+        resize: vertical;
+        outline: none;
+      }
+
+      .nr-review-test-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .nr-review-test-products {
+        margin-top: 14px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .nr-review-test-product {
+        display: grid;
+        grid-template-columns: 54px 1fr;
+        gap: 12px;
+        align-items: center;
+        padding: 10px;
+        border: 1px solid var(--border, #e5e7eb);
+        border-radius: 12px;
+        background: #fff;
+      }
+
+      .nr-review-test-product img,
+      .nr-review-test-placeholder {
+        width: 54px;
+        height: 54px;
+        object-fit: cover;
+        border-radius: 10px;
+        background: #e5e7eb;
+      }
+
+      .nr-review-test-product strong {
+        display: block;
+        color: var(--primary, #111827);
+        font-size: 13px;
+        line-height: 1.35;
+      }
+
+      .nr-review-test-product span {
+        display: block;
+        color: var(--text-light, #6b7280);
+        font-size: 12px;
+        margin-top: 2px;
+      }
+
+      .nr-test-email-result {
+        display: none;
+        margin-top: 14px;
+        padding: 12px;
+        border-radius: 12px;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .nr-test-email-result.success {
+        display: block;
+        background: #ecfdf5;
+        color: #047857;
+        border: 1px solid #a7f3d0;
+      }
+
+      .nr-test-email-result.warn {
+        display: block;
+        background: #fffbeb;
+        color: #92400e;
+        border: 1px solid #fde68a;
+      }
+
+      .nr-test-email-result.error {
+        display: block;
+        background: #fff1f2;
+        color: #be123c;
+        border: 1px solid #fecdd3;
+      }
+
+      @media (max-width: 1100px) {
+        .nr-msg-hero,
+        .nr-msg-preview-head,
+        .nr-msg-code-head {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .nr-msg-chip {
+          min-width: 0;
+        }
+
+        .nr-msg-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .nr-msg-two,
+        .nr-review-test-actions {
+          grid-template-columns: 1fr;
+        }
+
+        .nr-msg-preview-stage {
+          padding: 14px;
+        }
+
+        .nr-msg-toggle,
+        .nr-msg-btn,
+        .nr-msg-secondary-btn {
+          width: 100%;
+        }
+
+        .nr-msg-toggle button {
+          flex: 1;
+        }
+      }
     `;
-
     document.head.appendChild(style);
   }
 
-  function getBuilderMarkup() {
+  function findContainer() {
+    const el = document.getElementById('v-msg');
+    if (el) return el;
+
+    const legacyOutput = document.getElementById('flow-code-output');
+    if (legacyOutput) return legacyOutput.closest('.view') || legacyOutput.closest('section') || legacyOutput.parentElement;
+
+    const headings = Array.from(document.querySelectorAll('h1,h2,h3'));
+    const match = headings.find((h) => /messaging|campaign|shopify flow/i.test(h.textContent || ''));
+    return match ? (match.closest('.view') || match.closest('section') || match.parentElement) : null;
+  }
+
+  function renderShell() {
     return `
-      <div class="flow-builder-shell">
-        <div class="flow-builder-header">
+      <div class="nr-msg-shell">
+        <header class="nr-msg-hero">
           <div>
-            <p class="flow-kicker">Email campaigns</p>
-            <h2>Shopify Flow Review Request</h2>
-            <p class="flow-subtext">Build a mobile-friendly review request email. Customers can review the whole order, each purchased item, or both.</p>
+            <p class="nr-msg-kicker">Messaging & Campaigns</p>
+            <h1>Review Request Messaging</h1>
+            <p>
+              Build your review email, copy the Shopify Flow HTML, preview your review landing page, and send yourself a test email before going live.
+            </p>
           </div>
 
-          <div class="flow-status-card">
+          <div class="nr-msg-chip">
             <span>Recommended Flow</span>
             <strong>Order fulfilled → Wait <b id="flow-delay-preview">14</b> days → Send email</strong>
           </div>
+        </header>
+
+        <div class="nr-msg-tabs" role="tablist">
+          <button type="button" class="nr-msg-tab-btn active" data-msg-tab="admin">MESSAGING - ADMIN</button>
+          <button type="button" class="nr-msg-tab-btn" data-msg-tab="template">MESSAGING TEMPLATE</button>
+          <button type="button" class="nr-msg-tab-btn" data-msg-tab="tests">MESSAGING TEST PAGES</button>
         </div>
 
-        <div class="flow-builder-grid">
-          <div class="flow-controls">
-            <section class="flow-panel">
-              <div class="flow-panel-title"><span>1</span><div><h3>Brand</h3><p>Control the key visual details without overcomplicating the setup.</p></div></div>
-              <label for="flow-logo">Brand logo URL <em>optional</em></label>
-              <input id="flow-logo" type="url" placeholder="https://cdn.shopify.com/.../logo.png">
-              <div class="flow-two-col">
-                <div><label for="flow-color">Button colour</label><input id="flow-color" type="color" value="#111827"></div>
-                <div><label for="flow-button-radius">Button radius</label><input id="flow-button-radius" type="number" min="0" max="40" value="8"></div>
-              </div>
-              <div class="flow-two-col">
-                <div><label for="flow-bg-color">Email background</label><input id="flow-bg-color" type="color" value="#f3f4f6"></div>
-                <div><label for="flow-card-color">Email card</label><input id="flow-card-color" type="color" value="#ffffff"></div>
-              </div>
-            </section>
+        <section id="nr-msg-tab-admin" class="nr-msg-tab-panel active">
+          ${renderAdminTab()}
+        </section>
 
-            <section class="flow-panel">
-              <div class="flow-panel-title"><span>2</span><div><h3>Email copy</h3><p>Simple editable copy for merchants.</p></div></div>
-              <label for="flow-heading">Heading</label>
-              <input id="flow-heading" type="text" value="How did we do?">
-              <label for="flow-intro">Intro line</label>
-              <input id="flow-intro" type="text" value='Hi {{ order.customer.firstName | default: "there" }}'>
-              <label for="flow-body">Main message</label>
-              <textarea id="flow-body" rows="4">We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?</textarea>
-              <label for="flow-signoff">Footer note</label>
-              <input id="flow-signoff" type="text" value="Your feedback helps other customers make confident choices.">
-            </section>
+        <section id="nr-msg-tab-template" class="nr-msg-tab-panel">
+          ${renderTemplateTab()}
+        </section>
 
-            <section class="flow-panel">
-              <div class="flow-panel-title"><span>3</span><div><h3>Review links</h3><p>Choose how customers leave reviews.</p></div></div>
-              <label for="flow-link-mode">Review link style</label>
-              <select id="flow-link-mode">
-                <option value="both">Order button + individual product links</option>
-                <option value="order">Review entire order only</option>
-                <option value="products">Review each product only</option>
-              </select>
-              <label for="flow-main-button-text">Main button text</label>
-              <input id="flow-main-button-text" type="text" value="Review Your Order">
-              <label for="flow-product-button-text">Product button text</label>
-              <input id="flow-product-button-text" type="text" value="Review This Item">
-              <label for="flow-page-handle">Review landing page handle</label>
-              <input id="flow-page-handle" type="text" value="${DEFAULT_PAGE_HANDLE}">
-              <div class="flow-help-box">Generated links point to <strong>/pages/<span id="flow-page-handle-preview">${DEFAULT_PAGE_HANDLE}</span></strong> and pass <code>review_type</code>, <code>order</code>, <code>email</code>, <code>product_id</code>, and <code>variant_id</code> where available.</div>
-            </section>
-
-            <section class="flow-panel">
-              <div class="flow-panel-title"><span>4</span><div><h3>Shopify Flow setup</h3><p>The delay is configured inside Shopify Flow, not inside the email HTML.</p></div></div>
-              <label for="flow-delay-days">Recommended wait after fulfilment</label>
-              <select id="flow-delay-days">
-                <option value="7">7 days</option>
-                <option value="10">10 days</option>
-                <option value="14" selected>14 days</option>
-                <option value="21">21 days</option>
-                <option value="30">30 days</option>
-              </select>
-              <div class="flow-steps">
-                <div><strong>Trigger</strong><span>Order fulfilled</span></div>
-                <div><strong>Wait</strong><span><b id="flow-delay-copy-preview">14</b> days</span></div>
-                <div><strong>Action</strong><span>Send email</span></div>
-              </div>
-            </section>
-
-            <section class="flow-panel">
-              <div class="flow-panel-title"><span>5</span><div><h3>Review page tester</h3><p>Open your review page with safe preview data. This does not create a Shopify order.</p></div></div>
-
-              <label for="review-test-name">Customer name</label>
-              <input id="review-test-name" type="text" value="Alex">
-
-              <label for="review-test-email">Customer email</label>
-              <input id="review-test-email" type="email" value="alex@example.com">
-
-              <div class="flow-two-col">
-                <div>
-                  <label for="review-test-order">Order number</label>
-                  <input id="review-test-order" type="text" value="1001">
-                </div>
-                <div>
-                  <label for="review-test-type">Review mode</label>
-                  <select id="review-test-type">
-                    <option value="order">Review full order</option>
-                    <option value="product">Review one product</option>
-                  </select>
-                </div>
-              </div>
-
-              <label for="review-test-count">How many products?</label>
-              <input id="review-test-count" type="number" min="1" max="10" value="2">
-
-              <div class="flow-help-box">
-                Select real products with the Shopify picker, or generate sample products to test the page quickly.
-                The test URL passes customer, order, product, variant, image, and quantity context.
-              </div>
-
-              <div class="review-test-actions">
-                <button type="button" id="review-test-pick-products">Select Products</button>
-                <button type="button" id="review-test-sample-products">Use Sample Products</button>
-              </div>
-
-              <div id="review-test-products" class="review-test-products"></div>
-
-              <button type="button" id="review-test-open" class="review-test-main-btn">Open Test Review Page</button>
-              <button type="button" id="review-test-copy-url" class="review-test-copy-btn">Copy Test URL</button>
-              <textarea id="review-test-url" class="review-test-url" readonly spellcheck="false" placeholder="Your generated test URL will appear here."></textarea>
-            </section>
-          </div>
-
-          <div class="flow-preview-column">
-            <section class="flow-preview-card">
-              <div class="flow-preview-toolbar">
-                <div><h3>Live preview</h3><p>Check the email on desktop and mobile before copying the code.</p></div>
-                <div class="flow-preview-toggle">
-                  <button type="button" id="flow-preview-desktop" class="active" data-flow-preview-mode="desktop">Desktop</button>
-                  <button type="button" id="flow-preview-mobile" data-flow-preview-mode="mobile">Mobile</button>
-                </div>
-              </div>
-              <div class="flow-preview-stage"><div id="flow-preview-wrap" class="flow-preview-wrap"><div id="flow-email-preview"></div></div></div>
-            </section>
-
-            <section class="flow-code-card">
-              <div class="flow-code-header">
-                <div><h3>Copy email HTML</h3><p>In Shopify Flow, add a Send email action, enable HTML, and paste this code into the body.</p></div>
-                <button type="button" id="flow-copy-code-btn">Copy Code</button>
-              </div>
-              <textarea id="flow-code-output" spellcheck="false" readonly></textarea>
-            </section>
-          </div>
-        </div>
+        <section id="nr-msg-tab-tests" class="nr-msg-tab-panel">
+          ${renderTestsTab()}
+        </section>
       </div>
     `;
   }
 
-  function getFieldValue(id, fallback) {
-    const el = document.getElementById(id);
-    return el ? (el.value || '').trim() || fallback : fallback;
+  function renderAdminTab() {
+    return `
+      <div class="nr-msg-grid">
+        <div class="nr-msg-grid-one">
+          <section class="nr-msg-card nr-msg-card-pad">
+            <div class="nr-msg-card-title">
+              <span class="nr-msg-step">1</span>
+              <div>
+                <h2>Shopify Flow instructions</h2>
+                <p>Use this when installing the email into Shopify Flow.</p>
+              </div>
+            </div>
+
+            <div class="nr-msg-help" style="margin-top:0;">
+              <strong>Workflow:</strong><br>
+              Order fulfilled → Wait <b id="flow-delay-copy-preview">14</b> days → Send email
+              <br><br>
+              In the Send email action, enable HTML and paste the generated code from the right.
+            </div>
+
+            <div class="nr-msg-help">
+              <strong>Review page handle:</strong><br>
+              /pages/<span id="flow-page-handle-preview-admin">leave-review</span>
+            </div>
+
+            <div class="nr-msg-actions">
+              <button class="nr-msg-btn" type="button" data-nr-action="copy-flow">Copy Email HTML</button>
+              <button class="nr-msg-secondary-btn" type="button" data-nr-action="go-template">Edit Template</button>
+              <button class="nr-msg-secondary-btn" type="button" data-nr-action="go-tests">Send Test Email</button>
+            </div>
+          </section>
+
+          <section class="nr-msg-card nr-msg-card-pad">
+            <div class="nr-msg-card-title">
+              <span class="nr-msg-step">2</span>
+              <div>
+                <h2>Email tracking note</h2>
+                <p>Open/click tracking works when the email enhancer script is installed.</p>
+              </div>
+            </div>
+
+            <div class="nr-msg-help" style="margin-top:0;">
+              The generated email can include open pixels and tracked links. For sent counts, add a Shopify Flow HTTP request step before sending the email.
+            </div>
+          </section>
+        </div>
+
+        <section class="nr-msg-card">
+          <div class="nr-msg-code-head">
+            <div>
+              <h2>Copy email HTML</h2>
+              <p>Paste this into Shopify Flow's Send email action.</p>
+            </div>
+            <button class="nr-msg-btn" type="button" data-nr-action="copy-flow">Copy Code</button>
+          </div>
+          <textarea id="flow-code-output" spellcheck="false"></textarea>
+        </section>
+      </div>
+    `;
   }
 
-  function getOptions() {
+  function renderTemplateTab() {
+    return `
+      <div class="nr-msg-grid">
+        <aside class="nr-msg-grid-one">
+          <section class="nr-msg-card nr-msg-card-pad">
+            <div class="nr-msg-card-title">
+              <span class="nr-msg-step">1</span>
+              <div>
+                <h2>Brand</h2>
+                <p>Logo, colours, and button styling.</p>
+              </div>
+            </div>
+
+            <label for="flow-logo">Brand logo URL <em>optional</em></label>
+            <input id="flow-logo" type="url" placeholder="https://cdn.shopify.com/.../logo.png">
+
+            <div class="nr-msg-two">
+              <div>
+                <label for="flow-color">Button colour</label>
+                <input id="flow-color" type="color" value="#111827">
+              </div>
+              <div>
+                <label for="flow-button-radius">Button radius</label>
+                <input id="flow-button-radius" type="number" min="0" max="40" value="8">
+              </div>
+            </div>
+
+            <div class="nr-msg-two">
+              <div>
+                <label for="flow-bg-color">Email background</label>
+                <input id="flow-bg-color" type="color" value="#f3f4f6">
+              </div>
+              <div>
+                <label for="flow-card-color">Email card</label>
+                <input id="flow-card-color" type="color" value="#ffffff">
+              </div>
+            </div>
+          </section>
+
+          <section class="nr-msg-card nr-msg-card-pad">
+            <div class="nr-msg-card-title">
+              <span class="nr-msg-step">2</span>
+              <div>
+                <h2>Email copy</h2>
+                <p>Editable copy for merchants.</p>
+              </div>
+            </div>
+
+            <label for="flow-subject">Email subject</label>
+            <input id="flow-subject" type="text" value="How did we do?">
+
+            <label for="flow-heading">Heading</label>
+            <input id="flow-heading" type="text" value="How did we do?">
+
+            <label for="flow-intro">Intro line</label>
+            <input id="flow-intro" type="text" value='Hi {{ order.customer.firstName | default: "there" }},'>
+
+            <label for="flow-body">Main message</label>
+            <textarea id="flow-body" rows="4">We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?</textarea>
+
+            <label for="flow-signoff">Footer note</label>
+            <input id="flow-signoff" type="text" value="Your feedback helps other customers make confident choices.">
+          </section>
+
+          <section class="nr-msg-card nr-msg-card-pad">
+            <div class="nr-msg-card-title">
+              <span class="nr-msg-step">3</span>
+              <div>
+                <h2>Review links</h2>
+                <p>Choose how customers leave reviews.</p>
+              </div>
+            </div>
+
+            <label for="flow-link-mode">Review link style</label>
+            <select id="flow-link-mode">
+              <option value="both">Order button + individual product links</option>
+              <option value="order">Review entire order only</option>
+              <option value="products">Review each product only</option>
+            </select>
+
+            <label for="flow-main-button-text">Main button text</label>
+            <input id="flow-main-button-text" type="text" value="Review Your Order">
+
+            <label for="flow-product-button-text">Product button text</label>
+            <input id="flow-product-button-text" type="text" value="Review This Item">
+
+            <label for="flow-page-handle">Review landing page handle</label>
+            <input id="flow-page-handle" type="text" value="leave-review">
+          </section>
+
+          <section class="nr-msg-card nr-msg-card-pad">
+            <div class="nr-msg-card-title">
+              <span class="nr-msg-step">4</span>
+              <div>
+                <h2>Flow setup</h2>
+                <p>The wait step happens in Shopify Flow.</p>
+              </div>
+            </div>
+
+            <label for="flow-delay-days">Recommended wait after fulfilment</label>
+            <select id="flow-delay-days">
+              <option value="7">7 days</option>
+              <option value="10">10 days</option>
+              <option value="14" selected>14 days</option>
+              <option value="21">21 days</option>
+              <option value="30">30 days</option>
+            </select>
+          </section>
+        </aside>
+
+        <main class="nr-msg-grid-one">
+          <section class="nr-msg-card">
+            <div class="nr-msg-preview-head">
+              <div>
+                <h2>Live preview</h2>
+                <p>Check the customer email on desktop and mobile.</p>
+              </div>
+              <div class="nr-msg-toggle">
+                <button type="button" id="flow-preview-desktop" class="active" data-nr-preview="desktop">Desktop</button>
+                <button type="button" id="flow-preview-mobile" data-nr-preview="mobile">Mobile</button>
+              </div>
+            </div>
+            <div class="nr-msg-preview-stage">
+              <div id="flow-preview-wrap" class="nr-msg-preview-wrap">
+                <div id="flow-email-preview"></div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    `;
+  }
+
+  function renderTestsTab() {
+    return `
+      <div class="nr-msg-grid">
+        <aside class="nr-msg-grid-one">
+          <section class="nr-msg-card nr-msg-card-pad">
+            <div class="nr-msg-card-title">
+              <span class="nr-msg-step">1</span>
+              <div>
+                <h2>Review test page</h2>
+                <p>Open your review landing page with fake order/product data.</p>
+              </div>
+            </div>
+
+            <label for="review-test-name">Customer name</label>
+            <input id="review-test-name" type="text" value="Alex">
+
+            <label for="review-test-email">Customer email</label>
+            <input id="review-test-email" type="email" value="alex@example.com">
+
+            <label for="review-test-order">Order number</label>
+            <input id="review-test-order" type="text" value="1001">
+
+            <label for="review-test-type">Review mode</label>
+            <select id="review-test-type">
+              <option value="order">Review full order</option>
+              <option value="product">Review one product</option>
+            </select>
+
+            <label for="review-test-count">How many products?</label>
+            <input id="review-test-count" type="number" min="1" max="10" value="2">
+
+            <div class="nr-review-test-actions">
+              <button class="nr-msg-secondary-btn" type="button" data-nr-action="pick-products">Select Products</button>
+              <button class="nr-msg-secondary-btn" type="button" data-nr-action="sample-products">Use Sample Products</button>
+            </div>
+
+            <div id="review-test-products" class="nr-review-test-products"></div>
+
+            <button class="nr-msg-btn" type="button" style="width:100%; margin-top:16px;" data-nr-action="open-review-test">
+              Open Test Review Page
+            </button>
+          </section>
+
+          <section class="nr-msg-card nr-msg-card-pad">
+            <div class="nr-msg-card-title">
+              <span class="nr-msg-step">2</span>
+              <div>
+                <h2>Send test email</h2>
+                <p>Send the generated email to yourself before installing Flow.</p>
+              </div>
+            </div>
+
+            <label for="test-email-to">Send to</label>
+            <input id="test-email-to" type="email" placeholder="you@example.com">
+
+            <label for="test-email-name">Customer name shown in preview</label>
+            <input id="test-email-name" type="text" value="Alex">
+
+            <label for="test-email-order">Order number shown in links</label>
+            <input id="test-email-order" type="text" value="1001">
+
+            <div class="nr-msg-help">
+              This uses the same email HTML and review page handle from your Messaging Template tab.
+            </div>
+
+            <button class="nr-msg-btn" type="button" style="width:100%; margin-top:16px;" data-nr-action="send-test-email">
+              Send Test Email
+            </button>
+
+            <div id="nr-test-email-result" class="nr-test-email-result"></div>
+          </section>
+        </aside>
+
+        <main class="nr-msg-grid-one">
+          <section class="nr-msg-card">
+            <div class="nr-msg-preview-head">
+              <div>
+                <h2>Test email preview</h2>
+                <p>This is the email that will be sent or opened as a draft.</p>
+              </div>
+              <button class="nr-msg-secondary-btn" type="button" data-nr-action="go-template">Edit Template</button>
+            </div>
+            <div class="nr-msg-preview-stage">
+              <div id="flow-email-preview-test"></div>
+            </div>
+          </section>
+        </main>
+      </div>
+    `;
+  }
+
+  function getTemplateOptions() {
     return {
-      logo: getFieldValue('flow-logo', ''),
-      accentColor: getFieldValue('flow-color', '#111827'),
-      bgColor: getFieldValue('flow-bg-color', '#f3f4f6'),
-      cardColor: getFieldValue('flow-card-color', '#ffffff'),
-      buttonRadius: Math.max(0, Math.min(40, parseInt(getFieldValue('flow-button-radius', '8'), 10) || 8)),
-      heading: getFieldValue('flow-heading', 'How did we do?'),
-      intro: getFieldValue('flow-intro', 'Hi {{ order.customer.firstName | default: "there" }}'),
-      body: getFieldValue('flow-body', "We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?"),
-      signoff: getFieldValue('flow-signoff', 'Your feedback helps other customers make confident choices.'),
-      linkMode: getFieldValue('flow-link-mode', 'both'),
-      mainButtonText: getFieldValue('flow-main-button-text', 'Review Your Order'),
-      productButtonText: getFieldValue('flow-product-button-text', 'Review This Item'),
-      pageHandle: cleanHandle(getFieldValue('flow-page-handle', DEFAULT_PAGE_HANDLE)),
-      delayDays: getFieldValue('flow-delay-days', '14')
+      logo: value('flow-logo', ''),
+      accentColor: value('flow-color', '#111827'),
+      bgColor: value('flow-bg-color', '#f3f4f6'),
+      cardColor: value('flow-card-color', '#ffffff'),
+      buttonRadius: Math.max(0, Math.min(40, parseInt(value('flow-button-radius', '8'), 10) || 8)),
+      subject: value('flow-subject', 'How did we do?'),
+      heading: value('flow-heading', 'How did we do?'),
+      intro: value('flow-intro', 'Hi {{ order.customer.firstName | default: "there" }},'),
+      body: value('flow-body', "We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?"),
+      signoff: value('flow-signoff', 'Your feedback helps other customers make confident choices.'),
+      linkMode: value('flow-link-mode', 'both'),
+      mainButtonText: value('flow-main-button-text', 'Review Your Order'),
+      productButtonText: value('flow-product-button-text', 'Review This Item'),
+      pageHandle: cleanHandle(value('flow-page-handle', 'leave-review')),
+      delayDays: value('flow-delay-days', '14')
     };
   }
 
-  function buildFlowEmailHtml(options) {
-    const shopUrl = `https://${getShopDomain()}`;
+  function buildEmailHtml(options, mode = 'liquid') {
+    const shopUrl = `https://${SHOP_DOMAIN}`;
+    const isTest = mode === 'test';
+
+    const customerName = value('test-email-name', 'Alex');
+    const orderNumber = value('test-email-order', '1001').replace(/^#/, '');
+
+    const intro = isTest
+      ? `Hi ${escapeHtml(customerName)},`
+      : options.intro;
+
+    const orderValue = isTest
+      ? encodeURIComponent(orderNumber)
+      : `{{ order.name | remove: '#' | url_encode }}`;
+
+    const emailValue = isTest
+      ? encodeURIComponent(value('test-email-to', 'test@example.com'))
+      : `{{ order.customer.email | url_encode }}`;
+
     const logoHtml = options.logo ? `
                             <tr>
                                 <td align="center" style="padding:0 0 24px 0;">
@@ -300,7 +899,7 @@
                                 </td>
                             </tr>` : '';
 
-    const orderReviewUrl = `${shopUrl}/pages/${options.pageHandle}?review_type=order&order={{ order.name | remove: '#' | url_encode }}&email={{ order.customer.email | url_encode }}`;
+    const orderReviewUrl = `${shopUrl}/pages/${options.pageHandle}?review_type=order&order=${orderValue}&email=${emailValue}`;
 
     const orderButtonHtml = `
                             <tr>
@@ -311,7 +910,38 @@
                                 </td>
                             </tr>`;
 
-    const productLinksHtml = `
+    let productLinksHtml = '';
+
+    if (isTest) {
+      const products = reviewTestProducts.length ? reviewTestProducts : sampleProducts(2, false);
+      productLinksHtml = `
+                            <tr>
+                                <td style="padding:24px 0 0 0;">
+                                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                        ${products.map((product) => `
+                                            <tr>
+                                                <td style="padding:14px 0; border-top:1px solid #e5e7eb;">
+                                                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                                        <tr>
+                                                            <td style="font-size:15px; font-weight:bold; color:#111827; line-height:1.4; padding:0 0 8px 0;">
+                                                                ${escapeHtml(product.title)}
+                                                            </td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td>
+                                                                <a href="${shopUrl}/pages/${options.pageHandle}?review_type=product&order=${orderValue}&email=${emailValue}&product_id=${encodeURIComponent(product.id)}&variant_id=${encodeURIComponent(product.variantId || '')}" style="display:inline-block; background:${options.accentColor}; color:#ffffff; text-decoration:none; font-size:14px; font-weight:bold; padding:10px 16px; border-radius:${options.buttonRadius}px; line-height:1.2;">
+                                                                    ${escapeHtml(options.productButtonText)}
+                                                                </a>
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>`).join('')}
+                                    </table>
+                                </td>
+                            </tr>`;
+    } else {
+      productLinksHtml = `
                             <tr>
                                 <td style="padding:24px 0 0 0;">
                                     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
@@ -338,12 +968,12 @@
                                     </table>
                                 </td>
                             </tr>`;
+    }
 
-    const reviewLinks = options.linkMode === 'order'
-      ? orderButtonHtml
-      : options.linkMode === 'products'
-        ? productLinksHtml
-        : orderButtonHtml + productLinksHtml;
+    let reviewLinks = '';
+    if (options.linkMode === 'order') reviewLinks = orderButtonHtml;
+    else if (options.linkMode === 'products') reviewLinks = productLinksHtml;
+    else reviewLinks = orderButtonHtml + productLinksHtml;
 
     return `
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:${options.bgColor}; margin:0; padding:0; width:100%;">
@@ -356,28 +986,38 @@
                             ${logoHtml}
                             <tr>
                                 <td align="center" style="padding:0 0 12px 0;">
-                                    <h1 style="margin:0; color:#111827; font-size:26px; line-height:1.25; font-weight:700;">${escapeHtml(options.heading)}</h1>
+                                    <h1 style="margin:0; color:#111827; font-size:26px; line-height:1.25; font-weight:700;">
+                                        ${escapeHtml(options.heading)}
+                                    </h1>
                                 </td>
                             </tr>
                             <tr>
                                 <td align="center" style="padding:0 0 10px 0;">
-                                    <p style="margin:0; color:#4b5563; font-size:16px; line-height:1.6;">${options.intro}</p>
+                                    <p style="margin:0; color:#4b5563; font-size:16px; line-height:1.6;">
+                                        ${intro}
+                                    </p>
                                 </td>
                             </tr>
                             <tr>
                                 <td align="center" style="padding:0 0 8px 0;">
-                                    <p style="margin:0; color:#4b5563; font-size:16px; line-height:1.6;">${escapeHtml(options.body)}</p>
+                                    <p style="margin:0; color:#4b5563; font-size:16px; line-height:1.6;">
+                                        ${escapeHtml(options.body)}
+                                    </p>
                                 </td>
                             </tr>
                             ${reviewLinks}
                             <tr>
                                 <td align="center" style="padding:24px 0 0 0;">
-                                    <p style="margin:0; color:#6b7280; font-size:13px; line-height:1.5;">${escapeHtml(options.signoff)}</p>
+                                    <p style="margin:0; color:#6b7280; font-size:13px; line-height:1.5;">
+                                        ${escapeHtml(options.signoff)}
+                                    </p>
                                 </td>
                             </tr>
                             <tr>
                                 <td align="center" style="padding:20px 0 0 0;">
-                                    <p style="margin:0; color:#9ca3af; font-size:12px; line-height:1.5;">Sent by {{ shop.name }}.</p>
+                                    <p style="margin:0; color:#9ca3af; font-size:12px; line-height:1.5;">
+                                        Sent by ${isTest ? escapeHtml(SHOP_DOMAIN) : '{{ shop.name }}'}.
+                                    </p>
                                 </td>
                             </tr>
                         </table>
@@ -389,87 +1029,9 @@
 </table>`.trim();
   }
 
-  function buildPreviewHtml(options) {
-    const previewLogo = options.logo
-      ? `<img src="${escapeHtml(options.logo)}" alt="Logo" style="display:block; max-width:150px; margin:0 auto 22px; height:auto;">`
-      : `<div style="width:54px; height:54px; border-radius:16px; background:${options.accentColor}; margin:0 auto 22px;"></div>`;
-
-    const previewOrderButton = `
-      <div style="padding:20px 0 8px; text-align:center;">
-        <a href="#" style="display:inline-block; background:${options.accentColor}; color:#ffffff; text-decoration:none; font-size:16px; font-weight:bold; padding:14px 24px; border-radius:${options.buttonRadius}px; line-height:1.2;">${escapeHtml(options.mainButtonText)}</a>
-      </div>`;
-
-    const sampleItems = ['Sample Product One', 'Sample Product Two'];
-    const previewProductLinks = `
-      <div style="padding-top:22px; text-align:left;">
-        ${sampleItems.map(name => `
-          <div style="padding:14px 0; border-top:1px solid #e5e7eb;">
-            <div style="font-size:15px; font-weight:bold; color:#111827; line-height:1.4; padding-bottom:8px;">${escapeHtml(name)}</div>
-            <a href="#" style="display:inline-block; background:${options.accentColor}; color:#ffffff; text-decoration:none; font-size:14px; font-weight:bold; padding:10px 16px; border-radius:${options.buttonRadius}px; line-height:1.2;">${escapeHtml(options.productButtonText)}</a>
-          </div>`).join('')}
-      </div>`;
-
-    const previewLinks = options.linkMode === 'order'
-      ? previewOrderButton
-      : options.linkMode === 'products'
-        ? previewProductLinks
-        : previewOrderButton + previewProductLinks;
-
-    return `
-      <div style="background:${options.bgColor}; padding:24px 12px;">
-        <div style="max-width:600px; margin:0 auto; background:${options.cardColor}; border-radius:12px; overflow:hidden;">
-          <div style="padding:32px 24px; font-family:Arial, Helvetica, sans-serif; text-align:center;">
-            ${previewLogo}
-            <h1 style="margin:0 0 12px; color:#111827; font-size:26px; line-height:1.25; font-weight:700;">${escapeHtml(options.heading)}</h1>
-            <p style="margin:0 0 10px; color:#4b5563; font-size:16px; line-height:1.6;">Hi Alex,</p>
-            <p style="margin:0 0 8px; color:#4b5563; font-size:16px; line-height:1.6;">${escapeHtml(options.body)}</p>
-            ${previewLinks}
-            <p style="margin:24px 0 0; color:#6b7280; font-size:13px; line-height:1.5;">${escapeHtml(options.signoff)}</p>
-            <p style="margin:20px 0 0; color:#9ca3af; font-size:12px; line-height:1.5;">Sent by your store.</p>
-          </div>
-        </div>
-        <div style="max-width:600px; margin:10px auto 0; font-family:Arial, Helvetica, sans-serif; font-size:11px; color:#6b7280; text-align:center;">
-          Links will point to /pages/${escapeHtml(options.pageHandle)} and include order/customer/product details.
-        </div>
-      </div>`;
-  }
-
-  function updateBuilder() {
-    const options = getOptions();
-
-    const pageHandleInput = document.getElementById('flow-page-handle');
-    if (pageHandleInput && pageHandleInput.value !== options.pageHandle) pageHandleInput.value = options.pageHandle;
-
-    const pageHandlePreview = document.getElementById('flow-page-handle-preview');
-    if (pageHandlePreview) pageHandlePreview.innerText = options.pageHandle;
-
-    const delayPreview = document.getElementById('flow-delay-preview');
-    if (delayPreview) delayPreview.innerText = options.delayDays;
-
-    const delayCopyPreview = document.getElementById('flow-delay-copy-preview');
-    if (delayCopyPreview) delayCopyPreview.innerText = options.delayDays;
-
-    const output = document.getElementById('flow-code-output');
-    if (output) output.value = buildFlowEmailHtml(options);
-
-    const preview = document.getElementById('flow-email-preview');
-    if (preview) preview.innerHTML = buildPreviewHtml(options);
-  }
-
-  async function copyFlowCode() {
-    const output = document.getElementById('flow-code-output');
-    if (!output) return;
-
-    output.select();
-    output.setSelectionRange(0, 999999);
-
-    try {
-      await navigator.clipboard.writeText(output.value);
-    } catch (e) {
-      document.execCommand('copy');
-    }
-
-    showToast('Copied to clipboard!');
+  function buildPreviewHtml(options, mode = 'template') {
+    const previewHtml = buildEmailHtml(options, mode === 'test' ? 'test' : 'test');
+    return previewHtml;
   }
 
   function setPreviewMode(mode) {
@@ -482,68 +1044,66 @@
     if (mobileBtn) mobileBtn.classList.toggle('active', mode === 'mobile');
   }
 
+  function updateAllMessaging() {
+    const options = getTemplateOptions();
 
-  let reviewTestProducts = [];
+    const pageHandlePreviewAdmin = document.getElementById('flow-page-handle-preview-admin');
+    if (pageHandlePreviewAdmin) pageHandlePreviewAdmin.textContent = options.pageHandle;
 
-  function clampProductCount(value) {
-    return Math.max(1, Math.min(10, parseInt(value || '2', 10) || 2));
+    const pageHandlePreview = document.getElementById('flow-page-handle-preview');
+    if (pageHandlePreview) pageHandlePreview.textContent = options.pageHandle;
+
+    const delayPreview = document.getElementById('flow-delay-preview');
+    if (delayPreview) delayPreview.textContent = options.delayDays;
+
+    const delayCopyPreview = document.getElementById('flow-delay-copy-preview');
+    if (delayCopyPreview) delayCopyPreview.textContent = options.delayDays;
+
+    const flowOutput = document.getElementById('flow-code-output');
+    if (flowOutput) flowOutput.value = buildEmailHtml(options, 'liquid');
+
+    const flowPreview = document.getElementById('flow-email-preview');
+    if (flowPreview) flowPreview.innerHTML = buildPreviewHtml(options, 'template');
+
+    const testPreview = document.getElementById('flow-email-preview-test');
+    if (testPreview) testPreview.innerHTML = buildPreviewHtml(options, 'test');
   }
 
-  function getProductImage(product) {
-    if (!product) return '';
-
-    if (product.image && typeof product.image === 'string') return product.image;
-    if (product.featuredImage && product.featuredImage.url) return product.featuredImage.url;
-    if (product.featuredImage && product.featuredImage.originalSrc) return product.featuredImage.originalSrc;
-
-    const firstImage = Array.isArray(product.images) ? product.images[0] : null;
-    if (firstImage && firstImage.url) return firstImage.url;
-    if (firstImage && firstImage.originalSrc) return firstImage.originalSrc;
-    if (firstImage && firstImage.src) return firstImage.src;
-
-    return '';
-  }
-
-  function normalisePickedProduct(product, index) {
-    const firstVariant = product && Array.isArray(product.variants) ? product.variants[0] : null;
-
-    return {
-      id: String(product && product.id ? product.id : `sample-product-${index + 1}`).split('/').pop(),
-      variantId: String(firstVariant && firstVariant.id ? firstVariant.id : `sample-variant-${index + 1}`).split('/').pop(),
-      title: product && product.title ? product.title : `Sample Product ${index + 1}`,
-      handle: product && product.handle ? product.handle : `sample-product-${index + 1}`,
-      image: getProductImage(product),
-      quantity: 1,
-      productTags: Array.isArray(product && product.tags) ? product.tags : (typeof (product && product.tags) === 'string' ? product.tags.split(',').map(tag => tag.trim()).filter(Boolean) : []),
-      metafields: product && product.metafields ? product.metafields : {}
-    };
-  }
-
-  function generateSampleReviewProducts() {
-    const count = clampProductCount(getFieldValue('review-test-count', '2'));
-
-    reviewTestProducts = Array.from({ length: count }).map((_, index) => ({
+  function sampleProducts(count, shouldRender = true) {
+    const products = Array.from({ length: count }).map((_, index) => ({
       id: `sample-product-${index + 1}`,
       variantId: `sample-variant-${index + 1}`,
       title: `Sample Product ${index + 1}`,
       handle: `sample-product-${index + 1}`,
       image: '',
       quantity: 1,
-      productTags: index === 0 ? ['snowboard'] : [],
+      tags: [],
       metafields: {}
     }));
 
-    renderReviewTestProducts();
-    updateReviewTestUrl();
-    showToast('Sample products added.');
+    if (shouldRender) {
+      reviewTestProducts = products;
+      renderTestProducts();
+      updateAllMessaging();
+    }
+
+    return products;
   }
 
-  async function pickReviewTestProducts() {
-    const count = clampProductCount(getFieldValue('review-test-count', '2'));
+  function getTestCount() {
+    return Math.max(1, Math.min(10, parseInt(value('review-test-count', '2'), 10) || 2));
+  }
+
+  function generateSampleProducts() {
+    sampleProducts(getTestCount(), true);
+  }
+
+  async function pickProducts() {
+    const count = getTestCount();
 
     if (!window.shopify || !window.shopify.resourcePicker) {
-      generateSampleReviewProducts();
-      showToast('Shopify product picker unavailable. Sample products added.');
+      toast('Shopify product picker unavailable. Using sample products.');
+      generateSampleProducts();
       return;
     }
 
@@ -553,219 +1113,251 @@
         multiple: true
       });
 
-      if (!selected || selected.length === 0) {
-        showToast('Product picker closed.');
-        return;
-      }
+      if (!selected || !selected.length) return;
 
-      reviewTestProducts = selected.slice(0, count).map(normalisePickedProduct);
-      renderReviewTestProducts();
-      updateReviewTestUrl();
-      showToast('Products selected.');
+      reviewTestProducts = selected.slice(0, count).map((product, index) => {
+        const firstVariant = product.variants && product.variants[0];
+        const firstImage = product.images && product.images[0];
+
+        return {
+          id: String(product.id || '').split('/').pop() || `selected-product-${index + 1}`,
+          variantId: firstVariant ? String(firstVariant.id || '').split('/').pop() : '',
+          title: product.title || `Selected Product ${index + 1}`,
+          handle: product.handle || '',
+          image: firstImage ? firstImage.originalSrc || firstImage.url || '' : '',
+          quantity: 1,
+          tags: [],
+          metafields: {}
+        };
+      });
+
+      renderTestProducts();
+      updateAllMessaging();
     } catch (error) {
       console.error(error);
-      showToast('Product picker closed.');
+      toast('Product picker closed.');
     }
   }
 
-  function removeReviewTestProduct(index) {
-    reviewTestProducts.splice(index, 1);
-    renderReviewTestProducts();
-    updateReviewTestUrl();
-  }
-
-  function renderReviewTestProducts() {
+  function renderTestProducts() {
     const container = document.getElementById('review-test-products');
     if (!container) return;
 
     if (!reviewTestProducts.length) {
-      container.innerHTML = '<div class="flow-help-box">No products selected yet.</div>';
+      container.innerHTML = '<div class="nr-msg-help">No products selected yet.</div>';
       return;
     }
 
-    container.innerHTML = reviewTestProducts.map((product, index) => `
-      <div class="review-test-product">
-        ${product.image ? `<img src="${escapeHtml(product.image)}" alt="">` : '<img alt="">'}
+    container.innerHTML = reviewTestProducts.map((product) => `
+      <div class="nr-review-test-product">
+        ${product.image ? `<img src="${escapeHtml(product.image)}" alt="">` : '<div class="nr-review-test-placeholder"></div>'}
         <div>
           <strong>${escapeHtml(product.title)}</strong>
           <span>Product ID: ${escapeHtml(product.id)}</span>
           ${product.variantId ? `<span>Variant ID: ${escapeHtml(product.variantId)}</span>` : ''}
-          <span>Tags are used to test conditional sliders.</span>
         </div>
-        <button type="button" data-review-test-remove="${index}" aria-label="Remove ${escapeHtml(product.title)}">×</button>
-        <input class="review-test-tags" type="text" data-review-test-tags="${index}" value="${escapeHtml((product.productTags || product.tags || []).join(', '))}" placeholder="Tags for conditional sliders, e.g. snowboard, waterproof">
       </div>
     `).join('');
-
-    container.querySelectorAll('[data-review-test-remove]').forEach(button => {
-      button.addEventListener('click', () => removeReviewTestProduct(parseInt(button.dataset.reviewTestRemove, 10)));
-    });
-
-    container.querySelectorAll('[data-review-test-tags]').forEach(input => {
-      input.addEventListener('input', () => {
-        const index = parseInt(input.dataset.reviewTestTags, 10);
-        if (!reviewTestProducts[index]) return;
-        reviewTestProducts[index].productTags = input.value.split(',').map(tag => tag.trim()).filter(Boolean);
-        reviewTestProducts[index].tags = reviewTestProducts[index].productTags;
-        updateReviewTestUrl();
-      });
-    });
   }
 
-  function encodeReviewPreviewData(data) {
-    const json = JSON.stringify(data);
-    const encoded = btoa(unescape(encodeURIComponent(json)));
-
-    return encoded
+  function encodePreviewData(data) {
+    return btoa(unescape(encodeURIComponent(JSON.stringify(data))))
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
       .replace(/=+$/, '');
   }
 
-  function buildReviewTestUrl() {
-    const pageHandle = cleanHandle(getFieldValue('flow-page-handle', DEFAULT_PAGE_HANDLE));
-    const name = getFieldValue('review-test-name', 'Alex');
-    const email = getFieldValue('review-test-email', 'alex@example.com');
-    const rawOrderNumber = getFieldValue('review-test-order', '1001').replace(/^#/, '');
-    const reviewType = getFieldValue('review-test-type', 'order');
+  function getPreviewPayload() {
+    const name = value('review-test-name', value('test-email-name', 'Alex'));
+    const email = value('review-test-email', value('test-email-to', 'alex@example.com'));
+    const orderNumber = value('review-test-order', value('test-email-order', '1001')).replace(/^#/, '');
+    const reviewType = value('review-test-type', 'order');
 
-    if (!reviewTestProducts.length) {
-      const count = clampProductCount(getFieldValue('review-test-count', '2'));
-      reviewTestProducts = Array.from({ length: count }).map((_, index) => ({
-        id: `sample-product-${index + 1}`,
-        variantId: `sample-variant-${index + 1}`,
-        title: `Sample Product ${index + 1}`,
-        handle: `sample-product-${index + 1}`,
-        image: '',
-        quantity: 1,
-        productTags: index === 0 ? ['snowboard'] : [],
-        metafields: {}
-      }));
-      renderReviewTestProducts();
-    }
+    if (!reviewTestProducts.length) generateSampleProducts();
 
-    const products = reviewType === 'product'
-      ? reviewTestProducts.slice(0, 1)
-      : reviewTestProducts;
-
-    const previewData = {
+    return {
       preview: true,
-      source: 'nectar_admin_review_page_tester',
       reviewType,
-      customer: {
-        name,
-        firstName: name.split(' ')[0] || name,
-        email
-      },
+      customer: { name, email },
       order: {
-        name: `#${rawOrderNumber}`,
-        number: rawOrderNumber,
+        name: `#${orderNumber}`,
+        number: orderNumber,
         fulfilledAt: new Date().toISOString()
       },
-      products
+      products: reviewType === 'product' ? reviewTestProducts.slice(0, 1) : reviewTestProducts
     };
-
-    return `https://${getShopDomain()}/pages/${pageHandle}?preview=true&preview_data=${encodeReviewPreviewData(previewData)}`;
   }
 
-  function updateReviewTestUrl() {
-    const output = document.getElementById('review-test-url');
-    if (!output) return '';
-    const url = buildReviewTestUrl();
-    output.value = url;
-    return url;
-  }
-
-  function openReviewPageTest() {
-    const url = updateReviewTestUrl();
-    if (!url) return;
+  function openReviewTestPage() {
+    const options = getTemplateOptions();
+    const encoded = encodePreviewData(getPreviewPayload());
+    const url = `https://${SHOP_DOMAIN}/pages/${options.pageHandle}?preview=true&preview_data=${encoded}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 
-  async function copyReviewTestUrl() {
-    const url = updateReviewTestUrl();
-    if (!url) return;
+  async function copyFlowCode() {
+    const output = document.getElementById('flow-code-output');
+    if (!output) return;
+
+    output.select();
+    output.setSelectionRange(0, 999999);
 
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(output.value);
     } catch (error) {
-      const output = document.getElementById('review-test-url');
-      if (output) {
-        output.select();
-        output.setSelectionRange(0, 999999);
-        document.execCommand('copy');
-      }
+      document.execCommand('copy');
     }
 
-    showToast('Test URL copied.');
+    toast('Email HTML copied.');
   }
 
+  function setTestEmailResult(type, message) {
+    const box = document.getElementById('nr-test-email-result');
+    if (!box) return;
 
-  function wireEvents() {
-    const ids = [
-      'flow-logo', 'flow-color', 'flow-button-radius', 'flow-bg-color', 'flow-card-color',
-      'flow-heading', 'flow-intro', 'flow-body', 'flow-signoff', 'flow-link-mode',
-      'flow-main-button-text', 'flow-product-button-text', 'flow-page-handle', 'flow-delay-days',
-      'review-test-name', 'review-test-email', 'review-test-order', 'review-test-type', 'review-test-count'
-    ];
+    box.className = `nr-test-email-result ${type}`;
+    box.innerHTML = message;
+  }
 
-    ids.forEach(id => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.addEventListener('input', () => {
-        updateBuilder();
-        updateReviewTestUrl();
+  async function sendTestEmail() {
+    const options = getTemplateOptions();
+    const to = value('test-email-to');
+
+    if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+      setTestEmailResult('error', 'Please enter a valid test email address.');
+      return;
+    }
+
+    const subject = options.subject || 'How did we do?';
+    const html = buildEmailHtml(options, 'test');
+
+    setTestEmailResult('warn', 'Sending test email...');
+
+    try {
+      const response = await fetch('/api/admin/test-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shopDomain: SHOP_DOMAIN,
+          to,
+          subject,
+          html,
+          previewData: getPreviewPayload()
+        })
       });
-      el.addEventListener('change', () => {
-        updateBuilder();
-        updateReviewTestUrl();
-      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(result.error || 'The test email endpoint is not installed yet.');
+      }
+
+      setTestEmailResult('success', `Test email sent to <strong>${escapeHtml(to)}</strong>.`);
+      toast('Test email sent.');
+    } catch (error) {
+      console.warn(error);
+
+      const plainText = [
+        subject,
+        '',
+        'Your test email sender endpoint is not available yet, so this opened a manual email draft.',
+        '',
+        'HTML preview:',
+        html
+      ].join('\n');
+
+      const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainText.slice(0, 1800))}`;
+      window.location.href = mailto;
+
+      setTestEmailResult(
+        'warn',
+        'The server email sender is not installed yet, so I opened a manual email draft instead. Add the backend test email endpoint to send directly from the app.'
+      );
+    }
+  }
+
+  function switchTab(tab) {
+    currentMsgTab = tab;
+
+    document.querySelectorAll('.nr-msg-tab-btn').forEach((button) => {
+      button.classList.toggle('active', button.dataset.msgTab === tab);
     });
 
-    const pickProductsBtn = document.getElementById('review-test-pick-products');
-    if (pickProductsBtn) pickProductsBtn.addEventListener('click', pickReviewTestProducts);
+    document.querySelectorAll('.nr-msg-tab-panel').forEach((panel) => {
+      panel.classList.toggle('active', panel.id === `nr-msg-tab-${tab}`);
+    });
 
-    const sampleProductsBtn = document.getElementById('review-test-sample-products');
-    if (sampleProductsBtn) sampleProductsBtn.addEventListener('click', generateSampleReviewProducts);
+    updateAllMessaging();
+  }
 
-    const openTestBtn = document.getElementById('review-test-open');
-    if (openTestBtn) openTestBtn.addEventListener('click', openReviewPageTest);
+  function bindEvents() {
+    const shell = document.querySelector('.nr-msg-shell');
+    if (!shell) return;
 
-    const copyTestUrlBtn = document.getElementById('review-test-copy-url');
-    if (copyTestUrlBtn) copyTestUrlBtn.addEventListener('click', copyReviewTestUrl);
+    shell.addEventListener('input', (event) => {
+      if (event.target.matches('input, textarea, select')) updateAllMessaging();
+    });
 
-    const copyBtn = document.getElementById('flow-copy-code-btn');
-    if (copyBtn) copyBtn.addEventListener('click', copyFlowCode);
+    shell.addEventListener('change', (event) => {
+      if (event.target.matches('input, textarea, select')) updateAllMessaging();
+    });
 
-    document.querySelectorAll('[data-flow-preview-mode]').forEach(btn => {
-      btn.addEventListener('click', () => setPreviewMode(btn.dataset.flowPreviewMode));
+    shell.addEventListener('click', (event) => {
+      const tabButton = event.target.closest('[data-msg-tab]');
+      if (tabButton) {
+        switchTab(tabButton.dataset.msgTab);
+        return;
+      }
+
+      const previewButton = event.target.closest('[data-nr-preview]');
+      if (previewButton) {
+        setPreviewMode(previewButton.dataset.nrPreview);
+        return;
+      }
+
+      const actionButton = event.target.closest('[data-nr-action]');
+      if (!actionButton) return;
+
+      const action = actionButton.dataset.nrAction;
+      if (action === 'copy-flow') copyFlowCode();
+      if (action === 'go-template') switchTab('template');
+      if (action === 'go-tests') switchTab('tests');
+      if (action === 'pick-products') pickProducts();
+      if (action === 'sample-products') generateSampleProducts();
+      if (action === 'open-review-test') openReviewTestPage();
+      if (action === 'send-test-email') sendTestEmail();
     });
   }
 
-  function initMessagingCampaigns() {
-    const messagingView = document.getElementById('v-msg');
-    if (!messagingView) return;
-
+  function init() {
     injectStyles();
-    messagingView.innerHTML = getBuilderMarkup();
-    wireEvents();
-    renderReviewTestProducts();
-    updateBuilder();
-    updateReviewTestUrl();
+
+    const container = findContainer();
+    if (!container) {
+      console.warn('[Nectar Reviews] Messaging container not found.');
+      return;
+    }
+
+    container.innerHTML = renderShell();
+    bindEvents();
+    generateSampleProducts();
+    switchTab(currentMsgTab);
+    updateAllMessaging();
+
+    console.log('[Nectar Reviews] Messaging tabs + test email builder mounted.');
   }
 
-  // Override the old functions in admin.js while keeping the same public names.
-  window.generateFlowCode = updateBuilder;
+  window.generateFlowCode = updateAllMessaging;
   window.copyFlowCode = copyFlowCode;
   window.setFlowPreviewMode = setPreviewMode;
-  window.pickReviewTestProducts = pickReviewTestProducts;
-  window.generateSampleReviewProducts = generateSampleReviewProducts;
-  window.openReviewPageTest = openReviewPageTest;
-  window.copyReviewTestUrl = copyReviewTestUrl;
+  window.generateSampleReviewProducts = generateSampleProducts;
+  window.pickReviewTestProducts = pickProducts;
+  window.openReviewPageTest = openReviewTestPage;
+  window.sendNectarTestEmail = sendTestEmail;
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initMessagingCampaigns);
+    document.addEventListener('DOMContentLoaded', init);
   } else {
-    initMessagingCampaigns();
+    init();
   }
 })();
