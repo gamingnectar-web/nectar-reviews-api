@@ -1,14 +1,21 @@
 /*
-  Nectar Reviews — Messaging fixes
+  Nectar Reviews — Messaging & Campaigns
   File: public/admin-messaging-campaigns.js
 
-  Fixes:
-  - "Send Test Email" no longer sits on "Sending..." forever.
-  - Adds a 25 second timeout and clear success/error messages.
-  - Shows provider/backend errors returned by /api/admin/test-email.
-  - Keeps the manual mail draft fallback when backend sending is not available.
-  - Adds a manual product selector fallback when Shopify resourcePicker is unavailable.
-  - Adds product search fallback via /api/admin/products/search when backend route is installed.
+  Full restored version.
+
+  Includes:
+  - MESSAGING - ADMIN
+  - MESSAGING TEMPLATE
+  - MESSAGING TEST PAGES
+  - Merchant email provider settings
+  - Gmail / Google Workspace, Outlook, SendGrid, Postmark, Custom SMTP presets
+  - Test email sending with timeout/status messages
+  - Shopify App Bridge product picker support
+  - Product search fallback
+  - Manual product fallback
+  - Review page preview generator
+  - Shopify Flow HTML generator
 */
 
 (function () {
@@ -22,12 +29,60 @@
   let emailSettingsLoaded = false;
 
   const providerPresets = {
-    none: { smtpHost: '', smtpPort: '', secureMode: 'starttls', smtpUser: '', fromName: '', fromEmail: '', replyToEmail: '' },
-    gmail: { smtpHost: 'smtp.gmail.com', smtpPort: '587', secureMode: 'starttls', smtpUser: '', fromName: '', fromEmail: '', replyToEmail: '' },
-    outlook: { smtpHost: 'smtp.office365.com', smtpPort: '587', secureMode: 'starttls', smtpUser: '', fromName: '', fromEmail: '', replyToEmail: '' },
-    sendgrid: { smtpHost: 'smtp.sendgrid.net', smtpPort: '587', secureMode: 'starttls', smtpUser: 'apikey', fromName: '', fromEmail: '', replyToEmail: '' },
-    postmark: { smtpHost: 'smtp.postmarkapp.com', smtpPort: '587', secureMode: 'starttls', smtpUser: '', fromName: '', fromEmail: '', replyToEmail: '' },
-    custom: { smtpHost: '', smtpPort: '587', secureMode: 'starttls', smtpUser: '', fromName: '', fromEmail: '', replyToEmail: '' }
+    none: {
+      smtpHost: '',
+      smtpPort: '',
+      secureMode: 'starttls',
+      smtpUser: '',
+      fromName: '',
+      fromEmail: '',
+      replyToEmail: ''
+    },
+    gmail: {
+      smtpHost: 'smtp.gmail.com',
+      smtpPort: '587',
+      secureMode: 'starttls',
+      smtpUser: '',
+      fromName: '',
+      fromEmail: '',
+      replyToEmail: ''
+    },
+    outlook: {
+      smtpHost: 'smtp.office365.com',
+      smtpPort: '587',
+      secureMode: 'starttls',
+      smtpUser: '',
+      fromName: '',
+      fromEmail: '',
+      replyToEmail: ''
+    },
+    sendgrid: {
+      smtpHost: 'smtp.sendgrid.net',
+      smtpPort: '587',
+      secureMode: 'starttls',
+      smtpUser: 'apikey',
+      fromName: '',
+      fromEmail: '',
+      replyToEmail: ''
+    },
+    postmark: {
+      smtpHost: 'smtp.postmarkapp.com',
+      smtpPort: '587',
+      secureMode: 'starttls',
+      smtpUser: '',
+      fromName: '',
+      fromEmail: '',
+      replyToEmail: ''
+    },
+    custom: {
+      smtpHost: '',
+      smtpPort: '587',
+      secureMode: 'starttls',
+      smtpUser: '',
+      fromName: '',
+      fromEmail: '',
+      replyToEmail: ''
+    }
   };
 
   function escapeHtml(value) {
@@ -74,7 +129,12 @@
       window.showToast(message);
       return;
     }
+
     console.log(message);
+  }
+
+  function wait(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   function fetchWithTimeout(url, options = {}, timeoutMs = 25000) {
@@ -85,11 +145,63 @@
       .finally(() => clearTimeout(timer));
   }
 
+  async function getShopifyResourcePickerBridge() {
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const bridge =
+        (typeof globalThis !== 'undefined' && globalThis.shopify) ||
+        (typeof window !== 'undefined' && window.shopify) ||
+        null;
+
+      if (bridge && typeof bridge.resourcePicker === 'function') {
+        return bridge;
+      }
+
+      await wait(100);
+    }
+
+    return null;
+  }
+
+  function normalizeResourcePickerSelection(result) {
+    const rawSelection = Array.isArray(result)
+      ? result
+      : (result && Array.isArray(result.selection))
+        ? result.selection
+        : (result && Array.isArray(result.selected))
+          ? result.selected
+          : [];
+
+    return rawSelection.map((product, index) => {
+      const firstVariant = product.variants && product.variants[0];
+      const firstImage =
+        (product.images && product.images[0]) ||
+        product.featuredImage ||
+        product.image ||
+        null;
+
+      return {
+        id: String(product.id || product.admin_graphql_api_id || '').split('/').pop() || `selected-product-${index + 1}`,
+        variantId: firstVariant ? String(firstVariant.id || '').split('/').pop() : '',
+        title: product.title || product.name || `Selected Product ${index + 1}`,
+        handle: product.handle || '',
+        image: firstImage ? (firstImage.originalSrc || firstImage.url || firstImage.src || '') : '',
+        quantity: 1,
+        tags: Array.isArray(product.tags)
+          ? product.tags
+          : typeof product.tags === 'string'
+            ? product.tags.split(',').map((tag) => tag.trim()).filter(Boolean)
+            : [],
+        metafields: {}
+      };
+    });
+  }
+
   function injectStyles() {
     if (document.getElementById('nr-messaging-tabs-style')) return;
 
     const style = document.createElement('style');
     style.id = 'nr-messaging-tabs-style';
+
     style.textContent = `
       .nr-msg-shell { width:100%; box-sizing:border-box; }
       .nr-msg-hero { display:flex; justify-content:space-between; align-items:flex-start; gap:24px; margin-bottom:22px; }
@@ -167,38 +279,12 @@
       .nr-test-email-result.warn { display:block; background:#fffbeb; color:#92400e; border:1px solid #fde68a; }
       .nr-test-email-result.error { display:block; background:#fff1f2; color:#be123c; border:1px solid #fecdd3; }
 
-      .nr-manual-product-row {
-        padding:12px;
-        border:1px dashed var(--border,#e5e7eb);
-        border-radius:12px;
-        background:#fff;
-        margin-top:10px;
-      }
-
-      .nr-product-search-results {
-        margin-top:10px;
-        display:grid;
-        gap:8px;
-      }
-
+      .nr-product-search-results { margin-top:10px; display:grid; gap:8px; }
       .nr-product-search-result {
-        display:grid;
-        grid-template-columns:42px 1fr auto;
-        gap:10px;
-        align-items:center;
-        padding:9px;
-        border:1px solid var(--border,#e5e7eb);
-        border-radius:10px;
-        background:#fff;
+        display:grid; grid-template-columns:42px 1fr auto; gap:10px; align-items:center; padding:9px;
+        border:1px solid var(--border,#e5e7eb); border-radius:10px; background:#fff;
       }
-
-      .nr-product-search-result img {
-        width:42px;
-        height:42px;
-        border-radius:8px;
-        object-fit:cover;
-        background:#e5e7eb;
-      }
+      .nr-product-search-result img { width:42px; height:42px; border-radius:8px; object-fit:cover; background:#e5e7eb; }
 
       @media (max-width:1100px) {
         .nr-msg-hero, .nr-msg-preview-head, .nr-msg-code-head { flex-direction:column; align-items:stretch; }
@@ -213,6 +299,7 @@
         .nr-msg-toggle button { flex:1; }
       }
     `;
+
     document.head.appendChild(style);
   }
 
@@ -391,10 +478,12 @@
             <div class="nr-msg-card-title"><span class="nr-msg-step">1</span><div><h2>Brand</h2><p>Logo, colours, and button styling.</p></div></div>
             <label for="flow-logo">Brand logo URL <em>optional</em></label>
             <input id="flow-logo" type="url" placeholder="https://cdn.shopify.com/.../logo.png">
+
             <div class="nr-msg-two">
               <div><label for="flow-color">Button colour</label><input id="flow-color" type="color" value="#111827"></div>
               <div><label for="flow-button-radius">Button radius</label><input id="flow-button-radius" type="number" min="0" max="40" value="8"></div>
             </div>
+
             <div class="nr-msg-two">
               <div><label for="flow-bg-color">Email background</label><input id="flow-bg-color" type="color" value="#f3f4f6"></div>
               <div><label for="flow-card-color">Email card</label><input id="flow-card-color" type="color" value="#ffffff"></div>
@@ -403,36 +492,46 @@
 
           <section class="nr-msg-card nr-msg-card-pad">
             <div class="nr-msg-card-title"><span class="nr-msg-step">2</span><div><h2>Email copy</h2><p>Editable copy for merchants.</p></div></div>
+
             <label for="flow-subject">Email subject</label>
             <input id="flow-subject" type="text" value="How did we do?">
+
             <label for="flow-heading">Heading</label>
             <input id="flow-heading" type="text" value="How did we do?">
+
             <label for="flow-intro">Intro line</label>
             <input id="flow-intro" type="text" value='Hi {{ order.customer.firstName | default: "there" }},'>
+
             <label for="flow-body">Main message</label>
             <textarea id="flow-body" rows="4">We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?</textarea>
+
             <label for="flow-signoff">Footer note</label>
             <input id="flow-signoff" type="text" value="Your feedback helps other customers make confident choices.">
           </section>
 
           <section class="nr-msg-card nr-msg-card-pad">
             <div class="nr-msg-card-title"><span class="nr-msg-step">3</span><div><h2>Review links</h2><p>Choose how customers leave reviews.</p></div></div>
+
             <label for="flow-link-mode">Review link style</label>
             <select id="flow-link-mode">
               <option value="both">Order button + individual product links</option>
               <option value="order">Review entire order only</option>
               <option value="products">Review each product only</option>
             </select>
+
             <label for="flow-main-button-text">Main button text</label>
             <input id="flow-main-button-text" type="text" value="Review Your Order">
+
             <label for="flow-product-button-text">Product button text</label>
             <input id="flow-product-button-text" type="text" value="Review This Item">
+
             <label for="flow-page-handle">Review landing page handle</label>
             <input id="flow-page-handle" type="text" value="leave-review">
           </section>
 
           <section class="nr-msg-card nr-msg-card-pad">
             <div class="nr-msg-card-title"><span class="nr-msg-step">4</span><div><h2>Flow setup</h2><p>The wait step happens in Shopify Flow.</p></div></div>
+
             <label for="flow-delay-days">Recommended wait after fulfilment</label>
             <select id="flow-delay-days">
               <option value="7">7 days</option>
@@ -466,43 +565,67 @@
         <aside class="nr-msg-grid-one">
           <section class="nr-msg-card nr-msg-card-pad">
             <div class="nr-msg-card-title"><span class="nr-msg-step">1</span><div><h2>Review test page</h2><p>Open your review landing page with fake order/product data.</p></div></div>
+
             <label for="review-test-name">Customer name</label>
             <input id="review-test-name" type="text" value="Alex">
+
             <label for="review-test-email">Customer email</label>
             <input id="review-test-email" type="email" value="alex@example.com">
+
             <label for="review-test-order">Order number</label>
             <input id="review-test-order" type="text" value="1001">
+
             <label for="review-test-type">Review mode</label>
-            <select id="review-test-type"><option value="order">Review full order</option><option value="product">Review one product</option></select>
+            <select id="review-test-type">
+              <option value="order">Review full order</option>
+              <option value="product">Review one product</option>
+            </select>
+
             <label for="review-test-count">How many products?</label>
             <input id="review-test-count" type="number" min="1" max="10" value="2">
 
             <label for="nr-product-search">Search products <em>optional</em></label>
             <input id="nr-product-search" type="text" placeholder="Search product title or handle">
+
             <div class="nr-msg-actions">
               <button class="nr-msg-secondary-btn" type="button" data-nr-action="search-products">Search Products</button>
               <button class="nr-msg-secondary-btn" type="button" data-nr-action="manual-product">Add Manual Product</button>
             </div>
+
             <div id="nr-product-search-results" class="nr-product-search-results"></div>
 
             <div class="nr-review-test-actions">
               <button class="nr-msg-secondary-btn" type="button" data-nr-action="pick-products">Select Products</button>
               <button class="nr-msg-secondary-btn" type="button" data-nr-action="sample-products">Use Sample Products</button>
             </div>
+
             <div id="review-test-products" class="nr-review-test-products"></div>
-            <button class="nr-msg-btn" type="button" style="width:100%; margin-top:16px;" data-nr-action="open-review-test">Open Test Review Page</button>
+
+            <button class="nr-msg-btn" type="button" style="width:100%; margin-top:16px;" data-nr-action="open-review-test">
+              Open Test Review Page
+            </button>
           </section>
 
           <section class="nr-msg-card nr-msg-card-pad">
             <div class="nr-msg-card-title"><span class="nr-msg-step">2</span><div><h2>Send test email</h2><p>Send the generated email using the saved provider credentials.</p></div></div>
+
             <label for="test-email-to">Send to</label>
             <input id="test-email-to" type="email" placeholder="you@example.com">
+
             <label for="test-email-name">Customer name shown in preview</label>
             <input id="test-email-name" type="text" value="Alex">
+
             <label for="test-email-order">Order number shown in links</label>
             <input id="test-email-order" type="text" value="1001">
-            <div class="nr-msg-help">This uses the current template and your saved Email Sending Provider settings. If the provider is not configured, the app opens a manual draft fallback.</div>
-            <button id="nr-send-test-email-btn" class="nr-msg-btn" type="button" style="width:100%; margin-top:16px;" data-nr-action="send-test-email">Send Test Email</button>
+
+            <div class="nr-msg-help">
+              This uses the current template and your saved Email Sending Provider settings. If the provider is not configured, the app opens a manual draft fallback.
+            </div>
+
+            <button id="nr-send-test-email-btn" class="nr-msg-btn" type="button" style="width:100%; margin-top:16px;" data-nr-action="send-test-email">
+              Send Test Email
+            </button>
+
             <div id="nr-test-email-result" class="nr-test-email-result"></div>
           </section>
         </aside>
@@ -531,11 +654,13 @@
 
   function applyProviderPreset(provider) {
     const preset = providerPresets[provider] || providerPresets.none;
+
     setValue('email-smtp-host', preset.smtpHost);
     setValue('email-smtp-port', preset.smtpPort);
     setValue('email-secure-mode', preset.secureMode);
     setValue('email-smtp-user', preset.smtpUser);
     setValue('email-smtp-pass', '');
+
     updateProviderHelp();
   }
 
@@ -548,6 +673,7 @@
   function updateProviderStatus(status, text) {
     const el = document.getElementById('nr-provider-status');
     if (!el) return;
+
     el.className = `nr-msg-provider-status ${status}`;
     el.textContent = text;
   }
@@ -555,7 +681,9 @@
   async function loadEmailSettings() {
     try {
       const res = await fetchWithTimeout(`/api/admin/email-settings?shopDomain=${encodeURIComponent(SHOP_DOMAIN)}&t=${Date.now()}`, {}, 12000);
+
       if (!res.ok) throw new Error('Email settings endpoint not installed');
+
       const data = await res.json();
 
       setValue('email-provider', data.provider || 'none');
@@ -582,6 +710,7 @@
     } catch (error) {
       console.warn(error);
       updateProviderStatus('failed', 'Settings endpoint missing');
+
       const help = document.getElementById('email-provider-help');
       if (help) help.textContent = 'The backend email settings endpoint is not installed yet. Install the server update before saving credentials.';
     }
@@ -614,6 +743,7 @@
 
     try {
       updateProviderStatus('not-configured', 'Saving...');
+
       const res = await fetchWithTimeout('/api/admin/email-settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -621,9 +751,11 @@
       }, 20000);
 
       const result = await res.json().catch(() => ({}));
+
       if (!res.ok) throw new Error(result.error || 'Could not save email settings');
 
       setValue('email-smtp-pass', '');
+
       const savedNote = document.getElementById('email-password-saved-note');
       if (savedNote) savedNote.style.display = 'block';
 
@@ -647,13 +779,16 @@
       }, 12000);
 
       const result = await res.json().catch(() => ({}));
+
       if (!res.ok) throw new Error(result.error || 'Could not clear settings');
 
       applyProviderPreset('none');
       setValue('email-provider', 'none');
       setChecked('email-provider-enabled', false);
+
       const savedNote = document.getElementById('email-password-saved-note');
       if (savedNote) savedNote.style.display = 'none';
+
       updateProviderStatus('not-configured', 'Not configured');
       toast('Email credentials cleared.');
     } catch (error) {
@@ -715,6 +850,7 @@
 
     if (isTest) {
       const products = reviewTestProducts.length ? reviewTestProducts : sampleProducts(2, false);
+
       productLinksHtml = `
                             <tr>
                                 <td style="padding:24px 0 0 0;">
@@ -824,6 +960,7 @@
     const wrap = document.getElementById('flow-preview-wrap');
     const desktopBtn = document.getElementById('flow-preview-desktop');
     const mobileBtn = document.getElementById('flow-preview-mobile');
+
     if (wrap) wrap.classList.toggle('mobile', mode === 'mobile');
     if (desktopBtn) desktopBtn.classList.toggle('active', mode === 'desktop');
     if (mobileBtn) mobileBtn.classList.toggle('active', mode === 'mobile');
@@ -892,36 +1029,34 @@
 
   async function pickProducts() {
     const count = getTestCount();
+    const bridge = await getShopifyResourcePickerBridge();
 
-    if (!window.shopify || !window.shopify.resourcePicker) {
-      toast('Shopify product picker unavailable here. Use product search or manual product instead.');
+    if (!bridge) {
+      toast('Shopify App Bridge resource picker is not ready. Use Search Products or check App Bridge setup.');
       return;
     }
 
     try {
-      const selected = await window.shopify.resourcePicker({ type: 'product', multiple: true });
-      if (!selected || !selected.length) return;
-
-      reviewTestProducts = selected.slice(0, count).map((product, index) => {
-        const firstVariant = product.variants && product.variants[0];
-        const firstImage = product.images && product.images[0];
-        return {
-          id: String(product.id || '').split('/').pop() || `selected-product-${index + 1}`,
-          variantId: firstVariant ? String(firstVariant.id || '').split('/').pop() : '',
-          title: product.title || `Selected Product ${index + 1}`,
-          handle: product.handle || '',
-          image: firstImage ? firstImage.originalSrc || firstImage.url || '' : '',
-          quantity: 1,
-          tags: [],
-          metafields: {}
-        };
+      const result = await bridge.resourcePicker({
+        type: 'product',
+        multiple: true,
+        action: 'select'
       });
 
+      const selectedProducts = normalizeResourcePickerSelection(result).slice(0, count);
+
+      if (!selectedProducts.length) {
+        toast('No products selected.');
+        return;
+      }
+
+      reviewTestProducts = selectedProducts;
       renderTestProducts();
       updateAllMessaging();
+      toast(`${selectedProducts.length} product${selectedProducts.length === 1 ? '' : 's'} selected.`);
     } catch (error) {
       console.error(error);
-      toast('Product picker closed.');
+      toast(error && error.message ? error.message : 'Product picker closed or failed.');
     }
   }
 
@@ -930,8 +1065,9 @@
     const resultsEl = document.getElementById('nr-product-search-results');
 
     if (!resultsEl) return;
+
     if (!query) {
-      resultsEl.innerHTML = '<div class="nr-msg-help">Enter a product title or handle to search.</div>';
+      resultsEl.innerHTML = '<div class="nr-msg-help">Enter a product title, handle, or product ID to search.</div>';
       return;
     }
 
@@ -950,23 +1086,25 @@
         return;
       }
 
+      window.__nrProductSearchResults = products;
+
       resultsEl.innerHTML = products.map((product, index) => `
         <div class="nr-product-search-result">
           ${product.image ? `<img src="${escapeHtml(product.image)}" alt="">` : '<div class="nr-review-test-placeholder" style="width:42px;height:42px;"></div>'}
           <div>
             <strong>${escapeHtml(product.title)}</strong>
             <span style="display:block;color:#6b7280;font-size:12px;">ID: ${escapeHtml(product.id)}</span>
+            ${Array.isArray(product.tags) && product.tags.length ? `<span style="display:block;color:#6b7280;font-size:12px;">Tags: ${escapeHtml(product.tags.join(', '))}</span>` : ''}
           </div>
           <button class="nr-msg-secondary-btn" type="button" data-nr-add-search-product="${index}">Add</button>
         </div>
       `).join('');
-
-      window.__nrProductSearchResults = products;
     } catch (error) {
       console.error(error);
+
       resultsEl.innerHTML = `
         <div class="nr-msg-help">
-          Product search is not available yet. You can still use <strong>Add Manual Product</strong>.
+          Product search is not available yet. Use <strong>Select Products</strong> if App Bridge is ready, or <strong>Add Manual Product</strong>.
           <br>Error: ${escapeHtml(error.message)}
         </div>
       `;
@@ -981,6 +1119,7 @@
     if (!id) return;
 
     const variantId = prompt('Variant ID, optional:', '') || '';
+    const tagsRaw = prompt('Preview tags, optional. Separate with commas. Example: Drink, Skincare', '') || '';
 
     addProductToTest({
       id,
@@ -989,7 +1128,7 @@
       handle: '',
       image: '',
       quantity: 1,
-      tags: [],
+      tags: tagsRaw.split(',').map((tag) => tag.trim()).filter(Boolean),
       metafields: {}
     });
   }
@@ -1010,6 +1149,7 @@
           <strong>${escapeHtml(product.title)}</strong>
           <span>Product ID: ${escapeHtml(product.id)}</span>
           ${product.variantId ? `<span>Variant ID: ${escapeHtml(product.variantId)}</span>` : ''}
+          ${Array.isArray(product.tags) && product.tags.length ? `<span>Preview tags: ${escapeHtml(product.tags.join(', '))}</span>` : ''}
           <button type="button" style="margin-top:6px; border:0; background:transparent; color:#d72c0d; cursor:pointer; font-weight:800; padding:0;" data-nr-remove-product="${index}">Remove</button>
         </div>
       </div>
@@ -1048,12 +1188,14 @@
     const options = getTemplateOptions();
     const encoded = encodePreviewData(getPreviewPayload());
     const url = `https://${SHOP_DOMAIN}/pages/${options.pageHandle}?preview=true&preview_data=${encoded}`;
+
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 
   async function copyFlowCode() {
     const output = document.getElementById('flow-code-output');
     if (!output) return;
+
     output.select();
     output.setSelectionRange(0, 999999);
 
@@ -1069,6 +1211,7 @@
   function setTestEmailResult(type, message) {
     const box = document.getElementById('nr-test-email-result');
     if (!box) return;
+
     box.className = `nr-test-email-result ${type}`;
     box.innerHTML = message;
   }
@@ -1158,6 +1301,7 @@
       if (event.target.id === 'email-provider') {
         applyProviderPreset(event.target.value);
       }
+
       if (event.target.matches('input, textarea, select')) updateAllMessaging();
     });
 
@@ -1195,6 +1339,7 @@
       if (!actionButton) return;
 
       const action = actionButton.dataset.nrAction;
+
       if (action === 'copy-flow') copyFlowCode();
       if (action === 'go-template') switchTab('template');
       if (action === 'go-tests') switchTab('tests');
@@ -1213,19 +1358,21 @@
     injectStyles();
 
     const container = findContainer();
+
     if (!container) {
       console.warn('[Nectar Reviews] Messaging container not found.');
       return;
     }
 
     container.innerHTML = renderShell();
+
     bindEvents();
     generateSampleProducts();
     switchTab(currentMsgTab);
     updateAllMessaging();
     loadEmailSettings();
 
-    console.log('[Nectar Reviews] Messaging fixes mounted.');
+    console.log('[Nectar Reviews] Messaging full restored file mounted.');
   }
 
   window.generateFlowCode = updateAllMessaging;
