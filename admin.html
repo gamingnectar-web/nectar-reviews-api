@@ -434,7 +434,219 @@
         padding-top: 18px;
       }
     }
-  </style>
+  
+/* Nectar dashboard + reward discount additions */
+.nr-nav-dropdown {
+  display: grid;
+  gap: 6px;
+}
+
+.nr-dropdown-toggle {
+  display: flex !important;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.nr-nav-subtabs {
+  display: none;
+  padding-left: 12px;
+  gap: 6px;
+}
+
+.nr-nav-dropdown.open .nr-nav-subtabs {
+  display: grid;
+}
+
+.nr-nav-subtab {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nr-nav-subtab.active,
+.nr-nav-subtab:hover {
+  background: #ffffff;
+  color: var(--text);
+}
+
+.nr-dashboard-strip {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 18px;
+  margin-bottom: 28px;
+}
+
+.nr-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.nr-mini-card {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.nr-mini-card p {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.nr-mini-card strong {
+  font-size: 24px;
+  letter-spacing: -0.04em;
+}
+
+.nr-discount-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: #ecfdf3;
+  color: #067647;
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.nr-discount-status.off {
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.nr-action-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.nr-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.nr-field label,
+.nr-toggle-line {
+  display: block;
+  color: var(--text);
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.nr-field input,
+.nr-field select,
+.nr-field textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  font: inherit;
+  background: #fff;
+}
+
+.nr-field textarea {
+  min-height: 150px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.nr-muted {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.nr-code-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.nr-code-table th,
+.nr-code-table td {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.nr-code-table th {
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.nr-badge {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: #f2f4f7;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.nr-badge.used { background: #ecfdf3; color: #067647; }
+.nr-badge.failed { background: #fef3f2; color: #b42318; }
+.nr-badge.expired { background: #fffaeb; color: #b54708; }
+
+.nr-tabbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.nr-tabbar button {
+  border: 1px solid var(--border);
+  background: #fff;
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.nr-tabbar button.active {
+  background: var(--text);
+  color: #fff;
+  border-color: var(--text);
+}
+
+.nr-discount-subview {
+  display: none;
+}
+
+.nr-discount-subview.active {
+  display: block;
+}
+
+@media (max-width: 1100px) {
+  .nr-dashboard-strip,
+  .nr-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .nr-mini-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .nr-mini-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+</style>
 </head>
 
 <body>
@@ -450,7 +662,17 @@
       <nav>
         <div class="nav-group">
           <p class="nav-title">Manage</p>
-          <button class="tab-btn active" onclick="window.tab('v-dash')">Dashboard</button>
+          
+<div class="nr-nav-dropdown open" id="nr-dashboard-dropdown">
+  <button class="tab-btn active nr-dropdown-toggle" onclick="window.tab('v-dash'); window.toggleDashboardNav(true)">
+    <span>Dashboard</span>
+    <span>▾</span>
+  </button>
+  <div class="nr-nav-subtabs">
+    <button class="nr-nav-subtab active" data-nr-subtab="v-dash" onclick="window.tab('v-dash')">Overview</button>
+    <button class="nr-nav-subtab" data-nr-subtab="v-discounts" onclick="window.tab('v-discounts')">Discount Rewards</button>
+  </div>
+</div>
           <button class="tab-btn" onclick="window.tab('v-mgr')">Review Manager</button>
           <button class="tab-btn" onclick="window.tab('v-msg')">Messaging &amp; Campaigns ✉️</button>
           <button class="tab-btn" onclick="window.tab('v-trash')">Trash 🗑️</button>
@@ -492,6 +714,66 @@
 
         <div id="nr-dashboard-analytics-mount"></div>
 
+<div class="nr-dashboard-strip">
+  <div class="panel">
+    <div class="nr-action-row" style="justify-content: space-between; margin-bottom: 16px;">
+      <div>
+        <h3 style="margin:0;">Reviews Summary</h3>
+        <p class="nr-muted" style="margin:6px 0 0;">Live overview of review performance and moderation workload.</p>
+      </div>
+      <button class="secondary-btn" onclick="window.tab('v-mgr')">Open Review Manager</button>
+    </div>
+
+    <div class="nr-mini-grid">
+      <div class="nr-mini-card">
+        <p>Total</p>
+        <strong id="dash-reviews-total">0</strong>
+      </div>
+      <div class="nr-mini-card">
+        <p>Live</p>
+        <strong id="dash-reviews-live">0</strong>
+      </div>
+      <div class="nr-mini-card">
+        <p>Pending</p>
+        <strong id="dash-reviews-pending">0</strong>
+      </div>
+      <div class="nr-mini-card">
+        <p>Average</p>
+        <strong id="dash-reviews-average">0.0</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="nr-action-row" style="justify-content: space-between; margin-bottom: 16px;">
+      <div>
+        <h3 style="margin:0;">Discount Rewards</h3>
+        <p class="nr-muted" style="margin:6px 0 0;">5% review reward codes, 60-day expiry and one-use tracking.</p>
+      </div>
+      <span id="dash-discount-status" class="nr-discount-status off">Disabled</span>
+    </div>
+
+    <div class="nr-mini-grid" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
+      <div class="nr-mini-card">
+        <p>Issued</p>
+        <strong id="dash-discounts-issued">0</strong>
+      </div>
+      <div class="nr-mini-card">
+        <p>Used</p>
+        <strong id="dash-discounts-used">0</strong>
+      </div>
+      <div class="nr-mini-card">
+        <p>Active</p>
+        <strong id="dash-discounts-active">0</strong>
+      </div>
+    </div>
+
+    <div class="nr-action-row" style="margin-top: 16px;">
+      <button class="primary-btn" onclick="window.tab('v-discounts')">Configure Discounts</button>
+    </div>
+  </div>
+</div>
+
         <div class="grid-2">
           <div class="panel">
             <h3 style="margin-top: 0;">Review Sources</h3>
@@ -502,7 +784,158 @@
         </div>
       </section>
 
-      <section id="v-mgr" class="view">
+      
+<section id="v-discounts" class="view">
+  <h2 class="page-title">Discount Rewards</h2>
+
+  <div class="nr-tabbar">
+    <button class="active" data-reward-tab="settings" onclick="window.rewardSubTab('settings')">Settings</button>
+    <button data-reward-tab="codes" onclick="window.rewardSubTab('codes')">Generated Codes</button>
+    <button data-reward-tab="function" onclick="window.rewardSubTab('function')">Function Outline</button>
+  </div>
+
+  <div id="reward-settings" class="nr-discount-subview active">
+    <div class="grid-2">
+      <div class="panel">
+        <h3 style="margin-top: 0;">Review Reward Settings</h3>
+        <p class="nr-muted">Create unique Shopify discount codes when a customer leaves an eligible review.</p>
+
+        <div class="nr-form-grid">
+          <div class="nr-field">
+            <label>Enable reward codes</label>
+            <label class="nr-toggle-line">
+              <input type="checkbox" id="reward-enabled" />
+              Issue codes automatically
+            </label>
+          </div>
+
+          <div class="nr-field">
+            <label>Reward percentage</label>
+            <input id="reward-percentage" type="number" min="1" max="100" value="5" />
+          </div>
+
+          <div class="nr-field">
+            <label>Expiry window, days</label>
+            <input id="reward-expiry-days" type="number" min="1" max="365" value="60" />
+          </div>
+
+          <div class="nr-field">
+            <label>Code prefix</label>
+            <input id="reward-prefix" value="NECTAR" />
+          </div>
+
+          <div class="nr-field">
+            <label>Issue when review status is</label>
+            <select id="reward-trigger-status">
+              <option value="accepted">Accepted</option>
+              <option value="pending">Submitted / Pending</option>
+            </select>
+          </div>
+
+          <div class="nr-field">
+            <label>Verification rule</label>
+            <label class="nr-toggle-line">
+              <input type="checkbox" id="reward-verified-only" checked />
+              Verified purchases only
+            </label>
+          </div>
+        </div>
+
+        <h4>Combine with</h4>
+        <div class="nr-form-grid">
+          <label class="nr-toggle-line"><input type="checkbox" id="reward-combine-order" checked /> Order discounts</label>
+          <label class="nr-toggle-line"><input type="checkbox" id="reward-combine-product" checked /> Product / BOGO discounts</label>
+          <label class="nr-toggle-line"><input type="checkbox" id="reward-combine-shipping" checked /> Free shipping discounts</label>
+        </div>
+
+        <div class="nr-action-row" style="margin-top: 18px;">
+          <button class="primary-btn" onclick="window.saveRewardSettings()">Save Reward Settings</button>
+          <button class="secondary-btn" onclick="window.loadRewardSettings()">Refresh</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 style="margin-top: 0;">Reward Email Format</h3>
+        <p class="nr-muted">Use this in the email after a review reward is issued. The API stores the actual code per customer.</p>
+
+        <div class="nr-field">
+          <label>Email copy</label>
+          <textarea id="reward-email-template">Thanks for leaving a review.
+
+Here is your unique 5% off code:
+
+{{ discount_code }}
+
+It expires in {{ expiry_days }} days and can only be used once.</textarea>
+        </div>
+
+        <div class="nr-action-row" style="margin-top: 12px;">
+          <button class="secondary-btn" onclick="window.copyRewardEmailTemplate()">Copy Template</button>
+        </div>
+
+        <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;" />
+
+        <h4>Environment required</h4>
+        <p class="nr-muted">
+          Add <code>SHOPIFY_REVIEW_REWARD_FUNCTION_ID</code> and make sure your app has <code>write_discounts</code>.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div id="reward-codes" class="nr-discount-subview">
+    <div class="panel">
+      <div class="nr-action-row" style="justify-content: space-between;">
+        <div>
+          <h3 style="margin:0;">Generated Reward Codes</h3>
+          <p class="nr-muted" style="margin:6px 0 0;">Latest review discount codes generated by the app.</p>
+        </div>
+        <button class="secondary-btn" onclick="window.loadRewardCodes()">Refresh Codes</button>
+      </div>
+
+      <div style="overflow:auto; margin-top:18px;">
+        <table class="nr-code-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Email</th>
+              <th>Status</th>
+              <th>Expires</th>
+              <th>Review</th>
+            </tr>
+          </thead>
+          <tbody id="reward-code-list">
+            <tr><td colspan="5">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="reward-function" class="nr-discount-subview">
+    <div class="panel">
+      <h3 style="margin-top: 0;">Discount Function Outline</h3>
+      <p class="nr-muted">
+        This is the checkout-side logic. The server creates a code discount with config metafields; the Function reads those metafields and returns a 5% order-level reward.
+      </p>
+
+      <div class="nr-field">
+        <label>Function behaviour</label>
+        <textarea readonly>Input:
+- discount metafield: nectar_reviews.reward_config
+- buyer identity email, when available
+
+Output:
+- order subtotal discount
+- percentage from config, default 5
+- no product-line discount, to reduce clashes with BOGO/free item logic
+- combine flags controlled when the code is created</textarea>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="v-mgr" class="view">
         <h2 class="page-title">Review Manager</h2>
 
         <div class="filter-row">

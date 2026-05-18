@@ -700,4 +700,221 @@ window.copyFlowCode = function() {
     window.showToast('Copied to clipboard!');
 };
 
+
+
+/* -------------------------------------------------------------------------- */
+/* Dashboard dropdown + review reward discount admin */
+/* -------------------------------------------------------------------------- */
+
+(function () {
+  const q = (id) => document.getElementById(id);
+
+  window.toggleDashboardNav = function(forceOpen) {
+    const dropdown = q('nr-dashboard-dropdown');
+    if (!dropdown) return;
+    if (forceOpen === true) dropdown.classList.add('open');
+    else dropdown.classList.toggle('open');
+  };
+
+  window.rewardSubTab = function(id) {
+    document.querySelectorAll('.nr-discount-subview').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('[data-reward-tab]').forEach(el => el.classList.remove('active'));
+
+    const target = q('reward-' + id);
+    const button = document.querySelector('[data-reward-tab="' + id + '"]');
+
+    if (target) target.classList.add('active');
+    if (button) button.classList.add('active');
+
+    if (id === 'codes') window.loadRewardCodes();
+  };
+
+  const originalTab = window.tab;
+  window.tab = function(id) {
+    if (typeof originalTab === 'function') originalTab(id);
+
+    const isDashboardArea = id === 'v-dash' || id === 'v-discounts';
+    const dropdown = q('nr-dashboard-dropdown');
+    const dropdownButton = dropdown ? dropdown.querySelector('.nr-dropdown-toggle') : null;
+
+    if (dropdown) dropdown.classList.toggle('open', isDashboardArea);
+    if (dropdownButton) dropdownButton.classList.toggle('active', isDashboardArea);
+
+    document.querySelectorAll('.nr-nav-subtab').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.nrSubtab === id);
+    });
+
+    if (id === 'v-dash') window.loadDashboardOverview();
+    if (id === 'v-discounts') {
+      window.loadRewardSettings();
+      window.loadRewardCodes();
+    }
+  };
+
+  function number(value, fallback = 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  function setText(id, value) {
+    const el = q(id);
+    if (el) el.textContent = value;
+  }
+
+  window.loadDashboardOverview = async function() {
+    try {
+      const res = await fetch(`${API}/admin/dashboard?shopDomain=${encodeURIComponent(SHOP_DOMAIN)}&t=${Date.now()}`);
+      if (!res.ok) return;
+      const json = await res.json();
+
+      setText('dash-reviews-total', json.reviews?.total || 0);
+      setText('dash-reviews-live', json.reviews?.live || 0);
+      setText('dash-reviews-pending', json.reviews?.pending || 0);
+      setText('dash-reviews-average', number(json.reviews?.averageRating).toFixed(1));
+
+      setText('dash-discounts-issued', json.rewards?.issued || 0);
+      setText('dash-discounts-used', json.rewards?.used || 0);
+      setText('dash-discounts-active', json.rewards?.active || 0);
+
+      const status = q('dash-discount-status');
+      if (status) {
+        const enabled = !!json.rewardSettings?.enabled;
+        status.textContent = enabled ? 'Enabled' : 'Disabled';
+        status.classList.toggle('off', !enabled);
+      }
+    } catch (error) {
+      console.warn('Dashboard overview failed:', error);
+    }
+  };
+
+  window.loadRewardSettings = async function() {
+    try {
+      const res = await fetch(`${API}/admin/review-reward-settings?shopDomain=${encodeURIComponent(SHOP_DOMAIN)}&t=${Date.now()}`);
+      if (!res.ok) return;
+      const s = await res.json();
+
+      if (q('reward-enabled')) q('reward-enabled').checked = !!s.enabled;
+      if (q('reward-percentage')) q('reward-percentage').value = s.percentage ?? 5;
+      if (q('reward-expiry-days')) q('reward-expiry-days').value = s.expiryDays ?? 60;
+      if (q('reward-prefix')) q('reward-prefix').value = s.prefix || 'NECTAR';
+      if (q('reward-trigger-status')) q('reward-trigger-status').value = s.triggerStatus || 'accepted';
+      if (q('reward-verified-only')) q('reward-verified-only').checked = s.verifiedOnly !== false;
+      if (q('reward-combine-order')) q('reward-combine-order').checked = s.combinesWith?.orderDiscounts !== false;
+      if (q('reward-combine-product')) q('reward-combine-product').checked = s.combinesWith?.productDiscounts !== false;
+      if (q('reward-combine-shipping')) q('reward-combine-shipping').checked = s.combinesWith?.shippingDiscounts !== false;
+      if (q('reward-email-template')) q('reward-email-template').value = s.emailTemplate || q('reward-email-template').value;
+    } catch (error) {
+      console.warn('Reward settings load failed:', error);
+    }
+  };
+
+  window.saveRewardSettings = async function() {
+    const payload = {
+      shopDomain: SHOP_DOMAIN,
+      enabled: !!q('reward-enabled')?.checked,
+      percentage: number(q('reward-percentage')?.value, 5),
+      expiryDays: number(q('reward-expiry-days')?.value, 60),
+      prefix: (q('reward-prefix')?.value || 'NECTAR').trim().toUpperCase(),
+      triggerStatus: q('reward-trigger-status')?.value || 'accepted',
+      verifiedOnly: !!q('reward-verified-only')?.checked,
+      combinesWith: {
+        orderDiscounts: !!q('reward-combine-order')?.checked,
+        productDiscounts: !!q('reward-combine-product')?.checked,
+        shippingDiscounts: !!q('reward-combine-shipping')?.checked
+      },
+      emailTemplate: q('reward-email-template')?.value || ''
+    };
+
+    try {
+      const res = await fetch(`${API}/admin/review-reward-settings`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Could not save reward settings');
+      }
+
+      window.showToast('Reward settings saved');
+      window.loadDashboardOverview();
+    } catch (error) {
+      alert(error.message);
+    }
+  };
+
+  window.loadRewardCodes = async function() {
+    const tbody = q('reward-code-list');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
+
+    try {
+      const res = await fetch(`${API}/admin/review-rewards?shopDomain=${encodeURIComponent(SHOP_DOMAIN)}&t=${Date.now()}`);
+      if (!res.ok) throw new Error('Could not load reward codes');
+      const rows = await res.json();
+
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5">No reward codes have been generated yet.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = rows.map(row => {
+        const expires = row.endsAt ? new Date(row.endsAt).toLocaleDateString() : '—';
+        const status = row.status || 'issued';
+        return `
+          <tr>
+            <td><strong>${row.code || '—'}</strong></td>
+            <td>${row.email || '—'}</td>
+            <td><span class="nr-badge ${status}">${status}</span></td>
+            <td>${expires}</td>
+            <td>${row.reviewId || '—'}</td>
+          </tr>
+        `;
+      }).join('');
+    } catch (error) {
+      tbody.innerHTML = '<tr><td colspan="5">Could not load reward codes.</td></tr>';
+    }
+  };
+
+  window.copyRewardEmailTemplate = function() {
+    const el = q('reward-email-template');
+    if (!el) return;
+    el.select();
+    document.execCommand('copy');
+    window.showToast('Reward email template copied');
+  };
+
+  const originalUpdateStatus = window.updateStatus;
+  window.updateStatus = async function(id, status) {
+    if (typeof originalUpdateStatus === 'function') {
+      await originalUpdateStatus(id, status);
+    }
+
+    if (status === 'accepted') {
+      try {
+        const res = await fetch(`${API}/reviews/${id}/reward`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ shopDomain: SHOP_DOMAIN })
+        });
+
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.created) window.showToast('Review reward discount issued');
+        if (res.ok && json.skipped) console.log('Reward skipped:', json.reason);
+      } catch (error) {
+        console.warn('Reward issue failed:', error);
+      }
+    }
+
+    window.loadDashboardOverview();
+  };
+
+  setTimeout(() => {
+    window.loadDashboardOverview();
+    window.loadRewardSettings();
+  }, 600);
+})();
+
 window.load();
