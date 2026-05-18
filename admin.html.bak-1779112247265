@@ -741,175 +741,6 @@
   display: none !important;
 }
 
-
-/* Final clean Nectar sidebar + discount rewards UI */
-.nr-sidebar-group {
-  display: grid;
-  gap: 6px;
-  margin: 8px 0 10px;
-}
-
-.nr-group-toggle {
-  width: 100%;
-  display: flex !important;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.nr-group-items {
-  display: none;
-  padding-left: 10px;
-  gap: 6px;
-}
-
-.nr-sidebar-group.open .nr-group-items {
-  display: grid;
-}
-
-.nr-group-caret {
-  font-size: 11px;
-  opacity: 0.7;
-}
-
-.nr-nav-subtab {
-  width: 100%;
-  border: 0;
-  background: transparent;
-  color: var(--text-light, #64748b);
-  text-align: left;
-  padding: 10px 12px;
-  border-radius: 10px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.nr-nav-subtab.active,
-.nr-nav-subtab:hover {
-  background: #ffffff;
-  color: var(--text, #0f172a);
-}
-
-.nr-nav-parent-active {
-  background: #ffffff !important;
-  color: var(--text, #0f172a) !important;
-}
-
-.nr-tabbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 18px;
-}
-
-.nr-tabbar button {
-  border: 1px solid var(--border, #e2e8f0);
-  background: #fff;
-  padding: 10px 14px;
-  border-radius: 999px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.nr-tabbar button.active {
-  background: var(--text, #0f172a);
-  color: #fff;
-  border-color: var(--text, #0f172a);
-}
-
-.nr-discount-subview {
-  display: none;
-}
-
-.nr-discount-subview.active {
-  display: block;
-}
-
-.nr-form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.nr-field label,
-.nr-toggle-line {
-  display: block;
-  color: var(--text, #0f172a);
-  font-weight: 800;
-  margin-bottom: 8px;
-}
-
-.nr-field input,
-.nr-field select,
-.nr-field textarea {
-  width: 100%;
-  border: 1px solid var(--border, #e2e8f0);
-  border-radius: 12px;
-  padding: 12px;
-  font: inherit;
-  background: #fff;
-}
-
-.nr-field textarea {
-  min-height: 150px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
-.nr-muted {
-  color: var(--text-light, #64748b);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.nr-code-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.nr-code-table th,
-.nr-code-table td {
-  text-align: left;
-  padding: 12px;
-  border-bottom: 1px solid var(--border, #e2e8f0);
-  font-size: 13px;
-}
-
-.nr-code-table th {
-  color: var(--text-light, #64748b);
-  text-transform: uppercase;
-  font-size: 11px;
-}
-
-.nr-badge {
-  display: inline-flex;
-  border-radius: 999px;
-  padding: 5px 9px;
-  background: #f2f4f7;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.nr-badge.used,
-.nr-badge.deleted {
-  background: #ecfdf3;
-  color: #067647;
-}
-
-.nr-badge.failed {
-  background: #fef3f2;
-  color: #b42318;
-}
-
-.nr-badge.expired {
-  background: #fffaeb;
-  color: #b54708;
-}
-
-@media (max-width: 900px) {
-  .nr-form-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 </style>
 </head>
 
@@ -924,43 +755,26 @@
       </div>
 
       <nav>
-        
-<div class="nav-group">
-  <p class="nav-title">Manage</p>
-
-  <button class="tab-btn active" data-final-nav-target="v-dash" onclick="window.tab('v-dash')">
-    Dashboard Overview
+        <div class="nav-group">
+          <p class="nav-title">Manage</p>
+          
+<div class="nr-nav-dropdown open" id="nr-dashboard-dropdown">
+  <button class="tab-btn active nr-dropdown-toggle" onclick="window.tab('v-dash'); window.toggleDashboardNav(true)">
+    <span>Dashboard</span>
+    <span>▾</span>
   </button>
-
-  <div class="nr-sidebar-group open" id="nr-reviews-group">
-    <button class="tab-btn nr-group-toggle" type="button" onclick="window.toggleNectarNavGroup('nr-reviews-group')">
-      <span>Reviews</span>
-      <span class="nr-group-caret">▾</span>
-    </button>
-
-    <div class="nr-group-items">
-      <button class="nr-nav-subtab" data-final-nav-target="v-mgr" onclick="window.tab('v-mgr')">Review Manager</button>
-      <button class="nr-nav-subtab" data-final-nav-target="v-msg" onclick="window.tab('v-msg')">Messaging &amp; Campaigns ✉️</button>
-      <button class="nr-nav-subtab" data-final-nav-target="v-trash" onclick="window.tab('v-trash')">Trash 🗑️</button>
-      <button class="nr-nav-subtab" data-final-nav-target="v-import" onclick="window.tab('v-import')">Import CSV</button>
-    </div>
-  </div>
-
-  <div class="nr-sidebar-group" id="nr-discounts-group">
-    <button class="tab-btn nr-group-toggle" type="button" onclick="window.toggleNectarNavGroup('nr-discounts-group')">
-      <span>Discount Rewards</span>
-      <span class="nr-group-caret">▾</span>
-    </button>
-
-    <div class="nr-group-items">
-      <button class="nr-nav-subtab" data-final-nav-target="v-discounts-settings" onclick="window.tab('v-discounts'); window.rewardSubTab('settings')">Settings</button>
-      <button class="nr-nav-subtab" data-final-nav-target="v-discounts-codes" onclick="window.tab('v-discounts'); window.rewardSubTab('codes')">Generated Codes</button>
-      <button class="nr-nav-subtab" data-final-nav-target="v-discounts-function" onclick="window.tab('v-discounts'); window.rewardSubTab('function')">Function Outline</button>
-    </div>
+  <div class="nr-nav-subtabs">
+    <button class="nr-nav-subtab active" data-nr-subtab="v-dash" onclick="window.tab('v-dash')">Overview</button>
+    <button class="nr-nav-subtab" data-nr-subtab="v-discounts" onclick="window.tab('v-discounts')">Discount Rewards</button>
   </div>
 </div>
+          <button class="tab-btn" onclick="window.tab('v-mgr')">Review Manager</button>
+          <button class="tab-btn" onclick="window.tab('v-msg')">Messaging &amp; Campaigns ✉️</button>
+          <button class="tab-btn" onclick="window.tab('v-trash')">Trash 🗑️</button>
+          <button class="tab-btn" onclick="window.tab('v-import')">Import CSV</button>
+        </div>
 
-<div class="nav-group">
+        <div class="nav-group">
           <p class="nav-title">Configuration</p>
           <button class="tab-btn" onclick="window.tab('v-settings')">Rules &amp; Settings</button>
           <button class="tab-btn" onclick="window.tab('v-style')">Visual Customiser</button>
