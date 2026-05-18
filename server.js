@@ -2421,6 +2421,382 @@ app.post('/api/admin/review-rewards/manual', async (req, res) => {
   }
 });
 
+/* -------------------------------------------------------------------------- */
+/* Nectar reward discount live backend                                        */
+/* -------------------------------------------------------------------------- */
+
+const reviewRewardSettingSchema = new mongoose.Schema({
+  shopDomain: { type: String, required: true, unique: true, index: true },
+  enabled: { type: Boolean, default: false },
+  percentage: { type: Number, default: 5 },
+  expiryDays: { type: Number, default: 60 },
+  prefix: { type: String, default: 'GN' },
+  triggerStatus: { type: String, enum: ['pending', 'accepted'], default: 'accepted' },
+  verifiedOnly: { type: Boolean, default: true },
+  combinesWith: {
+    orderDiscounts: { type: Boolean, default: true },
+    productDiscounts: { type: Boolean, default: true },
+    shippingDiscounts: { type: Boolean, default: true }
+  },
+  emailTemplate: {
+    type: String,
+    default: 'Thanks for leaving a review.\n\nHere is your unique {{ percentage }}% off code:\n\n{{ discount_code }}\n\nIt expires in {{ expiry_days }} days and can only be used once.'
+  }
+}, { timestamps: true });
+
+const ReviewRewardSetting =
+  mongoose.models.ReviewRewardSetting ||
+  mongoose.model('ReviewRewardSetting', reviewRewardSettingSchema, 'review_reward_settings');
+
+const reviewRewardCodeSchema = new mongoose.Schema({
+  shopDomain: { type: String, required: true, index: true },
+  reviewId: { type: mongoose.Schema.Types.ObjectId, ref: 'Review', default: null, index: true },
+  email: { type: String, required: true, lowercase: true, trim: true, index: true },
+  code: { type: String, required: true, unique: true, index: true },
+  shopifyDiscountId: { type: String, default: '' },
+  percentage: { type: Number, default: 5 },
+  status: {
+    type: String,
+    enum: ['issued', 'used', 'expired', 'deleted', 'failed'],
+    default: 'issued',
+    index: true
+  },
+  failureReason: { type: String, default: '' },
+  startsAt: { type: Date, default: Date.now },
+  endsAt: { type: Date, required: true },
+  usedAt: { type: Date, default: null },
+  deletedAt: { type: Date, default: null },
+  orderId: { type: String, default: '' },
+  manual: { type: Boolean, default: false }
+}, { timestamps: true });
+
+const ReviewRewardCode =
+  mongoose.models.ReviewRewardCode ||
+  mongoose.model('ReviewRewardCode', reviewRewardCodeSchema, 'review_reward_codes');
+
+function defaultRewardSettings(shopDomain) {
+  return {
+    shopDomain,
+    enabled: false,
+    percentage: 5,
+    expiryDays: 60,
+    prefix: 'GN',
+    triggerStatus: 'accepted',
+    verifiedOnly: true,
+    combinesWith: {
+      orderDiscounts: true,
+      productDiscounts: true,
+      shippingDiscounts: true
+    },
+    emailTemplate: 'Thanks for leaving a review.\n\nHere is your unique {{ percentage }}% off code:\n\n{{ discount_code }}\n\nIt expires in {{ expiry_days }} days and can only be used once.'
+  };
+}
+
+function normaliseRewardSettings(raw, shopDomain) {
+  const base = defaultRewardSettings(shopDomain);
+  const s = raw ? (raw.toObject ? raw.toObject() : raw) : {};
+
+  return {
+    ...base,
+    ...s,
+    percentage: Math.max(1, Math.min(100, Number(s.percentage || base.percentage))),
+    expiryDays: Math.max(1, Math.min(365, Number(s.expiryDays || base.expiryDays))),
+    prefix: String(s.prefix || base.prefix).replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 18) || 'GN',
+    combinesWith: {
+      ...base.combinesWith,
+      ...(s.combinesWith || {})
+    }
+  };
+}
+
+function generateRewardCode(prefix = 'GN') {
+  return `${prefix}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+}
+
+function sanitizeRewardCode(raw) {
+  return String(raw || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 40);
+}
+
+async function createShopifyBasicRewardDiscount({ shopDomain, code, settings, startsAt, endsAt }) {
+  const mutation = `
+    mutation CreateBasicRewardCode($basicCodeDiscount: DiscountCodeBasicInput!) {
+      discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
+        codeDiscountNode {
+          id
+          codeDiscount {
+            ... on DiscountCodeBasic {
+              title
+              status
+              startsAt
+              endsAt
+              codes(first: 1) {
+                nodes { code }
+              }
+            }
+          }
+        }
+        userErrors {
+          field
+          message
+          code
+        }
+      }
+    }
+  `;
+
+  const percentageDecimal = Math.max(0.01, Math.min(1, Number(settings.percentage || 5) / 100));
+
+  const variables = {
+    basicCodeDiscount: {
+      title: `Nectar review reward - ${code}`,
+      code,
+      startsAt: startsAt.toISOString(),
+      endsAt: endsAt.toISOString(),
+      usageLimit: 1,
+      appliesOncePerCustomer: true,
+      customerSelection: { all: true },
+      customerGets: {
+        value: { percentage: percentageDecimal },
+        items: { all: true }
+      },
+      combinesWith: settings.combinesWith || {
+        orderDiscounts: true,
+        productDiscounts: true,
+        shippingDiscounts: true
+      }
+    }
+  };
+
+  const apiVersion = process.env.SHOPIFY_API_VERSION || '2026-04';
+
+  const json = await shopifyFetch(`/admin/api/${apiVersion}/graphql.json`, {
+    shopDomain,
+    method: 'POST',
+    body: JSON.stringify({ query: mutation, variables })
+  });
+
+  const errors = json.data?.discountCodeBasicCreate?.userErrors || [];
+
+  if (errors.length) {
+    throw new Error(errors.map((error) => error.message).join(', '));
+  }
+
+  const node = json.data?.discountCodeBasicCreate?.codeDiscountNode;
+
+  if (!node?.id) {
+    throw new Error('Shopify did not return a discount ID');
+  }
+
+  return {
+    discountId: node.id,
+    status: node.codeDiscount?.status || 'ACTIVE'
+  };
+}
+
+async function createRewardForEmail({ shopDomain, email, reviewId = null, manual = false, requested = {} }) {
+  const savedSettings = await ReviewRewardSetting.findOne({ shopDomain });
+  const settings = normaliseRewardSettings(savedSettings, shopDomain);
+
+  if (requested.percentage) settings.percentage = Math.max(1, Math.min(100, Number(requested.percentage)));
+  if (requested.expiryDays) settings.expiryDays = Math.max(1, Math.min(365, Number(requested.expiryDays)));
+  if (requested.prefix) settings.prefix = String(requested.prefix).replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 18) || settings.prefix;
+
+  const startsAt = new Date();
+  const endsAt = new Date(startsAt.getTime() + settings.expiryDays * 24 * 60 * 60 * 1000);
+
+  let code = sanitizeRewardCode(requested.code);
+
+  if (!code) {
+    for (let i = 0; i < 10; i += 1) {
+      const candidate = generateRewardCode(settings.prefix);
+      const exists = await ReviewRewardCode.findOne({ code: candidate }).lean();
+      if (!exists) {
+        code = candidate;
+        break;
+      }
+    }
+  }
+
+  if (!code) throw new Error('Could not generate a unique reward code');
+
+  const existing = await ReviewRewardCode.findOne({ code }).lean();
+  if (existing) throw new Error('That reward code already exists');
+
+  const reward = await ReviewRewardCode.create({
+    shopDomain,
+    reviewId,
+    email,
+    code,
+    percentage: settings.percentage,
+    startsAt,
+    endsAt,
+    manual,
+    status: 'issued'
+  });
+
+  try {
+    const shopifyDiscount = await createShopifyBasicRewardDiscount({
+      shopDomain,
+      code,
+      settings,
+      startsAt,
+      endsAt
+    });
+
+    reward.shopifyDiscountId = shopifyDiscount.discountId;
+    reward.status = 'issued';
+    await reward.save();
+
+    return reward;
+  } catch (error) {
+    reward.status = 'failed';
+    reward.failureReason = error.message || 'Shopify discount creation failed';
+    await reward.save();
+    throw error;
+  }
+}
+
+app.get('/api/admin/review-reward-settings', async (req, res) => {
+  try {
+    const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop);
+
+    if (!shopDomain) return res.status(400).json({ error: 'shopDomain is required' });
+
+    const settings = await ReviewRewardSetting.findOne({ shopDomain });
+    return res.json(normaliseRewardSettings(settings, shopDomain));
+  } catch (error) {
+    console.error('Load review reward settings failed:', error);
+    return res.status(500).json({ error: 'Could not load review reward settings' });
+  }
+});
+
+app.patch('/api/admin/review-reward-settings', async (req, res) => {
+  try {
+    const shopDomain = cleanShopDomain(req.body.shopDomain || req.query.shopDomain);
+
+    if (!shopDomain) return res.status(400).json({ error: 'shopDomain is required' });
+
+    const incoming = normaliseRewardSettings(req.body || {}, shopDomain);
+
+    const saved = await ReviewRewardSetting.findOneAndUpdate(
+      { shopDomain },
+      { $set: incoming },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    return res.json(normaliseRewardSettings(saved, shopDomain));
+  } catch (error) {
+    console.error('Save review reward settings failed:', error);
+    return res.status(500).json({ error: error.message || 'Could not save review reward settings' });
+  }
+});
+
+app.get('/api/admin/review-rewards', async (req, res) => {
+  try {
+    const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop);
+
+    if (!shopDomain) return res.status(400).json({ error: 'shopDomain is required' });
+
+    const rewards = await ReviewRewardCode.find({ shopDomain })
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+
+    return res.json(rewards.map((reward) => ({
+      id: reward._id,
+      reviewId: reward.reviewId,
+      email: reward.email,
+      code: reward.code,
+      status: reward.status,
+      percentage: reward.percentage,
+      startsAt: reward.startsAt,
+      endsAt: reward.endsAt,
+      usedAt: reward.usedAt,
+      failureReason: reward.failureReason,
+      manual: reward.manual
+    })));
+  } catch (error) {
+    console.error('Load review rewards failed:', error);
+    return res.status(500).json({ error: 'Could not load review rewards' });
+  }
+});
+
+app.post('/api/admin/review-rewards/manual', async (req, res) => {
+  try {
+    const shopDomain = cleanShopDomain(req.body.shopDomain || req.query.shopDomain);
+    const email = String(req.body.email || '').trim().toLowerCase();
+
+    if (!shopDomain) return res.status(400).json({ error: 'shopDomain is required' });
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'A valid customer email is required' });
+    }
+
+    const reward = await createRewardForEmail({
+      shopDomain,
+      email,
+      manual: true,
+      requested: req.body || {}
+    });
+
+    return res.json({
+      created: true,
+      reward: {
+        id: reward._id,
+        reviewId: reward.reviewId,
+        email: reward.email,
+        code: reward.code,
+        status: reward.status,
+        percentage: reward.percentage,
+        startsAt: reward.startsAt,
+        endsAt: reward.endsAt,
+        shopifyDiscountId: reward.shopifyDiscountId
+      }
+    });
+  } catch (error) {
+    console.error('Manual review reward creation failed:', error);
+    return res.status(500).json({ error: error.message || 'Could not create manual reward code' });
+  }
+});
+
+app.post('/api/reviews/:id/reward', async (req, res) => {
+  try {
+    const review = await Review.findById(req.params.id);
+
+    if (!review) return res.status(404).json({ error: 'Review not found' });
+
+    const shopDomain = cleanShopDomain(req.body?.shopDomain || req.query.shopDomain || review.shopDomain);
+    const settings = normaliseRewardSettings(await ReviewRewardSetting.findOne({ shopDomain }), shopDomain);
+
+    if (!settings.enabled) return res.json({ skipped: true, reason: 'reward_settings_disabled' });
+    if (!review.email) return res.json({ skipped: true, reason: 'review_has_no_email' });
+    if (settings.verifiedOnly && !review.verifiedPurchase) return res.json({ skipped: true, reason: 'not_verified_purchase' });
+    if (settings.triggerStatus === 'accepted' && review.status !== 'accepted') {
+      return res.json({ skipped: true, reason: 'review_not_accepted' });
+    }
+
+    const existing = await ReviewRewardCode.findOne({ shopDomain, reviewId: review._id }).lean();
+
+    if (existing) {
+      return res.json({ skipped: true, reason: 'reward_already_exists', reward: existing });
+    }
+
+    const reward = await createRewardForEmail({
+      shopDomain,
+      email: String(review.email).toLowerCase(),
+      reviewId: review._id,
+      manual: false,
+      requested: {}
+    });
+
+    return res.json({ created: true, reward });
+  } catch (error) {
+    console.error('Issue review reward failed:', error);
+    return res.status(500).json({ error: error.message || 'Could not issue review reward' });
+  }
+});
+
+
+
 
 
 
