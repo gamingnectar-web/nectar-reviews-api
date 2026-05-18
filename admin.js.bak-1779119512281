@@ -709,10 +709,206 @@ window.load();
 
 
 /* -------------------------------------------------------------------------- */
-/* HARD RESET fast top tabs + contextual side tabs                            */
+/* Manual reward issue button */
 /* -------------------------------------------------------------------------- */
 
 (function () {
+  if (window.__nectarManualRewardButtonLoaded) return;
+  window.__nectarManualRewardButtonLoaded = true;
+
+  function toast(message) {
+    if (typeof window.showToast === 'function') {
+      window.showToast(message);
+    } else {
+      alert(message);
+    }
+  }
+
+  function apiBase() {
+    return typeof API !== 'undefined' && API ? API : '/api';
+  }
+
+  function shopDomain() {
+    if (typeof SHOP_DOMAIN !== 'undefined' && SHOP_DOMAIN) return SHOP_DOMAIN;
+
+    try {
+      const url = new URL(window.location.href);
+      return url.searchParams.get('shopDomain') || url.searchParams.get('shop') || '';
+    } catch (error) {
+      return '';
+    }
+  }
+
+  function humanReason(reason) {
+    return String(reason || 'unknown')
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, letter => letter.toUpperCase());
+  }
+
+  function extractReviewId(button) {
+    const containerId = button.closest('[data-review-id]')?.getAttribute('data-review-id');
+    if (containerId) return containerId;
+
+    const onclick = button.getAttribute('onclick') || '';
+    const match = onclick.match(/updateStatus\s*\(\s*['"]([^'"]+)['"]/);
+    return match ? match[1] : '';
+  }
+
+  function getReviewContainer(button) {
+    return (
+      button.closest('tr') ||
+      button.closest('.review-card') ||
+      button.closest('.review-item') ||
+      button.closest('.panel') ||
+      button.parentElement
+    );
+  }
+
+  window.issueReviewReward = async function(reviewId, button) {
+    if (!reviewId) {
+      toast('Could not find review ID for this row.');
+      return;
+    }
+
+    const originalText = button ? button.textContent : '';
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Issuing...';
+    }
+
+    try {
+      const res = await fetch(apiBase() + '/reviews/' + encodeURIComponent(reviewId) + '/reward', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopDomain: shopDomain() })
+      });
+
+      const json = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(json.error || 'Could not issue reward code');
+      }
+
+      if (json.created) {
+        toast('Reward code issued');
+        if (button) button.textContent = 'Reward Issued';
+      } else if (json.skipped) {
+        toast('Reward skipped: ' + humanReason(json.reason));
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText || 'Issue Reward';
+        }
+      } else {
+        toast('Reward request completed');
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText || 'Issue Reward';
+        }
+      }
+
+      if (typeof window.loadRewardCodes === 'function') window.loadRewardCodes();
+      if (typeof window.loadDashboardOverview === 'function') window.loadDashboardOverview();
+    } catch (error) {
+      console.warn('Manual reward issue failed:', error);
+      toast(error.message || 'Could not issue reward code');
+
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalText || 'Issue Reward';
+      }
+    }
+  };
+
+  window.injectRewardButtons = function() {
+    const statusButtons = Array.from(document.querySelectorAll('[onclick*="updateStatus"]'));
+
+    const seen = new Set();
+
+    statusButtons.forEach(statusButton => {
+      const reviewId = extractReviewId(statusButton);
+      if (!reviewId || seen.has(reviewId)) return;
+      seen.add(reviewId);
+
+      const container = getReviewContainer(statusButton);
+      if (!container) return;
+
+      if (container.querySelector('[data-reward-for="' + reviewId + '"]')) return;
+
+      const rewardButton = document.createElement('button');
+      rewardButton.type = 'button';
+      rewardButton.className = 'nr-reward-btn';
+      rewardButton.textContent = 'Issue Reward';
+      rewardButton.setAttribute('data-reward-for', reviewId);
+
+      rewardButton.addEventListener('click', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        window.issueReviewReward(reviewId, rewardButton);
+      });
+
+      const actionArea = statusButton.parentElement || container;
+      actionArea.appendChild(rewardButton);
+    });
+  };
+
+  let injectTimer = null;
+
+  function scheduleInject() {
+    clearTimeout(injectTimer);
+    injectTimer = setTimeout(() => {
+      if (typeof window.injectRewardButtons === 'function') {
+        window.injectRewardButtons();
+      }
+    }, 150);
+  }
+
+  const observer = new MutationObserver(scheduleInject);
+
+  if (document.body) {
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  document.addEventListener('DOMContentLoaded', scheduleInject);
+  setTimeout(scheduleInject, 500);
+  setTimeout(scheduleInject, 1500);
+  setInterval(scheduleInject, 3000);
+})();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* -------------------------------------------------------------------------- */
+/* FAST clean top tabs + contextual side tabs                                 */
+/* -------------------------------------------------------------------------- */
+
+(function () {
+  if (window.__nectarFastCleanNavLoaded) return;
+  window.__nectarFastCleanNavLoaded = true;
+
   const state = {
     module: 'dashboard',
     sub: 'overview',
@@ -732,14 +928,14 @@ window.load();
           '<div class="nr-field"><label>Custom code, optional</label><input id="manual-reward-code" placeholder="Leave blank to auto-generate" /></div>',
           '<div class="nr-field"><label>Discount percentage</label><input id="manual-reward-percentage" type="number" min="1" max="100" value="5" /></div>',
           '<div class="nr-field"><label>Expiry window, days</label><input id="manual-reward-expiry-days" type="number" min="1" max="365" value="60" /></div>',
-          '<button class="post-btn" type="button" onclick="window.createManualRewardCode()">Create Manual Code</button>',
+          '<button class="post-btn" onclick="window.createManualRewardCode()">Create Manual Code</button>',
         '</div>',
         '<div class="panel">',
           '<h3 style="margin-top:0;">Created Code</h3>',
           '<div id="manual-reward-result" class="nr-manual-result">Create a code to see the email copy here.</div>',
           '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">',
-            '<button class="secondary-btn" type="button" onclick="window.copyManualRewardCode()">Copy Code</button>',
-            '<button class="secondary-btn" type="button" onclick="window.copyManualRewardEmail()">Copy Email Copy</button>',
+            '<button class="secondary-btn" onclick="window.copyManualRewardCode()">Copy Code</button>',
+            '<button class="secondary-btn" onclick="window.copyManualRewardEmail()">Copy Email Copy</button>',
           '</div>',
         '</div>',
       '</div>',
@@ -751,24 +947,24 @@ window.load();
           '<h3 style="margin-top:0;">Reward Email Template</h3>',
           '<p class="nr-muted">Design the email copy here. These variables are replaced when a reward code is generated.</p>',
           '<div class="nr-variable-row">',
-            '<button class="nr-variable-chip" type="button" onclick="window.insertRewardVariable(\\'{{ discount_code }}\\')">{{ discount_code }}</button>',
-            '<button class="nr-variable-chip" type="button" onclick="window.insertRewardVariable(\\'{{ expiry_days }}\\')">{{ expiry_days }}</button>',
-            '<button class="nr-variable-chip" type="button" onclick="window.insertRewardVariable(\\'{{ percentage }}\\')">{{ percentage }}</button>',
-            '<button class="nr-variable-chip" type="button" onclick="window.insertRewardVariable(\\'{{ customer_email }}\\')">{{ customer_email }}</button>',
+            '<button class="nr-variable-chip" onclick="window.insertRewardVariable(\\'{{ discount_code }}\\')">{{ discount_code }}</button>',
+            '<button class="nr-variable-chip" onclick="window.insertRewardVariable(\\'{{ expiry_days }}\\')">{{ expiry_days }}</button>',
+            '<button class="nr-variable-chip" onclick="window.insertRewardVariable(\\'{{ percentage }}\\')">{{ percentage }}</button>',
+            '<button class="nr-variable-chip" onclick="window.insertRewardVariable(\\'{{ customer_email }}\\')">{{ customer_email }}</button>',
           '</div>',
           '<div class="nr-field"><label>Email subject</label><input id="reward-email-subject" value="Your review reward code" /></div>',
           '<div class="nr-field">',
             '<label>Email body</label>',
             '<textarea id="reward-email-template-main">Thanks for leaving a review.\\n\\nHere is your unique {{ percentage }}% off code:\\n\\n{{ discount_code }}\\n\\nIt expires in {{ expiry_days }} days and can only be used once.</textarea>',
           '</div>',
-          '<button class="post-btn" type="button" onclick="window.saveRewardSettings()">Save Email Template</button>',
+          '<button class="post-btn" onclick="window.saveRewardSettings()">Save Email Template</button>',
         '</div>',
         '<div class="panel">',
           '<h3 style="margin-top:0;">Live Preview</h3>',
           '<div id="reward-email-preview" class="nr-email-preview"></div>',
           '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">',
-            '<button class="secondary-btn" type="button" onclick="window.renderRewardEmailPreview()">Refresh Preview</button>',
-            '<button class="secondary-btn" type="button" onclick="window.copyRewardEmailPreview()">Copy Preview</button>',
+            '<button class="secondary-btn" onclick="window.renderRewardEmailPreview()">Refresh Preview</button>',
+            '<button class="secondary-btn" onclick="window.copyRewardEmailPreview()">Copy Preview</button>',
           '</div>',
         '</div>',
       '</div>',
@@ -794,8 +990,12 @@ window.load();
     else console.log(message);
   }
 
-  function later(fn) {
-    setTimeout(fn, 0);
+  function runLater(fn) {
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(fn, { timeout: 800 });
+    } else {
+      setTimeout(fn, 0);
+    }
   }
 
   function contentRoot() {
@@ -812,50 +1012,51 @@ window.load();
   }
 
   function ensureTopTabs() {
-    document.querySelectorAll('.nr-primary-tabs').forEach(el => el.remove());
+    let tabs = q('nr-primary-tabs');
 
-    const tabs = document.createElement('div');
-    tabs.id = 'nr-primary-tabs';
-    tabs.className = 'nr-primary-tabs';
+    if (!tabs) {
+      tabs = document.createElement('div');
+      tabs.id = 'nr-primary-tabs';
+      tabs.className = 'nr-primary-tabs';
+
+      const root = contentRoot();
+      if (root) root.insertBefore(tabs, root.firstChild);
+    }
+
     tabs.innerHTML = [
-      '<button type="button" class="nr-primary-tab" data-nr-module="dashboard" data-nr-sub="overview">Dashboard</button>',
-      '<button type="button" class="nr-primary-tab" data-nr-module="reviews" data-nr-sub="manager">Reviews</button>',
-      '<button type="button" class="nr-primary-tab" data-nr-module="discounts" data-nr-sub="settings">Discount Rewards</button>'
+      '<button type="button" class="nr-primary-tab" data-module="dashboard" data-sub="overview">Dashboard</button>',
+      '<button type="button" class="nr-primary-tab" data-module="reviews" data-sub="manager">Reviews</button>',
+      '<button type="button" class="nr-primary-tab" data-module="discounts" data-sub="settings">Discount Rewards</button>'
     ].join('');
 
-    const root = contentRoot();
-    if (root) root.insertBefore(tabs, root.firstChild);
-
-    updateTopActive();
-  }
-
-  function updateTopActive() {
-    document.querySelectorAll('.nr-primary-tab').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.nrModule === state.module);
+    tabs.querySelectorAll('.nr-primary-tab').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.module === state.module);
     });
   }
 
-  function findMainSidebarGroup() {
+  function findPrimarySidebarGroup() {
     const groups = Array.from(document.querySelectorAll('.nav-group'));
 
-    if (groups.length) {
-      const configuration = groups.find(group => /configuration/i.test(group.textContent || ''));
-      const developers = groups.find(group => /developers/i.test(group.textContent || ''));
-      return groups.find(group => group !== configuration && group !== developers) || groups[0];
-    }
+    if (!groups.length) return null;
 
-    const labels = Array.from(document.querySelectorAll('.section-label, .nav-title'));
-    const manage = labels.find(el => /manage|dashboard|reviews/i.test(el.textContent || ''));
-    return manage ? manage.parentElement : null;
+    const configGroup = groups.find(group => /configuration/i.test(group.textContent || ''));
+    const devGroup = groups.find(group => /developers/i.test(group.textContent || ''));
+
+    return groups.find(group => group !== configGroup && group !== devGroup) || groups[0];
   }
 
   function sideButton(label, module, sub) {
     const active = state.module === module && state.sub === sub ? ' active' : '';
-    return '<button type="button" class="nr-side-tab' + active + '" data-nr-module="' + module + '" data-nr-sub="' + sub + '">' + label + '</button>';
+
+    return (
+      '<button type="button" class="nr-side-tab' + active + '" data-module="' + module + '" data-sub="' + sub + '">' +
+      label +
+      '</button>'
+    );
   }
 
   function renderSidebar() {
-    const group = findMainSidebarGroup();
+    const group = findPrimarySidebarGroup();
     if (!group) return;
 
     let title = 'Dashboard';
@@ -891,8 +1092,12 @@ window.load();
 
     if (!q('reward-manual')) {
       const settings = q('reward-settings');
-      if (settings) settings.insertAdjacentHTML('afterend', discountExtrasHtml);
-      else discountView.insertAdjacentHTML('beforeend', discountExtrasHtml);
+
+      if (settings) {
+        settings.insertAdjacentHTML('afterend', discountExtrasHtml);
+      } else {
+        discountView.insertAdjacentHTML('beforeend', discountExtrasHtml);
+      }
     }
 
     syncEmailTemplateFields();
@@ -901,17 +1106,23 @@ window.load();
   function showDiscountSubView(sub) {
     ensureDiscountExtras();
 
+    const wanted = 'reward-' + sub;
+
     document.querySelectorAll('.nr-discount-subview').forEach(view => {
-      view.classList.toggle('active', view.id === 'reward-' + sub);
+      view.classList.toggle('active', view.id === wanted);
+    });
+
+    document.querySelectorAll('[data-reward-tab]').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.rewardTab === sub);
     });
 
     if (sub === 'codes' && !state.rewardCodesLoaded) {
       state.rewardCodesLoaded = true;
-      later(() => window.loadRewardCodes());
+      runLater(() => window.loadRewardCodes());
     }
 
     if (sub === 'email') {
-      later(() => window.renderRewardEmailPreview());
+      runLater(() => window.renderRewardEmailPreview());
     }
   }
 
@@ -919,11 +1130,16 @@ window.load();
     state.module = module || 'dashboard';
     state.sub = sub || 'overview';
 
+    ensureTopTabs();
+    ensureDiscountExtras();
+
     if (state.module === 'dashboard') {
       state.sub = 'overview';
       showView('v-dash');
-      later(() => {
-        if (typeof window.loadStats === 'function') window.loadStats();
+
+      runLater(() => {
+        if (typeof window.loadDashboardOverview === 'function') window.loadDashboardOverview();
+        else if (typeof window.loadStats === 'function') window.loadStats();
       });
     }
 
@@ -940,11 +1156,11 @@ window.load();
 
       if (!state.rewardSettingsLoaded) {
         state.rewardSettingsLoaded = true;
-        later(() => window.loadRewardSettings());
+        runLater(() => window.loadRewardSettings());
       }
     }
 
-    updateTopActive();
+    ensureTopTabs();
     renderSidebar();
   }
 
@@ -957,6 +1173,7 @@ window.load();
     if (viewId === 'v-trash') return select('reviews', 'trash');
     if (viewId === 'v-import') return select('reviews', 'import');
     if (viewId === 'v-discounts') return select('discounts', state.sub || 'settings');
+
     showView(viewId);
   };
 
@@ -965,14 +1182,15 @@ window.load();
   };
 
   document.addEventListener('click', function(event) {
-    const button = event.target.closest('[data-nr-module][data-nr-sub]');
+    const button = event.target.closest('[data-module][data-sub]');
+
     if (!button) return;
 
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
 
-    select(button.dataset.nrModule, button.dataset.nrSub);
+    select(button.dataset.module, button.dataset.sub);
   }, true);
 
   function setVal(id, value, fallback) {
@@ -988,6 +1206,7 @@ window.load();
   window.loadRewardSettings = async function() {
     try {
       const res = await fetch(apiBase() + '/admin/review-reward-settings?shopDomain=' + encodeURIComponent(shopDomain()) + '&t=' + Date.now());
+
       if (!res.ok) return;
 
       const s = await res.json();
@@ -1122,6 +1341,7 @@ window.load();
 
   window.renderRewardEmailPreview = function() {
     const preview = q('reward-email-preview');
+
     if (!preview) return;
 
     preview.textContent = fillTemplate(templateValue(), state.lastManualReward || {
@@ -1134,6 +1354,7 @@ window.load();
 
   window.insertRewardVariable = function(variable) {
     const box = getTemplateBox();
+
     if (!box) return;
 
     const start = box.selectionStart || box.value.length;
@@ -1149,6 +1370,7 @@ window.load();
 
   window.copyRewardEmailPreview = async function() {
     const preview = q('reward-email-preview');
+
     if (!preview) return;
 
     await navigator.clipboard.writeText(preview.textContent || '');
@@ -1173,6 +1395,7 @@ window.load();
     };
 
     const resultBox = q('manual-reward-result');
+
     if (resultBox) resultBox.textContent = 'Creating code...';
 
     try {
@@ -1225,6 +1448,7 @@ window.load();
 
   window.copyManualRewardCode = async function() {
     const code = state.lastManualReward?.code;
+
     if (!code) return alert('No manual code has been created yet.');
 
     await navigator.clipboard.writeText(code);
@@ -1242,13 +1466,15 @@ window.load();
   function detectInitialState() {
     const activeView = document.querySelector('.view.active');
 
-    if (activeView && activeView.id === 'v-mgr') {
+    if (!activeView) return;
+
+    if (activeView.id === 'v-mgr') {
       state.module = 'reviews';
       state.sub = 'manager';
       return;
     }
 
-    if (activeView && activeView.id === 'v-discounts') {
+    if (activeView.id === 'v-discounts') {
       state.module = 'discounts';
       state.sub = 'settings';
       return;
@@ -1264,7 +1490,6 @@ window.load();
     ensureDiscountExtras();
     renderSidebar();
     renderRewardEmailPreview();
-    updateTopActive();
   }
 
   document.addEventListener('DOMContentLoaded', boot);
