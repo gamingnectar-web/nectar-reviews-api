@@ -702,220 +702,8 @@ window.copyFlowCode = function() {
 
 
 
-/* -------------------------------------------------------------------------- */
-/* Dashboard dropdown + review reward discount admin */
-/* -------------------------------------------------------------------------- */
 
-(function () {
-  const q = (id) => document.getElementById(id);
 
-  window.toggleDashboardNav = function(forceOpen) {
-    const dropdown = q('nr-dashboard-dropdown');
-    if (!dropdown) return;
-    if (forceOpen === true) dropdown.classList.add('open');
-    else dropdown.classList.toggle('open');
-  };
-
-  window.rewardSubTab = function(id) {
-    document.querySelectorAll('.nr-discount-subview').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('[data-reward-tab]').forEach(el => el.classList.remove('active'));
-
-    const target = q('reward-' + id);
-    const button = document.querySelector('[data-reward-tab="' + id + '"]');
-
-    if (target) target.classList.add('active');
-    if (button) button.classList.add('active');
-
-    if (id === 'codes') window.loadRewardCodes();
-  };
-
-  const originalTab = window.tab;
-  window.tab = function(id) {
-    if (typeof originalTab === 'function') originalTab(id);
-
-    const isDashboardArea = id === 'v-dash' || id === 'v-discounts';
-    const dropdown = q('nr-dashboard-dropdown');
-    const dropdownButton = dropdown ? dropdown.querySelector('.nr-dropdown-toggle') : null;
-
-    if (dropdown) dropdown.classList.toggle('open', isDashboardArea);
-    if (dropdownButton) dropdownButton.classList.toggle('active', isDashboardArea);
-
-    document.querySelectorAll('.nr-nav-subtab').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.nrSubtab === id);
-    });
-
-    if (id === 'v-dash') window.loadDashboardOverview();
-    if (id === 'v-discounts') {
-      window.loadRewardSettings();
-      window.loadRewardCodes();
-    }
-  };
-
-  function number(value, fallback = 0) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-
-  function setText(id, value) {
-    const el = q(id);
-    if (el) el.textContent = value;
-  }
-
-  window.loadDashboardOverview = async function() {
-    try {
-      const res = await fetch(`${API}/admin/dashboard?shopDomain=${encodeURIComponent(SHOP_DOMAIN)}&t=${Date.now()}`);
-      if (!res.ok) return;
-      const json = await res.json();
-
-      setText('dash-reviews-total', json.reviews?.total || 0);
-      setText('dash-reviews-live', json.reviews?.live || 0);
-      setText('dash-reviews-pending', json.reviews?.pending || 0);
-      setText('dash-reviews-average', number(json.reviews?.averageRating).toFixed(1));
-
-      setText('dash-discounts-issued', json.rewards?.issued || 0);
-      setText('dash-discounts-used', json.rewards?.used || 0);
-      setText('dash-discounts-active', json.rewards?.active || 0);
-
-      const status = q('dash-discount-status');
-      if (status) {
-        const enabled = !!json.rewardSettings?.enabled;
-        status.textContent = enabled ? 'Enabled' : 'Disabled';
-        status.classList.toggle('off', !enabled);
-      }
-    } catch (error) {
-      console.warn('Dashboard overview failed:', error);
-    }
-  };
-
-  window.loadRewardSettings = async function() {
-    try {
-      const res = await fetch(`${API}/admin/review-reward-settings?shopDomain=${encodeURIComponent(SHOP_DOMAIN)}&t=${Date.now()}`);
-      if (!res.ok) return;
-      const s = await res.json();
-
-      if (q('reward-enabled')) q('reward-enabled').checked = !!s.enabled;
-      if (q('reward-percentage')) q('reward-percentage').value = s.percentage ?? 5;
-      if (q('reward-expiry-days')) q('reward-expiry-days').value = s.expiryDays ?? 60;
-      if (q('reward-prefix')) q('reward-prefix').value = s.prefix || 'NECTAR';
-      if (q('reward-trigger-status')) q('reward-trigger-status').value = s.triggerStatus || 'accepted';
-      if (q('reward-verified-only')) q('reward-verified-only').checked = s.verifiedOnly !== false;
-      if (q('reward-combine-order')) q('reward-combine-order').checked = s.combinesWith?.orderDiscounts !== false;
-      if (q('reward-combine-product')) q('reward-combine-product').checked = s.combinesWith?.productDiscounts !== false;
-      if (q('reward-combine-shipping')) q('reward-combine-shipping').checked = s.combinesWith?.shippingDiscounts !== false;
-      if (q('reward-email-template')) q('reward-email-template').value = s.emailTemplate || q('reward-email-template').value;
-    } catch (error) {
-      console.warn('Reward settings load failed:', error);
-    }
-  };
-
-  window.saveRewardSettings = async function() {
-    const payload = {
-      shopDomain: SHOP_DOMAIN,
-      enabled: !!q('reward-enabled')?.checked,
-      percentage: number(q('reward-percentage')?.value, 5),
-      expiryDays: number(q('reward-expiry-days')?.value, 60),
-      prefix: (q('reward-prefix')?.value || 'NECTAR').trim().toUpperCase(),
-      triggerStatus: q('reward-trigger-status')?.value || 'accepted',
-      verifiedOnly: !!q('reward-verified-only')?.checked,
-      combinesWith: {
-        orderDiscounts: !!q('reward-combine-order')?.checked,
-        productDiscounts: !!q('reward-combine-product')?.checked,
-        shippingDiscounts: !!q('reward-combine-shipping')?.checked
-      },
-      emailTemplate: q('reward-email-template')?.value || ''
-    };
-
-    try {
-      const res = await fetch(`${API}/admin/review-reward-settings`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Could not save reward settings');
-      }
-
-      window.showToast('Reward settings saved');
-      window.loadDashboardOverview();
-    } catch (error) {
-      alert(error.message);
-    }
-  };
-
-  window.loadRewardCodes = async function() {
-    const tbody = q('reward-code-list');
-    if (!tbody) return;
-
-    tbody.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
-
-    try {
-      const res = await fetch(`${API}/admin/review-rewards?shopDomain=${encodeURIComponent(SHOP_DOMAIN)}&t=${Date.now()}`);
-      if (!res.ok) throw new Error('Could not load reward codes');
-      const rows = await res.json();
-
-      if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="5">No reward codes have been generated yet.</td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = rows.map(row => {
-        const expires = row.endsAt ? new Date(row.endsAt).toLocaleDateString() : '—';
-        const status = row.status || 'issued';
-        return `
-          <tr>
-            <td><strong>${row.code || '—'}</strong></td>
-            <td>${row.email || '—'}</td>
-            <td><span class="nr-badge ${status}">${status}</span></td>
-            <td>${expires}</td>
-            <td>${row.reviewId || '—'}</td>
-          </tr>
-        `;
-      }).join('');
-    } catch (error) {
-      tbody.innerHTML = '<tr><td colspan="5">Could not load reward codes.</td></tr>';
-    }
-  };
-
-  window.copyRewardEmailTemplate = function() {
-    const el = q('reward-email-template');
-    if (!el) return;
-    el.select();
-    document.execCommand('copy');
-    window.showToast('Reward email template copied');
-  };
-
-  const originalUpdateStatus = window.updateStatus;
-  window.updateStatus = async function(id, status) {
-    if (typeof originalUpdateStatus === 'function') {
-      await originalUpdateStatus(id, status);
-    }
-
-    if (status === 'accepted') {
-      try {
-        const res = await fetch(`${API}/reviews/${id}/reward`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ shopDomain: SHOP_DOMAIN })
-        });
-
-        const json = await res.json().catch(() => ({}));
-        if (res.ok && json.created) window.showToast('Review reward discount issued');
-        if (res.ok && json.skipped) console.log('Reward skipped:', json.reason);
-      } catch (error) {
-        console.warn('Reward issue failed:', error);
-      }
-    }
-
-    window.loadDashboardOverview();
-  };
-
-  setTimeout(() => {
-    window.loadDashboardOverview();
-    window.loadRewardSettings();
-  }, 600);
-})();
 
 window.load();
 
@@ -1087,284 +875,98 @@ window.load();
 })();
 
 
-/* -------------------------------------------------------------------------- */
-/* Force clean dashboard sidebar navigation */
-/* -------------------------------------------------------------------------- */
 
-(function () {
-  if (window.__nectarForceCleanNavLoaded) return;
-  window.__nectarForceCleanNavLoaded = true;
 
-  function text(el) {
-    return (el && el.textContent ? el.textContent : '').trim();
-  }
 
-  function findExactText(label) {
-    return Array.from(document.querySelectorAll('div, span, p, strong, small'))
-      .find(el => text(el).toUpperCase() === label.toUpperCase());
-  }
 
-  function makeButton(label, className, onClick, target) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = className;
-    button.textContent = label;
-    if (target) button.setAttribute('data-force-nav-target', target);
-    button.addEventListener('click', function(event) {
-      event.preventDefault();
-      event.stopPropagation();
-      onClick();
-    });
-    return button;
-  }
 
-  function makeGroup(id, label, openByDefault, children) {
-    const group = document.createElement('div');
-    group.className = 'nr-sidebar-group' + (openByDefault ? ' open' : '');
-    group.id = id;
 
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = 'tab-btn nr-group-toggle';
-    toggle.innerHTML = '<span>' + label + '</span><span class="nr-group-caret">▾</span>';
-    toggle.addEventListener('click', function(event) {
-      event.preventDefault();
-      event.stopPropagation();
-      group.classList.toggle('open');
-    });
 
-    const items = document.createElement('div');
-    items.className = 'nr-group-items';
 
-    children.forEach(child => items.appendChild(child));
 
-    group.appendChild(toggle);
-    group.appendChild(items);
 
-    return group;
-  }
 
-  function clearOldManageItems(manageLabel, configLabel) {
-    let node = manageLabel.nextSibling;
-    const remove = [];
 
-    while (node && node !== configLabel) {
-      remove.push(node);
-      node = node.nextSibling;
-    }
 
-    remove.forEach(item => item.remove());
-  }
 
-  function showDiscountTab(tabId) {
-    if (typeof window.tab === 'function') {
-      window.tab('v-discounts');
-    }
 
-    setTimeout(function() {
-      if (typeof window.rewardSubTab === 'function') {
-        window.rewardSubTab(tabId);
-      }
-      setActiveSidebar('v-discounts', tabId);
-    }, 50);
-  }
 
-  function replaceManageSidebar() {
-    const manageLabel = findExactText('MANAGE');
-    const configLabel = findExactText('CONFIGURATION');
 
-    if (!manageLabel || !configLabel || manageLabel.parentElement !== configLabel.parentElement) {
-      return false;
-    }
 
-    if (document.getElementById('nr-force-dashboard-nav')) {
-      setActiveFromCurrentView();
-      return true;
-    }
 
-    clearOldManageItems(manageLabel, configLabel);
-
-    const fragment = document.createDocumentFragment();
-
-    const dashboard = makeButton(
-      'Dashboard Overview',
-      'tab-btn active',
-      function() {
-        if (typeof window.tab === 'function') window.tab('v-dash');
-        setActiveSidebar('v-dash');
-      },
-      'v-dash'
-    );
-    dashboard.id = 'nr-force-dashboard-nav';
-    fragment.appendChild(dashboard);
-
-    const reviewsGroup = makeGroup('nr-force-reviews-group', 'Reviews', true, [
-      makeButton('Review Manager', 'nr-nav-subtab', function() {
-        if (typeof window.tab === 'function') window.tab('v-mgr');
-        setActiveSidebar('v-mgr');
-      }, 'v-mgr'),
-
-      makeButton('Messaging & Campaigns ✉️', 'nr-nav-subtab', function() {
-        if (typeof window.tab === 'function') window.tab('v-campaigns');
-        setActiveSidebar('v-campaigns');
-      }, 'v-campaigns'),
-
-      makeButton('Trash 🗑️', 'nr-nav-subtab', function() {
-        if (typeof window.tab === 'function') window.tab('v-trash');
-        setActiveSidebar('v-trash');
-      }, 'v-trash'),
-
-      makeButton('Import CSV', 'nr-nav-subtab', function() {
-        if (typeof window.tab === 'function') window.tab('v-import');
-        setActiveSidebar('v-import');
-      }, 'v-import')
-    ]);
-
-    const discountsGroup = makeGroup('nr-force-discounts-group', 'Discount Rewards', false, [
-      makeButton('Settings', 'nr-nav-subtab', function() {
-        showDiscountTab('settings');
-      }, 'v-discounts-settings'),
-
-      makeButton('Generated Codes', 'nr-nav-subtab', function() {
-        showDiscountTab('codes');
-      }, 'v-discounts-codes'),
-
-      makeButton('Function Outline', 'nr-nav-subtab', function() {
-        showDiscountTab('function');
-      }, 'v-discounts-function')
-    ]);
-
-    fragment.appendChild(reviewsGroup);
-    fragment.appendChild(discountsGroup);
-
-    configLabel.parentNode.insertBefore(fragment, configLabel);
-
-    setActiveFromCurrentView();
-    return true;
-  }
-
-  function setActiveSidebar(viewId, rewardTab) {
-    document.querySelectorAll('[data-force-nav-target]').forEach(el => {
-      el.classList.remove('active');
-    });
-
-    document.querySelectorAll('.nr-group-toggle').forEach(el => {
-      el.classList.remove('nr-nav-parent-active');
-    });
-
-    if (viewId === 'v-dash') {
-      const dashboard = document.querySelector('[data-force-nav-target="v-dash"]');
-      if (dashboard) dashboard.classList.add('active');
-      return;
-    }
-
-    if (['v-mgr', 'v-campaigns', 'v-trash', 'v-import'].includes(viewId)) {
-      const group = document.getElementById('nr-force-reviews-group');
-      if (group) group.classList.add('open');
-
-      const parent = document.querySelector('#nr-force-reviews-group .nr-group-toggle');
-      if (parent) parent.classList.add('nr-nav-parent-active');
-
-      const target = document.querySelector('[data-force-nav-target="' + viewId + '"]');
-      if (target) target.classList.add('active');
-      return;
-    }
-
-    if (viewId === 'v-discounts') {
-      const group = document.getElementById('nr-force-discounts-group');
-      if (group) group.classList.add('open');
-
-      const parent = document.querySelector('#nr-force-discounts-group .nr-group-toggle');
-      if (parent) parent.classList.add('nr-nav-parent-active');
-
-      const key = rewardTab || 'settings';
-      const target = document.querySelector('[data-force-nav-target="v-discounts-' + key + '"]');
-      if (target) target.classList.add('active');
-    }
-  }
-
-  function setActiveFromCurrentView() {
-    const activeView = document.querySelector('.view.active');
-    if (!activeView) {
-      setActiveSidebar('v-dash');
-      return;
-    }
-
-    if (activeView.id === 'v-discounts') {
-      const activeRewardTab = document.querySelector('[data-reward-tab].active');
-      setActiveSidebar('v-discounts', activeRewardTab ? activeRewardTab.getAttribute('data-reward-tab') : 'settings');
-      return;
-    }
-
-    setActiveSidebar(activeView.id);
-  }
-
-  const previousTab = window.tab;
-
-  window.tab = function(id) {
-    if (typeof previousTab === 'function') {
-      previousTab(id);
-    }
-
-    setTimeout(function() {
-      replaceManageSidebar();
-      setActiveSidebar(id);
-
-      if (id === 'v-dash' && typeof window.loadDashboardOverview === 'function') {
-        window.loadDashboardOverview();
-      }
-
-      if (id === 'v-discounts') {
-        if (typeof window.loadRewardSettings === 'function') window.loadRewardSettings();
-        if (typeof window.loadRewardCodes === 'function') window.loadRewardCodes();
-      }
-    }, 0);
-  };
-
-  const previousRewardSubTab = window.rewardSubTab;
-
-  window.rewardSubTab = function(id) {
-    if (typeof previousRewardSubTab === 'function') {
-      previousRewardSubTab(id);
-    }
-
-    setTimeout(function() {
-      replaceManageSidebar();
-      setActiveSidebar('v-discounts', id);
-    }, 0);
-  };
-
-  function boot() {
-    replaceManageSidebar();
-
-    setTimeout(function() {
-      replaceManageSidebar();
-
-      const activeView = document.querySelector('.view.active');
-      if (!activeView && typeof window.tab === 'function') {
-        window.tab('v-dash');
-      } else {
-        setActiveFromCurrentView();
-      }
-    }, 300);
-  }
-
-  document.addEventListener('DOMContentLoaded', boot);
-  setTimeout(boot, 300);
-  setTimeout(boot, 1000);
-  setTimeout(boot, 2000);
-})();
 
 
 /* -------------------------------------------------------------------------- */
-/* Final clean Nectar sidebar + Discount Rewards behaviour */
+/* Stable no-dropdown app navigation controller                               */
 /* -------------------------------------------------------------------------- */
 
 (function () {
-  if (window.__nectarFinalSidebarDiscountsLoaded) return;
-  window.__nectarFinalSidebarDiscountsLoaded = true;
+  if (window.__nectarStableTabsControllerLoaded) return;
+  window.__nectarStableTabsControllerLoaded = true;
 
-  const discountSectionHtml = "\n<section id=\"v-discounts\" class=\"view\">\n  <h2 class=\"page-title\">Discount Rewards</h2>\n\n  <div class=\"nr-tabbar\">\n    <button class=\"active\" data-reward-tab=\"settings\" onclick=\"window.rewardSubTab('settings')\">Settings</button>\n    <button data-reward-tab=\"codes\" onclick=\"window.rewardSubTab('codes')\">Generated Codes</button>\n    <button data-reward-tab=\"function\" onclick=\"window.rewardSubTab('function')\">Function Outline</button>\n  </div>\n\n  <div id=\"reward-settings\" class=\"nr-discount-subview active\">\n    <div class=\"grid-2\">\n      <div class=\"panel\">\n        <h3 style=\"margin-top:0;\">Review Reward Settings</h3>\n        <p class=\"nr-muted\">Create unique Shopify discount codes when a customer leaves an eligible review.</p>\n\n        <div class=\"nr-form-grid\">\n          <div class=\"nr-field\">\n            <label>Enable reward codes</label>\n            <label class=\"nr-toggle-line\">\n              <input type=\"checkbox\" id=\"reward-enabled\" />\n              Issue codes automatically\n            </label>\n          </div>\n\n          <div class=\"nr-field\">\n            <label>Reward percentage</label>\n            <input id=\"reward-percentage\" type=\"number\" min=\"1\" max=\"100\" value=\"5\" />\n          </div>\n\n          <div class=\"nr-field\">\n            <label>Expiry window, days</label>\n            <input id=\"reward-expiry-days\" type=\"number\" min=\"1\" max=\"365\" value=\"60\" />\n          </div>\n\n          <div class=\"nr-field\">\n            <label>Code prefix</label>\n            <input id=\"reward-prefix\" value=\"NECTAR\" />\n          </div>\n\n          <div class=\"nr-field\">\n            <label>Issue when review status is</label>\n            <select id=\"reward-trigger-status\">\n              <option value=\"accepted\">Accepted</option>\n              <option value=\"pending\">Submitted / Pending</option>\n            </select>\n          </div>\n\n          <div class=\"nr-field\">\n            <label>Verification rule</label>\n            <label class=\"nr-toggle-line\">\n              <input type=\"checkbox\" id=\"reward-verified-only\" checked />\n              Verified purchases only\n            </label>\n          </div>\n        </div>\n\n        <h4>Combine with</h4>\n        <div class=\"nr-form-grid\">\n          <label class=\"nr-toggle-line\"><input type=\"checkbox\" id=\"reward-combine-order\" checked /> Order discounts</label>\n          <label class=\"nr-toggle-line\"><input type=\"checkbox\" id=\"reward-combine-product\" checked /> Product / BOGO discounts</label>\n          <label class=\"nr-toggle-line\"><input type=\"checkbox\" id=\"reward-combine-shipping\" checked /> Free shipping discounts</label>\n        </div>\n\n        <div style=\"display:flex; gap:10px; flex-wrap:wrap; margin-top:18px;\">\n          <button class=\"post-btn\" onclick=\"window.saveRewardSettings()\">Save Reward Settings</button>\n          <button class=\"secondary-btn\" onclick=\"window.loadRewardSettings()\">Refresh</button>\n        </div>\n      </div>\n\n      <div class=\"panel\">\n        <h3 style=\"margin-top:0;\">Reward Email Format</h3>\n        <p class=\"nr-muted\">Use this copy after a reward code is issued.</p>\n\n        <div class=\"nr-field\">\n          <label>Email copy</label>\n          <textarea id=\"reward-email-template\">Thanks for leaving a review.\n\nHere is your unique 5% off code:\n\n{{ discount_code }}\n\nIt expires in {{ expiry_days }} days and can only be used once.</textarea>\n        </div>\n\n        <p class=\"nr-muted\">\n          The code is unique, expires after the configured window, and should be deleted/disabled after use by the webhook.\n        </p>\n      </div>\n    </div>\n  </div>\n\n  <div id=\"reward-codes\" class=\"nr-discount-subview\">\n    <div class=\"panel\">\n      <div style=\"display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;\">\n        <div>\n          <h3 style=\"margin:0;\">Generated Reward Codes</h3>\n          <p class=\"nr-muted\" style=\"margin:6px 0 0;\">Latest review discount codes generated by the app.</p>\n        </div>\n        <button class=\"secondary-btn\" onclick=\"window.loadRewardCodes()\">Refresh Codes</button>\n      </div>\n\n      <div style=\"overflow:auto; margin-top:18px;\">\n        <table class=\"nr-code-table\">\n          <thead>\n            <tr>\n              <th>Code</th>\n              <th>Email</th>\n              <th>Status</th>\n              <th>Expires</th>\n              <th>Review</th>\n            </tr>\n          </thead>\n          <tbody id=\"reward-code-list\">\n            <tr><td colspan=\"5\">No codes loaded yet.</td></tr>\n          </tbody>\n        </table>\n      </div>\n    </div>\n  </div>\n\n  <div id=\"reward-function\" class=\"nr-discount-subview\">\n    <div class=\"panel\">\n      <h3 style=\"margin-top:0;\">Discount Function Outline</h3>\n      <p class=\"nr-muted\">\n        The server creates the unique code. The Shopify Function reads the reward config and returns a 5% order-level discount.\n      </p>\n\n      <div class=\"nr-field\">\n        <label>Function behaviour</label>\n        <textarea readonly>Input:\n- discount metafield: nectar_reviews.reward_config\n- buyer identity email, when available\n\nOutput:\n- order subtotal discount\n- percentage from config, default 5\n- no product-line discount, to reduce clashes with BOGO/free item logic\n- combine flags controlled when the code is created</textarea>\n      </div>\n    </div>\n  </div>\n</section>\n";
+  const state = {
+    module: 'dashboard',
+    sub: 'overview',
+    lastManualReward: null
+  };
+
+  const discountExtraHtml = [
+    '<div id="reward-manual" class="nr-discount-subview">',
+      '<div class="nr-manual-code-grid">',
+        '<div class="panel">',
+          '<h3 style="margin-top:0;">Create Manual Reward Code</h3>',
+          '<p class="nr-muted">Create a one-use reward code for a customer email. Use this for testing and support cases.</p>',
+          '<div class="nr-field"><label>Customer email</label><input id="manual-reward-email" type="email" placeholder="customer@example.com" /></div>',
+          '<div class="nr-field"><label>Code prefix</label><input id="manual-reward-prefix" value="GN" /></div>',
+          '<div class="nr-field"><label>Custom code, optional</label><input id="manual-reward-code" placeholder="Leave blank to auto-generate" /></div>',
+          '<div class="nr-field"><label>Discount percentage</label><input id="manual-reward-percentage" type="number" min="1" max="100" value="5" /></div>',
+          '<div class="nr-field"><label>Expiry window, days</label><input id="manual-reward-expiry-days" type="number" min="1" max="365" value="60" /></div>',
+          '<button class="post-btn" onclick="window.createManualRewardCode()">Create Manual Code</button>',
+        '</div>',
+        '<div class="panel">',
+          '<h3 style="margin-top:0;">Created Code</h3>',
+          '<div id="manual-reward-result" class="nr-manual-result">Create a code to see the email copy here.</div>',
+          '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">',
+            '<button class="secondary-btn" onclick="window.copyManualRewardCode()">Copy Code</button>',
+            '<button class="secondary-btn" onclick="window.copyManualRewardEmail()">Copy Email Copy</button>',
+          '</div>',
+        '</div>',
+      '</div>',
+    '</div>',
+
+    '<div id="reward-email" class="nr-discount-subview">',
+      '<div class="nr-email-template-grid">',
+        '<div class="panel">',
+          '<h3 style="margin-top:0;">Reward Email Template</h3>',
+          '<p class="nr-muted">Design the email copy here. These variables are replaced when a code is generated.</p>',
+          '<div class="nr-variable-row">',
+            '<button class="nr-variable-chip" onclick="window.insertRewardVariable(\\'{{ discount_code }}\\')">{{ discount_code }}</button>',
+            '<button class="nr-variable-chip" onclick="window.insertRewardVariable(\\'{{ expiry_days }}\\')">{{ expiry_days }}</button>',
+            '<button class="nr-variable-chip" onclick="window.insertRewardVariable(\\'{{ percentage }}\\')">{{ percentage }}</button>',
+            '<button class="nr-variable-chip" onclick="window.insertRewardVariable(\\'{{ customer_email }}\\')">{{ customer_email }}</button>',
+          '</div>',
+          '<div class="nr-field"><label>Email subject</label><input id="reward-email-subject" value="Your review reward code" /></div>',
+          '<div class="nr-field">',
+            '<label>Email body</label>',
+            '<textarea id="reward-email-template-main">Thanks for leaving a review.\\n\\nHere is your unique {{ percentage }}% off code:\\n\\n{{ discount_code }}\\n\\nIt expires in {{ expiry_days }} days and can only be used once.</textarea>',
+          '</div>',
+          '<button class="post-btn" onclick="window.saveRewardSettings()">Save Email Template</button>',
+        '</div>',
+        '<div class="panel">',
+          '<h3 style="margin-top:0;">Live Preview</h3>',
+          '<div id="reward-email-preview" class="nr-email-preview"></div>',
+          '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">',
+            '<button class="secondary-btn" onclick="window.renderRewardEmailPreview()">Refresh Preview</button>',
+            '<button class="secondary-btn" onclick="window.copyRewardEmailPreview()">Copy Preview</button>',
+          '</div>',
+        '</div>',
+      '</div>',
+    '</div>'
+  ].join('');
+
+  function q(id) {
+    return document.getElementById(id);
+  }
 
   function getApiBase() {
     return typeof API !== 'undefined' && API ? API : '/api';
@@ -1381,949 +983,63 @@ window.load();
     else console.log(message);
   }
 
-  function q(id) {
-    return document.getElementById(id);
-  }
-
-  window.toggleNectarNavGroup = function(groupId) {
-    const group = q(groupId);
-    if (group) group.classList.toggle('open');
-  };
-
-  function ensureDiscountSection() {
-    if (q('v-discounts')) return;
-
-    const manager = q('v-mgr');
-    if (manager) {
-      manager.insertAdjacentHTML('beforebegin', discountSectionHtml);
-    }
-  }
-
-  function cleanDashboardOverview() {
-    const dash = q('v-dash');
-    if (!dash) return;
-
-    dash.querySelectorAll('.panel').forEach(panel => {
-      const txt = (panel.textContent || '').trim();
-      if (/Discount Rewards/i.test(txt)) {
-        panel.remove();
-      }
-    });
-  }
-
-  function finalCleanSidebar() {
-    const manageTitle = Array.from(document.querySelectorAll('.nav-title'))
-      .find(el => (el.textContent || '').trim().toLowerCase() === 'manage');
-
-    if (!manageTitle) return;
-
-    const manageGroup = manageTitle.closest('.nav-group');
-    if (!manageGroup) return;
-
-    if (manageGroup.dataset.finalCleanNectarNav === 'true') return;
-
-    manageGroup.dataset.finalCleanNectarNav = 'true';
-    manageGroup.innerHTML = `
-      <p class="nav-title">Manage</p>
-
-      <button class="tab-btn active" data-final-nav-target="v-dash" onclick="window.tab('v-dash')">
-        Dashboard Overview
-      </button>
-
-      <div class="nr-sidebar-group open" id="nr-reviews-group">
-        <button class="tab-btn nr-group-toggle" type="button" onclick="window.toggleNectarNavGroup('nr-reviews-group')">
-          <span>Reviews</span>
-          <span class="nr-group-caret">▾</span>
-        </button>
-
-        <div class="nr-group-items">
-          <button class="nr-nav-subtab" data-final-nav-target="v-mgr" onclick="window.tab('v-mgr')">Review Manager</button>
-          <button class="nr-nav-subtab" data-final-nav-target="v-msg" onclick="window.tab('v-msg')">Messaging &amp; Campaigns ✉️</button>
-          <button class="nr-nav-subtab" data-final-nav-target="v-trash" onclick="window.tab('v-trash')">Trash 🗑️</button>
-          <button class="nr-nav-subtab" data-final-nav-target="v-import" onclick="window.tab('v-import')">Import CSV</button>
-        </div>
-      </div>
-
-      <div class="nr-sidebar-group" id="nr-discounts-group">
-        <button class="tab-btn nr-group-toggle" type="button" onclick="window.toggleNectarNavGroup('nr-discounts-group')">
-          <span>Discount Rewards</span>
-          <span class="nr-group-caret">▾</span>
-        </button>
-
-        <div class="nr-group-items">
-          <button class="nr-nav-subtab" data-final-nav-target="v-discounts-settings" onclick="window.tab('v-discounts'); window.rewardSubTab('settings')">Settings</button>
-          <button class="nr-nav-subtab" data-final-nav-target="v-discounts-codes" onclick="window.tab('v-discounts'); window.rewardSubTab('codes')">Generated Codes</button>
-          <button class="nr-nav-subtab" data-final-nav-target="v-discounts-function" onclick="window.tab('v-discounts'); window.rewardSubTab('function')">Function Outline</button>
-        </div>
-      </div>
-    `;
-  }
-
-  function setActiveSidebar(viewId, rewardTab) {
-    document.querySelectorAll('[data-final-nav-target]').forEach(el => {
-      el.classList.remove('active');
-    });
-
-    document.querySelectorAll('.nr-group-toggle').forEach(el => {
-      el.classList.remove('nr-nav-parent-active');
-    });
-
-    if (viewId === 'v-dash') {
-      const dash = document.querySelector('[data-final-nav-target="v-dash"]');
-      if (dash) dash.classList.add('active');
-      return;
-    }
-
-    if (['v-mgr', 'v-msg', 'v-trash', 'v-import'].includes(viewId)) {
-      const group = q('nr-reviews-group');
-      if (group) group.classList.add('open');
-
-      const parent = document.querySelector('#nr-reviews-group .nr-group-toggle');
-      if (parent) parent.classList.add('nr-nav-parent-active');
-
-      const target = document.querySelector('[data-final-nav-target="' + viewId + '"]');
-      if (target) target.classList.add('active');
-      return;
-    }
-
-    if (viewId === 'v-discounts') {
-      const group = q('nr-discounts-group');
-      if (group) group.classList.add('open');
-
-      const parent = document.querySelector('#nr-discounts-group .nr-group-toggle');
-      if (parent) parent.classList.add('nr-nav-parent-active');
-
-      const key = rewardTab || 'settings';
-      const target = document.querySelector('[data-final-nav-target="v-discounts-' + key + '"]');
-      if (target) target.classList.add('active');
-    }
-  }
-
-  window.rewardSubTab = function(id) {
-    ensureDiscountSection();
-
-    document.querySelectorAll('.nr-discount-subview').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('[data-reward-tab]').forEach(el => el.classList.remove('active'));
-
-    const view = q('reward-' + id);
-    const btn = document.querySelector('[data-reward-tab="' + id + '"]');
-
-    if (view) view.classList.add('active');
-    if (btn) btn.classList.add('active');
-
-    setActiveSidebar('v-discounts', id);
-
-    if (id === 'codes') window.loadRewardCodes();
-  };
-
-  function setInput(id, value, fallback) {
-    const el = q(id);
-    if (!el) return;
-    el.value = value ?? fallback ?? '';
-  }
-
-  function setCheck(id, value) {
-    const el = q(id);
-    if (!el) return;
-    el.checked = !!value;
-  }
-
-  window.loadRewardSettings = async function() {
-    ensureDiscountSection();
-
-    try {
-      const res = await fetch(`${getApiBase()}/admin/review-reward-settings?shopDomain=${encodeURIComponent(getShopDomain())}&t=${Date.now()}`);
-
-      if (!res.ok) return;
-
-      const s = await res.json();
-
-      setCheck('reward-enabled', s.enabled);
-      setInput('reward-percentage', s.percentage, 5);
-      setInput('reward-expiry-days', s.expiryDays, 60);
-      setInput('reward-prefix', s.prefix, 'NECTAR');
-      setInput('reward-trigger-status', s.triggerStatus, 'accepted');
-      setCheck('reward-verified-only', s.verifiedOnly !== false);
-      setCheck('reward-combine-order', s.combinesWith?.orderDiscounts !== false);
-      setCheck('reward-combine-product', s.combinesWith?.productDiscounts !== false);
-      setCheck('reward-combine-shipping', s.combinesWith?.shippingDiscounts !== false);
-
-      if (q('reward-email-template') && s.emailTemplate) {
-        q('reward-email-template').value = s.emailTemplate;
-      }
-    } catch (error) {
-      console.warn('Reward settings load failed:', error);
-    }
-  };
-
-  window.saveRewardSettings = async function() {
-    ensureDiscountSection();
-
-    const payload = {
-      shopDomain: getShopDomain(),
-      enabled: !!q('reward-enabled')?.checked,
-      percentage: Number(q('reward-percentage')?.value || 5),
-      expiryDays: Number(q('reward-expiry-days')?.value || 60),
-      prefix: String(q('reward-prefix')?.value || 'NECTAR').trim().toUpperCase(),
-      triggerStatus: q('reward-trigger-status')?.value || 'accepted',
-      verifiedOnly: !!q('reward-verified-only')?.checked,
-      combinesWith: {
-        orderDiscounts: !!q('reward-combine-order')?.checked,
-        productDiscounts: !!q('reward-combine-product')?.checked,
-        shippingDiscounts: !!q('reward-combine-shipping')?.checked
-      },
-      emailTemplate: q('reward-email-template')?.value || ''
-    };
-
-    try {
-      const res = await fetch(`${getApiBase()}/admin/review-reward-settings`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Backend reward settings endpoint is not available yet.');
-      }
-
-      toast('Reward settings saved');
-    } catch (error) {
-      alert(error.message);
-    }
-  };
-
-  window.loadRewardCodes = async function() {
-    ensureDiscountSection();
-
-    const tbody = q('reward-code-list');
-    if (!tbody) return;
-
-    tbody.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
-
-    try {
-      const res = await fetch(`${getApiBase()}/admin/review-rewards?shopDomain=${encodeURIComponent(getShopDomain())}&t=${Date.now()}`);
-
-      if (!res.ok) {
-        tbody.innerHTML = '<tr><td colspan="5">Backend reward code endpoint is not available yet.</td></tr>';
-        return;
-      }
-
-      const rows = await res.json();
-
-      if (!Array.isArray(rows) || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5">No reward codes have been generated yet.</td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = rows.map(row => {
-        const status = row.status || 'issued';
-        const expires = row.endsAt ? new Date(row.endsAt).toLocaleDateString() : '—';
-
-        return `
-          <tr>
-            <td><strong>${row.code || '—'}</strong></td>
-            <td>${row.email || '—'}</td>
-            <td><span class="nr-badge ${status}">${status}</span></td>
-            <td>${expires}</td>
-            <td>${row.reviewId || '—'}</td>
-          </tr>
-        `;
-      }).join('');
-    } catch (error) {
-      tbody.innerHTML = '<tr><td colspan="5">Could not load reward codes.</td></tr>';
-    }
-  };
-
-  const originalTab = window.tab;
-
-  window.tab = function(id) {
-    ensureDiscountSection();
-
-    if (typeof originalTab === 'function') {
-      originalTab(id);
-    }
-
-    finalCleanSidebar();
-    cleanDashboardOverview();
-    setActiveSidebar(id);
-
-    if (id === 'v-discounts') {
-      window.loadRewardSettings();
-    }
-
-    if (id === 'v-dash' && typeof window.loadStats === 'function') {
-      window.loadStats();
-    }
-  };
-
-  function bootCleanNav() {
-    ensureDiscountSection();
-    finalCleanSidebar();
-    cleanDashboardOverview();
-
-    const activeView = document.querySelector('.view.active');
-    if (activeView) {
-      setActiveSidebar(activeView.id);
-    } else if (typeof window.tab === 'function') {
-      window.tab('v-dash');
-    }
-  }
-
-  document.addEventListener('DOMContentLoaded', bootCleanNav);
-  setTimeout(bootCleanNav, 250);
-  setTimeout(bootCleanNav, 1000);
-  setTimeout(bootCleanNav, 2000);
-})();
-
-
-
-/* -------------------------------------------------------------------------- */
-/* Nectar top tabs, contextual sidebar, manual discounts and email templates   */
-/* -------------------------------------------------------------------------- */
-
-(function () {
-  if (window.__nectarTopTabsManualDiscountsLoaded) return;
-  window.__nectarTopTabsManualDiscountsLoaded = true;
-
-  const STATE = {
-    module: 'dashboard',
-    sub: 'overview',
-    lastManualReward: null
-  };
-
-  const DISCOUNT_SECTION_HTML = [
-    '<div id="reward-manual" class="nr-discount-subview">',
-      '<div class="nr-manual-code-grid">',
-        '<div class="panel">',
-          '<h3 style="margin-top:0;">Create Manual Reward Code</h3>',
-          '<p class="nr-muted">Create a one-use reward code for a customer email. This is useful for testing and support cases.</p>',
-
-          '<div class="nr-field">',
-            '<label>Customer email</label>',
-            '<input id="manual-reward-email" type="email" placeholder="customer@example.com" />',
-          '</div>',
-
-          '<div class="nr-field">',
-            '<label>Code prefix</label>',
-            '<input id="manual-reward-prefix" value="GN" />',
-          '</div>',
-
-          '<div class="nr-field">',
-            '<label>Custom code, optional</label>',
-            '<input id="manual-reward-code" placeholder="Leave blank to auto-generate" />',
-          '</div>',
-
-          '<div class="nr-field">',
-            '<label>Discount percentage</label>',
-            '<input id="manual-reward-percentage" type="number" min="1" max="100" value="5" />',
-          '</div>',
-
-          '<div class="nr-field">',
-            '<label>Expiry window, days</label>',
-            '<input id="manual-reward-expiry-days" type="number" min="1" max="365" value="60" />',
-          '</div>',
-
-          '<div class="nr-field">',
-            '<label>Internal note, optional</label>',
-            '<input id="manual-reward-note" placeholder="Example: support goodwill code" />',
-          '</div>',
-
-          '<button class="post-btn" onclick="window.createManualRewardCode()">Create Manual Code</button>',
-        '</div>',
-
-        '<div class="panel">',
-          '<h3 style="margin-top:0;">Created Code</h3>',
-          '<div id="manual-reward-result" class="nr-manual-result">',
-            'Create a code to see the customer email copy here.',
-          '</div>',
-          '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">',
-            '<button class="secondary-btn" onclick="window.copyManualRewardCode()">Copy Code</button>',
-            '<button class="secondary-btn" onclick="window.copyManualRewardEmail()">Copy Email Copy</button>',
-          '</div>',
-        '</div>',
-      '</div>',
-    '</div>',
-
-    '<div id="reward-email" class="nr-discount-subview">',
-      '<div class="nr-email-template-grid">',
-        '<div class="panel">',
-          '<h3 style="margin-top:0;">Reward Email Template</h3>',
-          '<p class="nr-muted">This template is stored in the app settings and can be reused by the client-side reward tools.</p>',
-
-          '<div class="nr-variable-row">',
-            '<button class="nr-variable-chip" onclick="window.insertRewardVariable(\'{{ discount_code }}\')">{{ discount_code }}</button>',
-            '<button class="nr-variable-chip" onclick="window.insertRewardVariable(\'{{ expiry_days }}\')">{{ expiry_days }}</button>',
-            '<button class="nr-variable-chip" onclick="window.insertRewardVariable(\'{{ percentage }}\')">{{ percentage }}</button>',
-            '<button class="nr-variable-chip" onclick="window.insertRewardVariable(\'{{ customer_email }}\')">{{ customer_email }}</button>',
-          '</div>',
-
-          '<div class="nr-field">',
-            '<label>Email subject</label>',
-            '<input id="reward-email-subject" value="Your review reward code" />',
-          '</div>',
-
-          '<div class="nr-field">',
-            '<label>Email body</label>',
-            '<textarea id="reward-email-template-main">Thanks for leaving a review.\n\nHere is your unique {{ percentage }}% off code:\n\n{{ discount_code }}\n\nIt expires in {{ expiry_days }} days and can only be used once.</textarea>',
-          '</div>',
-
-          '<button class="post-btn" onclick="window.saveRewardSettings()">Save Email Template</button>',
-        '</div>',
-
-        '<div class="panel">',
-          '<h3 style="margin-top:0;">Live Preview</h3>',
-          '<p class="nr-muted">Preview uses the latest manual code, or sample values if no code has been created yet.</p>',
-          '<div id="reward-email-preview" class="nr-email-preview"></div>',
-          '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">',
-            '<button class="secondary-btn" onclick="window.renderRewardEmailPreview()">Refresh Preview</button>',
-            '<button class="secondary-btn" onclick="window.copyRewardEmailPreview()">Copy Preview</button>',
-          '</div>',
-        '</div>',
-      '</div>',
-    '</div>'
-  ].join('');
-
-  function getApiBase() {
-    return typeof API !== 'undefined' && API ? API : '/api';
-  }
-
-  function getShopDomain() {
-    if (typeof SHOP_DOMAIN !== 'undefined' && SHOP_DOMAIN) return SHOP_DOMAIN;
-    const params = new URLSearchParams(window.location.search);
-    return params.get('shopDomain') || params.get('shop') || '';
-  }
-
-  function q(id) {
-    return document.getElementById(id);
-  }
-
-  function toast(message) {
-    if (typeof window.showToast === 'function') window.showToast(message);
-    else alert(message);
-  }
-
-  function findContentRoot() {
+  function contentRoot() {
     const firstView = document.querySelector('.view');
     return firstView ? firstView.parentElement : document.body;
   }
 
-  function ensureTopTabs() {
-    if (q('nr-primary-tabs')) return;
-
-    const root = findContentRoot();
-    if (!root) return;
-
-    const tabs = document.createElement('div');
-    tabs.id = 'nr-primary-tabs';
-    tabs.className = 'nr-primary-tabs';
-    tabs.innerHTML = [
-      '<button class="nr-primary-tab active" data-module="dashboard" onclick="window.nrSelectModule(\'dashboard\', \'overview\')">Dashboard</button>',
-      '<button class="nr-primary-tab" data-module="reviews" onclick="window.nrSelectModule(\'reviews\', \'manager\')">Reviews</button>',
-      '<button class="nr-primary-tab" data-module="discounts" onclick="window.nrSelectModule(\'discounts\', \'settings\')">Discount Rewards</button>'
-    ].join('');
-
-    root.insertBefore(tabs, root.firstChild);
-  }
-
-  function ensureDiscountViews() {
-    const discountSection = q('v-discounts');
-    if (!discountSection) return;
-
-    if (!q('reward-manual')) {
-      const settings = q('reward-settings');
-      if (settings) settings.insertAdjacentHTML('afterend', DISCOUNT_SECTION_HTML);
-      else discountSection.insertAdjacentHTML('beforeend', DISCOUNT_SECTION_HTML);
-    }
-
-    syncEmailTemplateFields();
-    renderRewardEmailPreview();
-  }
-
-  function getManageGroup() {
-    const titles = Array.from(document.querySelectorAll('.nav-title, .section-label'));
-    const manageTitle = titles.find(el => (el.textContent || '').trim().toLowerCase() === 'manage');
-    return manageTitle ? manageTitle.closest('.nav-group') || manageTitle.parentElement : null;
-  }
-
-  function optionHtml(value, label, activeValue) {
-    return '<option value="' + value + '"' + (value === activeValue ? ' selected' : '') + '>' + label + '</option>';
-  }
-
-  function renderContextSidebar() {
-    const group = getManageGroup();
-    if (!group) return;
-
-    let title = 'Dashboard';
-    let options = '';
-    let help = '';
-
-    if (STATE.module === 'dashboard') {
-      title = 'Dashboard';
-      options = optionHtml('overview', 'Overview', STATE.sub);
-      help = 'Performance, review totals and quick health checks.';
-    }
-
-    if (STATE.module === 'reviews') {
-      title = 'Reviews';
-      options = [
-        optionHtml('manager', 'Review Manager', STATE.sub),
-        optionHtml('campaigns', 'Messaging & Campaigns', STATE.sub),
-        optionHtml('trash', 'Trash', STATE.sub),
-        optionHtml('import', 'Import CSV', STATE.sub)
-      ].join('');
-      help = 'Manage, import and message around reviews.';
-    }
-
-    if (STATE.module === 'discounts') {
-      title = 'Discount Rewards';
-      options = [
-        optionHtml('settings', 'Settings', STATE.sub),
-        optionHtml('manual', 'Manual Code', STATE.sub),
-        optionHtml('codes', 'Generated Codes', STATE.sub),
-        optionHtml('email', 'Email Template', STATE.sub),
-        optionHtml('function', 'Function Outline', STATE.sub)
-      ].join('');
-      help = 'Configure, manually create and track reward codes.';
-    }
-
-    group.innerHTML = [
-      '<p class="nav-title">' + title + '</p>',
-      '<select class="nr-left-select" id="nr-context-select">',
-      options,
-      '</select>',
-      '<p class="nr-context-help">' + help + '</p>'
-    ].join('');
-
-    const select = q('nr-context-select');
-    if (select) {
-      select.addEventListener('change', function () {
-        window.nrSelectModule(STATE.module, select.value);
-      });
-    }
-  }
-
-  function setTopActive() {
-    document.querySelectorAll('.nr-primary-tab').forEach(btn => {
-      btn.classList.toggle('active', btn.getAttribute('data-module') === STATE.module);
+  function showView(id) {
+    document.querySelectorAll('.view').forEach(view => {
+      const active = view.id === id;
+      view.classList.toggle('active', active);
+      view.style.display = active ? '' : 'none';
     });
-  }
-
-  function mapViewToState(viewId) {
-    if (viewId === 'v-dash') return { module: 'dashboard', sub: 'overview' };
-    if (viewId === 'v-mgr') return { module: 'reviews', sub: 'manager' };
-    if (viewId === 'v-msg' || viewId === 'v-campaigns') return { module: 'reviews', sub: 'campaigns' };
-    if (viewId === 'v-trash') return { module: 'reviews', sub: 'trash' };
-    if (viewId === 'v-import') return { module: 'reviews', sub: 'import' };
-    if (viewId === 'v-discounts') return { module: 'discounts', sub: STATE.sub || 'settings' };
-    return null;
-  }
-
-  const previousTab = window.tab;
-
-  function rawTab(viewId) {
-    if (typeof previousTab === 'function') previousTab(viewId);
-  }
-
-  window.tab = function(viewId) {
-    const mapped = mapViewToState(viewId);
-    if (mapped) {
-      STATE.module = mapped.module;
-      STATE.sub = mapped.sub;
-    }
-
-    rawTab(viewId);
-
-    ensureTopTabs();
-    ensureDiscountViews();
-    renderContextSidebar();
-    setTopActive();
-
-    if (viewId === 'v-discounts') {
-      window.rewardSubTab(STATE.sub || 'settings');
-      window.loadRewardSettings();
-    }
-  };
-
-  window.nrSelectModule = function(module, sub) {
-    STATE.module = module;
-    STATE.sub = sub;
-
-    ensureTopTabs();
-    ensureDiscountViews();
-
-    if (module === 'dashboard') {
-      rawTab('v-dash');
-      if (typeof window.loadStats === 'function') window.loadStats();
-    }
-
-    if (module === 'reviews') {
-      if (sub === 'manager') rawTab('v-mgr');
-      if (sub === 'campaigns') rawTab(q('v-campaigns') ? 'v-campaigns' : 'v-msg');
-      if (sub === 'trash') rawTab('v-trash');
-      if (sub === 'import') rawTab('v-import');
-    }
-
-    if (module === 'discounts') {
-      rawTab('v-discounts');
-      window.rewardSubTab(sub || 'settings');
-      window.loadRewardSettings();
-      if (sub === 'codes') window.loadRewardCodes();
-    }
-
-    renderContextSidebar();
-    setTopActive();
-  };
-
-  window.rewardSubTab = function(id) {
-    STATE.module = 'discounts';
-    STATE.sub = id || 'settings';
-
-    ensureDiscountViews();
-
-    document.querySelectorAll('.nr-discount-subview').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('[data-reward-tab]').forEach(el => el.classList.remove('active'));
-
-    const target = q('reward-' + STATE.sub);
-    if (target) target.classList.add('active');
-
-    const tabButton = document.querySelector('[data-reward-tab="' + STATE.sub + '"]');
-    if (tabButton) tabButton.classList.add('active');
-
-    renderContextSidebar();
-    setTopActive();
-
-    if (STATE.sub === 'codes') window.loadRewardCodes();
-    if (STATE.sub === 'email') renderRewardEmailPreview();
-  };
-
-  function getEmailTemplateTextarea() {
-    return q('reward-email-template-main') || q('reward-email-template');
-  }
-
-  function syncEmailTemplateFields() {
-    const oldBox = q('reward-email-template');
-    const newBox = q('reward-email-template-main');
-
-    if (oldBox && newBox && oldBox.value && oldBox.value !== newBox.value) {
-      newBox.value = oldBox.value;
-    }
-  }
-
-  function emailTemplateValue() {
-    const box = getEmailTemplateTextarea();
-    return box ? box.value : 'Thanks for leaving a review. Your code is {{ discount_code }} and expires in {{ expiry_days }} days.';
-  }
-
-  function fillTemplate(template, reward) {
-    const r = reward || {};
-    return String(template || '')
-      .replaceAll('{{ discount_code }}', r.code || 'GN-SAMPLE')
-      .replaceAll('{{ expiry_days }}', String(r.expiryDays || 60))
-      .replaceAll('{{ percentage }}', String(r.percentage || 5))
-      .replaceAll('{{ customer_email }}', r.email || 'customer@example.com');
-  }
-
-  window.renderRewardEmailPreview = function() {
-    const preview = q('reward-email-preview');
-    if (!preview) return;
-
-    const reward = STATE.lastManualReward || {
-      code: 'GN-SAMPLE',
-      email: 'customer@example.com',
-      percentage: Number(q('reward-percentage')?.value || 5),
-      expiryDays: Number(q('reward-expiry-days')?.value || 60)
-    };
-
-    preview.textContent = fillTemplate(emailTemplateValue(), reward);
-  };
-
-  window.insertRewardVariable = function(variable) {
-    const box = getEmailTemplateTextarea();
-    if (!box) return;
-
-    const start = box.selectionStart || box.value.length;
-    const end = box.selectionEnd || box.value.length;
-    box.value = box.value.slice(0, start) + variable + box.value.slice(end);
-    box.focus();
-    box.selectionStart = box.selectionEnd = start + variable.length;
-
-    renderRewardEmailPreview();
-  };
-
-  window.copyRewardEmailPreview = async function() {
-    const preview = q('reward-email-preview');
-    if (!preview) return;
-    await navigator.clipboard.writeText(preview.textContent || '');
-    toast('Email preview copied');
-  };
-
-  const previousLoadRewardSettings = window.loadRewardSettings;
-
-  window.loadRewardSettings = async function() {
-    if (typeof previousLoadRewardSettings === 'function') {
-      await previousLoadRewardSettings();
-    }
-
-    ensureDiscountViews();
-    syncEmailTemplateFields();
-
-    if (q('manual-reward-percentage') && q('reward-percentage')) {
-      q('manual-reward-percentage').value = q('reward-percentage').value || 5;
-    }
-
-    if (q('manual-reward-expiry-days') && q('reward-expiry-days')) {
-      q('manual-reward-expiry-days').value = q('reward-expiry-days').value || 60;
-    }
-
-    if (q('manual-reward-prefix') && q('reward-prefix')) {
-      q('manual-reward-prefix').value = q('reward-prefix').value || 'GN';
-    }
-
-    renderRewardEmailPreview();
-  };
-
-  const previousSaveRewardSettings = window.saveRewardSettings;
-
-  window.saveRewardSettings = async function() {
-    const newBox = q('reward-email-template-main');
-    const oldBox = q('reward-email-template');
-
-    if (newBox && oldBox) {
-      oldBox.value = newBox.value;
-    }
-
-    if (typeof previousSaveRewardSettings === 'function') {
-      return previousSaveRewardSettings();
-    }
-
-    const payload = {
-      shopDomain: getShopDomain(),
-      enabled: !!q('reward-enabled')?.checked,
-      percentage: Number(q('reward-percentage')?.value || 5),
-      expiryDays: Number(q('reward-expiry-days')?.value || 60),
-      prefix: String(q('reward-prefix')?.value || 'GN').trim().toUpperCase(),
-      triggerStatus: q('reward-trigger-status')?.value || 'accepted',
-      verifiedOnly: !!q('reward-verified-only')?.checked,
-      combinesWith: {
-        orderDiscounts: !!q('reward-combine-order')?.checked,
-        productDiscounts: !!q('reward-combine-product')?.checked,
-        shippingDiscounts: !!q('reward-combine-shipping')?.checked
-      },
-      emailTemplate: emailTemplateValue()
-    };
-
-    const res = await fetch(getApiBase() + '/admin/review-reward-settings', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Could not save reward settings');
-    }
-
-    toast('Reward settings saved');
-  };
-
-  window.createManualRewardCode = async function() {
-    const email = String(q('manual-reward-email')?.value || '').trim().toLowerCase();
-
-    if (!email || !email.includes('@')) {
-      alert('Enter a valid customer email first.');
-      return;
-    }
-
-    const payload = {
-      shopDomain: getShopDomain(),
-      email,
-      code: String(q('manual-reward-code')?.value || '').trim(),
-      prefix: String(q('manual-reward-prefix')?.value || 'GN').trim().toUpperCase(),
-      percentage: Number(q('manual-reward-percentage')?.value || 5),
-      expiryDays: Number(q('manual-reward-expiry-days')?.value || 60),
-      note: String(q('manual-reward-note')?.value || '').trim()
-    };
-
-    const resultBox = q('manual-reward-result');
-    if (resultBox) resultBox.textContent = 'Creating code...';
-
-    try {
-      const res = await fetch(getApiBase() + '/admin/review-rewards/manual', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      const json = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        throw new Error(json.error || 'Could not create manual reward code');
-      }
-
-      const reward = json.reward || {};
-      STATE.lastManualReward = {
-        code: reward.code,
-        email: reward.email,
-        percentage: reward.percentage || payload.percentage,
-        expiryDays: payload.expiryDays
-      };
-
-      if (resultBox) {
-        resultBox.innerHTML = [
-          '<div class="nr-muted">Manual reward code created</div>',
-          '<div class="nr-code-output">' + reward.code + '</div>',
-          '<div><strong>Email:</strong> ' + reward.email + '</div>',
-          '<div><strong>Discount:</strong> ' + (reward.percentage || payload.percentage) + '%</div>',
-          '<div><strong>Status:</strong> ' + (reward.status || 'issued') + '</div>',
-          '<hr style="border:0; border-top:1px solid var(--border,#e2e8f0); margin:14px 0;" />',
-          '<div id="manual-reward-email-copy"></div>'
-        ].join('');
-      }
-
-      const emailCopy = fillTemplate(emailTemplateValue(), STATE.lastManualReward);
-      const copyBox = q('manual-reward-email-copy');
-      if (copyBox) copyBox.textContent = emailCopy;
-
-      renderRewardEmailPreview();
-      if (typeof window.loadRewardCodes === 'function') window.loadRewardCodes();
-
-      toast('Manual reward code created');
-    } catch (error) {
-      if (resultBox) resultBox.textContent = error.message;
-      alert(error.message);
-    }
-  };
-
-  window.copyManualRewardCode = async function() {
-    const code = STATE.lastManualReward?.code;
-    if (!code) return alert('No manual code has been created yet.');
-    await navigator.clipboard.writeText(code);
-    toast('Code copied');
-  };
-
-  window.copyManualRewardEmail = async function() {
-    const copyBox = q('manual-reward-email-copy');
-    const text = copyBox ? copyBox.textContent : fillTemplate(emailTemplateValue(), STATE.lastManualReward);
-    await navigator.clipboard.writeText(text || '');
-    toast('Email copy copied');
-  };
-
-  function boot() {
-    ensureTopTabs();
-    ensureDiscountViews();
-
-    const activeView = document.querySelector('.view.active');
-    if (activeView) {
-      const mapped = mapViewToState(activeView.id);
-      if (mapped) {
-        STATE.module = mapped.module;
-        STATE.sub = mapped.sub;
-      }
-    }
-
-    renderContextSidebar();
-    setTopActive();
-  }
-
-  document.addEventListener('DOMContentLoaded', boot);
-  setTimeout(boot, 250);
-  setTimeout(boot, 1000);
-  setTimeout(boot, 2000);
-})();
-
-
-
-
-/* -------------------------------------------------------------------------- */
-/* Final contextual side tabs - replaces dropdown sidebar                     */
-/* -------------------------------------------------------------------------- */
-
-(function () {
-  if (window.__nectarSideTabsNoDropdownLoaded) return;
-  window.__nectarSideTabsNoDropdownLoaded = true;
-
-  const state = {
-    module: 'dashboard',
-    sub: 'overview',
-    lastManualReward: null
-  };
-
-  function q(id) {
-    return document.getElementById(id);
-  }
-
-  function getApiBase() {
-    return typeof API !== 'undefined' && API ? API : '/api';
-  }
-
-  function getShopDomain() {
-    if (typeof SHOP_DOMAIN !== 'undefined' && SHOP_DOMAIN) return SHOP_DOMAIN;
-    const params = new URLSearchParams(window.location.search);
-    return params.get('shopDomain') || params.get('shop') || '';
-  }
-
-  function toast(message) {
-    if (typeof window.showToast === 'function') window.showToast(message);
-    else alert(message);
-  }
-
-  function findContentRoot() {
-    const firstView = document.querySelector('.view');
-    return firstView ? firstView.parentElement : document.body;
   }
 
   function ensureTopTabs() {
     let tabs = q('nr-primary-tabs');
 
     if (!tabs) {
-      const root = findContentRoot();
       tabs = document.createElement('div');
       tabs.id = 'nr-primary-tabs';
       tabs.className = 'nr-primary-tabs';
-      tabs.innerHTML = [
-        '<button class="nr-primary-tab" data-module="dashboard" onclick="window.nrSelectModule(\'dashboard\', \'overview\')">Dashboard</button>',
-        '<button class="nr-primary-tab" data-module="reviews" onclick="window.nrSelectModule(\'reviews\', \'manager\')">Reviews</button>',
-        '<button class="nr-primary-tab" data-module="discounts" onclick="window.nrSelectModule(\'discounts\', \'settings\')">Discount Rewards</button>'
-      ].join('');
 
+      const root = contentRoot();
       if (root) root.insertBefore(tabs, root.firstChild);
     }
 
-    document.querySelectorAll('.nr-primary-tab').forEach(button => {
-      button.classList.toggle('active', button.getAttribute('data-module') === state.module);
+    tabs.innerHTML = [
+      '<button type="button" class="nr-primary-tab" data-stable-module="dashboard" data-stable-sub="overview">Dashboard</button>',
+      '<button type="button" class="nr-primary-tab" data-stable-module="reviews" data-stable-sub="manager">Reviews</button>',
+      '<button type="button" class="nr-primary-tab" data-stable-module="discounts" data-stable-sub="settings">Discount Rewards</button>'
+    ].join('');
+
+    tabs.querySelectorAll('.nr-primary-tab').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.stableModule === state.module);
     });
   }
 
-  function getSidebarGroup() {
+  function findSidebarManageGroup() {
     const groups = Array.from(document.querySelectorAll('.nav-group'));
+    if (!groups.length) return null;
 
-    const configGroup = groups.find(group => /configuration/i.test(group.textContent || ''));
-    const developersGroup = groups.find(group => /developers/i.test(group.textContent || ''));
+    const config = groups.find(g => /configuration/i.test(g.textContent || ''));
+    const dev = groups.find(g => /developers/i.test(g.textContent || ''));
 
-    return groups.find(group => {
-      if (group === configGroup || group === developersGroup) return false;
-      const txt = group.textContent || '';
-      return /dashboard|reviews|discount rewards|manage|overview/i.test(txt);
-    }) || groups[0] || null;
+    return groups.find(g => g !== config && g !== dev) || groups[0];
   }
 
   function sideButton(label, module, sub) {
     const active = state.module === module && state.sub === sub ? ' active' : '';
-    return '<button class="nr-side-tab' + active + '" onclick="window.nrSelectModule(\'' + module + '\', \'' + sub + '\')">' + label + '</button>';
+    return '<button type="button" class="nr-side-tab' + active + '" data-stable-module="' + module + '" data-stable-sub="' + sub + '">' + label + '</button>';
   }
 
-  function renderSideTabs() {
-    const group = getSidebarGroup();
+  function renderSidebar() {
+    const group = findSidebarManageGroup();
     if (!group) return;
 
     let title = 'Dashboard';
-    let buttons = '';
-
-    if (state.module === 'dashboard') {
-      title = 'Dashboard';
-      buttons = sideButton('Overview', 'dashboard', 'overview');
-    }
+    let buttons = sideButton('Overview', 'dashboard', 'overview');
 
     if (state.module === 'reviews') {
       title = 'Reviews';
@@ -2346,203 +1062,205 @@ window.load();
       ].join('');
     }
 
-    group.innerHTML = [
-      '<p class="nr-side-title">' + title + '</p>',
-      '<div class="nr-side-tabs">' + buttons + '</div>'
-    ].join('');
+    group.innerHTML = '<p class="nr-side-title">' + title + '</p><div class="nr-side-tabs">' + buttons + '</div>';
   }
 
-  const manualAndEmailHtml = [
-    '<div id="reward-manual" class="nr-discount-subview">',
-      '<div class="nr-manual-code-grid">',
-        '<div class="panel">',
-          '<h3 style="margin-top:0;">Create Manual Reward Code</h3>',
-          '<p class="nr-muted">Create a one-use reward code for a customer email. Use this for support cases and testing.</p>',
-
-          '<div class="nr-field">',
-            '<label>Customer email</label>',
-            '<input id="manual-reward-email" type="email" placeholder="customer@example.com" />',
-          '</div>',
-
-          '<div class="nr-field">',
-            '<label>Code prefix</label>',
-            '<input id="manual-reward-prefix" value="GN" />',
-          '</div>',
-
-          '<div class="nr-field">',
-            '<label>Custom code, optional</label>',
-            '<input id="manual-reward-code" placeholder="Leave blank to auto-generate" />',
-          '</div>',
-
-          '<div class="nr-field">',
-            '<label>Discount percentage</label>',
-            '<input id="manual-reward-percentage" type="number" min="1" max="100" value="5" />',
-          '</div>',
-
-          '<div class="nr-field">',
-            '<label>Expiry window, days</label>',
-            '<input id="manual-reward-expiry-days" type="number" min="1" max="365" value="60" />',
-          '</div>',
-
-          '<button class="post-btn" onclick="window.createManualRewardCode()">Create Manual Code</button>',
-        '</div>',
-
-        '<div class="panel">',
-          '<h3 style="margin-top:0;">Created Code</h3>',
-          '<div id="manual-reward-result" class="nr-manual-result">Create a code to see the email copy here.</div>',
-          '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">',
-            '<button class="secondary-btn" onclick="window.copyManualRewardCode()">Copy Code</button>',
-            '<button class="secondary-btn" onclick="window.copyManualRewardEmail()">Copy Email Copy</button>',
-          '</div>',
-        '</div>',
-      '</div>',
-    '</div>',
-
-    '<div id="reward-email" class="nr-discount-subview">',
-      '<div class="nr-email-template-grid">',
-        '<div class="panel">',
-          '<h3 style="margin-top:0;">Reward Email Template</h3>',
-          '<p class="nr-muted">Design the reward email copy here. The app uses these variables when a code is created.</p>',
-
-          '<div class="nr-variable-row">',
-            '<button class="nr-variable-chip" onclick="window.insertRewardVariable(\'{{ discount_code }}\')">{{ discount_code }}</button>',
-            '<button class="nr-variable-chip" onclick="window.insertRewardVariable(\'{{ expiry_days }}\')">{{ expiry_days }}</button>',
-            '<button class="nr-variable-chip" onclick="window.insertRewardVariable(\'{{ percentage }}\')">{{ percentage }}</button>',
-            '<button class="nr-variable-chip" onclick="window.insertRewardVariable(\'{{ customer_email }}\')">{{ customer_email }}</button>',
-          '</div>',
-
-          '<div class="nr-field">',
-            '<label>Email subject</label>',
-            '<input id="reward-email-subject" value="Your review reward code" />',
-          '</div>',
-
-          '<div class="nr-field">',
-            '<label>Email body</label>',
-            '<textarea id="reward-email-template-main">Thanks for leaving a review.\n\nHere is your unique {{ percentage }}% off code:\n\n{{ discount_code }}\n\nIt expires in {{ expiry_days }} days and can only be used once.</textarea>',
-          '</div>',
-
-          '<button class="post-btn" onclick="window.saveRewardSettings()">Save Email Template</button>',
-        '</div>',
-
-        '<div class="panel">',
-          '<h3 style="margin-top:0;">Live Preview</h3>',
-          '<div id="reward-email-preview" class="nr-email-preview"></div>',
-          '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">',
-            '<button class="secondary-btn" onclick="window.renderRewardEmailPreview()">Refresh Preview</button>',
-            '<button class="secondary-btn" onclick="window.copyRewardEmailPreview()">Copy Preview</button>',
-          '</div>',
-        '</div>',
-      '</div>',
-    '</div>'
-  ].join('');
-
-  function ensureDiscountExtraViews() {
-    const discountSection = q('v-discounts');
-    if (!discountSection) return;
+  function ensureDiscountExtras() {
+    const discountView = q('v-discounts');
+    if (!discountView) return;
 
     if (!q('reward-manual')) {
       const settings = q('reward-settings');
-      if (settings) settings.insertAdjacentHTML('afterend', manualAndEmailHtml);
-      else discountSection.insertAdjacentHTML('beforeend', manualAndEmailHtml);
+      if (settings) settings.insertAdjacentHTML('afterend', discountExtraHtml);
+      else discountView.insertAdjacentHTML('beforeend', discountExtraHtml);
     }
 
     syncEmailTemplateFields();
   }
 
-  function showView(viewId) {
-    if (typeof window.__nectarOriginalTabForSideTabs === 'function') {
-      window.__nectarOriginalTabForSideTabs(viewId);
-      return;
-    }
-
-    document.querySelectorAll('.view').forEach(view => {
-      view.classList.toggle('active', view.id === viewId);
-      view.style.display = view.id === viewId ? '' : 'none';
-    });
-  }
-
-  if (!window.__nectarOriginalTabForSideTabs && typeof window.tab === 'function') {
-    window.__nectarOriginalTabForSideTabs = window.tab;
-  }
-
-  function showDiscountSubView(sub) {
-    ensureDiscountExtraViews();
+  function showDiscountSub(sub) {
+    ensureDiscountExtras();
 
     document.querySelectorAll('.nr-discount-subview').forEach(view => {
-      view.classList.remove('active');
+      view.classList.toggle('active', view.id === 'reward-' + sub);
     });
 
-    document.querySelectorAll('[data-reward-tab]').forEach(button => {
-      button.classList.remove('active');
-    });
-
-    const target = q('reward-' + sub);
-    if (target) target.classList.add('active');
-
-    const oldButton = document.querySelector('[data-reward-tab="' + sub + '"]');
-    if (oldButton) oldButton.classList.add('active');
-
-    if (sub === 'codes' && typeof window.loadRewardCodes === 'function') {
-      window.loadRewardCodes();
-    }
-
-    if (sub === 'email') {
-      renderRewardEmailPreview();
-    }
+    if (sub === 'codes') loadRewardCodes();
+    if (sub === 'email') renderRewardEmailPreview();
   }
 
-  window.nrSelectModule = function(module, sub) {
-    state.module = module;
+  function select(module, sub) {
+    state.module = module || 'dashboard';
     state.sub = sub || 'overview';
 
     ensureTopTabs();
-    ensureDiscountExtraViews();
+    ensureDiscountExtras();
 
-    if (module === 'dashboard') {
+    if (state.module === 'dashboard') {
       state.sub = 'overview';
       showView('v-dash');
       if (typeof window.loadStats === 'function') window.loadStats();
       if (typeof window.loadDashboardOverview === 'function') window.loadDashboardOverview();
     }
 
-    if (module === 'reviews') {
+    if (state.module === 'reviews') {
       if (state.sub === 'manager') showView('v-mgr');
       if (state.sub === 'campaigns') showView(q('v-campaigns') ? 'v-campaigns' : 'v-msg');
       if (state.sub === 'trash') showView('v-trash');
       if (state.sub === 'import') showView('v-import');
     }
 
-    if (module === 'discounts') {
+    if (state.module === 'discounts') {
       showView('v-discounts');
-      showDiscountSubView(state.sub || 'settings');
-      if (typeof window.loadRewardSettings === 'function') window.loadRewardSettings();
+      showDiscountSub(state.sub || 'settings');
+      loadRewardSettings();
     }
 
     ensureTopTabs();
-    renderSideTabs();
+    renderSidebar();
+  }
 
-    setTimeout(renderSideTabs, 50);
-    setTimeout(renderSideTabs, 250);
-  };
+  window.nrSelectModule = select;
 
-  window.tab = function(viewId) {
-    if (viewId === 'v-dash') return window.nrSelectModule('dashboard', 'overview');
-    if (viewId === 'v-mgr') return window.nrSelectModule('reviews', 'manager');
-    if (viewId === 'v-msg' || viewId === 'v-campaigns') return window.nrSelectModule('reviews', 'campaigns');
-    if (viewId === 'v-trash') return window.nrSelectModule('reviews', 'trash');
-    if (viewId === 'v-import') return window.nrSelectModule('reviews', 'import');
-    if (viewId === 'v-discounts') return window.nrSelectModule('discounts', state.sub || 'settings');
-
-    showView(viewId);
+  window.tab = function(id) {
+    if (id === 'v-dash') return select('dashboard', 'overview');
+    if (id === 'v-mgr') return select('reviews', 'manager');
+    if (id === 'v-campaigns' || id === 'v-msg') return select('reviews', 'campaigns');
+    if (id === 'v-trash') return select('reviews', 'trash');
+    if (id === 'v-import') return select('reviews', 'import');
+    if (id === 'v-discounts') return select('discounts', state.sub || 'settings');
+    showView(id);
   };
 
   window.rewardSubTab = function(sub) {
-    state.module = 'discounts';
-    state.sub = sub || 'settings';
-    showView('v-discounts');
-    showDiscountSubView(state.sub);
-    ensureTopTabs();
-    renderSideTabs();
+    return select('discounts', sub || 'settings');
+  };
+
+  document.addEventListener('click', function(event) {
+    const btn = event.target.closest('[data-stable-module][data-stable-sub]');
+    if (!btn) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+
+    select(btn.dataset.stableModule, btn.dataset.stableSub);
+  }, true);
+
+  function setText(id, value) {
+    const el = q(id);
+    if (el) el.textContent = value;
+  }
+
+  function setVal(id, value, fallback) {
+    const el = q(id);
+    if (el) el.value = value ?? fallback ?? '';
+  }
+
+  function setCheck(id, value) {
+    const el = q(id);
+    if (el) el.checked = !!value;
+  }
+
+  window.loadRewardSettings = async function() {
+    try {
+      const res = await fetch(getApiBase() + '/admin/review-reward-settings?shopDomain=' + encodeURIComponent(getShopDomain()) + '&t=' + Date.now());
+      if (!res.ok) return;
+
+      const s = await res.json();
+
+      setCheck('reward-enabled', s.enabled);
+      setVal('reward-percentage', s.percentage, 5);
+      setVal('reward-expiry-days', s.expiryDays, 60);
+      setVal('reward-prefix', s.prefix, 'GN');
+      setVal('reward-trigger-status', s.triggerStatus, 'accepted');
+      setCheck('reward-verified-only', s.verifiedOnly !== false);
+      setCheck('reward-combine-order', s.combinesWith?.orderDiscounts !== false);
+      setCheck('reward-combine-product', s.combinesWith?.productDiscounts !== false);
+      setCheck('reward-combine-shipping', s.combinesWith?.shippingDiscounts !== false);
+
+      if (q('reward-email-template')) q('reward-email-template').value = s.emailTemplate || q('reward-email-template').value;
+      if (q('reward-email-template-main')) q('reward-email-template-main').value = s.emailTemplate || q('reward-email-template-main').value;
+
+      syncEmailTemplateFields();
+      renderRewardEmailPreview();
+    } catch (error) {
+      console.warn('Reward settings load failed:', error);
+    }
+  };
+
+  window.saveRewardSettings = async function() {
+    syncEmailTemplateFields();
+
+    const payload = {
+      shopDomain: getShopDomain(),
+      enabled: !!q('reward-enabled')?.checked,
+      percentage: Number(q('reward-percentage')?.value || 5),
+      expiryDays: Number(q('reward-expiry-days')?.value || 60),
+      prefix: String(q('reward-prefix')?.value || 'GN').trim().toUpperCase(),
+      triggerStatus: q('reward-trigger-status')?.value || 'accepted',
+      verifiedOnly: !!q('reward-verified-only')?.checked,
+      combinesWith: {
+        orderDiscounts: !!q('reward-combine-order')?.checked,
+        productDiscounts: !!q('reward-combine-product')?.checked,
+        shippingDiscounts: !!q('reward-combine-shipping')?.checked
+      },
+      emailTemplate: templateValue()
+    };
+
+    const res = await fetch(getApiBase() + '/admin/review-reward-settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.error || 'Could not save reward settings');
+      return;
+    }
+
+    toast('Reward settings saved');
+  };
+
+  window.loadRewardCodes = async function() {
+    const tbody = q('reward-code-list');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
+
+    try {
+      const res = await fetch(getApiBase() + '/admin/review-rewards?shopDomain=' + encodeURIComponent(getShopDomain()) + '&t=' + Date.now());
+
+      if (!res.ok) {
+        tbody.innerHTML = '<tr><td colspan="5">Could not load reward codes.</td></tr>';
+        return;
+      }
+
+      const rows = await res.json();
+
+      if (!Array.isArray(rows) || !rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5">No reward codes have been generated yet.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = rows.map(row => {
+        const status = row.status || 'issued';
+        const expires = row.endsAt ? new Date(row.endsAt).toLocaleDateString() : '—';
+
+        return [
+          '<tr>',
+            '<td><strong>' + (row.code || '—') + '</strong></td>',
+            '<td>' + (row.email || '—') + '</td>',
+            '<td><span class="nr-badge ' + status + '">' + status + '</span></td>',
+            '<td>' + expires + '</td>',
+            '<td>' + (row.reviewId || '—') + '</td>',
+          '</tr>'
+        ].join('');
+      }).join('');
+    } catch (error) {
+      tbody.innerHTML = '<tr><td colspan="5">Could not load reward codes.</td></tr>';
+    }
   };
 
   function getTemplateBox() {
@@ -2558,17 +1276,9 @@ window.load();
       oldBox.value = newBox.value;
     }
 
-    if (q('manual-reward-prefix') && q('reward-prefix')) {
-      q('manual-reward-prefix').value = q('reward-prefix').value || 'GN';
-    }
-
-    if (q('manual-reward-percentage') && q('reward-percentage')) {
-      q('manual-reward-percentage').value = q('reward-percentage').value || 5;
-    }
-
-    if (q('manual-reward-expiry-days') && q('reward-expiry-days')) {
-      q('manual-reward-expiry-days').value = q('reward-expiry-days').value || 60;
-    }
+    if (q('manual-reward-prefix') && q('reward-prefix')) q('manual-reward-prefix').value = q('reward-prefix').value || 'GN';
+    if (q('manual-reward-percentage') && q('reward-percentage')) q('manual-reward-percentage').value = q('reward-percentage').value || 5;
+    if (q('manual-reward-expiry-days') && q('reward-expiry-days')) q('manual-reward-expiry-days').value = q('reward-expiry-days').value || 60;
   }
 
   function templateValue() {
@@ -2653,6 +1363,7 @@ window.load();
       }
 
       const reward = json.reward || {};
+
       state.lastManualReward = {
         code: reward.code,
         email: reward.email,
@@ -2678,11 +1389,7 @@ window.load();
       if (copyBox) copyBox.textContent = emailCopy;
 
       renderRewardEmailPreview();
-
-      if (typeof window.loadRewardCodes === 'function') {
-        window.loadRewardCodes();
-      }
-
+      loadRewardCodes();
       toast('Manual reward code created');
     } catch (error) {
       if (resultBox) resultBox.textContent = error.message;
@@ -2705,60 +1412,33 @@ window.load();
   };
 
   function detectInitialState() {
-    const activeTop = document.querySelector('.nr-primary-tab.active');
-    const module = activeTop ? activeTop.getAttribute('data-module') : null;
-
-    if (module === 'reviews') {
-      state.module = 'reviews';
-      state.sub = 'manager';
-      return;
-    }
-
-    if (module === 'discounts') {
-      state.module = 'discounts';
-      state.sub = 'settings';
-      return;
-    }
-
     const activeView = document.querySelector('.view.active');
 
-    if (activeView) {
-      if (activeView.id === 'v-mgr') {
-        state.module = 'reviews';
-        state.sub = 'manager';
-      } else if (activeView.id === 'v-discounts') {
-        state.module = 'discounts';
-        state.sub = 'settings';
-      } else {
-        state.module = 'dashboard';
-        state.sub = 'overview';
-      }
+    if (!activeView) return;
+
+    if (activeView.id === 'v-mgr') {
+      state.module = 'reviews';
+      state.sub = 'manager';
+    } else if (activeView.id === 'v-discounts') {
+      state.module = 'discounts';
+      state.sub = 'settings';
+    } else {
+      state.module = 'dashboard';
+      state.sub = 'overview';
     }
   }
 
   function boot() {
     detectInitialState();
     ensureTopTabs();
-    ensureDiscountExtraViews();
-    renderSideTabs();
+    ensureDiscountExtras();
+    renderSidebar();
     renderRewardEmailPreview();
-  }
-
-  const observer = new MutationObserver(function() {
-    clearTimeout(window.__nectarSideTabsTimer);
-    window.__nectarSideTabsTimer = setTimeout(function() {
-      ensureTopTabs();
-      renderSideTabs();
-    }, 80);
-  });
-
-  if (document.body) {
-    observer.observe(document.body, { childList: true, subtree: true });
   }
 
   document.addEventListener('DOMContentLoaded', boot);
   setTimeout(boot, 100);
-  setTimeout(boot, 500);
-  setTimeout(boot, 1200);
+  setTimeout(boot, 600);
+  setTimeout(boot, 1500);
 })();
 
