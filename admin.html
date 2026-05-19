@@ -1,0 +1,19 @@
+query RunInput {
+  discount {
+    discountClasses
+    metafield(namespace: "nectar_reviews", key: "reward_config") {
+      value
+    }
+  }
+  cart {
+    buyerIdentity {
+      email
+      customer {
+        email
+      }
+    }
+    lines {
+      id
+    }
+  }
+}

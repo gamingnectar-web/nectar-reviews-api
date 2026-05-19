@@ -1,23 +1,306 @@
-{
-  "name": "nectar-reviews-api-secure-modular",
-  "version": "3.2.0",
-  "description": "Shopify reviews, discounts and Nectar Drops loyalty app with installed-shop admin sessions",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
-    "check": "node scripts/check-syntax.js",
-    "audit": "npm audit --omit=dev",
-    "privacy:scrub": "node scripts/privacy-scrub-existing-data.js"
-  },
-  "engines": {
-    "node": ">=18"
-  },
-  "dependencies": {
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "mongoose": "^8.3.2",
-    "nodemailer": "^8.0.7"
-  }
-}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nectar Reviews Admin</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --panel: #ffffff;
+      --text: #0f172a;
+      --text-light: #64748b;
+      --border: #e2e8f0;
+      --accent: #0f172a;
+      --success: #067647;
+      --danger: #b42318;
+      --warning: #b54708;
+      --soft: #f1f5f9;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+
+    .app-shell { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 100vh; }
+    .sidebar { padding: 22px; border-right: 1px solid var(--border); background: #f1f5f9; position: sticky; top: 0; height: 100vh; overflow: auto; }
+    .brand { font-size: 22px; font-weight: 950; letter-spacing: -0.04em; margin: 0 0 4px; }
+    .brand-sub { color: var(--text-light); margin: 0 0 26px; font-size: 13px; }
+    .nav-group { margin: 0 0 22px; }
+    .nav-title, .nr-side-title { margin: 0 0 10px; color: var(--text-light); text-transform: uppercase; letter-spacing: .12em; font-size: 11px; font-weight: 950; }
+    .nr-side-tabs { display: grid; gap: 8px; }
+    .nr-side-tab, .static-nav-btn { width: 100%; border: 0; background: transparent; color: var(--text); text-align: left; padding: 11px 13px; border-radius: 10px; font-weight: 850; cursor: pointer; }
+    .nr-side-tab:hover, .nr-side-tab.active, .static-nav-btn:hover { background: #ffffff; }
+
+    .main { padding: 28px; max-width: 1480px; width: 100%; }
+    .nr-primary-tabs { display: flex; align-items: center; gap: 10px; margin: 0 0 24px; padding: 0 0 18px; border-bottom: 1px solid var(--border); position: relative; z-index: 5; }
+    .nr-primary-tab { display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border); background: #ffffff; color: var(--text); border-radius: 999px; padding: 11px 18px; font-weight: 900; cursor: pointer; white-space: nowrap; }
+    .nr-primary-tab.active { background: var(--text); color: #ffffff; border-color: var(--text); }
+
+    .view { display: none; }
+    .view.active { display: block; }
+    .page-title { font-size: 30px; letter-spacing: -0.04em; margin: 0 0 22px; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 20px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    .stack { display: grid; gap: 18px; }
+    .muted, .nr-muted { color: var(--text-light); font-size: 13px; line-height: 1.5; }
+
+    .stat-card { background: #fff; border: 1px solid var(--border); border-radius: 18px; padding: 20px; }
+    .stat-card p { margin: 0 0 8px; color: var(--text-light); font-size: 12px; text-transform: uppercase; font-weight: 900; }
+    .stat-card strong { font-size: 30px; letter-spacing: -0.05em; }
+
+    .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
+    .toolbar select, .toolbar input { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: #fff; }
+
+    .btn, .post-btn, .secondary-btn, .danger-btn { border: 1px solid transparent; border-radius: 12px; padding: 10px 14px; font-weight: 900; cursor: pointer; }
+    .btn, .post-btn { background: var(--text); color: #fff; }
+    .secondary-btn { background: #fff; color: var(--text); border-color: var(--border); }
+    .danger-btn { background: #fef3f2; color: var(--danger); border-color: #fecaca; }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+    .review-card { background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin-bottom: 12px; }
+    .review-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+    .stars { color: #f5b301; letter-spacing: 1px; font-weight: 900; }
+    .badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 5px 9px; font-size: 12px; font-weight: 900; background: #eef2ff; color: #3730a3; }
+    .badge.accepted, .badge.issued, .badge.used { background: #ecfdf3; color: var(--success); }
+    .badge.pending { background: #fffaeb; color: var(--warning); }
+    .badge.rejected, .badge.spam, .badge.failed { background: #fef3f2; color: var(--danger); }
+    .badge.hold { background: #eff6ff; color: #1d4ed8; }
+
+    .field, .nr-field { margin-bottom: 15px; }
+    .field label, .nr-field label { display: block; font-weight: 850; margin-bottom: 7px; }
+    .field input, .field select, .field textarea, .nr-field input, .nr-field select, .nr-field textarea { width: 100%; border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: #fff; }
+    .field textarea, .nr-field textarea { min-height: 130px; font-family: inherit; }
+
+    .nr-discount-subview { display: none; }
+    .nr-discount-subview.active { display: block; }
+    .nr-form-grid, .nr-manual-code-grid, .nr-email-template-grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 18px; }
+    .nr-manual-result, .nr-email-preview { border: 1px solid var(--border); background: #fff; border-radius: 16px; padding: 16px; min-height: 160px; white-space: pre-wrap; }
+    .nr-code-output { font-size: 28px; font-weight: 950; letter-spacing: .02em; margin: 8px 0 14px; }
+    .nr-code-table { width: 100%; border-collapse: collapse; }
+    .nr-code-table th, .nr-code-table td { text-align: left; padding: 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .nr-code-table th { color: var(--text-light); text-transform: uppercase; font-size: 11px; }
+
+    .sub-preview { display: none; }
+    .sub-preview.active { display: block; }
+    .sub-view { display: none; }
+    .sub-view.active { display: block; }
+
+    #custom-toast { position: fixed; top: -100px; left: 50%; transform: translateX(-50%); background: var(--text); color: #fff; padding: 12px 16px; border-radius: 999px; z-index: 9999; transition: top .25s ease; font-weight: 850; }
+
+    @media (max-width: 1000px) {
+      .app-shell { grid-template-columns: 1fr; }
+      .sidebar { position: relative; height: auto; }
+      .main { padding: 20px; }
+      .grid-2, .grid-3, .grid-4, .nr-form-grid, .nr-manual-code-grid, .nr-email-template-grid { grid-template-columns: 1fr; }
+      .nr-primary-tabs { overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div id="custom-toast"></div>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <h1 class="brand">Nectar Reviews</h1>
+      <p class="brand-sub">Admin Console</p>
+      <div class="nav-group" id="context-nav">
+        <p class="nr-side-title">Dashboard</p>
+        <div class="nr-side-tabs"><button class="nr-side-tab active" type="button">Overview</button></div>
+      </div>
+      <div class="nav-group">
+        <p class="nav-title">Configuration</p>
+        <button class="static-nav-btn" type="button" data-static-view="v-settings">Rules & Settings</button>
+        <button class="static-nav-btn" type="button" data-static-view="v-style">Visual Customiser</button>
+      </div>
+      <div class="nav-group">
+        <p class="nav-title">Developers</p>
+        <button class="static-nav-btn" type="button" data-static-view="v-install">Manual Setup</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div id="nr-primary-tabs" class="nr-primary-tabs"></div>
+
+      <section id="v-dash" class="view active">
+        <h2 class="page-title">Performance Dashboard</h2>
+        <div class="grid-4">
+          <div class="stat-card"><p>Total Reviews</p><strong id="stat-total">0</strong></div>
+          <div class="stat-card"><p>Live on Store</p><strong id="stat-live">0</strong></div>
+          <div class="stat-card"><p>Pending</p><strong id="stat-pending">0</strong></div>
+          <div class="stat-card"><p>Average Rating</p><strong id="stat-average">0.0</strong></div>
+        </div>
+        <div class="grid-2" style="margin-top:18px;">
+          <div class="panel" id="v-dash-prod-card">
+            <h3 style="margin-top:0;">Top Product Snapshot</h3>
+            <p class="muted">Loading top product...</p>
+          </div>
+          <div class="panel">
+            <h3 style="margin-top:0;">Review Sources</h3>
+            <div id="source-summary" class="muted">Loading sources...</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="v-mgr" class="view">
+        <h2 class="page-title">Review Manager</h2>
+        <div class="toolbar">
+          <select id="filter-stars">
+            <option value="all">All Stars</option><option value="5">5 Stars</option><option value="4">4 Stars</option><option value="3">3 Stars</option><option value="2">2 Stars</option><option value="1">1 Star</option>
+          </select>
+          <select id="filter-status">
+            <option value="all">All Statuses</option><option value="pending">Pending</option><option value="accepted">Accepted</option><option value="hold">On Hold</option><option value="rejected">Rejected</option><option value="spam">Spam / Test</option>
+          </select>
+          <button class="secondary-btn" type="button" id="refresh-reviews">Refresh</button>
+        </div>
+        <div id="reviews-list" class="stack"><div class="panel muted">Loading reviews...</div></div>
+      </section>
+
+      <section id="v-msg" class="view">
+        <h2 class="page-title">Messaging & Campaigns</h2>
+        <div class="panel">
+          <h3 style="margin-top:0;">Review request campaigns</h3>
+          <p class="muted">Campaign builder and email flow controls can be expanded here. Review reward emails are managed in Discount Rewards → Email Template.</p>
+          <div id="flow-code" class="muted"></div>
+        </div>
+      </section>
+
+      <section id="v-trash" class="view">
+        <h2 class="page-title">Trash Bin</h2>
+        <p class="muted">Reviews here will be permanently deleted after 28 days.</p>
+        <div id="trash-list" class="stack"><div class="panel muted">Loading...</div></div>
+      </section>
+
+      <section id="v-import" class="view">
+        <h2 class="page-title">Importer Tool</h2>
+        <div class="panel">
+          <h3 style="margin-top:0;">CSV Import</h3>
+          <p class="muted">Upload handling can be reconnected to your importer endpoint. Keep CSV columns for Product ID, Star Rating, Name, and Review Body.</p>
+          <input type="file" id="csv-file" accept=".csv" />
+        </div>
+      </section>
+
+      <section id="v-discounts" class="view">
+        <h2 class="page-title">Discount Rewards</h2>
+        <div id="reward-settings" class="nr-discount-subview active">
+          <div class="grid-2">
+            <div class="panel">
+              <h3 style="margin-top:0;">Review Reward Settings</h3>
+              <p class="nr-muted">Create unique Shopify discount codes when a customer leaves an eligible review.</p>
+              <div class="nr-form-grid">
+                <div class="nr-field"><label>Enable reward codes</label><label><input type="checkbox" id="reward-enabled" /> Issue codes automatically</label></div>
+                <div class="nr-field"><label>Reward percentage</label><input id="reward-percentage" type="number" min="1" max="100" value="5" /></div>
+                <div class="nr-field"><label>Expiry window, days</label><input id="reward-expiry-days" type="number" min="1" max="365" value="60" /></div>
+                <div class="nr-field"><label>Code prefix</label><input id="reward-prefix" value="GN" /></div>
+                <div class="nr-field"><label>Issue when review status is</label><select id="reward-trigger-status"><option value="accepted">Accepted</option><option value="pending">Submitted / Pending</option></select></div>
+                <div class="nr-field"><label>Verification rule</label><label><input type="checkbox" id="reward-verified-only" checked /> Verified purchases only</label></div>
+              </div>
+              <h4>Combine with</h4>
+              <label><input type="checkbox" id="reward-combine-order" checked /> Order discounts</label><br />
+              <label><input type="checkbox" id="reward-combine-product" checked /> Product / BOGO discounts</label><br />
+              <label><input type="checkbox" id="reward-combine-shipping" checked /> Free shipping discounts</label><br /><br />
+              <button class="post-btn" type="button" id="save-reward-settings">Save Reward Settings</button>
+            </div>
+            <div class="panel">
+              <h3 style="margin-top:0;">Reward Email Format</h3>
+              <div class="nr-field"><label>Email subject</label><input id="reward-email-subject" value="Your review reward code" /></div>
+              <div class="nr-field"><label>Email copy</label><textarea id="reward-email-template">Thanks for leaving a review.
+
+Here is your unique {{ percentage }}% off code:
+
+{{ discount_code }}
+
+It expires in {{ expiry_days }} days and can only be used once.</textarea></div>
+            </div>
+          </div>
+        </div>
+        <div id="reward-manual" class="nr-discount-subview">
+          <div class="nr-manual-code-grid">
+            <div class="panel">
+              <h3 style="margin-top:0;">Create Manual Reward Code</h3>
+              <div class="nr-field"><label>Customer email</label><input id="manual-reward-email" type="email" placeholder="customer@example.com" /></div>
+              <div class="nr-field"><label>Code prefix</label><input id="manual-reward-prefix" value="GN" /></div>
+              <div class="nr-field"><label>Custom code, optional</label><input id="manual-reward-code" placeholder="Leave blank to auto-generate" /></div>
+              <div class="nr-field"><label>Discount percentage</label><input id="manual-reward-percentage" type="number" min="1" max="100" value="5" /></div>
+              <div class="nr-field"><label>Expiry window, days</label><input id="manual-reward-expiry-days" type="number" min="1" max="365" value="60" /></div>
+              <button class="post-btn" type="button" id="create-manual-code">Create Manual Code</button>
+            </div>
+            <div class="panel"><h3 style="margin-top:0;">Created Code</h3><div id="manual-reward-result" class="nr-manual-result">Create a code to see the email copy here.</div></div>
+          </div>
+        </div>
+        <div id="reward-codes" class="nr-discount-subview">
+          <div class="panel">
+            <div class="btn-row" style="justify-content:space-between;"><h3 style="margin:0;">Generated Reward Codes</h3><button class="secondary-btn" type="button" id="refresh-codes">Refresh Codes</button></div>
+            <div style="overflow:auto;margin-top:16px;"><table class="nr-code-table"><thead><tr><th>Code</th><th>Email</th><th>Status</th><th>Expires</th><th>Review</th></tr></thead><tbody id="reward-code-list"><tr><td colspan="5">No codes loaded yet.</td></tr></tbody></table></div>
+          </div>
+        </div>
+        <div id="reward-email" class="nr-discount-subview">
+          <div class="nr-email-template-grid">
+            <div class="panel"><h3 style="margin-top:0;">Reward Email Template</h3><div class="nr-field"><label>Email body</label><textarea id="reward-email-template-main">Thanks for leaving a review.
+
+Here is your unique {{ percentage }}% off code:
+
+{{ discount_code }}
+
+It expires in {{ expiry_days }} days and can only be used once.</textarea></div><button class="post-btn" type="button" id="save-email-template">Save Email Template</button></div>
+            <div class="panel"><h3 style="margin-top:0;">Live Preview</h3><div id="reward-email-preview" class="nr-email-preview"></div></div>
+          </div>
+        </div>
+        <div id="reward-function" class="nr-discount-subview"><div class="panel"><h3 style="margin-top:0;">Function Outline</h3><p class="muted">The app creates the unique code. Shopify applies it at checkout. The included Shopify Function extension is available for future app-discount logic.</p></div></div>
+      </section>
+
+      <section id="v-settings" class="view">
+        <h2 class="page-title">Rules & Settings</h2>
+        <div class="grid-2">
+          <div class="panel">
+            <h3 style="margin-top:0;">Developer Beta Mode</h3>
+            <div class="field"><label><input type="checkbox" id="set-beta-enable" /> Enable Beta Mode</label></div>
+            <div class="field"><label>Beta Tester Email</label><input id="set-beta-email" placeholder="customer@example.com" /></div>
+            <h3>Automated Publishing</h3>
+            <div class="field"><label><input type="checkbox" id="set-auto-enable" /> Enable Auto-Approve</label></div>
+            <div class="field"><label>Eligible reviews</label><select id="set-auto-type"><option value="verified">Verified Purchases Only</option><option value="all">All Reviews</option></select></div>
+            <div class="field"><label>Minimum Star Rating</label><select id="set-min-stars"><option value="5">5 Stars only</option><option value="4">4 Stars & up</option><option value="3">3 Stars & up</option><option value="2">2 Stars & up</option><option value="1">All Ratings</option></select></div>
+            <div class="field"><label><input type="checkbox" id="set-seo" checked /> Enable Google Rich Snippets</label></div>
+            <button class="post-btn" type="button" id="save-settings">Save Settings</button>
+          </div>
+          <div class="panel"><h3 style="margin-top:0;">Smart Conditional Sliders</h3><p class="muted">Attribute and product-tag slider rules can be reconnected here.</p><div id="attribute-list"></div></div>
+        </div>
+      </section>
+
+      <section id="v-style" class="view">
+        <h2 class="page-title">Visual Customiser</h2>
+        <div class="grid-2">
+          <div class="panel">
+            <div class="field"><label>Widget Title</label><input id="style-title" value="Customer Reviews" /></div>
+            <div class="field"><label>Brand Color</label><input id="style-primary" type="color" value="#000000" /></div>
+            <div class="field"><label>Star Color</label><input id="style-star" type="color" value="#ffc700" /></div>
+            <div class="field"><label>Text Size (px)</label><input id="style-text" type="number" value="15" /></div>
+            <button class="post-btn" type="button" id="save-style">Publish Styles</button>
+          </div>
+          <div class="panel"><h3 style="margin-top:0;">Live Preview</h3><div id="preview-container-wrap"><h3 id="preview-title">Customer Reviews</h3><div class="stars">★★★★★</div><p class="muted">Sample review preview</p></div></div>
+        </div>
+      </section>
+
+      <section id="v-install" class="view">
+        <h2 class="page-title">Manual Installation</h2>
+        <div class="panel">
+          <h3>Product Page Widget</h3>
+          <pre>&lt;div class="rev-widget" data-id="{{ product.id }}" data-shop="{{ shop.domain }}"&gt;&lt;/div&gt;</pre>
+          <h3>Global Carousel</h3>
+          <p class="muted">Use the Global Review Carousel block from the theme/app extension.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/admin.js?v=consolidated-live-2"></script>
+  <script src="/admin-messaging-campaigns.js?v=consolidated-live-2"></script>
+</body>
+</html>
