@@ -1,16 +1,18 @@
 # Nectar Reviews API
 
-Secure foundation build for the existing Nectar Reviews app.
+Secure foundation build for the existing Nectar Reviews app. This revision deliberately preserves the existing review manager/product-widget/messaging behaviour and only hardens the logic, API boundaries, and structure.
 
 ## What changed
 
-- Keeps the same admin dashboard structure/layout style.
+- Keeps the same admin dashboard structure/layout style and restores the original admin review line-bar display.
 - Moves backend code out of one large `server.js` into `src/` modules.
 - Adds admin-route protection for `/api/admin/*`, `/api/reviews/import`, and `/api/reviews/:id` updates.
 - Adds Shopify session token verification support.
 - Adds a temporary `ADMIN_SHARED_SECRET` fallback for local/dev while embedded App Bridge auth is tested.
 - Adds basic security headers, input validation, scoped CORS, rate limiting, and safer error responses.
 - Adds future product-line tabs for Discounts, Loyalty, and Referrals as inactive placeholders.
+- Restores the full product-page review widget experience: rating snapshot, customer consensus bars, review cards, and write-review modal.
+- Restores the Messaging & Campaigns Flow builder, review page tester, SMTP settings, campaign analytics, code copy, and test email tools.
 
 ## Deploy
 

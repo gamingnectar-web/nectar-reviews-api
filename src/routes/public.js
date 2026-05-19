@@ -28,26 +28,51 @@ router.get('/reviews', async (req, res, next) => {
     if (!itemId) return res.status(400).json({ error: 'itemId is required.' });
 
     const limit = clampNumber(req.query.limit, 1, 50, 20);
-    const reviews = await Review.find({ shopDomain, itemId, status: 'accepted', isDeleted: false })
+    const match = { shopDomain, itemId, status: 'accepted', isDeleted: false };
+    const allReviews = await Review.find(match)
       .sort({ createdAt: -1 })
-      .limit(limit)
+      .limit(500)
       .lean();
+    const reviews = allReviews.slice(0, limit);
 
-    const average = reviews.length
-      ? Number((reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / reviews.length).toFixed(1))
+    const count = allReviews.length;
+    const average = count
+      ? Number((allReviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / count).toFixed(1))
       : 0;
+
+    const distribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    const attrTotals = {};
+    allReviews.forEach((review) => {
+      const star = Math.max(1, Math.min(5, Math.round(Number(review.rating || 0))));
+      distribution[star] = (distribution[star] || 0) + 1;
+      const attrs = review.attributes && typeof review.attributes === 'object' ? review.attributes : {};
+      Object.entries(attrs).forEach(([key, value]) => {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) return;
+        if (!attrTotals[key]) attrTotals[key] = { sum: 0, count: 0 };
+        attrTotals[key].sum += numeric;
+        attrTotals[key].count += 1;
+      });
+    });
+    const attributeAverages = Object.fromEntries(Object.entries(attrTotals).map(([key, item]) => [
+      key,
+      item.count ? Number((item.sum / item.count).toFixed(1)) : 0,
+    ]));
 
     const config = await getSettings(shopDomain);
     return res.json({
       reviews,
-      count: reviews.length,
+      count,
       average,
+      distribution,
+      attributeAverages,
       settings: {
         betaMode: config?.betaMode || { enabled: false, email: '' },
         seo: config?.seo || { richSnippets: true },
         widgetStyles: config?.widgetStyles || {},
         cardStyles: config?.cardStyles || {},
         carouselStyles: config?.carouselStyles || {},
+        attributeProfiles: config?.attributeProfiles || [],
       },
     });
   } catch (error) {

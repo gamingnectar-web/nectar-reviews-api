@@ -74,6 +74,9 @@ async function adminFetch(path, options = {}) {
   return res.json();
 }
 
+window.adminFetch = adminFetch;
+window.SHOP_DOMAIN = SHOP_DOMAIN;
+
 window.showToast = function(msg) {
   if (window.shopify && window.shopify.toast) window.shopify.toast.show(msg);
   const toast = document.getElementById('custom-toast');
@@ -281,44 +284,63 @@ window.renderLists = function() {
 
 window.buildCard = function(r, isTrash) {
   const rating = Number(r.rating || 0);
+  const createdDate = new Date(r.createdAt || Date.now()).toLocaleDateString();
+  const productUrl = r.itemId && SHOP_DOMAIN && SHOP_DOMAIN.includes('myshopify.com')
+    ? `https://${SHOP_DOMAIN}/admin/products/${encodeURIComponent(r.itemId)}`
+    : '';
   const verifyHtml = r.verifiedPurchase
-    ? '<span class="v-badge v-badge-yes">✓ Verified Buyer</span>'
-    : `<button class="v-badge v-badge-no" onclick="window.manuallyVerify('${r._id}')">⚠️ Unverified — Verify</button>`;
+    ? `<span class="v-badge v-badge-yes" title="${escapeHtml(r.verificationNote || 'Verified Purchase')}">✓ Verified Buyer</span>`
+    : `<button class="v-badge v-badge-no" title="${escapeHtml(r.verificationNote || 'Could not verify.') }" onclick="window.manuallyVerify('${r._id}')">⚠️ Unverified</button>`;
   let attrHtml = '';
   if (r.attributes && Object.keys(r.attributes).length > 0) {
-    attrHtml = '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">';
-    for (const [key, val] of Object.entries(r.attributes)) {
-      attrHtml += `<span class="attr-tag">${escapeHtml(key)} ${escapeHtml(val)}/10</span>`;
+    attrHtml = '<div class="admin-attr-grid">';
+    for (const [key, rawVal] of Object.entries(r.attributes)) {
+      const val = Math.max(0, Math.min(10, Number(rawVal || 0)));
+      const pct = Math.max(0, Math.min(100, val * 10));
+      attrHtml += `
+        <div class="admin-attr-item">
+          <div class="admin-attr-head"><span>${escapeHtml(key)}</span><strong>${escapeHtml(val)}/10</strong></div>
+          <div class="admin-attr-bar"><span class="admin-attr-fill" style="width:${pct}%"></span></div>
+        </div>`;
     }
     attrHtml += '</div>';
   }
+  const testLabel = (r.isTestReview || r.testMode || r.testLabel)
+    ? `<span class="test-label">${escapeHtml(r.testLabel || 'Test Review')}</span>`
+    : '';
+  const productHtml = r.itemId
+    ? (productUrl ? `<a class="admin-product-pill" href="${productUrl}" target="_blank" rel="noopener">${escapeHtml(r.itemId)} ↗</a>` : `<span class="admin-product-pill">${escapeHtml(r.itemId)}</span>`)
+    : '<span class="muted">No Product ID</span>';
 
   return `
     <div class="review-card status-border-${escapeHtml(r.status || 'pending')}">
       <div style="display:flex; gap:22px; justify-content:space-between; align-items:flex-start;">
         <div style="flex:1; min-width:0;">
-          <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+          <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
+            ${testLabel}
             <span class="customer-link">${escapeHtml(r.userId || 'Guest')}</span>
             <span class="status-group">
-              <button class="s-btn acc ${r.status === 'accepted' ? 'active' : ''}" onclick="window.updateStatus('${r._id}', 'accepted')">✓</button>
-              <button class="s-btn hld ${r.status === 'hold' ? 'active' : ''}" onclick="window.updateStatus('${r._id}', 'hold')">⏸</button>
-              <button class="s-btn rej ${r.status === 'rejected' ? 'active' : ''}" onclick="window.updateStatus('${r._id}', 'rejected')">✕</button>
+              <button class="s-btn acc ${r.status === 'accepted' ? 'active' : ''}" onclick="window.updateStatus('${r._id}', 'accepted')" title="Accept">✓</button>
+              <button class="s-btn hld ${r.status === 'hold' ? 'active' : ''}" onclick="window.updateStatus('${r._id}', 'hold')" title="Hold">⏸</button>
+              <button class="s-btn rej ${r.status === 'rejected' ? 'active' : ''}" onclick="window.updateStatus('${r._id}', 'rejected')" title="Reject">✕</button>
             </span>
           </div>
-          <div style="color:var(--star); font-size:19px; margin-bottom:8px;">${'★'.repeat(rating)}${'☆'.repeat(Math.max(0, 5 - rating))}</div>
-          <h3 style="margin:0 0 8px;">${escapeHtml(r.headline || 'No Headline')}</h3>
-          <p style="margin:0; color:#374151; line-height:1.5; white-space:pre-wrap;">${escapeHtml(r.comment || '')}</p>
+          <div style="color:var(--star); font-size:19px; margin-bottom:8px; letter-spacing:1px;">${'★'.repeat(rating)}${'☆'.repeat(Math.max(0, 5 - rating))}</div>
+          <h3 style="margin:0 0 8px; font-size:20px; line-height:1.25;">${escapeHtml(r.headline || 'No Headline')}</h3>
+          <p style="margin:0; color:#374151; line-height:1.5; white-space:pre-wrap; font-size:15px;">${escapeHtml(r.comment || '')}</p>
           ${attrHtml}
-          <p class="muted" style="margin:14px 0 0; font-size:13px;">Product ID: ${escapeHtml(r.itemId || '')} • ${new Date(r.createdAt || Date.now()).toLocaleDateString()}</p>
         </div>
-        <div class="card-side" style="min-width:220px; text-align:right; border-left:1px solid var(--border); padding-left:20px;">
-          <div style="font-size:13px; color:var(--primary); font-weight:600; margin-bottom:10px;">${escapeHtml(r.email || 'No Email')}</div>
+        <div class="card-side" style="min-width:240px; text-align:right; border-left:1px solid var(--border); padding-left:22px;">
+          <p class="admin-card-meta-label">Product ID:</p>
+          ${productHtml}
+          <p class="admin-card-meta-label" style="margin-top:10px;">${escapeHtml(createdDate)}</p>
+          <div style="font-size:13px; color:var(--primary); font-weight:800; margin:10px 0;">${escapeHtml(r.email || 'No Email')}</div>
           <div style="margin-bottom:18px;">${verifyHtml}</div>
-          ${isTrash ? `<button class="restore-btn" onclick="window.toggleBin('${r._id}', false)">↺ Restore</button>` : `<button class="delete-btn" onclick="window.toggleBin('${r._id}', true)">Trash</button>`}
+          ${isTrash ? `<button class="restore-btn" onclick="window.toggleBin('${r._id}', false)">↺ Restore</button>` : `<button class="delete-btn" onclick="window.toggleBin('${r._id}', true)">🗑️ Trash</button>`}
         </div>
       </div>
       <div style="width:100%; margin-top:15px; border-top:1px dashed var(--border); padding-top:15px;">
-        <button class="reply-toggle" onclick="window.toggleReplyBox('${r._id}')">Reply to Customer</button>
+        <button class="reply-toggle" onclick="window.toggleReplyBox('${r._id}')">💬 Reply to Customer</button>
         <div id="reply-box-${r._id}" class="reply-panel" style="display:${r.reply ? 'block' : 'none'}; margin-top:15px;">
           <textarea id="reply-text-${r._id}" class="reply-input" placeholder="Type your public reply...">${escapeHtml(r.reply || '')}</textarea>
           <div style="text-align:right; margin-top:10px;"><button id="reply-btn-${r._id}" class="post-btn" onclick="window.saveReply('${r._id}')">Publish Reply</button></div>
