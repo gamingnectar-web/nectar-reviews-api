@@ -36,6 +36,116 @@ function shouldAutoApprove(config, payload) {
   return 'accepted';
 }
 
+
+function publicSettings(config) {
+  const widgetStyles = config?.widgetStyles || {};
+  return {
+    betaMode: config?.betaMode || { enabled: false, email: '' },
+    seo: config?.seo || { richSnippets: true },
+    widgetStyles,
+    styles: widgetStyles,
+    cardStyles: config?.cardStyles || {},
+    carouselStyles: config?.carouselStyles || {},
+    attributeProfiles: config?.attributeProfiles || [],
+    profiles: config?.attributeProfiles || [],
+    requireDeliveredTag: config?.requireDeliveredTag !== false,
+  };
+}
+
+function normaliseReviewForPublic(review) {
+  const plain = review && typeof review.toObject === 'function' ? review.toObject() : review;
+  if (!plain) return plain;
+  return {
+    _id: plain._id,
+    itemId: plain.itemId,
+    userId: plain.userId,
+    isAnonymous: Boolean(plain.isAnonymous),
+    rating: plain.rating,
+    headline: plain.headline,
+    comment: plain.comment,
+    reply: plain.reply,
+    attributes: plain.attributes,
+    productTags: plain.productTags || [],
+    source: plain.source,
+    verifiedPurchase: Boolean(plain.verifiedPurchase),
+    createdAt: plain.createdAt,
+    testMode: Boolean(plain.testMode),
+    isTestReview: Boolean(plain.isTestReview),
+  };
+}
+
+function buildProductFromQuery(query) {
+  const productId = cleanText(query.productId || query.product_id || query.itemId, 160);
+  if (!productId) return null;
+  return {
+    productId,
+    id: productId,
+    variantId: cleanText(query.variantId || query.variant_id, 160),
+    name: cleanText(query.productTitle || query.product_title || query.title || 'Product', 240) || 'Product',
+    title: cleanText(query.productTitle || query.product_title || query.title || 'Product', 240) || 'Product',
+    image: cleanText(query.image || query.productImage || query.product_image, 1000),
+    quantity: clampNumber(query.quantity, 1, 999, 1),
+    tags: [],
+  };
+}
+
+function productsFromQuery(query) {
+  const products = [];
+  const rawProducts = String(query.products || '').trim();
+  if (rawProducts) {
+    try {
+      const parsed = JSON.parse(rawProducts);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((product, index) => {
+          const id = cleanText(product.productId || product.itemId || product.id || `product-${index + 1}`, 160);
+          if (!id) return;
+          products.push({
+            productId: id,
+            id,
+            variantId: cleanText(product.variantId || product.variant_id || product.variant || '', 160),
+            name: cleanText(product.name || product.title || `Product ${index + 1}`, 240) || `Product ${index + 1}`,
+            title: cleanText(product.name || product.title || `Product ${index + 1}`, 240) || `Product ${index + 1}`,
+            image: cleanText(product.image || product.imageUrl || product.productImage || '', 1000),
+            quantity: clampNumber(product.quantity, 1, 999, 1),
+            tags: Array.isArray(product.tags) ? product.tags.map((tag) => cleanText(tag, 80)).filter(Boolean) : [],
+          });
+        });
+      }
+    } catch (error) {
+      // Keep falling back to individual product query params.
+    }
+  }
+  const single = buildProductFromQuery(query);
+  if (single && !products.some((product) => String(product.productId) === String(single.productId))) products.push(single);
+  return products;
+}
+
+router.get('/widget/config', async (req, res, next) => {
+  try {
+    const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop);
+    if (!shopDomain || !isValidShopDomain(shopDomain)) return res.status(400).json({ error: 'Valid shopDomain is required.' });
+    const config = await getSettings(shopDomain);
+    return res.json(publicSettings(config));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/global-reviews', async (req, res, next) => {
+  try {
+    const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop);
+    if (!shopDomain || !isValidShopDomain(shopDomain)) return res.status(400).json({ error: 'Valid shopDomain is required.' });
+    const limit = clampNumber(req.query.limit, 1, 50, 20);
+    const reviews = await Review.find({ shopDomain, status: 'accepted', isDeleted: false })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+    return res.json(reviews.map(normaliseReviewForPublic));
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/reviews', async (req, res, next) => {
   try {
     const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop);
@@ -83,14 +193,7 @@ router.get('/reviews', async (req, res, next) => {
       average,
       distribution,
       attributeAverages,
-      settings: {
-        betaMode: config?.betaMode || { enabled: false, email: '' },
-        seo: config?.seo || { richSnippets: true },
-        widgetStyles: config?.widgetStyles || {},
-        cardStyles: config?.cardStyles || {},
-        carouselStyles: config?.carouselStyles || {},
-        attributeProfiles: config?.attributeProfiles || [],
-      },
+      settings: publicSettings(config),
     });
   } catch (error) {
     next(error);
@@ -157,6 +260,113 @@ router.get('/reviews/summary', async (req, res, next) => {
     const count = rows.length;
     const average = count ? Number((rows.reduce((sum, row) => sum + row.rating, 0) / count).toFixed(1)) : 0;
     return res.json({ count, average });
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+router.get('/reviews/:itemId', async (req, res, next) => {
+  try {
+    const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop);
+    const itemId = cleanText(req.params.itemId || req.query.itemId || req.query.productId, 160);
+    if (!shopDomain || !isValidShopDomain(shopDomain)) return res.status(400).json({ error: 'Valid shopDomain is required.' });
+    if (!itemId) return res.status(400).json({ error: 'itemId is required.' });
+    const limit = clampNumber(req.query.limit, 1, 50, 20);
+    const reviews = await Review.find({ shopDomain, itemId: { $in: itemIdCandidates(itemId) }, status: 'accepted', isDeleted: false })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+    return res.json(reviews.map(normaliseReviewForPublic));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/reviews/bulk', async (req, res, next) => {
+  try {
+    const shopDomain = cleanShopDomain(req.body.shopDomain || req.body.shop);
+    if (!shopDomain || !isValidShopDomain(shopDomain)) return res.status(400).json({ error: 'Valid shopDomain is required.' });
+    const incoming = Array.isArray(req.body.reviews) ? req.body.reviews : [];
+    if (!incoming.length) return res.status(400).json({ error: 'No reviews supplied.' });
+    if (incoming.length > 50) return res.status(400).json({ error: 'Bulk review limit is 50 at a time.' });
+    const reviewToken = cleanText(req.body.reviewToken || req.query.token, 200);
+    if (reviewToken) {
+      const used = await Review.findOne({ shopDomain, reviewToken, reviewTokenUsedAt: { $ne: null } }).lean();
+      if (used) return res.status(409).json({ error: 'This review link has already been used.' });
+    }
+    const config = await getSettings(shopDomain);
+    const docs = incoming.map((review) => {
+      const itemId = cleanText(review.itemId || review.productId, 160);
+      const rating = clampNumber(review.rating, 1, 5, 0);
+      if (!itemId || !rating) return null;
+      const verifiedPurchase = review.verifiedPurchase !== false;
+      return {
+        shopDomain,
+        itemId,
+        rating,
+        userId: cleanText(review.userId || review.name || req.body.customerName || 'Verified Customer', 120) || 'Verified Customer',
+        email: cleanEmail(review.email || req.body.email),
+        isAnonymous: Boolean(review.isAnonymous),
+        headline: cleanText(review.headline || review.title, 160),
+        comment: cleanText(review.comment || review.body, 2500),
+        attributes: review.attributes && typeof review.attributes === 'object' ? review.attributes : undefined,
+        productTags: Array.isArray(review.productTags) ? review.productTags.map((tag) => cleanText(tag, 80)).filter(Boolean) : [],
+        source: 'email',
+        verifiedPurchase,
+        verificationNote: verifiedPurchase ? 'Submitted through review request page' : '',
+        orderId: cleanText(req.body.orderId || review.orderId, 120),
+        reviewToken,
+        reviewTokenUsedAt: reviewToken ? new Date() : null,
+        status: shouldAutoApprove(config, { rating, verifiedPurchase }),
+        isTestReview: Boolean(req.body.isPreview || req.body.testMode || review.isTestReview),
+        testMode: Boolean(req.body.isPreview || req.body.testMode || review.testMode),
+        testLabel: Boolean(req.body.isPreview || req.body.testMode || review.testMode) ? 'Review page test' : '',
+      };
+    }).filter(Boolean);
+    if (!docs.length) return res.status(400).json({ error: 'No valid reviews supplied.' });
+    const saved = await Review.insertMany(docs, { ordered: true });
+    return res.status(201).json({ ok: true, reviews: saved.map(normaliseReviewForPublic), count: saved.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/magic-link/order', async (req, res, next) => {
+  try {
+    const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop);
+    if (!shopDomain || !isValidShopDomain(shopDomain)) return res.status(400).json({ error: 'Valid shopDomain is required.' });
+    const products = productsFromQuery(req.query);
+    if (!products.length) return res.status(404).json({ error: 'No review products were included in this link.' });
+    return res.json({
+      orderId: cleanText(req.query.orderId || req.query.order || '1001', 120),
+      customerName: cleanText(req.query.customer || req.query.name || 'Customer', 120),
+      customerEmail: cleanEmail(req.query.email),
+      products,
+      delivered: true,
+      preview: req.query.preview === '1' || req.query.preview === 'true' || req.query.test === '1',
+      support: {},
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/support-requests', async (req, res, next) => {
+  try {
+    const shopDomain = cleanShopDomain(req.body.shopDomain || req.body.shop);
+    if (!shopDomain || !isValidShopDomain(shopDomain)) return res.status(400).json({ error: 'Valid shopDomain is required.' });
+    await CampaignEvent.create({
+      shopDomain,
+      campaign: 'support_request',
+      eventType: 'click',
+      orderId: cleanText(req.body.orderId, 120),
+      email: cleanEmail(req.body.email),
+      url: 'support-request',
+      userAgent: cleanText(req.headers['user-agent'], 500),
+      ipHash: hashValue(getClientIp(req)),
+    });
+    return res.json({ ok: true });
   } catch (error) {
     next(error);
   }
