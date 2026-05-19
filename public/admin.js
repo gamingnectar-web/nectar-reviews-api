@@ -300,7 +300,7 @@ window.buildCard = function(r, isTrash) {
       attrHtml += `
         <div class="admin-attr-item">
           <div class="admin-attr-head"><span>${escapeHtml(key)}</span><strong>${escapeHtml(val)}/10</strong></div>
-          <div class="admin-attr-bar"><span class="admin-attr-fill" style="width:${pct}%"></span></div>
+          <div class="admin-attr-bar"><span class="admin-attr-notch" style="left:calc(${pct}% - 4px)"></span></div>
         </div>`;
     }
     attrHtml += '</div>';

@@ -1,6 +1,15 @@
 (function () {
-  const DEFAULT_API = `${window.location.origin}/api`;
-  const API_BASE = (window.NECTAR_API_BASE || DEFAULT_API).replace(/\/$/, '');
+  function inferApiBase() {
+    if (window.NECTAR_API_BASE) return String(window.NECTAR_API_BASE).replace(/\/$/, '');
+    const script = document.currentScript || Array.from(document.scripts).find((item) => String(item.src || '').includes('/review-widget.js'));
+    if (script && script.src) {
+      try {
+        return `${new URL(script.src).origin}/api`;
+      } catch (_) {}
+    }
+    return `${window.location.origin}/api`;
+  }
+  const API_BASE = inferApiBase();
 
   function escapeHtml(value) {
     return String(value || '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[char]));

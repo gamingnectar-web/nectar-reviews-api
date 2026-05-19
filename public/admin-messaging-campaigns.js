@@ -102,6 +102,25 @@
       .review-test-product strong { display:block; font-size:13px; }
       .review-test-product small { color:var(--text-light,#6b7280); }
       .review-test-product button { border:0; background:transparent; color:#d72c0d; cursor:pointer; font-weight:900; }
+
+      .flow-product-modal-backdrop { position:fixed; inset:0; z-index:2147483000; display:none; align-items:center; justify-content:center; padding:24px; background:rgba(15,23,42,.55); }
+      .flow-product-modal-backdrop.active { display:flex; }
+      .flow-product-modal { width:min(840px, 100%); max-height:88vh; overflow:auto; background:#fff; border-radius:18px; box-shadow:0 28px 90px rgba(15,23,42,.32); border:1px solid var(--border,#e5e7eb); }
+      .flow-product-modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:22px 24px; border-bottom:1px solid var(--border,#e5e7eb); }
+      .flow-product-modal-head h3 { margin:0 0 5px; font-size:20px; }
+      .flow-product-modal-head p { margin:0; color:var(--text-light,#6b7280); }
+      .flow-product-modal-close { border:0; background:#f3f4f6; width:36px; height:36px; border-radius:999px; cursor:pointer; font-weight:900; }
+      .flow-product-search { display:grid; grid-template-columns:1fr auto; gap:10px; padding:18px 24px; border-bottom:1px solid var(--border,#e5e7eb); }
+      .flow-product-search input { min-height:44px; border:1px solid var(--border,#d0d5dd); border-radius:10px; padding:10px 12px; font:inherit; }
+      .flow-product-search button,.flow-product-modal-actions button { border:0; border-radius:10px; background:var(--primary,#111827); color:#fff; min-height:44px; padding:10px 16px; font-weight:900; cursor:pointer; }
+      .flow-product-results { padding:12px 24px 4px; display:grid; gap:10px; }
+      .flow-product-row { display:grid; grid-template-columns:auto 56px 1fr auto; gap:12px; align-items:center; padding:12px; border:1px solid var(--border,#e5e7eb); border-radius:14px; background:#fbfdff; }
+      .flow-product-row img { width:56px; height:56px; object-fit:cover; border-radius:10px; background:#eef2f7; }
+      .flow-product-row strong { display:block; font-size:14px; }
+      .flow-product-row small { color:var(--text-light,#6b7280); }
+      .flow-product-row button { border:1px solid var(--border,#d0d5dd); background:#fff; color:var(--primary,#111827); border-radius:10px; min-height:38px; padding:8px 12px; font-weight:900; cursor:pointer; }
+      .flow-product-modal-actions { display:flex; justify-content:flex-end; gap:10px; padding:18px 24px 24px; }
+      .flow-product-modal-actions .secondary { background:#fff; color:var(--primary,#111827); border:1px solid var(--border,#d0d5dd); }
       .flow-preview-card { overflow:hidden; }
       .flow-preview-toolbar,.flow-code-header { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:18px 20px; border-bottom:1px solid var(--border,#e5e7eb); }
       .flow-preview-toggle { display:inline-flex; padding:4px; border:1px solid var(--border,#e5e7eb); border-radius:999px; background:#f9fafb; }
@@ -255,19 +274,114 @@
     updateProductList();
   }
 
-  async function searchProducts() {
-    const q = prompt('Search Shopify products by title or ID');
-    if (!q) return;
-    const result = await securedFetch(`/admin/products/search?q=${encodeURIComponent(q)}`);
-    if (result.unavailable) {
-      showToast('Product search needs Shopify Admin API access. Use Sample Products for now.');
+  let productSearchResults = [];
+
+  function ensureProductModal() {
+    let modal = document.getElementById('flow-product-modal-backdrop');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.id = 'flow-product-modal-backdrop';
+    modal.className = 'flow-product-modal-backdrop';
+    modal.innerHTML = `
+      <div class="flow-product-modal" role="dialog" aria-modal="true" aria-labelledby="flow-product-modal-title">
+        <div class="flow-product-modal-head">
+          <div>
+            <h3 id="flow-product-modal-title">Select review products</h3>
+            <p>Search Shopify products and choose every item you want included in the test review page.</p>
+          </div>
+          <button type="button" class="flow-product-modal-close" aria-label="Close product selector">×</button>
+        </div>
+        <div class="flow-product-search">
+          <input id="flow-product-search-input" type="search" placeholder="Search by product title, handle or ID">
+          <button type="button" id="flow-product-search-run">Search</button>
+        </div>
+        <div id="flow-product-results" class="flow-product-results"><div class="flow-help-box">Search for products to add them here.</div></div>
+        <div class="flow-product-modal-actions">
+          <button type="button" class="secondary" id="flow-product-modal-cancel">Cancel</button>
+          <button type="button" id="flow-product-add-selected">Add Selected Products</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('.flow-product-modal-close')?.addEventListener('click', closeProductModal);
+    modal.querySelector('#flow-product-modal-cancel')?.addEventListener('click', closeProductModal);
+    modal.addEventListener('click', (event) => { if (event.target === modal) closeProductModal(); });
+    modal.querySelector('#flow-product-search-run')?.addEventListener('click', () => runProductSearch().catch((error) => showToast(error.message || 'Product search failed')));
+    modal.querySelector('#flow-product-search-input')?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        runProductSearch().catch((error) => showToast(error.message || 'Product search failed'));
+      }
+    });
+    modal.querySelector('#flow-product-add-selected')?.addEventListener('click', addSelectedProductsFromModal);
+    return modal;
+  }
+
+  function closeProductModal() {
+    document.getElementById('flow-product-modal-backdrop')?.classList.remove('active');
+  }
+
+  function renderProductSearchResults(items, message) {
+    const box = document.getElementById('flow-product-results');
+    if (!box) return;
+    if (message) {
+      box.innerHTML = `<div class="flow-help-box">${escapeHtml(message)}</div>`;
       return;
     }
-    const found = result.products || [];
-    if (!found.length) return showToast('No products found');
-    products.push(found[0]);
-    updateProductList();
-    showToast(`Added ${found[0].title}`);
+    if (!items.length) {
+      box.innerHTML = '<div class="flow-help-box">No products found. Try a product title, handle, or ID.</div>';
+      return;
+    }
+    box.innerHTML = items.map((product, index) => `
+      <label class="flow-product-row">
+        <input type="checkbox" data-product-result="${index}">
+        <img src="${escapeHtml(product.image || '')}" alt="">
+        <span><strong>${escapeHtml(product.title || 'Product')}</strong><small>Product ID: ${escapeHtml(product.id || '')}${product.variantId ? ` · Variant: ${escapeHtml(product.variantId)}` : ''}</small></span>
+        <button type="button" data-add-one-product="${index}">Add</button>
+      </label>`).join('');
+    box.querySelectorAll('[data-add-one-product]').forEach((btn) => btn.addEventListener('click', (event) => {
+      event.preventDefault();
+      const product = productSearchResults[Number(btn.dataset.addOneProduct)];
+      if (product) addProductToSelection(product);
+    }));
+  }
+
+  function addProductToSelection(product) {
+    if (!product?.id) return;
+    if (!products.some((item) => String(item.id) === String(product.id))) {
+      products.push(product);
+      updateProductList();
+      showToast(`Added ${product.title || 'product'}`);
+    }
+  }
+
+  function addSelectedProductsFromModal() {
+    const checked = Array.from(document.querySelectorAll('#flow-product-results [data-product-result]:checked'));
+    if (!checked.length) return showToast('Select at least one product first.');
+    checked.forEach((input) => {
+      const product = productSearchResults[Number(input.dataset.productResult)];
+      if (product) addProductToSelection(product);
+    });
+    closeProductModal();
+  }
+
+  async function runProductSearch() {
+    const q = (document.getElementById('flow-product-search-input')?.value || '').trim();
+    if (!q) return showToast('Enter a product title or ID first.');
+    renderProductSearchResults([], 'Searching Shopify products...');
+    const result = await securedFetch(`/admin/products/search?q=${encodeURIComponent(q)}`);
+    if (result.unavailable) {
+      productSearchResults = [];
+      renderProductSearchResults([], 'Product search needs the app to be installed through Shopify OAuth so this shop has a stored access token. Use Sample Products until install has completed.');
+      return;
+    }
+    productSearchResults = result.products || [];
+    renderProductSearchResults(productSearchResults);
+  }
+
+  async function searchProducts() {
+    const modal = ensureProductModal();
+    modal.classList.add('active');
+    setTimeout(() => document.getElementById('flow-product-search-input')?.focus(), 50);
   }
 
   function testUrl() {

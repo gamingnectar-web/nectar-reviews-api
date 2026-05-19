@@ -9,6 +9,17 @@ function onePixelGif() {
   return Buffer.from('R0lGODlhAQABAPAAAP///wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==', 'base64');
 }
 
+function itemIdCandidates(value) {
+  const raw = cleanText(value, 160);
+  const set = new Set();
+  if (raw) set.add(raw);
+  const parts = raw.split('/').filter(Boolean);
+  if (parts.length) set.add(parts[parts.length - 1]);
+  const digits = raw.match(/\d{6,}/g) || [];
+  digits.forEach((item) => set.add(item));
+  return Array.from(set).filter(Boolean);
+}
+
 async function getSettings(shopDomain) {
   return Settings.findOne({ shopDomain }).lean();
 }
@@ -23,12 +34,13 @@ function shouldAutoApprove(config, payload) {
 router.get('/reviews', async (req, res, next) => {
   try {
     const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop);
-    const itemId = cleanText(req.query.itemId || req.query.productId, 120);
+    const itemId = cleanText(req.query.itemId || req.query.productId, 160);
     if (!shopDomain || !isValidShopDomain(shopDomain)) return res.status(400).json({ error: 'Valid shopDomain is required.' });
     if (!itemId) return res.status(400).json({ error: 'itemId is required.' });
 
     const limit = clampNumber(req.query.limit, 1, 50, 20);
-    const match = { shopDomain, itemId, status: 'accepted', isDeleted: false };
+    const candidates = itemIdCandidates(itemId);
+    const match = { shopDomain, itemId: { $in: candidates }, status: 'accepted', isDeleted: false };
     const allReviews = await Review.find(match)
       .sort({ createdAt: -1 })
       .limit(500)
@@ -131,11 +143,11 @@ router.post('/reviews', async (req, res, next) => {
 router.get('/reviews/summary', async (req, res, next) => {
   try {
     const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop);
-    const itemId = cleanText(req.query.itemId || req.query.productId, 120);
+    const itemId = cleanText(req.query.itemId || req.query.productId, 160);
     if (!shopDomain || !isValidShopDomain(shopDomain)) return res.status(400).json({ error: 'Valid shopDomain is required.' });
 
     const match = { shopDomain, status: 'accepted', isDeleted: false };
-    if (itemId) match.itemId = itemId;
+    if (itemId) match.itemId = { $in: itemIdCandidates(itemId) };
     const rows = await Review.find(match).select('rating').lean();
     const count = rows.length;
     const average = count ? Number((rows.reduce((sum, row) => sum + row.rating, 0) / count).toFixed(1)) : 0;
