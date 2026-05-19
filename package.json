@@ -1,16 +1,23 @@
 {
-  "name": "nectar-reviews-api",
-  "version": "1.0.0",
-  "description": "Live API for Nectar Reviews Widget",
+  "name": "nectar-reviews-api-secure-modular",
+  "version": "3.0.0",
+  "description": "Security-first modular Shopify reviews, discounts, loyalty and messaging API",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node server.js",
+    "check": "node scripts/check-syntax.js",
+    "audit": "npm audit --omit=dev",
+    "privacy:scrub": "node scripts/privacy-scrub-existing-data.js"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "mongoose": "^8.3.2",
-    "nodemailer": "^6.9.16"
+    "nodemailer": "^8.0.7"
   }
 }

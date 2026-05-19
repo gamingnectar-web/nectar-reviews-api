@@ -1,0 +1,6 @@
+name = "Nectar Drops Customer Account"
+type = "ui_extension"
+
+[extensions.capabilities]
+api_access = true
+network_access = true

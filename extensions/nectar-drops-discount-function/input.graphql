@@ -1,0 +1,17 @@
+query RunInput {
+  cart {
+    buyerIdentity {
+      customer {
+        id
+        metafield(namespace: "nectar_drops", key: "redeemable_balance") {
+          value
+        }
+      }
+    }
+    cost {
+      subtotalAmount {
+        amount
+      }
+    }
+  }
+}

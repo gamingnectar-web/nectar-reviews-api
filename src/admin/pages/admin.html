@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nectar Reviews Admin</title>
+    <style>
+      :root { --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --soft:#f8fafc; --card:#fff; }
+      * { box-sizing:border-box; }
+      body { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin:0; background:var(--soft); color:var(--ink); }
+      header { background:#fff; border-bottom:1px solid var(--line); padding:18px 24px; position:sticky; top:0; z-index:5; }
+      main { max-width:1240px; margin:0 auto; padding:24px; }
+      .brand { display:grid; grid-template-columns:1fr minmax(220px, 320px) minmax(220px, 320px); gap:12px; align-items:end; }
+      .card { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:20px; margin-bottom:18px; box-shadow:0 1px 2px rgba(15,23,42,.05); }
+      .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
+      .two { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:12px; }
+      .three { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
+      .muted { color:var(--muted); font-size:14px; }
+      .stat { background:var(--soft); border:1px solid var(--line); border-radius:14px; padding:14px; }
+      label { display:block; font-size:14px; font-weight:600; }
+      input, textarea, select { margin-top:6px; padding:10px; border:1px solid #cbd5e1; border-radius:10px; width:100%; background:#fff; color:var(--ink); }
+      input[type="checkbox"] { width:auto; margin-right:8px; }
+      button { background:var(--ink); color:white; border:0; padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:700; }
+      button.secondary { background:#e2e8f0; color:var(--ink); }
+      button.danger { background:#b91c1c; }
+      nav { display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+      nav button { background:#f1f5f9; color:var(--ink); }
+      nav button.active { background:var(--ink); color:#fff; }
+      section.tab { display:none; }
+      section.tab.active { display:block; }
+      table { width:100%; border-collapse:collapse; }
+      th,td { text-align:left; border-bottom:1px solid var(--line); padding:10px; font-size:14px; vertical-align:top; }
+      pre { background:var(--ink); color:#fff; padding:12px; border-radius:12px; overflow:auto; min-height:120px; }
+      .module { display:flex; align-items:flex-start; gap:10px; border:1px solid var(--line); border-radius:14px; padding:14px; background:#fff; }
+      .wire { border:1px dashed #94a3b8; background:#f8fafc; border-radius:16px; padding:16px; }
+      @media (max-width:850px) { .brand { grid-template-columns:1fr; } main { padding:14px; } }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <div><h2 style="margin:0">Nectar Reviews</h2><div class="muted">Secure modular app foundation</div></div>
+        <label>Shop domain<input id="shopDomain" placeholder="example.myshopify.com" /></label>
+        <label>Admin token<input id="adminToken" type="password" placeholder="ADMIN_API_SECRET" autocomplete="off" /></label>
+      </div>
+      <nav>
+        <button class="active" data-tab="modules">Modules</button>
+        <button data-tab="reviews">Reviews</button>
+        <button data-tab="discounts">Review Rewards</button>
+        <button data-tab="loyalty">Nectar Drops</button>
+        <button data-tab="rules">Earn & Redeem Rules</button>
+        <button data-tab="activity">Activity Log</button>
+        <button data-tab="customer">Customer UX</button>
+        <button data-tab="security">Security</button>
+        <button data-tab="diagnostics">Diagnostics</button>
+      </nav>
+    </header>
+
+    <main>
+      <section id="tab-modules" class="tab active">
+        <div class="card"><h1>Modules</h1><p class="muted">Enable only the sections the store needs. Discounts and loyalty are optional modules.</p><button id="loadModules">Load modules</button><div id="moduleGrid" class="grid" style="margin-top:16px"></div><button id="saveModules" style="margin-top:16px">Save modules</button></div>
+      </section>
+
+      <section id="tab-reviews" class="tab">
+        <div class="card"><h1>Reviews</h1><p class="muted">Accepted reviews power widgets and trigger review rewards/Nectar Drops rules.</p><div class="three"><div class="stat"><strong id="reviewCount">-</strong><br><span class="muted">Accepted reviews</span></div><div class="stat"><strong id="averageRating">-</strong><br><span class="muted">Average rating</span></div><div class="stat"><strong>/widget/reviews-widget.js</strong><br><span class="muted">Storefront widget</span></div></div><p><button id="loadReviewAnalytics">Load analytics</button> <button id="loadReviews" class="secondary">Load reviews</button></p></div>
+      </section>
+
+      <section id="tab-discounts" class="tab">
+        <div class="card"><h1>Review reward discount</h1><p class="muted">Creates a one-use Shopify discount when a review is accepted. Raw discount codes are not stored long-term; only a hash and preview are stored.</p><div class="three"><label><input id="discountEnabled" type="checkbox" /> Enable reward</label><label><input id="discountSendEmail" type="checkbox" /> Send email only with transient recipient</label><label>Type<select id="discountType"><option value="percentage">Percentage</option><option value="fixed_amount">Fixed amount</option></select></label><label>Value<input id="discountValue" type="number" min="0" step="0.01" /></label><label>Prefix<input id="discountPrefix" placeholder="THANKYOU" /></label><label>Usage limit<input id="discountUsageLimit" type="number" min="1" step="1" /></label><label>Expires after days<input id="discountExpiresAfterDays" type="number" min="1" step="1" /></label><label><input id="discountOncePerCustomer" type="checkbox" /> Once per customer</label></div><p><button id="loadDiscountSettings">Load settings</button> <button id="saveDiscountSettings">Save settings</button> <button id="loadReviewRewards" class="secondary">Load rewards</button></p><div id="reviewRewardsTable"></div></div>
+      </section>
+
+      <section id="tab-loyalty" class="tab">
+        <div class="card"><h1>Nectar Drops <span id="loyaltyIconPreview">🍯</span></h1><p class="muted">Privacy-first loyalty. Customers are identified only by a shop-scoped HMAC key generated from the Shopify customer ID while they are logged in.</p><div class="three"><label><input id="loyaltyEnabled" type="checkbox" /> Enable loyalty</label><label>Points name<input id="pointsName" placeholder="Nectar Drops" /></label><label>Icon<input id="pointsIcon" placeholder="🍯" /></label><label>Landing page slug<input id="landingSlug" placeholder="nectar-drops" /></label><label>Order delay mode<select id="orderDelayMode"><option value="immediate">Immediately</option><option value="after_order_paid">X days after order paid</option><option value="after_fulfillment">X days after fulfillment</option><option value="after_delivery">X days after delivery</option><option value="manual">Manual approval</option></select></label><label>Delay days<input id="orderDelayDays" type="number" min="0" step="1" /></label></div><p><button id="loadLoyaltyOverview">Load overview</button> <button id="saveLoyaltySettings">Save loyalty settings</button> <button id="processPending" class="secondary">Approve eligible pending Drops</button></p><div id="loyaltyOverview"></div></div>
+        <div class="card"><h2>Accounts</h2><p class="muted">Only customer references are shown. No email, name, address, phone, or raw Shopify customer ID is stored.</p><button id="loadLoyaltyAccounts">Load accounts</button><div id="loyaltyAccounts"></div></div>
+      </section>
+
+      <section id="tab-rules" class="tab">
+        <div class="card"><h1>Earn & redeem rules</h1><p class="muted">Merchants can add more ways to earn or redeem without code changes. Rules store conditions and reward configuration, not personal customer data.</p><p><button id="loadRules">Load rules</button> <button id="createBaseEarnRule" class="secondary">Create sample earn rule</button> <button id="createRedeemRule" class="secondary">Create sample redeem rule</button></p><div id="rulesTable"></div></div>
+        <div class="card"><h2>Rule JSON editor</h2><p class="muted">Use this for advanced configuration until the visual builder is expanded.</p><textarea id="ruleEditor" rows="14"></textarea><p><button id="saveRuleFromEditor">Create rule from JSON</button></p></div>
+      </section>
+
+      <section id="tab-activity" class="tab">
+        <div class="card"><h1>Activity Log</h1><p class="muted">Append-only traceability for admin, system, customer and webhook actions. Actor/IP/user-agent data is hashed.</p><div class="three"><label>Module filter<input id="auditModule" placeholder="loyalty" /></label><label>Event type filter<input id="auditEventType" placeholder="loyalty.rule.updated" /></label><label>Limit<input id="auditLimit" type="number" value="100" min="1" max="250" /></label></div><p><button id="loadAudit">Load activity</button></p><div id="auditTable"></div></div>
+      </section>
+
+      <section id="tab-customer" class="tab">
+        <div class="card"><h1>Customer-facing wireframe</h1><div class="wire"><h2>🍯 Nectar Drops</h2><p><strong>Your balance:</strong> 420 approved Drops</p><p><strong>Pending:</strong> 180 Drops, available 14 days after delivery.</p><div class="three"><div class="stat"><strong>Earn</strong><br>5 Drops per £1 spent</div><div class="stat"><strong>Review</strong><br>25 Drops after approval</div><div class="stat"><strong>Redeem</strong><br>500 Drops = £5 off</div></div><p><button>Redeem Drops</button> <button class="secondary">View history</button></p></div></div>
+      </section>
+
+      <section id="tab-security" class="tab">
+        <div class="card"><h1>Security stance</h1><ul><li>No raw customer email/name/address/phone in loyalty accounts.</li><li>No raw Shopify customer ID stored.</li><li>Customer key is HMAC-SHA256(shopDomain + customer ID).</li><li>Webhook HMAC verification uses raw request body.</li><li>App proxy requests require Shopify signature and logged_in_customer_id.</li><li>Raw discount codes are shown only once at issue time, then stored as hashes/previews.</li><li>Audit log can use separate MongoDB database via MONGODB_AUDIT_URI.</li></ul></div>
+      </section>
+
+      <section id="tab-diagnostics" class="tab"><div class="card"><h1>Diagnostics</h1><p><button id="healthCheck">Health check</button></p><pre id="output">Ready.</pre></div></section>
+    </main>
+    <script src="/admin-assets/admin.js"></script>
+  </body>
+</html>
