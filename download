@@ -52,6 +52,17 @@ function publicSettings(config) {
   };
 }
 
+
+function liveReviewMatch(extra = {}) {
+  return {
+    ...extra,
+    status: 'accepted',
+    isDeleted: false,
+    isTestReview: { $ne: true },
+    testMode: { $ne: true },
+  };
+}
+
 function normaliseReviewForPublic(review) {
   const plain = review && typeof review.toObject === 'function' ? review.toObject() : review;
   if (!plain) return plain;
@@ -136,7 +147,7 @@ router.get('/global-reviews', async (req, res, next) => {
     const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop);
     if (!shopDomain || !isValidShopDomain(shopDomain)) return res.status(400).json({ error: 'Valid shopDomain is required.' });
     const limit = clampNumber(req.query.limit, 1, 50, 20);
-    const reviews = await Review.find({ shopDomain, status: 'accepted', isDeleted: false })
+    const reviews = await Review.find(liveReviewMatch({ shopDomain }))
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
@@ -155,7 +166,7 @@ router.get('/reviews', async (req, res, next) => {
 
     const limit = clampNumber(req.query.limit, 1, 50, 20);
     const candidates = itemIdCandidates(itemId);
-    const match = { shopDomain, itemId: { $in: candidates }, status: 'accepted', isDeleted: false };
+    const match = liveReviewMatch({ shopDomain, itemId: { $in: candidates } });
     const allReviews = await Review.find(match)
       .sort({ createdAt: -1 })
       .limit(500)
@@ -235,8 +246,8 @@ router.post('/reviews', async (req, res, next) => {
       orderId: cleanText(req.body.orderId, 120),
       reviewToken,
       reviewTokenUsedAt: reviewToken ? new Date() : null,
-      status: shouldAutoApprove(config, { rating, verifiedPurchase }),
-      isTestReview: Boolean(req.body.isTestReview),
+      status: (Boolean(req.body.isTestReview) || Boolean(req.body.testMode)) ? 'spam' : shouldAutoApprove(config, { rating, verifiedPurchase }),
+      isTestReview: Boolean(req.body.isTestReview) || Boolean(req.body.testMode),
       testMode: Boolean(req.body.testMode),
       testLabel: cleanText(req.body.testLabel, 80),
     };
@@ -254,7 +265,7 @@ router.get('/reviews/summary', async (req, res, next) => {
     const itemId = cleanText(req.query.itemId || req.query.productId, 160);
     if (!shopDomain || !isValidShopDomain(shopDomain)) return res.status(400).json({ error: 'Valid shopDomain is required.' });
 
-    const match = { shopDomain, status: 'accepted', isDeleted: false };
+    const match = liveReviewMatch({ shopDomain });
     if (itemId) match.itemId = { $in: itemIdCandidates(itemId) };
     const rows = await Review.find(match).select('rating').lean();
     const count = rows.length;
@@ -273,7 +284,7 @@ router.get('/reviews/:itemId', async (req, res, next) => {
     if (!shopDomain || !isValidShopDomain(shopDomain)) return res.status(400).json({ error: 'Valid shopDomain is required.' });
     if (!itemId) return res.status(400).json({ error: 'itemId is required.' });
     const limit = clampNumber(req.query.limit, 1, 50, 20);
-    const reviews = await Review.find({ shopDomain, itemId: { $in: itemIdCandidates(itemId) }, status: 'accepted', isDeleted: false })
+    const reviews = await Review.find(liveReviewMatch({ shopDomain, itemId: { $in: itemIdCandidates(itemId) } }))
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
@@ -318,8 +329,8 @@ router.post('/reviews/bulk', async (req, res, next) => {
         orderId: cleanText(req.body.orderId || review.orderId, 120),
         reviewToken,
         reviewTokenUsedAt: reviewToken ? new Date() : null,
-        status: shouldAutoApprove(config, { rating, verifiedPurchase }),
-        isTestReview: Boolean(req.body.isPreview || req.body.testMode || review.isTestReview),
+        status: Boolean(req.body.isPreview || req.body.testMode || review.isTestReview || review.testMode) ? 'spam' : shouldAutoApprove(config, { rating, verifiedPurchase }),
+        isTestReview: Boolean(req.body.isPreview || req.body.testMode || review.isTestReview || review.testMode),
         testMode: Boolean(req.body.isPreview || req.body.testMode || review.testMode),
         testLabel: Boolean(req.body.isPreview || req.body.testMode || review.testMode) ? 'Review page test' : '',
       };

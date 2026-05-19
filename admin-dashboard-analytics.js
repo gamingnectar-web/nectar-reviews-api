@@ -12,9 +12,19 @@ let adminTokenPromise = null;
 
 (function bootstrapAdminSecret() {
   const secret = urlParams.get('admin_secret');
+  const signedToken = urlParams.get('admin_token');
+  let changed = false;
   if (secret) {
     sessionStorage.setItem('nectar_admin_secret', secret);
     urlParams.delete('admin_secret');
+    changed = true;
+  }
+  if (signedToken) {
+    sessionStorage.setItem('nectar_admin_token', signedToken);
+    urlParams.delete('admin_token');
+    changed = true;
+  }
+  if (changed) {
     const cleanQuery = urlParams.toString();
     const cleanUrl = `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ''}${window.location.hash}`;
     window.history.replaceState({}, document.title, cleanUrl);
@@ -54,12 +64,14 @@ async function getAdminToken() {
 async function adminFetch(path, options = {}) {
   const token = await getAdminToken();
   const secret = sessionStorage.getItem('nectar_admin_secret') || '';
+  const signedToken = sessionStorage.getItem('nectar_admin_token') || '';
   const headers = {
     'Content-Type': 'application/json',
     'X-Shop-Domain': SHOP_DOMAIN,
     ...(options.headers || {}),
   };
   if (token) headers.Authorization = `Bearer ${token}`;
+  if (signedToken) headers['X-Nectar-Admin-Token'] = signedToken;
   if (secret) headers['X-Nectar-Admin-Secret'] = secret;
 
   const res = await fetch(`${API}${withShop(path)}`, { ...options, headers });
@@ -69,7 +81,10 @@ async function adminFetch(path, options = {}) {
       const json = await res.json();
       message = json.error || json.detail || message;
     } catch (_) {}
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = res.status;
+    if (res.status === 401) error.installUrl = `${window.location.origin}/auth/shopify?shop=${encodeURIComponent(SHOP_DOMAIN)}`;
+    throw error;
   }
   return res.json();
 }
@@ -204,6 +219,7 @@ function hydrateSettings(config) {
     document.getElementById('style-primary').value = config.widgetStyles.primaryColor || '#000000';
     document.getElementById('style-star').value = config.widgetStyles.starColor || '#ffc700';
     document.getElementById('style-text').value = config.widgetStyles.textSize || 15;
+    if (document.getElementById('style-width')) document.getElementById('style-width').value = config.widgetStyles.maxWidth || 1160;
   }
   if (config.cardStyles) {
     document.getElementById('card-star').value = config.cardStyles.starSize || 14;
@@ -465,6 +481,7 @@ window.updatePreviews = function() {
   const star = document.getElementById('style-star')?.value || '#ffc700';
   const txt = `${document.getElementById('style-text')?.value || 15}px`;
   const cardStar = `${document.getElementById('card-star')?.value || 14}px`;
+  const maxWidth = `${document.getElementById('style-width')?.value || 1160}px`;
   const preTitle = document.getElementById('pre-title');
   if (preTitle) preTitle.innerText = title;
   document.querySelectorAll('.pre-color-primary').forEach((el) => { el.style.background = primary; });
@@ -472,6 +489,8 @@ window.updatePreviews = function() {
   document.querySelectorAll('.pre-color-text').forEach((el) => { el.style.fontSize = txt; });
   document.querySelectorAll('.pre-color-text-brand').forEach((el) => { el.style.color = primary; });
   const cardIcon = document.getElementById('pre-card-icon');
+  const previewWrap = document.getElementById('preview-container-wrap');
+  if (previewWrap && previewWrap.style.maxWidth !== '375px') previewWrap.style.maxWidth = maxWidth;
   if (cardIcon) cardIcon.style.fontSize = cardStar;
   const cardCount = document.getElementById('pre-card-count');
   if (cardCount) cardCount.style.display = document.getElementById('card-count')?.checked ? 'inline' : 'none';
@@ -491,6 +510,7 @@ window.saveSettings = async function() {
       primaryColor: document.getElementById('style-primary').value,
       starColor: document.getElementById('style-star').value,
       textSize: parseInt(document.getElementById('style-text').value, 10),
+      maxWidth: parseInt(document.getElementById('style-width')?.value || '1160', 10),
     },
     cardStyles: { starSize: parseInt(document.getElementById('card-star').value, 10), showCount: document.getElementById('card-count').checked },
     carouselStyles: {

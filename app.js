@@ -53,6 +53,7 @@ const settingsSchema = new mongoose.Schema({
     textSize: { type: Number, default: 15 },
     emptyMode: { type: String, default: 'stars_text' },
     emptyText: { type: String, default: 'No reviews yet.' },
+    maxWidth: { type: Number, default: 1160 },
   },
   cardStyles: {
     starSize: { type: Number, default: 14 },

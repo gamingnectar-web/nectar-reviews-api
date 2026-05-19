@@ -20,13 +20,18 @@
   async function securedFetch(path, options = {}) {
     if (typeof window.adminFetch === 'function') return window.adminFetch(path, options);
     const secret = sessionStorage.getItem('nectar_admin_secret') || '';
+    const signedToken = sessionStorage.getItem('nectar_admin_token') || '';
     const headers = { 'Content-Type': 'application/json', 'X-Shop-Domain': getShopDomain(), ...(options.headers || {}) };
+    if (signedToken) headers['X-Nectar-Admin-Token'] = signedToken;
     if (secret) headers['X-Nectar-Admin-Secret'] = secret;
     const res = await fetch(`${DEFAULT_API}${apiPath(path)}`, { ...options, headers });
     if (!res.ok) {
       let message = `Request failed (${res.status})`;
       try { const json = await res.json(); message = json.error || json.detail || message; } catch (_) {}
-      throw new Error(message);
+      const error = new Error(message);
+      error.status = res.status;
+      if (res.status === 401) error.installUrl = `${window.location.origin}/auth/shopify?shop=${encodeURIComponent(getShopDomain())}`;
+      throw error;
     }
     return res.json();
   }
@@ -190,8 +195,8 @@
     modal.querySelector('.flow-product-modal-close')?.addEventListener('click', closeProductModal);
     modal.querySelector('#flow-product-modal-cancel')?.addEventListener('click', closeProductModal);
     modal.addEventListener('click', (event) => { if (event.target === modal) closeProductModal(); });
-    modal.querySelector('#flow-product-search-run')?.addEventListener('click', () => runProductSearch().catch((e) => renderProductSearchResults([], e.message || 'Product search failed')));
-    modal.querySelector('#flow-product-search-input')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); runProductSearch().catch((e) => renderProductSearchResults([], e.message || 'Product search failed')); } });
+    modal.querySelector('#flow-product-search-run')?.addEventListener('click', () => runProductSearch().catch((e) => renderProductSearchResults([], e.message || 'Product search failed', e.installUrl || (e.status === 401 ? `${window.location.origin}/auth/shopify?shop=${encodeURIComponent(getShopDomain())}` : ''))));
+    modal.querySelector('#flow-product-search-input')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); runProductSearch().catch((e) => renderProductSearchResults([], e.message || 'Product search failed', e.installUrl || (e.status === 401 ? `${window.location.origin}/auth/shopify?shop=${encodeURIComponent(getShopDomain())}` : ''))); } });
     modal.querySelector('#flow-product-add-selected')?.addEventListener('click', addSelectedProductsFromModal);
     return modal;
   }
@@ -205,7 +210,15 @@
       box.innerHTML = `<div class="oauth-connect"><div><strong>Product search is not connected yet.</strong><br><span>${escapeHtml(message || 'Install/reinstall through Shopify OAuth to save this shop\'s Admin API token.')}</span></div><a href="${escapeHtml(installUrl)}" target="_top">Connect Shopify</a></div>`;
       return;
     }
-    if (message) { box.innerHTML = `<div class="msg-help">${escapeHtml(message)}</div>`; return; }
+    if (message) {
+      const needsAuth = /Admin authentication required/i.test(message);
+      if (needsAuth) {
+        const url = `${window.location.origin}/auth/shopify?shop=${encodeURIComponent(getShopDomain())}`;
+        box.innerHTML = `<div class="oauth-connect"><div><strong>Secure admin session needed.</strong><br><span>Reconnect/open the app through Shopify, then try product search again.</span></div><a href="${escapeHtml(url)}" target="_top">Open secure session</a></div>`;
+        return;
+      }
+      box.innerHTML = `<div class="msg-help">${escapeHtml(message)}</div>`; return;
+    }
     if (!items.length) { box.innerHTML = '<div class="msg-help">No products found. Try a product title, handle, or ID.</div>'; return; }
     box.innerHTML = items.map((product, index) => `<label class="flow-product-row"><input type="checkbox" data-product-result="${index}"><img src="${escapeHtml(product.image || '')}" alt=""><span><strong>${escapeHtml(product.title || 'Product')}</strong><small>Product ID: ${escapeHtml(product.id || '')}${product.variantId ? ` · Variant: ${escapeHtml(product.variantId)}` : ''}</small></span><button type="button" data-add-one-product="${index}">Add</button></label>`).join('');
     box.querySelectorAll('[data-add-one-product]').forEach((btn) => btn.addEventListener('click', (event) => { event.preventDefault(); const p = productSearchResults[Number(btn.dataset.addOneProduct)]; if (p) addProductToSelection(p); }));
@@ -232,7 +245,7 @@
     const result = await securedFetch(`/admin/products/search?q=${encodeURIComponent(q)}`);
     if (result.unavailable || result.requiresOauth) {
       productSearchResults = [];
-      renderProductSearchResults([], result.message, result.installUrl);
+      renderProductSearchResults([], result.message || 'Reconnect Shopify to enable product search.', result.installUrl);
       return;
     }
     productSearchResults = result.products || [];

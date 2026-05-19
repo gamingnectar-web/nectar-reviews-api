@@ -206,6 +206,12 @@
     .attr-pill { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: #f9fafb; margin-top: 10px; }
     .attr-tag { display: inline-flex; padding: 5px 9px; border-radius: 999px; background: #e0f2fe; color: #0369a1; font-size: 11px; font-weight: 900; text-transform: uppercase; margin-right: 10px; }
 
+    .attr-rule-row { display:grid; grid-template-columns:160px minmax(180px,1fr) minmax(180px,1fr) auto; gap:12px; align-items:end; margin-top:14px; }
+    .attr-rule-field label { display:block; margin:0 0 7px; color:#344054; font-size:12px; font-weight:900; }
+    .attr-rule-field .premium-input, .attr-rule-field .filter-select { width:100%; }
+    .style-control-grid { display:grid; grid-template-columns:repeat(2,minmax(180px,1fr)); gap:14px; align-items:end; }
+    .style-control-grid label { display:block; margin:0 0 7px; color:#344054; font-size:12px; font-weight:900; }
+
     .test-label {
       display: inline-flex;
       align-items: center;
@@ -322,6 +328,7 @@
       .review-card > div:first-child { flex-direction: column; }
       .card-side { min-width: 0 !important; text-align: left !important; border-left: 0 !important; border-top: 1px solid var(--border); padding-left: 0 !important; padding-top: 18px; }
       .admin-attr-grid { grid-template-columns: 1fr; }
+      .attr-rule-row, .style-control-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -450,11 +457,13 @@
           </div>
           <div class="panel">
             <h3>Smart Conditional Sliders</h3>
-            <p><select id="attr-rule-type" class="filter-select" onchange="window.toggleRuleInput()"><option value="tag">Product Tag</option><option value="metafield">Metafield Key</option></select></p>
-            <input id="attr-rule-val-tag" class="premium-input" placeholder="Condition e.g. gaming" />
-            <select id="attr-rule-val-meta" class="filter-select" style="display:none;"><option value="">Loading Shopify Metafields...</option></select>
-            <p><input id="attr-label" class="premium-input" placeholder="Slider label" /></p>
-            <button class="secondary-btn" onclick="window.addAttribute()">+ Create Rule</button>
+            <p class="muted">Add the slider questions that should appear for products matching a tag or metafield.</p>
+            <div class="attr-rule-row">
+              <div class="attr-rule-field"><label>Condition type</label><select id="attr-rule-type" class="filter-select" onchange="window.toggleRuleInput()"><option value="tag">Product Tag</option><option value="metafield">Metafield Key</option></select></div>
+              <div class="attr-rule-field"><label>Condition</label><input id="attr-rule-val-tag" class="premium-input" placeholder="e.g. Drink" /><select id="attr-rule-val-meta" class="filter-select" style="display:none;"><option value="">Loading Shopify Metafields...</option></select></div>
+              <div class="attr-rule-field"><label>Slider label</label><input id="attr-label" class="premium-input" placeholder="e.g. Mixability" /></div>
+              <button class="secondary-btn" onclick="window.addAttribute()">+ Create Rule</button>
+            </div>
             <div id="attributes-list"></div>
           </div>
         </div>
@@ -471,10 +480,13 @@
             </div>
             <div id="style-widget" class="sub-view active">
               <p><input id="style-title" class="premium-input" placeholder="Widget Title" value="Customer Reviews" oninput="window.updatePreviews()" /></p>
-              <p><label>Brand Color</label><br><input id="style-primary" type="color" value="#000000" oninput="window.updatePreviews()" /></p>
-              <p><label>Star Color</label><br><input id="style-star" type="color" value="#ffc700" oninput="window.updatePreviews()" /></p>
-              <p><label>Text Size (px)</label><br><input id="style-text" class="premium-input" type="number" value="15" oninput="window.updatePreviews()" /></p>
-              <button class="primary-btn" onclick="window.saveSettings()">Publish Styles</button>
+              <div class="style-control-grid">
+                <div><label>Brand Color</label><input id="style-primary" type="color" value="#000000" oninput="window.updatePreviews()" /></div>
+                <div><label>Star Color</label><input id="style-star" type="color" value="#ffc700" oninput="window.updatePreviews()" /></div>
+                <div><label>Text Size (px)</label><input id="style-text" class="premium-input" type="number" value="15" oninput="window.updatePreviews()" /></div>
+                <div><label>Widget max width (px)</label><input id="style-width" class="premium-input" type="number" min="720" max="1800" value="1160" oninput="window.updatePreviews()" /></div>
+              </div>
+              <p><button class="primary-btn" onclick="window.saveSettings()">Publish Styles</button></p>
             </div>
             <div id="style-card" class="sub-view">
               <p><label>Star Size (px)</label><br><input id="card-star" class="premium-input" type="number" value="14" oninput="window.updatePreviews()" /></p>

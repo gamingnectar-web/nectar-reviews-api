@@ -17,7 +17,7 @@
   data-support-button="{{ support_button | escape }}"
   data-support-email="{{ block.settings.support_email | escape }}"
   data-support-url="{{ block.settings.support_url | escape }}"
-  style="--primary:{{ block.settings.primary_color }};--accent:{{ block.settings.star_color }};"
+  style="--primary:{{ block.settings.primary_color }};--accent:{{ block.settings.star_color }};--nectar-review-width:{{ block.settings.max_width }}px;"
 >
   {% if block.settings.header_image != blank %}
     <img class="nectar-review-hero" src="{{ block.settings.header_image | image_url: width: 1600 }}" alt="" loading="lazy">
@@ -93,6 +93,7 @@
     { "type": "textarea", "id": "intro_text", "label": "Intro text", "default": "Thank you for shopping with us! Let us know how we did." },
     { "type": "color", "id": "primary_color", "label": "Primary colour", "default": "#0f172a" },
     { "type": "color", "id": "star_color", "label": "Star colour", "default": "#f5b301" },
+    { "type": "range", "id": "max_width", "min": 720, "max": 1800, "step": 20, "unit": "px", "label": "Page content max width", "default": 1120 },
     { "type": "text", "id": "support_heading", "label": "Support heading", "default": "Need help with your order?" },
     { "type": "textarea", "id": "support_text", "label": "Support text", "default": "If something didn’t go to plan, tell customer service first — we’d love the chance to sort it out." },
     { "type": "text", "id": "support_button", "label": "Support button text", "default": "Get help with this order" },

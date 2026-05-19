@@ -174,7 +174,7 @@
   }
 
   function renderStars(productId) {
-    const rating = reviewState[productId]?.rating || 0;
+    const rating = reviewState[productId]?.rating || 5;
     let html = `<div id="stars-${escapeHtml(productId)}" class="nectar-stars">`;
     for (let i = 1; i <= 5; i++) {
       html += `<button type="button" class="nectar-star ${i <= rating ? 'active' : ''}" data-product-id="${escapeHtml(productId)}" data-rating="${i}" aria-label="${i} stars">★</button>`;
@@ -184,12 +184,13 @@
 
   function renderSliderPanel(product) {
     if (!product.matchingSliders.length) return '';
-    return `<div id="sliders-${escapeHtml(product.productId)}" class="nectar-detail-panel">
-      <h4>Optional detailed ratings</h4>
+    return `<div id="sliders-${escapeHtml(product.productId)}" class="nectar-detail-panel nectar-slider-panel open">
+      <h4>Confirm the product scores</h4>
+      <p class="nectar-panel-help">These start at 5/10. Move each slider to confirm the customer score for this item.</p>
       ${product.matchingSliders.map((slider) => {
         const label = slider.label || '';
         const key = sliderKey(product.productId, label);
-        return `<label class="nectar-range-row"><span>${escapeHtml(label)}</span><output id="slider-value-${key}">X/10</output><input id="slider-input-${key}" class="nectar-range is-inactive" type="range" min="1" max="10" value="5" data-active="false" data-product-id="${escapeHtml(product.productId)}" data-slider-label="${escapeHtml(label)}" data-slider-key="${key}"><button type="button" data-clear-slider="true" data-product-id="${escapeHtml(product.productId)}" data-slider-key="${key}">×</button></label>`;
+        return `<label class="nectar-range-row"><span>${escapeHtml(label)}</span><input id="slider-input-${key}" class="nectar-range" type="range" min="1" max="10" value="5" data-active="true" data-product-id="${escapeHtml(product.productId)}" data-slider-label="${escapeHtml(label)}" data-slider-key="${key}"><output id="slider-value-${key}">5/10</output><button type="button" data-clear-slider="true" data-product-id="${escapeHtml(product.productId)}" data-slider-key="${key}">Reset</button></label>`;
       }).join('')}
     </div>`;
   }
@@ -199,7 +200,7 @@
       <div class="nectar-product-head">${product.image ? `<img src="${escapeHtml(product.image)}" alt="">` : '<div class="nectar-product-img-placeholder"></div>'}<div><h3>${escapeHtml(product.name)}</h3><small>Product ID: ${escapeHtml(product.productId)}</small></div></div>
       ${renderStars(product.productId)}
       <button type="button" class="nectar-link-btn" data-toggle-composer="${escapeHtml(product.productId)}">Add a product specific review</button>
-      ${product.matchingSliders.length ? `<button type="button" class="nectar-link-btn" data-toggle-sliders="${escapeHtml(product.productId)}">Add detailed ratings</button>` : ''}
+
       <div id="composer-${escapeHtml(product.productId)}" class="nectar-detail-panel"><label>Product headline<input id="headline-${escapeHtml(product.productId)}" type="text"></label><label>Product review<textarea id="comment-${escapeHtml(product.productId)}"></textarea></label></div>
       ${renderSliderPanel(product)}
     </article>`;
@@ -207,11 +208,16 @@
 
   function renderProducts() {
     ui.list.innerHTML = products.map(renderProductCard).join('');
-    ui.list.querySelectorAll('.nectar-star').forEach((btn) => btn.addEventListener('click', function () {
-      const productId = this.dataset.productId;
-      reviewState[productId].rating = Number(this.dataset.rating || 5);
-      rerenderStars(productId);
-    }));
+    ui.list.querySelectorAll('.nectar-star').forEach((btn) => {
+      btn.addEventListener('click', function () {
+        const productId = this.dataset.productId;
+        reviewState[productId].rating = Number(this.dataset.rating || 5);
+        rerenderStars(productId);
+      });
+      btn.addEventListener('mouseenter', function () { previewStars(this.dataset.productId, Number(this.dataset.rating || 5)); });
+      btn.addEventListener('focus', function () { previewStars(this.dataset.productId, Number(this.dataset.rating || 5)); });
+    });
+    ui.list.querySelectorAll('.nectar-stars').forEach((wrap) => wrap.addEventListener('mouseleave', function () { rerenderStars(this.id.replace('stars-', '')); }));
     ui.list.querySelectorAll('.nectar-range').forEach((input) => input.addEventListener('input', function () {
       const productId = this.dataset.productId;
       const label = this.dataset.sliderLabel;
@@ -226,15 +232,29 @@
     ui.list.querySelectorAll('[data-toggle-sliders]').forEach((btn) => btn.addEventListener('click', () => toggleSliders(btn.dataset.toggleSliders)));
   }
 
+
+  function previewStars(productId, rating) {
+    const wrap = document.getElementById(`stars-${productId}`);
+    if (!wrap) return;
+    wrap.querySelectorAll('.nectar-star').forEach((star) => {
+      star.classList.toggle('active', Number(star.dataset.rating || 0) <= rating);
+    });
+  }
+
   function rerenderStars(productId) {
     const wrap = document.getElementById(`stars-${productId}`);
     if (!wrap) return;
     wrap.outerHTML = renderStars(productId);
     const fresh = document.getElementById(`stars-${productId}`);
-    fresh.querySelectorAll('.nectar-star').forEach((btn) => btn.addEventListener('click', function () {
-      reviewState[productId].rating = Number(this.dataset.rating || 5);
-      rerenderStars(productId);
-    }));
+    fresh.querySelectorAll('.nectar-star').forEach((btn) => {
+      btn.addEventListener('click', function () {
+        reviewState[productId].rating = Number(this.dataset.rating || 5);
+        rerenderStars(productId);
+      });
+      btn.addEventListener('mouseenter', function () { previewStars(productId, Number(this.dataset.rating || 5)); });
+      btn.addEventListener('focus', function () { previewStars(productId, Number(this.dataset.rating || 5)); });
+    });
+    fresh.addEventListener('mouseleave', function () { rerenderStars(productId); });
   }
 
   function clearSlider(productId, key) {
@@ -243,10 +263,10 @@
     if (!input || !value) return;
     const label = input.dataset.sliderLabel;
     input.value = 5;
-    input.dataset.active = 'false';
-    input.classList.add('is-inactive');
-    value.textContent = 'X/10';
-    delete reviewState[productId].attributes[label];
+    input.dataset.active = 'true';
+    input.classList.remove('is-inactive');
+    value.textContent = '5/10';
+    reviewState[productId].attributes[label] = 5;
   }
 
   function toggleComposer(productId) { document.getElementById(`composer-${productId}`)?.classList.toggle('open'); }
@@ -254,11 +274,33 @@
 
   function initReviewState() {
     reviewState = {};
-    products.forEach((product) => { reviewState[product.productId] = { rating: Number(params.get('rating') || 5), attributes: {} }; });
+    products.forEach((product) => {
+      const attributes = {};
+      (product.matchingSliders || []).forEach((slider) => { if (slider.label) attributes[slider.label] = 5; });
+      reviewState[product.productId] = { rating: Number(params.get('rating') || 5), attributes };
+    });
   }
 
   function show(which) {
     ['loading', 'error', 'notDelivered', 'success', 'main'].forEach((key) => { if (ui[key]) ui[key].style.display = key === which ? 'block' : 'none'; });
+  }
+
+
+  function ensureSubmitModal() {
+    let modal = document.getElementById('nectar-submit-confirmation-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.id = 'nectar-submit-confirmation-modal';
+    modal.className = 'nectar-modal-wrap nectar-submit-modal';
+    modal.innerHTML = `<div class="nectar-modal" role="dialog" aria-modal="true"><button type="button" class="nectar-modal-close" data-close-submit-modal>×</button><span class="nectar-pill">Submitted</span><h2>It’s on its way for review</h2><p>Thanks for sharing your feedback. Your review has been sent to the store team and will appear once it has been approved.</p><a class="nectar-button" href="/">Return to store</a></div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('[data-close-submit-modal]')?.addEventListener('click', () => modal.classList.remove('open'));
+    modal.addEventListener('click', (event) => { if (event.target === modal) modal.classList.remove('open'); });
+    return modal;
+  }
+
+  function showSubmitConfirmation() {
+    ensureSubmitModal().classList.add('open');
   }
 
   function getOverallReview() {
@@ -303,6 +345,7 @@
       });
       if (!res.ok) throw new Error('Submit failed');
       show('success');
+      showSubmitConfirmation();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (error) {
       console.error(error);
