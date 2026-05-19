@@ -103,6 +103,9 @@ const emailProviderSettingsSchema = new mongoose.Schema({
 const shopSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, unique: true, index: true },
   accessTokenEncrypted: { type: String, default: '' },
+  scopes: { type: String, default: '' },
+  installSource: { type: String, default: 'oauth' },
+  lastOAuthAt: { type: Date, default: null },
   installedAt: { type: Date, default: Date.now },
   uninstalledAt: { type: Date, default: null },
   plan: { type: String, default: 'development' },

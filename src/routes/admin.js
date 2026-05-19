@@ -1,4 +1,5 @@
 const express = require('express');
+const { env } = require('../config/env');
 const nodemailer = require('nodemailer');
 const { Review, Settings, CampaignEvent, EmailProviderSettings, Shop } = require('../models');
 const { requireAdminSession } = require('../utils/security');
@@ -235,7 +236,7 @@ router.get('/stats', async (req, res, next) => {
       const [id, item] = sorted[0];
       topProduct = { id, count: item.count, averageRating: (item.sum / item.count).toFixed(1), title: null, image: null };
       try {
-        const productData = await shopifyFetchOptional(`/admin/api/2024-01/products/${id}.json?fields=id,title,image`, { shopDomain });
+        const productData = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products/${id}.json?fields=id,title,image`, { shopDomain });
         if (productData?.product) {
           topProduct.title = productData.product.title;
           topProduct.image = productData.product.image?.src || null;
@@ -373,7 +374,7 @@ router.get('/metafields', async (req, res, next) => {
         edges { node { namespace key name } }
       }
     }`;
-    const json = await shopifyFetch('/admin/api/2024-01/graphql.json', {
+    const json = await shopifyFetch(`/admin/api/${env.shopifyApiVersion}/graphql.json`, {
       shopDomain: shopDomainFromReq(req),
       method: 'POST',
       body: JSON.stringify({ query }),
@@ -394,7 +395,7 @@ router.get('/products/search', async (req, res, next) => {
     const queryText = cleanText(req.query.q, 120).toLowerCase();
     if (!queryText) return res.json({ products: [] });
 
-    const data = await shopifyFetchOptional('/admin/api/2024-01/products.json?limit=250&fields=id,title,handle,image,variants,tags', { shopDomain: shopDomainFromReq(req) });
+    const data = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products.json?limit=250&fields=id,title,handle,image,variants,tags`, { shopDomain: shopDomainFromReq(req) });
     if (!data) {
       return res.json({
         products: [],
