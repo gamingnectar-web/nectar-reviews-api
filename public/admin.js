@@ -1,0 +1,636 @@
+const API = `${window.location.origin}/api`;
+const urlParams = new URLSearchParams(window.location.search);
+const SHOP_DOMAIN = (urlParams.get('shop') || urlParams.get('shopDomain') || 'your-dev-store.myshopify.com').toLowerCase();
+
+let data = [];
+let chartInstance = null;
+let currentAttributes = [];
+let parsedCSVData = [];
+let csvHeaders = [];
+let mappedReviews = [];
+let adminTokenPromise = null;
+
+(function bootstrapAdminSecret() {
+  const secret = urlParams.get('admin_secret');
+  if (secret) {
+    sessionStorage.setItem('nectar_admin_secret', secret);
+    urlParams.delete('admin_secret');
+    const cleanQuery = urlParams.toString();
+    const cleanUrl = `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ''}${window.location.hash}`;
+    window.history.replaceState({}, document.title, cleanUrl);
+  }
+})();
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function withShop(path) {
+  const separator = path.includes('?') ? '&' : '?';
+  return `${path}${separator}shopDomain=${encodeURIComponent(SHOP_DOMAIN)}`;
+}
+
+async function getAdminToken() {
+  if (!adminTokenPromise) {
+    adminTokenPromise = (async () => {
+      try {
+        if (window.shopify && typeof window.shopify.idToken === 'function') {
+          return await window.shopify.idToken();
+        }
+      } catch (error) {
+        console.warn('Could not get Shopify ID token:', error);
+      }
+      return '';
+    })();
+  }
+  return adminTokenPromise;
+}
+
+async function adminFetch(path, options = {}) {
+  const token = await getAdminToken();
+  const secret = sessionStorage.getItem('nectar_admin_secret') || '';
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-Shop-Domain': SHOP_DOMAIN,
+    ...(options.headers || {}),
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (secret) headers['X-Nectar-Admin-Secret'] = secret;
+
+  const res = await fetch(`${API}${withShop(path)}`, { ...options, headers });
+  if (!res.ok) {
+    let message = `Request failed (${res.status})`;
+    try {
+      const json = await res.json();
+      message = json.error || json.detail || message;
+    } catch (_) {}
+    throw new Error(message);
+  }
+  return res.json();
+}
+
+window.showToast = function(msg) {
+  if (window.shopify && window.shopify.toast) window.shopify.toast.show(msg);
+  const toast = document.getElementById('custom-toast');
+  if (!toast) return;
+  toast.innerText = msg;
+  toast.style.top = '30px';
+  setTimeout(() => { toast.style.top = '-100px'; }, 3000);
+};
+
+window.tab = function(id) {
+  const target = document.getElementById(id);
+  if (!target) return;
+  document.querySelectorAll('.view, .tab-btn').forEach((el) => el.classList.remove('active'));
+  target.classList.add('active');
+  const activeBtn = document.querySelector(`button[onclick="window.tab('${id}')"]`);
+  if (activeBtn) activeBtn.classList.add('active');
+  if (id === 'v-dash') window.loadStats();
+  if (['v-discounts', 'v-loyalty', 'v-referrals'].includes(id)) window.loadModules();
+};
+
+window.subTab = function(controlId, previewId) {
+  document.querySelectorAll('.sub-view, .sub-tab-btn').forEach((el) => el.classList.remove('active'));
+  document.getElementById(controlId)?.classList.add('active');
+  const activeBtn = document.querySelector(`button[onclick="window.subTab('${controlId}', '${previewId}')"]`);
+  if (activeBtn) activeBtn.classList.add('active');
+  if (previewId) {
+    document.querySelectorAll('.sub-preview').forEach((el) => el.classList.remove('active'));
+    document.getElementById(previewId)?.classList.add('active');
+  }
+};
+
+window.setPreviewMode = function(mode) {
+  document.getElementById('btn-desk-prev')?.classList.toggle('active', mode === 'desktop');
+  document.getElementById('btn-mob-prev')?.classList.toggle('active', mode === 'mobile');
+  const prevContainer = document.getElementById('preview-container-wrap');
+  if (!prevContainer) return;
+  if (mode === 'mobile') {
+    prevContainer.style.maxWidth = '375px';
+    prevContainer.style.margin = '0 auto';
+    prevContainer.style.border = '12px solid #1a1a1a';
+    prevContainer.style.borderRadius = '32px';
+    prevContainer.style.overflow = 'hidden';
+    prevContainer.style.backgroundColor = '#ffffff';
+  } else {
+    prevContainer.style.maxWidth = '100%';
+    prevContainer.style.margin = '0';
+    prevContainer.style.border = 'none';
+    prevContainer.style.borderRadius = '0';
+    prevContainer.style.overflow = 'visible';
+    prevContainer.style.backgroundColor = 'transparent';
+  }
+};
+
+window.toggleImportInst = function() {
+  const platform = document.getElementById('import-platform-select')?.value || 'generic';
+  document.querySelectorAll('.import-inst-box').forEach((el) => el.classList.remove('active'));
+  document.getElementById(`inst-${platform}`)?.classList.add('active');
+};
+
+window.fetchMetafields = async function() {
+  try {
+    const metafields = await adminFetch('/admin/metafields');
+    const select = document.getElementById('attr-rule-val-meta');
+    if (!select) return;
+    if (!metafields.length) {
+      select.innerHTML = '<option value="">No metafields found on this store</option>';
+      return;
+    }
+    select.innerHTML = metafields.map((m) => `<option value="${escapeHtml(m.key)}">${escapeHtml(m.name)} (${escapeHtml(m.key)})</option>`).join('');
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+window.toggleRuleInput = function() {
+  const type = document.getElementById('attr-rule-type')?.value || 'tag';
+  const tagInput = document.getElementById('attr-rule-val-tag');
+  const metaInput = document.getElementById('attr-rule-val-meta');
+  if (type === 'tag') {
+    if (tagInput) tagInput.style.display = 'block';
+    if (metaInput) metaInput.style.display = 'none';
+  } else {
+    if (tagInput) tagInput.style.display = 'none';
+    if (metaInput) metaInput.style.display = 'block';
+    if (metaInput && metaInput.options.length <= 1) window.fetchMetafields();
+  }
+};
+
+window.load = async function() {
+  try {
+    const session = await adminFetch('/admin/session');
+    const security = document.getElementById('security-status');
+    if (security) security.textContent = `Protected admin session active via ${session.authMode}. Shop: ${session.shopDomain}`;
+
+    data = await adminFetch(`/admin/reviews?t=${Date.now()}`);
+    const config = await adminFetch(`/admin/settings?t=${Date.now()}`);
+    hydrateSettings(config || {});
+    window.renderLists();
+    window.loadStats();
+    window.loadModules();
+    window.generateFlowCode();
+  } catch (error) {
+    console.error('Init error:', error);
+    window.showToast(error.message || 'Could not load admin data');
+    const list = document.getElementById('mgr-list');
+    if (list) {
+      list.innerHTML = `<div class="panel"><h3>Admin authentication required</h3><p class="muted">${escapeHtml(error.message || 'Could not authenticate admin session.')}</p><p class="muted">For dev access, set ADMIN_SHARED_SECRET in Render and open /admin?shop=${escapeHtml(SHOP_DOMAIN)}&admin_secret=YOUR_SECRET once.</p></div>`;
+    }
+  }
+};
+
+function hydrateSettings(config) {
+  if (config.betaMode) {
+    document.getElementById('set-beta-enable').checked = Boolean(config.betaMode.enabled);
+    document.getElementById('set-beta-email').value = config.betaMode.email || '';
+  }
+  document.getElementById('set-auto-enable').checked = Boolean(config.autoApproveEnabled);
+  document.getElementById('set-auto-type').value = config.autoApproveType || 'verified';
+  document.getElementById('set-min-stars').value = config.autoApproveMinStars || 4;
+  document.getElementById('set-seo').checked = config.seo?.richSnippets !== false;
+  currentAttributes = Array.isArray(config.attributeProfiles) ? config.attributeProfiles : [];
+
+  if (config.widgetStyles) {
+    document.getElementById('style-title').value = config.widgetStyles.widgetTitle || 'Customer Reviews';
+    document.getElementById('style-primary').value = config.widgetStyles.primaryColor || '#000000';
+    document.getElementById('style-star').value = config.widgetStyles.starColor || '#ffc700';
+    document.getElementById('style-text').value = config.widgetStyles.textSize || 15;
+  }
+  if (config.cardStyles) {
+    document.getElementById('card-star').value = config.cardStyles.starSize || 14;
+    document.getElementById('card-count').checked = config.cardStyles.showCount !== false;
+  }
+  if (config.carouselStyles) {
+    document.getElementById('car-layout').value = config.carouselStyles.layout || 'infinite';
+    document.getElementById('car-autoplay').checked = config.carouselStyles.autoplay !== false;
+    document.getElementById('car-delay').value = config.carouselStyles.delay || 4000;
+    document.getElementById('car-arrows').checked = Boolean(config.carouselStyles.showArrows);
+    document.getElementById('car-limit').value = config.carouselStyles.limit || 10;
+  }
+  window.updatePreviews();
+  window.renderAttributes();
+}
+
+window.loadStats = async function() {
+  try {
+    const stats = await adminFetch(`/admin/stats?t=${Date.now()}`);
+    document.getElementById('stat-total').innerText = (stats.sources.website + stats.sources.email + stats.sources.import) || 0;
+    document.getElementById('stat-live').innerText = data.filter((r) => r.status === 'accepted' && !r.isDeleted).length;
+
+    const prodCardEl = document.getElementById('v-dash-prod-card');
+    if (prodCardEl && stats.topProduct && stats.topProduct.id !== 'N/A') {
+      const count = stats.topProduct.count;
+      const avgNum = parseFloat(stats.topProduct.averageRating);
+      const fullStars = Number.isNaN(avgNum) ? 0 : Math.round(avgNum);
+      prodCardEl.innerHTML = `
+        <p class="stat-label">Most Reviewed Product</p>
+        <h3 style="margin:0 0 10px; font-size:18px;">${escapeHtml(stats.topProduct.title || `ID: ${stats.topProduct.id}`)}</h3>
+        <p style="margin:0; color:var(--star);">${'★'.repeat(fullStars)}${'☆'.repeat(5 - fullStars)} <span style="color:var(--text-light);">${avgNum.toFixed(1)} (${count} reviews)</span></p>`;
+    } else if (prodCardEl) {
+      prodCardEl.innerHTML = '<p class="stat-label">Top Product</p><h3 class="stat-value" style="font-size:24px;">No reviews yet</h3>';
+    }
+
+    const chartEl = document.getElementById('chartSources');
+    if (chartEl && window.Chart) {
+      const ctx = chartEl.getContext('2d');
+      if (chartInstance) chartInstance.destroy();
+      chartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Website Widget', 'Email Link', 'Imported CSV'],
+          datasets: [{ data: [stats.sources.website, stats.sources.email, stats.sources.import], backgroundColor: ['#008060', '#005bd3', '#ffc700'] }],
+        },
+        options: { cutout: '75%', plugins: { legend: { position: 'bottom' } } },
+      });
+    }
+  } catch (error) {
+    console.warn(error);
+  }
+};
+
+window.loadModules = async function() {
+  try {
+    const result = await adminFetch('/admin/modules');
+    window.nectarModules = result.modules || {};
+  } catch (error) {
+    console.warn(error);
+  }
+};
+
+window.renderLists = function() {
+  const query = (document.getElementById('search-bar')?.value || '').toLowerCase();
+  const status = document.getElementById('status-filter')?.value || 'all';
+  const starF = document.getElementById('star-filter')?.value || 'all';
+  let active = data.filter((r) => !r.isDeleted);
+  if (status !== 'all') active = active.filter((r) => r.status === status);
+  if (starF !== 'all') active = active.filter((r) => Number(r.rating) === parseInt(starF, 10));
+  if (query) active = active.filter((r) => `${r.userId || ''} ${r.email || ''} ${r.comment || ''}`.toLowerCase().includes(query));
+  const trash = data.filter((r) => r.isDeleted);
+
+  const mgrList = document.getElementById('mgr-list');
+  const trashList = document.getElementById('trash-list');
+  if (mgrList) mgrList.innerHTML = active.length ? active.map((r) => window.buildCard(r, false)).join('') : '<div class="panel"><p>No reviews match this filter.</p></div>';
+  if (trashList) trashList.innerHTML = trash.length ? trash.map((r) => window.buildCard(r, true)).join('') : '<div class="panel"><p>Trash is empty.</p></div>';
+};
+
+window.buildCard = function(r, isTrash) {
+  const rating = Number(r.rating || 0);
+  const verifyHtml = r.verifiedPurchase
+    ? '<span class="v-badge v-badge-yes">✓ Verified Buyer</span>'
+    : `<button class="v-badge v-badge-no" onclick="window.manuallyVerify('${r._id}')">⚠️ Unverified — Verify</button>`;
+  let attrHtml = '';
+  if (r.attributes && Object.keys(r.attributes).length > 0) {
+    attrHtml = '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">';
+    for (const [key, val] of Object.entries(r.attributes)) {
+      attrHtml += `<span class="attr-tag">${escapeHtml(key)} ${escapeHtml(val)}/10</span>`;
+    }
+    attrHtml += '</div>';
+  }
+
+  return `
+    <div class="review-card status-border-${escapeHtml(r.status || 'pending')}">
+      <div style="display:flex; gap:22px; justify-content:space-between; align-items:flex-start;">
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+            <span class="customer-link">${escapeHtml(r.userId || 'Guest')}</span>
+            <span class="status-group">
+              <button class="s-btn acc ${r.status === 'accepted' ? 'active' : ''}" onclick="window.updateStatus('${r._id}', 'accepted')">✓</button>
+              <button class="s-btn hld ${r.status === 'hold' ? 'active' : ''}" onclick="window.updateStatus('${r._id}', 'hold')">⏸</button>
+              <button class="s-btn rej ${r.status === 'rejected' ? 'active' : ''}" onclick="window.updateStatus('${r._id}', 'rejected')">✕</button>
+            </span>
+          </div>
+          <div style="color:var(--star); font-size:19px; margin-bottom:8px;">${'★'.repeat(rating)}${'☆'.repeat(Math.max(0, 5 - rating))}</div>
+          <h3 style="margin:0 0 8px;">${escapeHtml(r.headline || 'No Headline')}</h3>
+          <p style="margin:0; color:#374151; line-height:1.5; white-space:pre-wrap;">${escapeHtml(r.comment || '')}</p>
+          ${attrHtml}
+          <p class="muted" style="margin:14px 0 0; font-size:13px;">Product ID: ${escapeHtml(r.itemId || '')} • ${new Date(r.createdAt || Date.now()).toLocaleDateString()}</p>
+        </div>
+        <div class="card-side" style="min-width:220px; text-align:right; border-left:1px solid var(--border); padding-left:20px;">
+          <div style="font-size:13px; color:var(--primary); font-weight:600; margin-bottom:10px;">${escapeHtml(r.email || 'No Email')}</div>
+          <div style="margin-bottom:18px;">${verifyHtml}</div>
+          ${isTrash ? `<button class="restore-btn" onclick="window.toggleBin('${r._id}', false)">↺ Restore</button>` : `<button class="delete-btn" onclick="window.toggleBin('${r._id}', true)">Trash</button>`}
+        </div>
+      </div>
+      <div style="width:100%; margin-top:15px; border-top:1px dashed var(--border); padding-top:15px;">
+        <button class="reply-toggle" onclick="window.toggleReplyBox('${r._id}')">Reply to Customer</button>
+        <div id="reply-box-${r._id}" class="reply-panel" style="display:${r.reply ? 'block' : 'none'}; margin-top:15px;">
+          <textarea id="reply-text-${r._id}" class="reply-input" placeholder="Type your public reply...">${escapeHtml(r.reply || '')}</textarea>
+          <div style="text-align:right; margin-top:10px;"><button id="reply-btn-${r._id}" class="post-btn" onclick="window.saveReply('${r._id}')">Publish Reply</button></div>
+        </div>
+      </div>
+    </div>`;
+};
+
+window.toggleReplyBox = function(id) {
+  const box = document.getElementById(`reply-box-${id}`);
+  if (box) box.style.display = box.style.display === 'none' ? 'block' : 'none';
+};
+
+window.patchReview = async function(id, payload) {
+  const updated = await adminFetch(`/reviews/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ ...payload, shopDomain: SHOP_DOMAIN }),
+  });
+  const index = data.findIndex((review) => review._id === id);
+  if (index >= 0) data[index] = updated;
+  return updated;
+};
+
+window.manuallyVerify = async function(id) {
+  if (!confirm('Manually mark this review as a Verified Purchase?')) return;
+  try {
+    await window.patchReview(id, { verifiedPurchase: true, verificationNote: 'Manually verified by admin' });
+    window.renderLists();
+    window.showToast('Review Verified!');
+  } catch (error) {
+    window.showToast(error.message || 'Could not verify review');
+  }
+};
+
+window.updateStatus = async function(id, status) {
+  const original = data.find((x) => x._id === id);
+  if (original) original.status = status;
+  window.renderLists();
+  try {
+    await window.patchReview(id, { status });
+    window.showToast(`Status updated to ${status}`);
+  } catch (error) {
+    window.showToast(error.message || 'Could not update status');
+    window.load();
+  }
+};
+
+window.toggleBin = async function(id, isDeleted) {
+  if (isDeleted && !confirm('Move to trash? It will be permanently deleted in 28 days.')) return;
+  const original = data.find((x) => x._id === id);
+  if (original) original.isDeleted = isDeleted;
+  window.renderLists();
+  try {
+    await window.patchReview(id, { isDeleted });
+    window.showToast(isDeleted ? 'Moved to Trash' : 'Restored from Trash');
+  } catch (error) {
+    window.showToast(error.message || 'Could not update trash');
+    window.load();
+  }
+};
+
+window.saveReply = async function(id) {
+  const btn = document.getElementById(`reply-btn-${id}`);
+  const originalText = btn?.innerText || 'Publish Reply';
+  if (btn) { btn.innerText = 'Publishing...'; btn.disabled = true; }
+  const text = document.getElementById(`reply-text-${id}`)?.value || '';
+  try {
+    await window.patchReview(id, { reply: text });
+    if (btn) btn.innerText = 'Published!';
+    window.showToast('Reply published successfully');
+    setTimeout(() => { if (btn) { btn.innerText = originalText; btn.disabled = false; } }, 1500);
+  } catch (error) {
+    if (btn) btn.innerText = 'Error saving';
+    window.showToast(error.message || 'Could not save reply');
+    setTimeout(() => { if (btn) { btn.innerText = originalText; btn.disabled = false; } }, 2000);
+  }
+};
+
+window.renderAttributes = function() {
+  const container = document.getElementById('attributes-list');
+  if (!container) return;
+  if (!currentAttributes.length) {
+    container.innerHTML = '<div style="color:var(--text-light); font-size:13px; margin-top:12px;">No conditional rules created yet.</div>';
+    return;
+  }
+  container.innerHTML = currentAttributes.map((attr, i) => `
+    <div class="attr-pill">
+      <div><span class="attr-tag">${escapeHtml(attr.type)}</span><span class="muted">${escapeHtml(attr.condition)}</span> <strong style="color:var(--border);">→</strong> <strong>Slider: '${escapeHtml(attr.label)}'</strong></div>
+      <button style="background:none; border:none; color:var(--red); cursor:pointer; font-weight:600;" onclick="window.removeAttribute(${i})">✕ Remove</button>
+    </div>`).join('');
+};
+
+window.addAttribute = function() {
+  const type = document.getElementById('attr-rule-type')?.value || 'tag';
+  const condition = type === 'tag' ? document.getElementById('attr-rule-val-tag')?.value.trim() : document.getElementById('attr-rule-val-meta')?.value;
+  const label = document.getElementById('attr-label')?.value.trim();
+  if (!condition || condition === 'undefined' || !label) {
+    alert('Please fill out both the condition value and the slider name.');
+    return;
+  }
+  if (currentAttributes.length < 8) {
+    currentAttributes.push({ type, condition, label });
+    document.getElementById('attr-rule-val-tag').value = '';
+    document.getElementById('attr-label').value = '';
+    window.saveSettings();
+    window.renderAttributes();
+    window.showToast('Attribute Saved');
+  }
+};
+
+window.removeAttribute = async function(index) {
+  if (!confirm('Are you sure you want to remove this slider rule?')) return;
+  currentAttributes.splice(index, 1);
+  window.renderAttributes();
+  await window.saveSettings();
+  window.showToast('Attribute Removed');
+};
+
+window.updatePreviews = function() {
+  const title = document.getElementById('style-title')?.value || 'Customer Reviews';
+  const primary = document.getElementById('style-primary')?.value || '#000000';
+  const star = document.getElementById('style-star')?.value || '#ffc700';
+  const txt = `${document.getElementById('style-text')?.value || 15}px`;
+  const cardStar = `${document.getElementById('card-star')?.value || 14}px`;
+  const preTitle = document.getElementById('pre-title');
+  if (preTitle) preTitle.innerText = title;
+  document.querySelectorAll('.pre-color-primary').forEach((el) => { el.style.background = primary; });
+  document.querySelectorAll('.pre-color-star').forEach((el) => { el.style.color = star; });
+  document.querySelectorAll('.pre-color-text').forEach((el) => { el.style.fontSize = txt; });
+  document.querySelectorAll('.pre-color-text-brand').forEach((el) => { el.style.color = primary; });
+  const cardIcon = document.getElementById('pre-card-icon');
+  if (cardIcon) cardIcon.style.fontSize = cardStar;
+  const cardCount = document.getElementById('pre-card-count');
+  if (cardCount) cardCount.style.display = document.getElementById('card-count')?.checked ? 'inline' : 'none';
+};
+
+window.saveSettings = async function() {
+  const payload = {
+    shopDomain: SHOP_DOMAIN,
+    betaMode: { enabled: document.getElementById('set-beta-enable').checked, email: document.getElementById('set-beta-email').value.trim() },
+    autoApproveEnabled: document.getElementById('set-auto-enable').checked,
+    autoApproveType: document.getElementById('set-auto-type').value,
+    autoApproveMinStars: parseInt(document.getElementById('set-min-stars').value, 10),
+    attributeProfiles: currentAttributes,
+    seo: { richSnippets: document.getElementById('set-seo').checked },
+    widgetStyles: {
+      widgetTitle: document.getElementById('style-title').value,
+      primaryColor: document.getElementById('style-primary').value,
+      starColor: document.getElementById('style-star').value,
+      textSize: parseInt(document.getElementById('style-text').value, 10),
+    },
+    cardStyles: { starSize: parseInt(document.getElementById('card-star').value, 10), showCount: document.getElementById('card-count').checked },
+    carouselStyles: {
+      layout: document.getElementById('car-layout').value,
+      autoplay: document.getElementById('car-autoplay').checked,
+      delay: parseInt(document.getElementById('car-delay').value, 10) || 4000,
+      showArrows: document.getElementById('car-arrows').checked,
+      limit: parseInt(document.getElementById('car-limit').value, 10) || 10,
+    },
+  };
+  try {
+    await adminFetch('/admin/settings', { method: 'PATCH', body: JSON.stringify(payload) });
+    window.showToast('Settings Saved successfully!');
+  } catch (error) {
+    window.showToast(error.message || 'Could not save settings');
+  }
+};
+
+window.handleFileUpload = function() {
+  const file = document.getElementById('csv-file')?.files?.[0];
+  if (!file) return;
+  document.getElementById('file-name').innerText = `${file.name} selected`;
+  Papa.parse(file, {
+    header: true,
+    skipEmptyLines: true,
+    complete(results) {
+      parsedCSVData = results.data;
+      csvHeaders = results.meta.fields || [];
+      window.buildMappingUI();
+    },
+  });
+};
+
+window.buildMappingUI = function() {
+  document.getElementById('mapping-ui').style.display = 'block';
+  const reqFields = [
+    { id: 'map-itemId', label: 'Product ID (Req)' },
+    { id: 'map-rating', label: 'Star Rating (Req)' },
+    { id: 'map-userId', label: 'Reviewer Name' },
+    { id: 'map-email', label: 'Reviewer Email' },
+    { id: 'map-headline', label: 'Review Title' },
+    { id: 'map-comment', label: 'Review Body' },
+    { id: 'map-date', label: 'Review Date' },
+  ];
+  let html = '';
+  reqFields.forEach((f) => {
+    let options = '<option value="">-- Ignore --</option>';
+    csvHeaders.forEach((h) => {
+      const hL = h.toLowerCase();
+      let selected = '';
+      if (f.id === 'map-itemId' && (hL.includes('product') || hL.includes('id'))) selected = 'selected';
+      if (f.id === 'map-rating' && (hL.includes('score') || hL.includes('rating'))) selected = 'selected';
+      if (f.id === 'map-userId' && (hL.includes('name') || hL.includes('user'))) selected = 'selected';
+      if (f.id === 'map-email' && hL.includes('email')) selected = 'selected';
+      if (f.id === 'map-headline' && hL.includes('title')) selected = 'selected';
+      if (f.id === 'map-comment' && (hL.includes('body') || hL.includes('content') || hL.includes('review'))) selected = 'selected';
+      if (f.id === 'map-date' && hL.includes('date')) selected = 'selected';
+      options += `<option value="${escapeHtml(h)}" ${selected}>${escapeHtml(h)}</option>`;
+    });
+    html += `<label>${escapeHtml(f.label)}<select id="${f.id}" class="filter-select" style="width:100%; margin-top:6px;">${options}</select></label>`;
+  });
+  document.getElementById('column-mappers').innerHTML = html;
+  const btn = document.getElementById('import-submit-btn');
+  btn.innerText = 'Preview & Map Products';
+  btn.onclick = window.generateStagingArea;
+};
+
+window.generateStagingArea = function() {
+  const map = {
+    itemId: document.getElementById('map-itemId').value,
+    rating: document.getElementById('map-rating').value,
+    userId: document.getElementById('map-userId').value,
+    email: document.getElementById('map-email').value,
+    headline: document.getElementById('map-headline').value,
+    comment: document.getElementById('map-comment').value,
+    createdAt: document.getElementById('map-date').value,
+  };
+  if (!map.itemId || !map.rating) {
+    alert('Product ID and Star Rating must be mapped.');
+    return;
+  }
+  mappedReviews = parsedCSVData.map((row) => ({
+    itemId: row[map.itemId],
+    rating: row[map.rating],
+    userId: row[map.userId],
+    email: row[map.email],
+    headline: row[map.headline],
+    comment: row[map.comment],
+    createdAt: row[map.createdAt],
+  }));
+  const rows = mappedReviews.map((r, i) => `
+    <tr><td>${escapeHtml(r.userId || '')}</td><td>${'★'.repeat(parseInt(r.rating, 10) || 5)}</td><td>${escapeHtml(String(r.comment || '').slice(0, 80))}</td><td><input id="stage-item-${i}" class="premium-input" value="${escapeHtml(r.itemId || '')}" style="width:100%;" /></td></tr>`).join('');
+  const stagingHtml = `
+    <div id="staging-area" style="margin-top:24px;">
+      <h3>3. Smart Product Mapping</h3>
+      <p class="muted">Check that every row has the correct numeric Product ID before importing.</p>
+      <table style="width:100%; border-collapse:collapse;"><thead><tr><th>Reviewer</th><th>Rating</th><th>Review</th><th>Target Product ID</th></tr></thead><tbody>${rows}</tbody></table>
+      <p><button id="final-import-btn" class="primary-btn" onclick="window.processFinalImport()">Go Live (Import to Database)</button></p>
+    </div>`;
+  let existing = document.getElementById('staging-area');
+  if (!existing) {
+    existing = document.createElement('div');
+    existing.id = 'staging-area';
+    document.getElementById('mapping-ui').appendChild(existing);
+  }
+  existing.outerHTML = stagingHtml;
+};
+
+window.processFinalImport = async function() {
+  const btn = document.getElementById('final-import-btn');
+  if (btn) { btn.innerText = 'Importing...'; btn.disabled = true; }
+  const finalPayload = mappedReviews.map((r, i) => ({ ...r, itemId: document.getElementById(`stage-item-${i}`).value.trim() }));
+  try {
+    const result = await adminFetch('/reviews/import', {
+      method: 'POST',
+      body: JSON.stringify({ shopDomain: SHOP_DOMAIN, reviews: finalPayload }),
+    });
+    window.showToast(`Import successful: ${result.imported || 0} reviews`);
+    document.getElementById('mapping-ui').style.display = 'none';
+    document.getElementById('staging-area')?.remove();
+    window.load();
+    window.tab('v-mgr');
+  } catch (error) {
+    window.showToast(error.message || 'Import failed');
+  } finally {
+    if (btn) { btn.innerText = 'Go Live (Import to Database)'; btn.disabled = false; }
+  }
+};
+
+window.generateFlowCode = function() {
+  const logo = document.getElementById('flow-logo')?.value.trim() || '';
+  const color = document.getElementById('flow-color')?.value || '#111827';
+  const heading = document.getElementById('flow-heading')?.value || 'Review your recent order';
+  const shopUrl = `https://${SHOP_DOMAIN}`;
+  const logoHtml = logo ? `<img src="${escapeHtml(logo)}" alt="Logo" style="max-width:160px; margin-bottom:18px;" />` : '';
+  const flowHtml = `
+${logoHtml}
+<h2 style="color:${color}; margin:0 0 14px;">${escapeHtml(heading)}</h2>
+<p>Hi {{ order.customer.firstName | default: "there" }},</p>
+<p>We hope you're loving your recent purchase! Could you take 60 seconds to leave a quick review?</p>
+<a href="${shopUrl}/pages/review?order={{ order.name }}" style="display:inline-block; background:${color}; color:#fff; padding:12px 18px; border-radius:999px; text-decoration:none; font-weight:700;">Review Your Order</a>`.trim();
+  const output = document.getElementById('flow-code-output');
+  if (output) output.value = flowHtml;
+};
+
+window.copyFlowCode = function() {
+  const output = document.getElementById('flow-code-output');
+  if (!output) return;
+  output.select();
+  document.execCommand('copy');
+  window.showToast('Copied to clipboard!');
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+  const labelInput = document.getElementById('attr-label');
+  if (labelInput) {
+    labelInput.addEventListener('keypress', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        window.addAttribute();
+      }
+    });
+  }
+  window.load();
+});
