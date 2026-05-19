@@ -1,0 +1,26 @@
+{% if product.metafields.reviews.rating_count.value > 0 %}
+<style>
+    .rev-card-stars-{{ block.id }} {
+        display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: inherit; font-family: inherit; font-size: var(--rev-font, 13px); margin: 5px 0; cursor: pointer; transition: opacity 0.2s;
+    }
+    .rev-card-stars-{{ block.id }}:hover { opacity: 0.7; }
+    .rev-star-icon-{{ block.id }} { color: var(--rev-star-color, #ffc700); font-size: var(--rev-star-size, 14px); line-height: 1; }
+    .rev-count-{{ block.id }} { color: #6d7175; font-weight: 500; }
+</style>
+
+<div style="display: flex; width: 100%; justify-content: var(--rev-align, flex-start);" id="rev-card-wrapper-{{ block.id }}">
+    <a href="{{ product.url }}#reviews-section" class="rev-card-stars-{{ block.id }}">
+        <span class="rev-star-icon-{{ block.id }}">★</span>
+        <span style="font-weight: 700;">{{ product.metafields.reviews.rating.value | round: 1 }}</span>
+        <span class="rev-count-{{ block.id }}">({{ product.metafields.reviews.rating_count.value }})</span>
+    </a>
+</div>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Product Card Stars",
+  "target": "section",
+  "settings": []
+}
+{% endschema %}

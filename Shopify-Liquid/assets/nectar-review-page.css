@@ -1,0 +1,606 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
+
+.nectar-review-page {
+  --primary: #0f172a;
+  --accent: #f5b301;
+  --card: #ffffff;
+  --text: #111827;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --success: #059669;
+  --danger: #dc2626;
+  max-width: 1100px;
+  margin: 56px auto;
+  padding: 0 20px 40px;
+  font-family: 'Poppins', sans-serif !important;
+  color: var(--text);
+}
+
+.nectar-review-page *,
+.nectar-review-page *:before,
+.nectar-review-page *:after {
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.nectar-review-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.nectar-review-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: #eef4ff;
+  border: 1px solid #c7d2fe;
+  color: #1d4ed8;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.nectar-review-title {
+  margin: 0 0 10px 0 !important;
+  font-size: 48px;
+  line-height: 1.04;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.nectar-review-intro {
+  color: var(--muted);
+  font-size: 20px;
+  margin: 0;
+}
+
+.nectar-header-image {
+  width: 100%;
+  max-height: 280px;
+  object-fit: cover;
+  border-radius: 24px;
+  display: block;
+  margin-bottom: 28px;
+}
+
+.nectar-review-state,
+.nectar-review-success,
+.nectar-review-error,
+.nectar-order-summary,
+.nectar-review-card,
+.nectar-overall-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.04);
+}
+
+.nectar-review-state,
+.nectar-review-success,
+.nectar-review-error {
+  padding: 36px 24px;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.nectar-review-success h2 { color: var(--success); }
+.nectar-review-error h2 { color: var(--danger); }
+
+.nectar-order-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  padding: 18px;
+  margin-bottom: 24px;
+}
+
+.nectar-summary-box {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 18px;
+  background: #fcfdff;
+}
+
+.nectar-summary-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 8px;
+  letter-spacing: .05em;
+}
+
+.nectar-summary-value {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.nectar-overall-card {
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.nectar-overall-title {
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.nectar-overall-copy {
+  margin: 0 0 18px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.nectar-review-list {
+  display: grid;
+  gap: 22px;
+}
+
+.nectar-review-card {
+  padding: 24px;
+}
+
+.nectar-review-card-top {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: 22px;
+  align-items: start;
+}
+
+.nectar-review-left {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.nectar-product-image {
+  width: 120px;
+  min-width: 120px;
+  height: 120px;
+  border-radius: 18px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  background: #f1f5f9;
+}
+
+.nectar-product-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.nectar-product-name {
+  margin: 0 0 12px 0;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.18;
+}
+
+.nectar-product-note {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.55;
+  background: #f8fafc;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+
+.nectar-stars {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.nectar-star {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font-size: 34px;
+  line-height: 1;
+  color: #dbe3ee;
+  cursor: pointer;
+  transition: transform .18s ease, color .18s ease;
+}
+
+.nectar-star.active {
+  color: var(--accent);
+}
+
+.nectar-star:hover {
+  transform: translateY(-4px);
+}
+
+.nectar-star:nth-child(even):hover {
+  transform: translateY(4px);
+}
+
+.nectar-actions-inline {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.nectar-icon-btn,
+.nectar-outline-btn,
+.nectar-solid-btn {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+  transition: .2s ease;
+}
+
+.nectar-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  border-radius: 999px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.nectar-icon-btn:hover {
+  transform: translateY(-1px);
+  background: #f1f5f9;
+}
+
+.nectar-right-box {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 16px;
+  background: #fbfcff;
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.nectar-right-box-title {
+  font-size: 13px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: .05em;
+}
+
+.nectar-solid-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 18px;
+  width: 100%;
+  border-radius: 14px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 15px;
+}
+
+.nectar-outline-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 14px;
+  width: 100%;
+  border-radius: 14px;
+  background: #fff;
+  color: var(--primary);
+  border: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.nectar-return-link {
+  max-width: 280px;
+  margin: 18px auto 0;
+  text-decoration: none;
+}
+
+.nectar-expand-panel {
+  display: none;
+  margin-top: 18px;
+  border-top: 1px dashed var(--border);
+  padding-top: 18px;
+}
+
+.nectar-expand-panel.open {
+  display: block;
+}
+
+.nectar-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.nectar-panel-heading strong {
+  display: block;
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.nectar-panel-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.nectar-panel-close {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--muted);
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  font-size: 20px;
+  font-weight: 800;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.nectar-field-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.nectar-input,
+.nectar-textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  padding: 14px 16px;
+  border-radius: 16px;
+  font-size: 15px;
+}
+
+.nectar-input:focus,
+.nectar-textarea:focus {
+  outline: none;
+  border-color: #cbd5e1;
+  box-shadow: 0 0 0 4px rgba(15, 23, 42, 0.04);
+}
+
+.nectar-textarea {
+  min-height: 140px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.nectar-slider-wrap {
+  display: grid;
+  gap: 14px;
+}
+
+.nectar-slider-row {
+  border: 1px solid var(--border);
+  background: #fcfdff;
+  border-radius: 16px;
+  padding: 14px 16px;
+}
+
+.nectar-slider-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.nectar-slider-label {
+  font-size: 13px;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: .05em;
+  color: var(--muted);
+}
+
+.nectar-slider-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nectar-slider-value {
+  font-weight: 800;
+  color: var(--muted);
+  min-width: 48px;
+  text-align: right;
+}
+
+.nectar-slider-clear {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 999px;
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 800;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.nectar-range {
+  width: 100%;
+  accent-color: #111827;
+}
+
+.nectar-range.is-inactive {
+  opacity: .42;
+}
+
+.nectar-submit-wrap {
+  margin-top: 24px;
+}
+
+.nectar-submit-btn {
+  width: 100%;
+  border: none;
+  border-radius: 18px;
+  background: #000;
+  color: #fff;
+  padding: 18px 24px;
+  font-size: 20px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.nectar-submit-btn:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+.nectar-help-strip {
+  margin-top: 24px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 20px;
+  text-align: center;
+}
+
+.nectar-help-strip h3 {
+  margin: 0 0 8px 0;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.nectar-help-strip p {
+  margin: 0 0 12px 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.nectar-help-link {
+  color: #000;
+  font-weight: 800;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.nectar-modal-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, .55);
+  z-index: 9999;
+  padding: 20px;
+  align-items: center;
+  justify-content: center;
+}
+
+.nectar-modal-backdrop.open {
+  display: flex;
+}
+
+.nectar-modal {
+  width: 100%;
+  max-width: 620px;
+  background: #fff;
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: 0 20px 80px rgba(15, 23, 42, .25);
+}
+
+.nectar-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.nectar-modal-title {
+  font-size: 26px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.nectar-close-btn {
+  appearance: none;
+  border: none;
+  background: #f1f5f9;
+  border-radius: 999px;
+  width: 38px;
+  height: 38px;
+  cursor: pointer;
+  font-size: 20px;
+}
+
+.nectar-support-note {
+  color: var(--muted);
+  line-height: 1.55;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 900px) {
+  .nectar-review-card-top {
+    grid-template-columns: 1fr;
+  }
+
+  .nectar-right-box {
+    min-height: auto;
+  }
+
+  .nectar-order-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .nectar-review-title {
+    font-size: 38px;
+  }
+}
+
+@media (max-width: 640px) {
+  .nectar-review-page {
+    padding: 0 14px 32px;
+  }
+
+  .nectar-review-title {
+    font-size: 32px;
+  }
+
+  .nectar-review-intro {
+    font-size: 17px;
+  }
+
+  .nectar-review-left {
+    flex-direction: column;
+  }
+
+  .nectar-product-image {
+    width: 100%;
+    height: 220px;
+    max-width: 220px;
+  }
+
+  .nectar-product-name {
+    font-size: 22px;
+  }
+
+  .nectar-star {
+    font-size: 32px;
+  }
+}

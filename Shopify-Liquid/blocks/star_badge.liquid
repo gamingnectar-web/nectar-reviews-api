@@ -1,0 +1,89 @@
+<div id="rev-badge-{{ block.id }}" style="display: none; cursor: pointer; align-items: center; gap: 6px; font-family: 'Poppins', sans-serif;">
+  <span class="rev-badge-stars" style="color: #ffc700; font-size: 14px;"></span>
+  <span class="rev-badge-text" style="font-weight: 700; color: #111827; font-size: 14px;"></span>
+</div>
+
+<script>
+(async function() {
+    const SHOP_DOMAIN = "{{ shop.domain }}";
+    const API = "https://nectar-reviews-api.onrender.com/api";
+    const BLOCK_ID = "{{ block.id }}";
+    const ITEM_ID = "{{ product.id }}";
+    
+    let ratingCount = {{ product.metafields.reviews.rating_count.value | default: 0 }};
+    let ratingValue = {{ product.metafields.reviews.rating.value | default: 0 }};
+
+    const isEditor = {{ request.design_mode | default: 'false' }};
+    const custEmail = "{{ customer.email | default: '' }}".toLowerCase();
+    const badgeEl = document.getElementById(`rev-badge-${BLOCK_ID}`);
+
+    try {
+        // FALLBACK: If Shopify SEO hasn't synced the metafield yet, fetch from live API
+        if (ratingCount === 0) {
+            const revRes = await fetch(`${API}/reviews/${ITEM_ID}?shopDomain=${SHOP_DOMAIN}`);
+            if (revRes.ok) {
+                const reviews = await revRes.json();
+                if (reviews.length > 0) {
+                    ratingCount = reviews.length;
+                    ratingValue = reviews.reduce((sum, r) => sum + r.rating, 0) / ratingCount;
+                }
+            }
+        }
+
+        // If it's TRULY 0 after checking the API, hide the badge.
+        if (ratingCount === 0 && !isEditor) return; 
+
+        const configRes = await fetch(`${API}/widget/config?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
+        if (configRes.ok) {
+            const configData = await configRes.json();
+            
+            // --- BETA MODE GATE ---
+            if (configData.betaMode && configData.betaMode.enabled) {
+                if (!isEditor && custEmail !== (configData.betaMode.email || "").toLowerCase()) return;
+            }
+
+            // We are cleared! Show the badge.
+            badgeEl.style.display = 'flex';
+
+            if (configData.cardStyles) {
+                const starSize = configData.cardStyles.starSize || 14;
+                document.querySelector(`#rev-badge-${BLOCK_ID} .rev-badge-stars`).style.fontSize = `${starSize}px`;
+                if (configData.widgetStyles && configData.widgetStyles.starColor) {
+                    document.querySelector(`#rev-badge-${BLOCK_ID} .rev-badge-stars`).style.color = configData.widgetStyles.starColor;
+                }
+            }
+
+            if (ratingCount > 0) {
+                const fullStars = Math.round(ratingValue);
+                document.querySelector(`#rev-badge-${BLOCK_ID} .rev-badge-stars`).innerText = '★'.repeat(fullStars) + '☆'.repeat(5-fullStars);
+                
+                let countText = ratingValue.toFixed(1);
+                if (configData.cardStyles && configData.cardStyles.showCount !== false) {
+                    countText += ` <span style="font-weight: 400; color: #6b7280; font-size: 13px;">(${ratingCount})</span>`;
+                }
+                document.querySelector(`#rev-badge-${BLOCK_ID} .rev-badge-text`).innerHTML = countText;
+            } else {
+                document.querySelector(`#rev-badge-${BLOCK_ID} .rev-badge-stars`).innerText = '★★★★★';
+                document.querySelector(`#rev-badge-${BLOCK_ID} .rev-badge-text`).innerText = 'No reviews';
+            }
+
+            badgeEl.addEventListener('click', () => {
+                const widget = document.querySelector('[id^="rev-review-section-"]');
+                if (widget) {
+                    widget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } else {
+                    window.location.href = "{{ product.url }}#reviews";
+                }
+            });
+        }
+    } catch (e) { console.error("Badge error:", e); }
+})();
+</script>
+
+{% schema %}
+{
+  "name": "Star Rating Badge",
+  "target": "section",
+  "settings": []
+}
+{% endschema %}
