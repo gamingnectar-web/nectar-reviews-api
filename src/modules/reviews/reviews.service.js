@@ -274,12 +274,31 @@ async function getRequestLink(token) {
 
 async function analytics(shopDomain) {
   const cleanShop = cleanShopDomain(shopDomain);
-  const [statusCounts, ratingCounts, summary] = await Promise.all([
+  const [statusCounts, ratingCounts, summary, sourceCounts, topProducts] = await Promise.all([
     Review.aggregate([{ $match: { shopDomain: cleanShop, isDeleted: { $ne: true } } }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
     Review.aggregate([{ $match: { shopDomain: cleanShop, status: 'accepted', isDeleted: { $ne: true } } }, { $group: { _id: '$rating', count: { $sum: 1 } } }, { $sort: { _id: 1 } }]),
-    getReviewSummary(cleanShop)
+    getReviewSummary(cleanShop),
+    Review.aggregate([{ $match: { shopDomain: cleanShop, isDeleted: { $ne: true } } }, { $group: { _id: '$source', count: { $sum: 1 } } }]),
+    Review.aggregate([
+      { $match: { shopDomain: cleanShop, status: 'accepted', isDeleted: { $ne: true } } },
+      { $group: { _id: '$itemId', count: { $sum: 1 }, averageRating: { $avg: '$rating' }, title: { $first: '$itemTitle' } } },
+      { $sort: { count: -1 } },
+      { $limit: 1 }
+    ])
   ]);
-  return { summary, statusCounts, ratingCounts };
+
+  const sources = { website: 0, email: 0, import: 0, admin: 0 };
+  for (const source of sourceCounts) {
+    if (source?._id && Object.prototype.hasOwnProperty.call(sources, source._id)) sources[source._id] = source.count;
+  }
+  const top = topProducts[0];
+  return {
+    summary,
+    sources,
+    topProduct: top ? { id: top._id, title: top.title || '', count: top.count || 0, averageRating: top.averageRating ? Math.round(top.averageRating * 10) / 10 : 0 } : { id: 'N/A', count: 0, averageRating: 0 },
+    statusCounts,
+    ratingCounts
+  };
 }
 
 module.exports = {

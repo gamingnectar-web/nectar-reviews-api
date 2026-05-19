@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { modelFromConnection } = require('../../core/database');
 
 const campaignEventSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, index: true },
@@ -17,4 +18,4 @@ const campaignEventSchema = new mongoose.Schema({
 
 campaignEventSchema.index({ shopDomain: 1, campaign: 1, eventType: 1, createdAt: -1 });
 
-module.exports = mongoose.models.CampaignEvent || mongoose.model('CampaignEvent', campaignEventSchema, 'campaign_events');
+module.exports = modelFromConnection('messaging', 'CampaignEvent', campaignEventSchema, 'campaign_events');

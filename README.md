@@ -68,8 +68,9 @@ Add these:
 
 ```txt
 NODE_ENV=production
-ADMIN_AUTH_MODE=shared_secret
-ADMIN_API_SECRET=<long random secret>
+ADMIN_AUTH_MODE=shopify_session
+ADMIN_API_SECRET=<optional break-glass/dev fallback, not shown in merchant UI>
+ADMIN_SESSION_SECRET=<optional long random session secret>
 CUSTOMER_ID_SECRET=<long random secret; do not change later>
 AUDIT_HASH_SECRET=<long random secret>
 CRON_SECRET=<long random secret>
@@ -158,7 +159,7 @@ Set `ALLOW_INSECURE_CUSTOMER_LOOKUP=false` in production.
 ### Admin
 
 ```txt
-GET  /admin?shopDomain=your-shop.myshopify.com
+GET  /admin?shop=your-shop.myshopify.com
 GET  /api/admin/modules
 PUT  /api/admin/modules
 GET  /api/admin/audit
@@ -308,3 +309,47 @@ npm audit --omit=dev
 ```
 
 At packaging time, JavaScript syntax checks passed and npm audit reported zero vulnerabilities.
+
+
+## Browser MongoDB bootstrap
+
+If you cannot install `mongosh`, use the built-in secure setup page after deploying to Render.
+
+1. Set `DATABASE_BOOTSTRAP_SECRET` in Render. Use a long random value.
+2. Set `DISABLE_DATABASE_BOOTSTRAP=false` for the first deployment.
+3. Visit `/setup/bootstrap` on your Render app.
+4. Enter the secret and type `CREATE_DATABASES`.
+5. Confirm the databases appear in MongoDB Atlas.
+6. Set `DISABLE_DATABASE_BOOTSTRAP=true` and restart the Render service.
+
+The setup page creates the segmented MongoDB databases, collections, indexes, TTL retention rules, and starter Nectar Drops rules. See `docs/BROWSER_DATABASE_BOOTSTRAP.md`.
+
+
+## Storefront widget URLs
+
+The API root `/` should return a JSON status payload. The canonical review widget script is:
+
+```txt
+https://YOUR-RENDER-APP.onrender.com/widget/reviews-widget.js
+```
+
+The script works on Shopify storefronts because it derives the API origin from the script URL. If you embed it manually, use:
+
+```liquid
+<div
+  data-nectar-reviews-widget
+  data-shop-domain="{{ shop.permanent_domain }}"
+  data-item-id="{{ product.id }}"
+  data-api-base="https://YOUR-RENDER-APP.onrender.com">
+  Loading reviews…
+</div>
+<script src="https://YOUR-RENDER-APP.onrender.com/widget/reviews-widget.js" defer></script>
+```
+
+If the widget does not show, check these in order:
+
+1. `/health` returns OK.
+2. `/widget/reviews-widget.js` loads in the browser.
+3. `/api/reviews/summary?shopDomain=YOUR-SHOP.myshopify.com&itemId=PRODUCT_ID` returns JSON.
+4. The product template includes a Nectar Reviews block/snippet.
+5. The item ID used by submitted reviews matches the item ID used by the widget.

@@ -1,0 +1,14 @@
+{% comment %}
+  Manual install snippet for Nectar Reviews.
+  Paste into a product template/section if not using the Shopify theme app extension.
+{% endcomment %}
+<div
+  class="rev-widget"
+  data-nectar-reviews-widget
+  data-shop-domain="{{ shop.permanent_domain | escape }}"
+  data-item-id="{{ product.id | escape }}"
+  data-limit="5"
+  data-api-base="https://nectar-reviews-api.onrender.com">
+  <p>Loading reviews…</p>
+</div>
+<script src="https://nectar-reviews-api.onrender.com/widget/reviews-widget.js" defer></script>

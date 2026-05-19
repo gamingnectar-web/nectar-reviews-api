@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { modelFromConnection } = require('../../core/database');
 
 const reviewRequestLinkSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, index: true },
@@ -19,4 +20,4 @@ const reviewRequestLinkSchema = new mongoose.Schema({
 reviewRequestLinkSchema.index({ shopDomain: 1, customerKey: 1, itemId: 1 });
 reviewRequestLinkSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 86400 });
 
-module.exports = mongoose.models.ReviewRequestLink || mongoose.model('ReviewRequestLink', reviewRequestLinkSchema, 'review_request_links');
+module.exports = modelFromConnection('reviews', 'ReviewRequestLink', reviewRequestLinkSchema, 'review_request_links');

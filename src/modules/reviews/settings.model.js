@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { modelFromConnection } = require('../../core/database');
 
 const settingsSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, unique: true, index: true },
@@ -39,4 +40,4 @@ const settingsSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-module.exports = mongoose.models.Settings || mongoose.model('Settings', settingsSchema, 'settings');
+module.exports = modelFromConnection('reviews', 'Settings', settingsSchema, 'settings');

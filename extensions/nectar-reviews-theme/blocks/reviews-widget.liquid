@@ -1,0 +1,48 @@
+{% comment %}
+  Nectar Reviews product reviews widget.
+  Add this app block to a product template and set API base URL to your Render app URL.
+{% endcomment %}
+
+{% assign nectar_item_id = product.id | default: block.settings.fallback_item_id %}
+
+<div
+  class="nectar-reviews-block"
+  data-nectar-reviews-widget
+  data-shop-domain="{{ shop.permanent_domain | escape }}"
+  data-item-id="{{ nectar_item_id | escape }}"
+  data-limit="{{ block.settings.limit }}"
+  data-api-base="{{ block.settings.api_base_url | escape }}">
+  <p>Loading reviews…</p>
+</div>
+
+<script src="{{ block.settings.api_base_url | escape }}/widget/reviews-widget.js" defer></script>
+
+{% schema %}
+{
+  "name": "Nectar Reviews",
+  "target": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "api_base_url",
+      "label": "API base URL",
+      "default": "https://nectar-reviews-api.onrender.com"
+    },
+    {
+      "type": "range",
+      "id": "limit",
+      "label": "Reviews to show",
+      "min": 1,
+      "max": 20,
+      "step": 1,
+      "default": 5
+    },
+    {
+      "type": "text",
+      "id": "fallback_item_id",
+      "label": "Fallback item ID",
+      "info": "Only used outside product pages."
+    }
+  ]
+}
+{% endschema %}

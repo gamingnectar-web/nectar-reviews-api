@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { modelFromConnection } = require('../../core/database');
 
 const reviewRewardSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, index: true },
@@ -18,4 +19,4 @@ const reviewRewardSchema = new mongoose.Schema({
 reviewRewardSchema.index({ shopDomain: 1, reviewId: 1 }, { unique: true });
 reviewRewardSchema.index({ shopDomain: 1, discountCodeHash: 1 }, { unique: true });
 
-module.exports = mongoose.models.ReviewReward || mongoose.model('ReviewReward', reviewRewardSchema, 'review_rewards');
+module.exports = modelFromConnection('discounts', 'ReviewReward', reviewRewardSchema, 'review_rewards');

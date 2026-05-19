@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { modelFromConnection } = require('../../core/database');
 
 const loyaltyRuleSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, index: true },
@@ -28,4 +29,4 @@ const loyaltyRuleSchema = new mongoose.Schema({
 
 loyaltyRuleSchema.index({ shopDomain: 1, ruleType: 1, trigger: 1, enabled: 1, priority: 1 });
 
-module.exports = mongoose.models.LoyaltyRule || mongoose.model('LoyaltyRule', loyaltyRuleSchema, 'loyalty_rules');
+module.exports = modelFromConnection('loyalty', 'LoyaltyRule', loyaltyRuleSchema, 'loyalty_rules');

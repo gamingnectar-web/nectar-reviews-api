@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { modelFromConnection } = require('../../core/database');
 
 const loyaltySettingsSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, unique: true, index: true },
@@ -28,4 +29,4 @@ const loyaltySettingsSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-module.exports = mongoose.models.LoyaltySettings || mongoose.model('LoyaltySettings', loyaltySettingsSchema, 'loyalty_settings');
+module.exports = modelFromConnection('loyalty', 'LoyaltySettings', loyaltySettingsSchema, 'loyalty_settings');

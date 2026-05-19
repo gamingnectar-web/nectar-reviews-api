@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { modelFromConnection } = require('../database');
 
 const shopifyOAuthStateSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, index: true },
@@ -6,4 +7,4 @@ const shopifyOAuthStateSchema = new mongoose.Schema({
   expiresAt: { type: Date, required: true, index: { expires: 0 } }
 }, { timestamps: true });
 
-module.exports = mongoose.models.ShopifyOAuthState || mongoose.model('ShopifyOAuthState', shopifyOAuthStateSchema, 'shopify_oauth_states');
+module.exports = modelFromConnection('core', 'ShopifyOAuthState', shopifyOAuthStateSchema, 'shopify_oauth_states');

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { modelFromConnection } = require('../../core/database');
 
 const loyaltyRedemptionSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, index: true },
@@ -20,4 +21,4 @@ const loyaltyRedemptionSchema = new mongoose.Schema({
 loyaltyRedemptionSchema.index({ shopDomain: 1, customerKey: 1, createdAt: -1 });
 loyaltyRedemptionSchema.index({ shopDomain: 1, discountCodeHash: 1 }, { unique: true });
 
-module.exports = mongoose.models.LoyaltyRedemption || mongoose.model('LoyaltyRedemption', loyaltyRedemptionSchema, 'loyalty_redemptions');
+module.exports = modelFromConnection('loyalty', 'LoyaltyRedemption', loyaltyRedemptionSchema, 'loyalty_redemptions');

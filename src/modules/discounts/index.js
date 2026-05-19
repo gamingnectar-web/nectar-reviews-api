@@ -9,7 +9,7 @@ module.exports = {
   key: 'discounts',
   name: 'Discounts',
   description: 'Review reward discounts and future free gift rules.',
-  enabledByDefault: false,
+  enabledByDefault: true,
   register(app) {
     app.use('/api/admin/discounts', requireModule('discounts'), routes);
     if (!listenersRegistered) {

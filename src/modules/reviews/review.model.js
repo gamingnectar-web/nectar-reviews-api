@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { modelFromConnection } = require('../../core/database');
 
 const reviewSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, index: true },
@@ -36,4 +37,4 @@ reviewSchema.index({ shopDomain: 1, createdAt: -1 });
 reviewSchema.index({ shopDomain: 1, itemId: 1, status: 1 });
 reviewSchema.index({ shopDomain: 1, requestToken: 1 });
 
-module.exports = mongoose.models.Review || mongoose.model('Review', reviewSchema, 'reviews');
+module.exports = modelFromConnection('reviews', 'Review', reviewSchema, 'reviews');

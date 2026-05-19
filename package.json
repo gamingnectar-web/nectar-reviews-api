@@ -1,7 +1,7 @@
 {
   "name": "nectar-reviews-api-secure-modular",
-  "version": "3.0.0",
-  "description": "Security-first modular Shopify reviews, discounts, loyalty and messaging API",
+  "version": "3.2.0",
+  "description": "Shopify reviews, discounts and Nectar Drops loyalty app with installed-shop admin sessions",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

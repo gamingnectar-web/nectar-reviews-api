@@ -1,5 +1,7 @@
 const crypto = require('crypto');
 const { config } = require('../config');
+const { getShopDomainFromRequest, cleanShopDomain } = require('../http/request-utils');
+const { readSessionToken, verifyAdminSessionToken } = require('./admin-session.service');
 
 function safeEqual(a, b) {
   const left = Buffer.from(String(a || ''));
@@ -18,23 +20,39 @@ function readBearerToken(req) {
   return match ? match[1].trim() : '';
 }
 
+function hasValidSharedSecret(req) {
+  const expected = config.security.adminApiSecret;
+  if (!expected) return false;
+  const provided = req.get('x-nectar-admin-token') || readBearerToken(req);
+  return safeEqual(provided, expected);
+}
+
+function hasValidShopSession(req) {
+  const session = verifyAdminSessionToken(readSessionToken(req));
+  if (!session?.shopDomain) return false;
+  const requestedShop = cleanShopDomain(getShopDomainFromRequest(req));
+  if (requestedShop && requestedShop !== session.shopDomain) return false;
+  req.adminSession = session;
+  req.shopDomain = session.shopDomain;
+  return true;
+}
+
 function requireAdminApi(req, res, next) {
   const mode = config.security.adminAuthMode;
   if (mode === 'off') return next();
 
-  const expected = config.security.adminApiSecret;
-  if (!expected) {
-    return res.status(503).json({
-      error: 'Admin API protection is enabled but ADMIN_API_SECRET is not configured.'
-    });
-  }
-
-  const provided = req.get('x-nectar-admin-token') || readBearerToken(req);
-  if (!safeEqual(provided, expected)) {
+  if (mode === 'strict_shared_secret') {
+    if (hasValidSharedSecret(req)) return next();
     return res.status(401).json({ error: 'Admin authentication required.' });
   }
 
-  return next();
+  // Default and backwards compatible modes: installed Shopify admin session is enough.
+  // ADMIN_API_SECRET remains as a break-glass/development fallback and is not shown in the UI.
+  if (hasValidShopSession(req) || hasValidSharedSecret(req)) return next();
+
+  return res.status(401).json({
+    error: 'Admin session required. Open the app from Shopify Admin, or use ADMIN_API_SECRET only for development.'
+  });
 }
 
 module.exports = { requireAdminApi };

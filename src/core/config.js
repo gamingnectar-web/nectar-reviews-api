@@ -15,10 +15,19 @@ const config = {
   mongoUri: process.env.MONGODB_URI || process.env.MONGO_URI || '',
   auditMongoUri: process.env.MONGODB_AUDIT_URI || '',
   auditDbName: process.env.MONGODB_AUDIT_DB || 'nectar_audit',
+  databases: {
+    core: process.env.MONGODB_CORE_DB || 'nectar_core',
+    reviews: process.env.MONGODB_REVIEWS_DB || 'nectar_reviews',
+    loyalty: process.env.MONGODB_LOYALTY_DB || 'nectar_loyalty',
+    messaging: process.env.MONGODB_MESSAGING_DB || 'nectar_messaging',
+    discounts: process.env.MONGODB_DISCOUNTS_DB || 'nectar_discounts',
+    audit: process.env.MONGODB_AUDIT_DB || 'nectar_audit'
+  },
   security: {
     nodeEnv: process.env.NODE_ENV || 'development',
     adminApiSecret: process.env.ADMIN_API_SECRET || '',
-    adminAuthMode: process.env.ADMIN_AUTH_MODE || 'shared_secret',
+    adminAuthMode: process.env.ADMIN_AUTH_MODE || 'shopify_session',
+    adminSessionSecret: process.env.ADMIN_SESSION_SECRET || process.env.SESSION_SECRET || process.env.SHOPIFY_API_SECRET || '',
     customerIdSecret: process.env.CUSTOMER_ID_SECRET || process.env.SESSION_SECRET || process.env.SHOPIFY_API_SECRET || '',
     auditHashSecret: process.env.AUDIT_HASH_SECRET || process.env.CUSTOMER_ID_SECRET || process.env.SESSION_SECRET || process.env.SHOPIFY_API_SECRET || '',
     allowInsecureCustomerLookup: boolEnv('ALLOW_INSECURE_CUSTOMER_LOOKUP', false),
@@ -26,6 +35,8 @@ const config = {
     rateLimitWindowMs: intEnv('RATE_LIMIT_WINDOW_MS', 60000),
     rateLimitMax: intEnv('RATE_LIMIT_MAX', 120),
     cronSecret: process.env.CRON_SECRET || '',
+    databaseBootstrapSecret: process.env.DATABASE_BOOTSTRAP_SECRET || '',
+    disableDatabaseBootstrap: boolEnv('DISABLE_DATABASE_BOOTSTRAP', false),
     maxJsonSize: process.env.MAX_JSON_SIZE || '2mb'
   },
   shopify: {
@@ -39,8 +50,8 @@ const config = {
   modules: {
     reviews: boolEnv('MODULE_REVIEWS', true),
     messaging: boolEnv('MODULE_MESSAGING', true),
-    discounts: boolEnv('MODULE_DISCOUNTS', false),
-    loyalty: boolEnv('MODULE_LOYALTY', false),
+    discounts: boolEnv('MODULE_DISCOUNTS', true),
+    loyalty: boolEnv('MODULE_LOYALTY', true),
     help: boolEnv('MODULE_HELP', true),
     audit: boolEnv('MODULE_AUDIT', true)
   },

@@ -10,6 +10,7 @@ const {
   saveInstallation,
   getShopifyAdminAccessToken
 } = require('./shopify.service');
+const { createAdminSessionToken } = require('../security/admin-session.service');
 
 const router = express.Router();
 
@@ -32,7 +33,8 @@ router.get('/callback', asyncHandler(async (req, res) => {
   if (!validState) return res.status(400).send('Invalid or expired OAuth state.');
   const tokenResponse = await exchangeCodeForToken(shopDomain, code);
   await saveInstallation(shopDomain, tokenResponse);
-  res.redirect(`/admin?shopDomain=${encodeURIComponent(shopDomain)}`);
+  const adminSession = createAdminSessionToken(shopDomain, { source: 'install-callback' });
+  res.redirect(`/admin?shopDomain=${encodeURIComponent(shopDomain)}&adminSession=${encodeURIComponent(adminSession)}`);
 }));
 
 router.get('/status', asyncHandler(async (req, res) => {

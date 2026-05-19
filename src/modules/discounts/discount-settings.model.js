@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { modelFromConnection } = require('../../core/database');
 
 const discountSettingsSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, unique: true, index: true },
@@ -19,4 +20,4 @@ const discountSettingsSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-module.exports = mongoose.models.DiscountSettings || mongoose.model('DiscountSettings', discountSettingsSchema, 'discount_settings');
+module.exports = modelFromConnection('discounts', 'DiscountSettings', discountSettingsSchema, 'discount_settings');

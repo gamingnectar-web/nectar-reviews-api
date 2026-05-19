@@ -12,7 +12,7 @@ module.exports = {
   key: 'loyalty',
   name: 'Loyalty',
   description: 'Nectar Drops rules engine, delayed approvals, redemption codes and customer-facing balances.',
-  enabledByDefault: false,
+  enabledByDefault: true,
   register(app) {
     app.use('/api/admin/loyalty', requireModule('loyalty'), routes);
     app.use('/api/loyalty', publicRoutes);

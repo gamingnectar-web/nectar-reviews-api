@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { modelFromConnection } = require('../../core/database');
 
 const loyaltyAccountSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, index: true },
@@ -16,4 +17,4 @@ const loyaltyAccountSchema = new mongoose.Schema({
 loyaltyAccountSchema.index({ shopDomain: 1, customerKey: 1 }, { unique: true });
 loyaltyAccountSchema.index({ shopDomain: 1, updatedAt: -1 });
 
-module.exports = mongoose.models.LoyaltyAccount || mongoose.model('LoyaltyAccount', loyaltyAccountSchema, 'loyalty_accounts');
+module.exports = modelFromConnection('loyalty', 'LoyaltyAccount', loyaltyAccountSchema, 'loyalty_accounts');

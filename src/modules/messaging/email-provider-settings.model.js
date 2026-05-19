@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { modelFromConnection } = require('../../core/database');
 
 const emailProviderSettingsSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, unique: true, index: true },
@@ -17,4 +18,4 @@ const emailProviderSettingsSchema = new mongoose.Schema({
   lastTestError: { type: String, default: '' }
 }, { timestamps: true });
 
-module.exports = mongoose.models.EmailProviderSettings || mongoose.model('EmailProviderSettings', emailProviderSettingsSchema, 'email_provider_settings');
+module.exports = modelFromConnection('messaging', 'EmailProviderSettings', emailProviderSettingsSchema, 'email_provider_settings');

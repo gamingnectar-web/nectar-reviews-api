@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { modelFromConnection } = require('../database');
 
 const shopifyInstallationSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, unique: true, index: true },
@@ -9,4 +10,4 @@ const shopifyInstallationSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true }
 }, { timestamps: true });
 
-module.exports = mongoose.models.ShopifyInstallation || mongoose.model('ShopifyInstallation', shopifyInstallationSchema, 'shopify_installations');
+module.exports = modelFromConnection('core', 'ShopifyInstallation', shopifyInstallationSchema, 'shopify_installations');

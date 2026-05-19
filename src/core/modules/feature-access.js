@@ -4,20 +4,37 @@ const { cleanShopDomain, getShopDomainFromRequest } = require('../http/request-u
 
 const defaultEnabledModules = Object.entries(config.modules)
   .filter(([, enabled]) => enabled)
-  .map(([key]) => key);
+  .map(([key]) => key)
+  .filter((key) => key !== 'audit');
+
+function mergeDefaults(enabledModules = []) {
+  return Array.from(new Set([...(enabledModules || []), ...defaultEnabledModules]));
+}
 
 async function getOrCreateShopModules(shopDomain) {
   const cleanShop = cleanShopDomain(shopDomain);
   if (!cleanShop) return null;
-  return ShopModules.findOneAndUpdate(
-    { shopDomain: cleanShop },
-    { $setOnInsert: { shopDomain: cleanShop, enabledModules: defaultEnabledModules, moduleSettings: {} } },
-    { new: true, upsert: true }
-  );
+
+  let record = await ShopModules.findOne({ shopDomain: cleanShop });
+  if (!record) {
+    record = await ShopModules.create({ shopDomain: cleanShop, enabledModules: defaultEnabledModules, moduleSettings: {} });
+    return record;
+  }
+
+  // Backwards-compatibility: before the modular upgrade, merchants did not have to enable
+  // features manually. Keep all bundled core modules available by default unless an env flag
+  // explicitly disables a module globally.
+  const merged = mergeDefaults(record.enabledModules || []);
+  if (merged.length !== (record.enabledModules || []).length) {
+    record.enabledModules = merged;
+    await record.save();
+  }
+  return record;
 }
 
 async function isModuleEnabled(shopDomain, moduleKey) {
   const cleanShop = cleanShopDomain(shopDomain);
+  if (!config.modules[moduleKey]) return false;
   if (!cleanShop) return Boolean(config.modules[moduleKey]);
   const record = await getOrCreateShopModules(cleanShop);
   return Boolean(record?.enabledModules?.includes(moduleKey));
@@ -45,7 +62,7 @@ function requireModule(moduleKey) {
 
 async function setShopModules(shopDomain, enabledModules, moduleSettings = undefined) {
   const cleanShop = cleanShopDomain(shopDomain);
-  const update = { enabledModules: Array.from(new Set(enabledModules || [])) };
+  const update = { enabledModules: mergeDefaults(enabledModules || []) };
   if (moduleSettings !== undefined) update.moduleSettings = moduleSettings;
   return ShopModules.findOneAndUpdate(
     { shopDomain: cleanShop },
