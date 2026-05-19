@@ -6,7 +6,7 @@ const { requireAdminSession } = require('../utils/security');
 const { cleanText, cleanEmail, clampNumber, cleanReviewStatus } = require('../utils/validation');
 const { encryptSecret, decryptSecret } = require('../utils/crypto');
 const { publicEmailSettings } = require('../utils/emailSettings');
-const { shopifyFetch, shopifyFetchOptional } = require('../utils/shopify');
+const { shopifyFetch, shopifyFetchOptional, getAccessTokenForShop, buildInstallUrl } = require('../utils/shopify');
 
 const router = express.Router();
 
@@ -390,6 +390,23 @@ router.get('/metafields', async (req, res, next) => {
   }
 });
 
+
+router.get('/shopify-status', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const token = await getAccessTokenForShop(shopDomain);
+    return res.json({
+      ok: true,
+      shopDomain,
+      connected: Boolean(token),
+      installUrl: buildInstallUrl(shopDomain),
+      message: token ? 'Shopify products are connected.' : 'Connect this shop through Shopify OAuth to enable product search and product images.',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/products/search', async (req, res, next) => {
   try {
     const queryText = cleanText(req.query.q, 120).toLowerCase();
@@ -400,7 +417,9 @@ router.get('/products/search', async (req, res, next) => {
       return res.json({
         products: [],
         unavailable: true,
-        message: 'Shopify product search needs SHOPIFY_ACCESS_TOKEN/SHOPIFY_ADMIN_ACCESS_TOKEN, a stored per-shop access token, or the legacy SHOPIFY_API_KEY + SHOPIFY_API_SECRET fallback.',
+        requiresOauth: true,
+        installUrl: buildInstallUrl(shopDomainFromReq(req)),
+        message: 'Connect this shop through Shopify OAuth to enable product search. No global Render token is required.',
       });
     }
 

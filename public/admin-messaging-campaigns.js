@@ -1,12 +1,14 @@
-/* Nectar Reviews — Messaging & Campaigns
-   Restores the Flow email builder/test tools while using the secured admin API. */
+/* Nectar Reviews — Messaging & Campaigns v5
+   Tabbed campaign builder with secured admin API, per-shop OAuth product search, SMTP settings and test links. */
 (function () {
   const DEFAULT_PAGE_HANDLE = 'leave-review';
   const DEFAULT_API = `${window.location.origin}/api`;
+  const products = [];
+  let productSearchResults = [];
 
   function getShopDomain() {
     const params = new URLSearchParams(window.location.search);
-    return window.SHOP_DOMAIN || params.get('shop') || params.get('shopDomain') || 'your-dev-store.myshopify.com';
+    return (window.SHOP_DOMAIN || params.get('shop') || params.get('shopDomain') || 'your-dev-store.myshopify.com').toLowerCase();
   }
 
   function apiPath(path) {
@@ -36,12 +38,7 @@
   }
 
   function escapeHtml(str) {
-    return String(str || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
+    return String(str || '').replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[c]));
   }
 
   function cleanHandle(handle) {
@@ -59,319 +56,183 @@
     return shop.startsWith('http') ? shop.replace(/\/$/, '') : `https://${shop}`;
   }
 
+  function el(id) { return document.getElementById(id); }
+  function val(id, fallback = '') { const node = el(id); return node ? ((node.value || '').trim() || fallback) : fallback; }
+
   function injectStyles() {
     if (document.getElementById('nr-messaging-campaigns-styles')) return;
     const style = document.createElement('style');
     style.id = 'nr-messaging-campaigns-styles';
-    style.innerHTML = `
-      .flow-builder-shell { width:100%; }
-      .flow-builder-header { display:flex; justify-content:space-between; align-items:flex-start; gap:24px; margin-bottom:24px; }
-      .flow-kicker { margin:0 0 6px; color:var(--blue,#005bd3); font-size:12px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
-      .flow-builder-header h2 { margin:0; font-size:30px; letter-spacing:-.04em; color:var(--primary,#111827); }
-      .flow-subtext { margin:8px 0 0; max-width:760px; color:var(--text-light,#6b7280); font-size:15px; line-height:1.6; }
-      .flow-status-card { min-width:260px; padding:14px 16px; border:1px solid var(--border,#e5e7eb); border-radius:14px; background:#fff; box-shadow:0 1px 3px rgba(17,24,39,.06); }
-      .flow-status-card span { display:block; margin-bottom:4px; color:var(--text-light,#6b7280); font-size:12px; font-weight:800; text-transform:uppercase; }
-      .flow-status-card strong { display:block; color:var(--primary,#111827); font-size:13px; line-height:1.5; }
-      .flow-builder-grid { display:grid; grid-template-columns:minmax(320px,430px) minmax(0,1fr); gap:24px; align-items:start; }
-      .flow-controls,.flow-preview-column { display:grid; gap:18px; }
-      .flow-panel,.flow-preview-card,.flow-code-card { background:#fff; border:1px solid var(--border,#e5e7eb); border-radius:16px; box-shadow:0 1px 3px rgba(17,24,39,.06); }
-      .flow-panel { padding:22px; }
-      .flow-panel-title { display:flex; align-items:flex-start; gap:12px; margin-bottom:18px; }
-      .flow-panel-title span { width:30px; height:30px; flex:0 0 30px; display:grid; place-items:center; border-radius:999px; background:var(--primary,#111827); color:#fff; font-size:13px; font-weight:900; }
-      .flow-panel-title h3,.flow-preview-toolbar h3,.flow-code-header h3 { margin:0; font-size:18px; color:var(--primary,#111827); }
-      .flow-panel-title p,.flow-preview-toolbar p,.flow-code-header p { margin:4px 0 0; color:var(--text-light,#6b7280); font-size:13px; line-height:1.5; }
-      .flow-panel label { display:block; margin:14px 0 6px; color:var(--primary,#111827); font-size:13px; font-weight:800; }
-      .flow-panel label em { color:var(--text-light,#6b7280); font-style:normal; font-weight:600; }
-      .flow-panel input,.flow-panel select,.flow-panel textarea { width:100%; box-sizing:border-box; border:1px solid #cfd5dd; border-radius:10px; background:#fff; color:var(--primary,#111827); padding:11px 12px; font-size:14px; font-family:inherit; outline:none; }
-      .flow-panel input:focus,.flow-panel select:focus,.flow-panel textarea:focus,#flow-code-output:focus { border-color:var(--blue,#005bd3); box-shadow:0 0 0 3px rgba(0,91,211,.12); }
-      .flow-panel input[type="color"] { height:44px; padding:4px; cursor:pointer; }
-      .flow-panel textarea { min-height:94px; resize:vertical; line-height:1.5; }
-      .flow-two-col { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-      .flow-help-box { margin-top:16px; padding:12px; border:1px solid var(--border,#e5e7eb); border-radius:12px; background:#f9fafb; color:var(--text-light,#6b7280); font-size:13px; line-height:1.5; }
-      .flow-steps { display:grid; gap:8px; margin-top:16px; }
-      .flow-steps div { display:flex; justify-content:space-between; gap:16px; padding:10px 12px; border:1px solid var(--border,#e5e7eb); border-radius:10px; background:#fbfdff; }
-      .flow-steps strong { font-size:12px; text-transform:uppercase; color:var(--text-light,#6b7280); }
-      .flow-steps span { font-size:13px; font-weight:800; color:var(--primary,#111827); }
-      .review-test-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; }
-      .review-test-actions button,.review-test-main-btn,.review-test-copy-btn,.flow-code-header button,.flow-provider-actions button { border:0; border-radius:10px; background:var(--primary,#111827); color:#fff; min-height:42px; padding:10px 14px; font-weight:900; cursor:pointer; }
-      .review-test-actions button,.review-test-copy-btn,.flow-provider-actions .secondary { background:#fff; color:var(--primary,#111827); border:1px solid var(--border,#e5e7eb); }
-      .review-test-main-btn,.review-test-copy-btn { width:100%; margin-top:12px; }
-      .review-test-products { display:grid; gap:10px; margin-top:14px; }
-      .review-test-product { display:grid; grid-template-columns:46px 1fr auto; gap:10px; align-items:center; padding:10px; border:1px solid var(--border,#e5e7eb); border-radius:12px; background:#fbfdff; }
-      .review-test-product img { width:46px; height:46px; object-fit:cover; border-radius:8px; background:#eef2f7; }
-      .review-test-product strong { display:block; font-size:13px; }
-      .review-test-product small { color:var(--text-light,#6b7280); }
-      .review-test-product button { border:0; background:transparent; color:#d72c0d; cursor:pointer; font-weight:900; }
-
-      .flow-product-modal-backdrop { position:fixed; inset:0; z-index:2147483000; display:none; align-items:center; justify-content:center; padding:24px; background:rgba(15,23,42,.55); }
-      .flow-product-modal-backdrop.active { display:flex; }
-      .flow-product-modal { width:min(840px, 100%); max-height:88vh; overflow:auto; background:#fff; border-radius:18px; box-shadow:0 28px 90px rgba(15,23,42,.32); border:1px solid var(--border,#e5e7eb); }
-      .flow-product-modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:22px 24px; border-bottom:1px solid var(--border,#e5e7eb); }
-      .flow-product-modal-head h3 { margin:0 0 5px; font-size:20px; }
-      .flow-product-modal-head p { margin:0; color:var(--text-light,#6b7280); }
-      .flow-product-modal-close { border:0; background:#f3f4f6; width:36px; height:36px; border-radius:999px; cursor:pointer; font-weight:900; }
-      .flow-product-search { display:grid; grid-template-columns:1fr auto; gap:10px; padding:18px 24px; border-bottom:1px solid var(--border,#e5e7eb); }
-      .flow-product-search input { min-height:44px; border:1px solid var(--border,#d0d5dd); border-radius:10px; padding:10px 12px; font:inherit; }
-      .flow-product-search button,.flow-product-modal-actions button { border:0; border-radius:10px; background:var(--primary,#111827); color:#fff; min-height:44px; padding:10px 16px; font-weight:900; cursor:pointer; }
-      .flow-product-results { padding:12px 24px 4px; display:grid; gap:10px; }
-      .flow-product-row { display:grid; grid-template-columns:auto 56px 1fr auto; gap:12px; align-items:center; padding:12px; border:1px solid var(--border,#e5e7eb); border-radius:14px; background:#fbfdff; }
-      .flow-product-row img { width:56px; height:56px; object-fit:cover; border-radius:10px; background:#eef2f7; }
-      .flow-product-row strong { display:block; font-size:14px; }
-      .flow-product-row small { color:var(--text-light,#6b7280); }
-      .flow-product-row button { border:1px solid var(--border,#d0d5dd); background:#fff; color:var(--primary,#111827); border-radius:10px; min-height:38px; padding:8px 12px; font-weight:900; cursor:pointer; }
-      .flow-product-modal-actions { display:flex; justify-content:flex-end; gap:10px; padding:18px 24px 24px; }
-      .flow-product-modal-actions .secondary { background:#fff; color:var(--primary,#111827); border:1px solid var(--border,#d0d5dd); }
-      .flow-preview-card { overflow:hidden; }
-      .flow-preview-toolbar,.flow-code-header { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:18px 20px; border-bottom:1px solid var(--border,#e5e7eb); }
-      .flow-preview-toggle { display:inline-flex; padding:4px; border:1px solid var(--border,#e5e7eb); border-radius:999px; background:#f9fafb; }
-      .flow-preview-toggle button { border:0; border-radius:999px; padding:8px 12px; background:transparent; font-weight:900; cursor:pointer; color:var(--text-light,#6b7280); }
-      .flow-preview-toggle button.active { background:#fff; color:var(--primary,#111827); box-shadow:0 1px 3px rgba(17,24,39,.08); }
-      .flow-preview-stage { padding:24px; background:#f4f6f8; overflow:auto; }
-      .flow-preview-wrap { max-width:720px; margin:0 auto; transition:max-width .2s ease; }
-      .flow-preview-wrap.mobile { max-width:390px; border:10px solid #111; border-radius:30px; overflow:hidden; }
-      #flow-email-preview { background:#fff; min-height:260px; }
-      #flow-code-output { width:100%; min-height:240px; border:0; padding:18px 20px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px; line-height:1.5; resize:vertical; color:#111827; background:#fff; }
-      .flow-provider-state { display:inline-flex; align-items:center; gap:8px; margin-top:10px; padding:8px 10px; border-radius:999px; background:#f3f4f6; color:#374151; font-size:12px; font-weight:900; }
-      .flow-provider-state.ok { background:#dcfce7; color:#047857; }
-      .flow-provider-state.bad { background:#fff1f2; color:#be123c; }
-      .flow-provider-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
-      .flow-analytics-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:14px; }
-      .flow-analytics-grid div { padding:12px; border:1px solid var(--border,#e5e7eb); border-radius:12px; background:#fbfdff; }
-      .flow-analytics-grid span { display:block; color:var(--text-light,#6b7280); font-size:11px; font-weight:900; text-transform:uppercase; }
-      .flow-analytics-grid strong { display:block; margin-top:5px; font-size:24px; letter-spacing:-.04em; }
-      @media (max-width:1100px){ .flow-builder-header,.flow-preview-toolbar,.flow-code-header{flex-direction:column;align-items:stretch;} .flow-status-card{min-width:0;} .flow-builder-grid{grid-template-columns:1fr;} }
-      @media (max-width:640px){ .flow-two-col,.review-test-actions,.flow-analytics-grid{grid-template-columns:1fr;} .flow-preview-stage{padding:14px;} .flow-preview-toggle,.flow-code-header button{width:100%;} .flow-preview-toggle button{flex:1;} }
+    style.textContent = `
+      .msg-shell{display:grid;gap:18px;}
+      .msg-header{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;}
+      .msg-header h2{margin:0;font-size:28px;letter-spacing:-.04em;}.msg-header p{margin:7px 0 0;color:var(--text-light,#6b7280);max-width:820px;line-height:1.55;}
+      .msg-flow-card{min-width:250px;background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow,0 1px 3px rgba(0,0,0,.08));}.msg-flow-card span{display:block;font-size:11px;font-weight:900;text-transform:uppercase;color:#667085;}.msg-flow-card strong{display:block;margin-top:5px;font-size:13px;}
+      .msg-tabs{display:flex;flex-wrap:wrap;gap:8px;border-bottom:1px solid var(--border,#e5e7eb);margin-top:6px;}.msg-tab{border:0;background:transparent;color:#667085;padding:13px 15px;font-weight:900;cursor:pointer;border-bottom:3px solid transparent;}.msg-tab.active{color:var(--blue,#005bd3);border-bottom-color:var(--blue,#005bd3);}
+      .msg-pane{display:none;}.msg-pane.active{display:block;}.msg-grid{display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr);gap:20px;align-items:start;}.msg-stack{display:grid;gap:16px;}.msg-card{background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:16px;padding:20px;box-shadow:var(--shadow,0 1px 3px rgba(0,0,0,.08));}.msg-card h3{margin:0 0 5px;font-size:18px;}.msg-card p{margin:0 0 12px;color:#667085;line-height:1.5;}.msg-card label{display:block;margin:13px 0 6px;font-size:13px;font-weight:900;}.msg-card input,.msg-card select,.msg-card textarea{width:100%;box-sizing:border-box;min-height:44px;border:1px solid #cfd5dd;border-radius:10px;padding:10px 12px;font:inherit;background:#fff;}.msg-card textarea{min-height:98px;resize:vertical;}.msg-card input:focus,.msg-card select:focus,.msg-card textarea:focus{outline:none;border-color:var(--blue,#005bd3);box-shadow:0 0 0 3px rgba(0,91,211,.12);}.msg-card input[type=color]{height:44px;padding:4px;}.msg-two{display:grid;grid-template-columns:1fr 1fr;gap:12px;}.msg-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;}.msg-btn{border:0;border-radius:10px;background:var(--primary,#111827);color:#fff;min-height:42px;padding:10px 15px;font-weight:900;cursor:pointer;}.msg-btn.secondary{background:#fff;color:#111827;border:1px solid var(--border,#e5e7eb);}.msg-btn.full{width:100%;}.msg-help{padding:12px 14px;border:1px solid var(--border,#e5e7eb);border-radius:12px;background:#f8fafc;color:#667085;line-height:1.5;font-size:13px;}.msg-preview-card{padding:0;overflow:hidden;}.msg-preview-head{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:18px 20px;border-bottom:1px solid var(--border,#e5e7eb);}.msg-toggle{display:inline-flex;gap:4px;padding:4px;border:1px solid var(--border,#e5e7eb);border-radius:999px;background:#f8fafc;}.msg-toggle button{border:0;border-radius:999px;background:transparent;padding:8px 14px;font-weight:900;cursor:pointer;color:#667085;}.msg-toggle button.active{background:#fff;color:#111827;box-shadow:0 1px 3px rgba(17,24,39,.12);}.msg-preview-stage{display:grid;place-items:center;min-height:360px;background:#f4f6f8;padding:26px;}.msg-preview-wrap{width:100%;max-width:640px;}.msg-preview-wrap.mobile{max-width:390px;border:12px solid #111827;border-radius:30px;overflow:hidden;background:#fff;}.msg-code{width:100%;min-height:220px;border:0;border-top:1px solid var(--border,#e5e7eb);border-radius:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.45;}.msg-products{display:grid;gap:10px;margin-top:14px;}.msg-product{display:grid;grid-template-columns:48px 1fr auto;gap:10px;align-items:center;padding:10px;border:1px solid var(--border,#e5e7eb);border-radius:12px;background:#fbfdff;}.msg-product img{width:48px;height:48px;object-fit:cover;border-radius:9px;background:#eef2f7;}.msg-product strong{display:block;font-size:13px;}.msg-product small{display:block;color:#667085;line-height:1.35;}.msg-product button{border:0;background:transparent;color:#d72c0d;font-weight:900;cursor:pointer;}.msg-analytics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}.msg-analytics div{border:1px solid var(--border,#e5e7eb);border-radius:12px;background:#fbfdff;padding:16px;}.msg-analytics span{display:block;font-size:11px;text-transform:uppercase;font-weight:900;color:#667085;}.msg-analytics strong{display:block;margin-top:5px;font-size:26px;letter-spacing:-.05em;}.msg-state{margin-top:12px;padding:10px 12px;border-radius:10px;background:#f8fafc;border:1px solid var(--border,#e5e7eb);color:#667085;font-weight:800;}.msg-state.ok{background:#ecfdf3;color:#027a48;border-color:#abefc6;}.msg-state.bad{background:#fff1f3;color:#b42318;border-color:#fecdd6;}
+      .flow-product-modal-backdrop{position:fixed;inset:0;z-index:2147483000;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.56);}.flow-product-modal-backdrop.active{display:flex;}.flow-product-modal{width:min(860px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:18px;box-shadow:0 28px 90px rgba(15,23,42,.32);border:1px solid var(--border,#e5e7eb);}.flow-product-modal-head{display:flex;justify-content:space-between;gap:16px;padding:22px 24px;border-bottom:1px solid var(--border,#e5e7eb);}.flow-product-modal-head h3{margin:0 0 5px;font-size:20px;}.flow-product-modal-head p{margin:0;color:#667085;}.flow-product-modal-close{border:0;background:#f3f4f6;width:36px;height:36px;border-radius:999px;cursor:pointer;font-weight:900;}.flow-product-search{display:grid;grid-template-columns:1fr auto;gap:10px;padding:18px 24px;border-bottom:1px solid var(--border,#e5e7eb);}.flow-product-search input{min-height:44px;border:1px solid #cfd5dd;border-radius:10px;padding:10px 12px;font:inherit;}.flow-product-search button,.flow-product-modal-actions button{border:0;border-radius:10px;background:#111827;color:#fff;min-height:44px;padding:10px 16px;font-weight:900;cursor:pointer;}.flow-product-modal-actions{display:flex;justify-content:flex-end;gap:10px;padding:18px 24px 24px;}.flow-product-modal-actions .secondary{background:#fff;color:#111827;border:1px solid var(--border,#e5e7eb);}.flow-product-results{padding:12px 24px 4px;display:grid;gap:10px;}.flow-product-row{display:grid;grid-template-columns:auto 56px 1fr auto;gap:12px;align-items:center;padding:12px;border:1px solid var(--border,#e5e7eb);border-radius:14px;background:#fbfdff;}.flow-product-row img{width:56px;height:56px;object-fit:cover;border-radius:10px;background:#eef2f7;}.flow-product-row strong{display:block;font-size:14px;}.flow-product-row small{color:#667085;}.flow-product-row button{border:1px solid var(--border,#e5e7eb);background:#fff;color:#111827;border-radius:10px;min-height:38px;padding:8px 12px;font-weight:900;cursor:pointer;}.oauth-connect{display:flex;justify-content:space-between;gap:14px;align-items:center;border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:12px;padding:14px;}.oauth-connect a{background:#111827;color:#fff;text-decoration:none;border-radius:10px;padding:10px 14px;font-weight:900;white-space:nowrap;}
+      @media(max-width:1100px){.msg-header{flex-direction:column}.msg-flow-card{min-width:0}.msg-grid{grid-template-columns:1fr}.msg-preview-head{flex-direction:column;align-items:stretch}}@media(max-width:650px){.msg-two,.msg-analytics{grid-template-columns:1fr}.flow-product-search{grid-template-columns:1fr}.flow-product-row{grid-template-columns:auto 44px 1fr}.flow-product-row button{grid-column:1/-1}.msg-tabs{overflow:auto;flex-wrap:nowrap}.msg-tab{white-space:nowrap}}
     `;
     document.head.appendChild(style);
   }
 
   function markup() {
     return `
-      <div class="flow-builder-shell">
-        <div class="flow-builder-header">
+      <div class="msg-shell">
+        <div class="msg-header">
           <div>
-            <p class="flow-kicker">Email campaigns</p>
-            <h2>Shopify Flow Review Request</h2>
-            <p class="flow-subtext">Build a mobile-friendly review request email. Customers can review the whole order, each purchased item, or both. This keeps the existing campaign workflow but runs through the secured API.</p>
+            <h2>Messaging &amp; Campaigns</h2>
+            <p>Build your review request email, test review links, configure delivery, and check tracking without mixing everything into one long screen.</p>
           </div>
-          <div class="flow-status-card"><span>Recommended Flow</span><strong>Order fulfilled → Wait <b id="flow-delay-preview">14</b> days → Send email</strong></div>
+          <div class="msg-flow-card"><span>Recommended flow</span><strong>Order fulfilled → Wait <b id="msg-delay-preview">14</b> days → Send email</strong></div>
         </div>
-        <div class="flow-builder-grid">
-          <div class="flow-controls">
-            <section class="flow-panel">
-              <div class="flow-panel-title"><span>1</span><div><h3>Brand</h3><p>Control the key visual details without overcomplicating setup.</p></div></div>
-              <label for="flow-logo">Brand logo URL <em>optional</em></label><input id="flow-logo" type="url" placeholder="https://cdn.shopify.com/.../logo.png">
-              <div class="flow-two-col"><div><label for="flow-color">Button colour</label><input id="flow-color" type="color" value="#111827"></div><div><label for="flow-button-radius">Button radius</label><input id="flow-button-radius" type="number" min="0" max="40" value="8"></div></div>
-              <div class="flow-two-col"><div><label for="flow-bg-color">Email background</label><input id="flow-bg-color" type="color" value="#f3f4f6"></div><div><label for="flow-card-color">Email card</label><input id="flow-card-color" type="color" value="#ffffff"></div></div>
-            </section>
-            <section class="flow-panel">
-              <div class="flow-panel-title"><span>2</span><div><h3>Email copy</h3><p>Simple editable copy for merchants.</p></div></div>
-              <label for="flow-heading">Heading</label><input id="flow-heading" type="text" value="How did we do?">
-              <label for="flow-intro">Intro line</label><input id="flow-intro" type="text" value='Hi {{ order.customer.firstName | default: "there" }}'>
-              <label for="flow-body">Body</label><textarea id="flow-body">We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?</textarea>
-              <label for="flow-signoff">Sign-off</label><input id="flow-signoff" type="text" value="Your feedback helps other customers make confident choices.">
-            </section>
-            <section class="flow-panel">
-              <div class="flow-panel-title"><span>3</span><div><h3>Review links</h3><p>Choose whether the email links to order-level review, product-level review, or both.</p></div></div>
-              <label for="flow-link-mode">Link mode</label><select id="flow-link-mode"><option value="both">Order and products</option><option value="order">Order only</option><option value="products">Product buttons only</option></select>
-              <div class="flow-two-col"><div><label for="flow-main-button-text">Main button text</label><input id="flow-main-button-text" type="text" value="Review Your Order"></div><div><label for="flow-product-button-text">Product button text</label><input id="flow-product-button-text" type="text" value="Review This Item"></div></div>
-              <label for="flow-page-handle">Review page handle</label><input id="flow-page-handle" type="text" value="leave-review">
-              <div class="flow-help-box">Install your review page at <code>/pages/<span id="flow-page-preview">leave-review</span></code>. The links pass customer, order, product, variant, image and quantity context.</div>
-            </section>
-            <section class="flow-panel">
-              <div class="flow-panel-title"><span>4</span><div><h3>Flow timing</h3><p>Use this as your Shopify Flow checklist.</p></div></div>
-              <label for="flow-delay-days">Recommended wait after fulfilment</label><select id="flow-delay-days"><option value="7">7 days</option><option value="10">10 days</option><option value="14" selected>14 days</option><option value="21">21 days</option><option value="30">30 days</option></select>
-              <div class="flow-steps"><div><strong>Trigger</strong><span>Order fulfilled</span></div><div><strong>Wait</strong><span><b id="flow-delay-copy-preview">14</b> days</span></div><div><strong>Action</strong><span>Send email</span></div></div>
-            </section>
-            <section class="flow-panel">
-              <div class="flow-panel-title"><span>5</span><div><h3>Review page tester</h3><p>Open your review page with safe preview data. This does not create a Shopify order.</p></div></div>
-              <label for="review-test-name">Customer name</label><input id="review-test-name" type="text" value="Alex">
-              <label for="review-test-email">Customer email</label><input id="review-test-email" type="email" value="alex@example.com">
-              <div class="flow-two-col"><div><label for="review-test-order">Order number</label><input id="review-test-order" type="text" value="1001"></div><div><label for="review-test-type">Review mode</label><select id="review-test-type"><option value="order">Review full order</option><option value="product">Review one product</option></select></div></div>
-              <label for="review-test-count">How many sample products?</label><input id="review-test-count" type="number" min="1" max="10" value="2">
-              <div class="flow-help-box">Select real products with the Shopify search, or generate sample products to test the page quickly.</div>
-              <div class="review-test-actions"><button type="button" id="review-test-pick-products">Search Products</button><button type="button" id="review-test-sample-products">Use Sample Products</button></div>
-              <div id="review-test-products" class="review-test-products"></div>
-              <button type="button" id="review-test-open" class="review-test-main-btn">Open Test Review Page</button>
-              <button type="button" id="review-test-copy-url" class="review-test-copy-btn">Copy Test URL</button>
-            </section>
-            <section class="flow-panel">
-              <div class="flow-panel-title"><span>6</span><div><h3>Email delivery</h3><p>Optional SMTP setup for test sending and later campaign automation.</p></div></div>
-              <div class="flow-two-col"><div><label for="smtp-provider">Provider</label><select id="smtp-provider"><option value="smtp">SMTP / app password</option><option value="gmail">Gmail app password</option><option value="outlook">Outlook SMTP</option></select></div><div><label for="smtp-enabled">Enabled</label><select id="smtp-enabled"><option value="true">Enabled</option><option value="false">Disabled</option></select></div></div>
-              <label for="smtp-host">SMTP host</label><input id="smtp-host" type="text" placeholder="smtp.gmail.com">
-              <div class="flow-two-col"><div><label for="smtp-port">Port</label><input id="smtp-port" type="number" value="587"></div><div><label for="smtp-secure">Security</label><select id="smtp-secure"><option value="starttls">STARTTLS</option><option value="ssl">SSL / 465</option><option value="none">None</option></select></div></div>
-              <label for="smtp-user">SMTP username</label><input id="smtp-user" type="text" autocomplete="username">
-              <label for="smtp-pass">SMTP password / app password <em>leave blank to keep saved password</em></label><input id="smtp-pass" type="password" autocomplete="new-password">
-              <div class="flow-two-col"><div><label for="smtp-from-name">From name</label><input id="smtp-from-name" type="text" value="Nectar Reviews"></div><div><label for="smtp-from-email">From email</label><input id="smtp-from-email" type="email"></div></div>
-              <label for="smtp-reply-to">Reply-to email</label><input id="smtp-reply-to" type="email">
-              <div id="smtp-state" class="flow-provider-state">Loading email settings...</div>
-              <div class="flow-provider-actions"><button type="button" id="smtp-save">Save Email Provider</button><button type="button" id="smtp-remove" class="secondary">Remove Provider</button></div>
-              <label for="flow-test-recipient">Send test to</label><input id="flow-test-recipient" type="email" placeholder="you@example.com">
-              <div class="flow-provider-actions"><button type="button" id="flow-send-test-email">Send Test Email</button></div>
-            </section>
-          </div>
-          <div class="flow-preview-column">
-            <section class="flow-preview-card">
-              <div class="flow-preview-toolbar"><div><h3>Live email preview</h3><p>Preview how the email looks before copying it into Shopify Flow.</p></div><div class="flow-preview-toggle"><button type="button" id="flow-preview-desktop" class="active" data-flow-preview-mode="desktop">Desktop</button><button type="button" id="flow-preview-mobile" data-flow-preview-mode="mobile">Mobile</button></div></div>
-              <div class="flow-preview-stage"><div id="flow-preview-wrap" class="flow-preview-wrap"><div id="flow-email-preview"></div></div></div>
-            </section>
-            <section class="flow-code-card"><div class="flow-code-header"><div><h3>Copy email HTML</h3><p>In Shopify Flow, add a Send email action, enable HTML, and paste this code into the body.</p></div><button type="button" id="flow-copy-code-btn">Copy Code</button></div><textarea id="flow-code-output" spellcheck="false" readonly></textarea></section>
-            <section class="flow-panel"><div class="flow-panel-title"><span>7</span><div><h3>Campaign analytics</h3><p>Open/click tracking totals from the secured API.</p></div></div><div id="flow-analytics" class="flow-analytics-grid"><div><span>Sent</span><strong>0</strong></div><div><span>Open rate</span><strong>0%</strong></div><div><span>Click rate</span><strong>0%</strong></div></div></section>
-          </div>
+        <div class="msg-tabs" role="tablist">
+          <button type="button" class="msg-tab active" data-msg-tab="builder">Email Builder</button>
+          <button type="button" class="msg-tab" data-msg-tab="tester">Review Page Tester</button>
+          <button type="button" class="msg-tab" data-msg-tab="delivery">Email Delivery</button>
+          <button type="button" class="msg-tab" data-msg-tab="analytics">Analytics</button>
         </div>
+
+        <section id="msg-pane-builder" class="msg-pane active">
+          <div class="msg-grid">
+            <div class="msg-stack">
+              <div class="msg-card"><h3>Brand</h3><p>Keep this simple for Shopify Flow.</p><label>Brand logo URL</label><input id="msg-logo" type="url" placeholder="https://cdn.shopify.com/.../logo.png"><div class="msg-two"><div><label>Button colour</label><input id="msg-color" type="color" value="#111827"></div><div><label>Button radius</label><input id="msg-button-radius" type="number" min="0" max="40" value="8"></div></div><div class="msg-two"><div><label>Email background</label><input id="msg-bg-color" type="color" value="#f3f4f6"></div><div><label>Email card</label><input id="msg-card-color" type="color" value="#ffffff"></div></div></div>
+              <div class="msg-card"><h3>Email copy</h3><label>Heading</label><input id="msg-heading" type="text" value="How did we do?"><label>Intro line</label><input id="msg-intro" type="text" value='Hi {{ order.customer.firstName | default: "there" }}'><label>Body</label><textarea id="msg-body">We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?</textarea><label>Sign-off</label><input id="msg-signoff" type="text" value="Your feedback helps other customers make confident choices."></div>
+              <div class="msg-card"><h3>Review links</h3><div class="msg-two"><div><label>Link mode</label><select id="msg-link-mode"><option value="both">Order and products</option><option value="order">Order only</option><option value="products">Product buttons only</option></select></div><div><label>Review page handle</label><input id="msg-page-handle" type="text" value="leave-review"></div></div><div class="msg-two"><div><label>Main button text</label><input id="msg-main-button-text" type="text" value="Review Your Order"></div><div><label>Product button text</label><input id="msg-product-button-text" type="text" value="Review This Item"></div></div><div class="msg-two"><div><label>Wait after fulfilment</label><select id="msg-delay-days"><option value="7">7 days</option><option value="10">10 days</option><option value="14" selected>14 days</option><option value="21">21 days</option><option value="30">30 days</option></select></div><div><label>Flow action</label><input value="Send email" readonly></div></div><div class="msg-help">In Shopify Flow, add a Send email action, enable HTML, and paste the generated code.</div></div>
+            </div>
+            <div class="msg-stack">
+              <div class="msg-card msg-preview-card"><div class="msg-preview-head"><div><h3>Live email preview</h3><p>Preview before pasting into Shopify Flow.</p></div><div class="msg-toggle"><button type="button" id="msg-preview-desktop" class="active" data-preview="desktop">Desktop</button><button type="button" id="msg-preview-mobile" data-preview="mobile">Mobile</button></div></div><div class="msg-preview-stage"><div id="msg-preview-wrap" class="msg-preview-wrap"><div id="msg-email-preview"></div></div></div></div>
+              <div class="msg-card" style="padding:0;"><div class="msg-preview-head"><div><h3>Copy email HTML</h3><p>Paste this into Shopify Flow.</p></div><button type="button" id="msg-copy-code-btn" class="msg-btn">Copy Code</button></div><textarea id="msg-code-output" class="msg-code" spellcheck="false" readonly></textarea></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="msg-pane-tester" class="msg-pane">
+          <div class="msg-grid">
+            <div class="msg-card"><h3>Review page tester</h3><p>Open your review page with safe preview data. This does not create a Shopify order.</p><label>Customer name</label><input id="msg-test-name" type="text" value="Alex"><label>Customer email</label><input id="msg-test-email" type="email" value="alex@example.com"><div class="msg-two"><div><label>Order number</label><input id="msg-test-order" type="text" value="1001"></div><div><label>Review mode</label><select id="msg-test-type"><option value="order">Review full order</option><option value="product">Review one product</option></select></div></div><label>How many sample products?</label><input id="msg-test-count" type="number" min="1" max="10" value="2"><div class="msg-actions"><button type="button" id="msg-pick-products" class="msg-btn secondary">Search Products</button><button type="button" id="msg-sample-products" class="msg-btn secondary">Use Sample Products</button></div><div id="msg-products" class="msg-products"></div><div class="msg-actions"><button type="button" id="msg-open-test" class="msg-btn">Open Test Review Page</button><button type="button" id="msg-copy-test-url" class="msg-btn secondary">Copy Test URL</button></div></div>
+            <div class="msg-card"><h3>How product search works</h3><p>Product search uses the per-shop OAuth token saved when the merchant installs the app. No global Render access token is needed.</p><div id="msg-shopify-status" class="msg-help">Checking Shopify product connection...</div></div>
+          </div>
+        </section>
+
+        <section id="msg-pane-delivery" class="msg-pane">
+          <div class="msg-grid">
+            <div class="msg-card"><h3>Email provider</h3><p>Optional SMTP setup for test sending and later automation.</p><div class="msg-two"><div><label>Provider</label><select id="msg-smtp-provider"><option value="smtp">SMTP / app password</option><option value="gmail">Gmail app password</option><option value="outlook">Outlook SMTP</option></select></div><div><label>Enabled</label><select id="msg-smtp-enabled"><option value="true">Enabled</option><option value="false">Disabled</option></select></div></div><label>SMTP host</label><input id="msg-smtp-host" type="text" placeholder="smtp.gmail.com"><div class="msg-two"><div><label>Port</label><input id="msg-smtp-port" type="number" value="587"></div><div><label>Security</label><select id="msg-smtp-secure"><option value="starttls">STARTTLS</option><option value="ssl">SSL / 465</option><option value="none">None</option></select></div></div><label>SMTP username</label><input id="msg-smtp-user" type="text" autocomplete="username"><label>SMTP password / app password <span class="muted">leave blank to keep saved</span></label><input id="msg-smtp-pass" type="password" autocomplete="new-password"><div class="msg-two"><div><label>From name</label><input id="msg-smtp-from-name" type="text" value="Nectar Reviews"></div><div><label>From email</label><input id="msg-smtp-from-email" type="email"></div></div><label>Reply-to email</label><input id="msg-smtp-reply-to" type="email"><div id="msg-smtp-state" class="msg-state">Loading email settings...</div><div class="msg-actions"><button type="button" id="msg-smtp-save" class="msg-btn">Save Email Provider</button><button type="button" id="msg-smtp-remove" class="msg-btn secondary">Remove Provider</button></div></div>
+            <div class="msg-card"><h3>Send test email</h3><p>This sends the current HTML from the Email Builder tab.</p><label>Send test to</label><input id="msg-test-recipient" type="email" placeholder="you@example.com"><div class="msg-actions"><button type="button" id="msg-send-test-email" class="msg-btn">Send Test Email</button></div><div class="msg-help">You must save a working email provider before test sending.</div></div>
+          </div>
+        </section>
+
+        <section id="msg-pane-analytics" class="msg-pane">
+          <div class="msg-card"><h3>Campaign analytics</h3><p>Open/click tracking totals from the secured API.</p><div id="msg-analytics" class="msg-analytics"><div><span>Sent</span><strong>0</strong></div><div><span>Open rate</span><strong>0%</strong></div><div><span>Click rate</span><strong>0%</strong></div></div></div>
+        </section>
       </div>`;
   }
 
-  function val(id, fallback) {
-    const el = document.getElementById(id);
-    return el ? ((el.value || '').trim() || fallback) : fallback;
-  }
-
   function opts() {
+    const pageHandle = cleanHandle(val('msg-page-handle', DEFAULT_PAGE_HANDLE));
     return {
-      logo: val('flow-logo', ''),
-      accentColor: val('flow-color', '#111827'),
-      bgColor: val('flow-bg-color', '#f3f4f6'),
-      cardColor: val('flow-card-color', '#ffffff'),
-      buttonRadius: Math.max(0, Math.min(40, parseInt(val('flow-button-radius', '8'), 10) || 8)),
-      heading: val('flow-heading', 'How did we do?'),
-      intro: val('flow-intro', 'Hi {{ order.customer.firstName | default: "there" }}'),
-      body: val('flow-body', "We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?"),
-      signoff: val('flow-signoff', 'Your feedback helps other customers make confident choices.'),
-      linkMode: val('flow-link-mode', 'both'),
-      mainButtonText: val('flow-main-button-text', 'Review Your Order'),
-      productButtonText: val('flow-product-button-text', 'Review This Item'),
-      pageHandle: cleanHandle(val('flow-page-handle', DEFAULT_PAGE_HANDLE)),
-      delayDays: val('flow-delay-days', '14'),
+      logo: val('msg-logo', ''),
+      accentColor: el('msg-color')?.value || '#111827',
+      buttonRadius: Math.max(0, Math.min(40, Number(val('msg-button-radius', '8')) || 8)),
+      bgColor: el('msg-bg-color')?.value || '#f3f4f6',
+      cardColor: el('msg-card-color')?.value || '#ffffff',
+      heading: val('msg-heading', 'How did we do?'),
+      intro: val('msg-intro', 'Hi {{ order.customer.firstName | default: "there" }}'),
+      body: val('msg-body', "We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?"),
+      signoff: val('msg-signoff', 'Your feedback helps other customers make confident choices.'),
+      linkMode: val('msg-link-mode', 'both'),
+      mainButtonText: val('msg-main-button-text', 'Review Your Order'),
+      productButtonText: val('msg-product-button-text', 'Review This Item'),
+      pageHandle,
+      delayDays: val('msg-delay-days', '14'),
     };
   }
 
-  function buildEmailHtml(options) {
+  function buildEmailHtml(o) {
     const base = shopUrl();
-    const logoHtml = options.logo ? `<tr><td align="center" style="padding:0 0 20px 0;"><img src="${escapeHtml(options.logo)}" alt="{{ shop.name }}" style="max-width:160px; height:auto; display:block;"></td></tr>` : '';
-    const orderUrl = `${base}/pages/${options.pageHandle}?review_type=order&order={{ order.name | remove: '#' | url_encode }}&email={{ order.customer.email | url_encode }}&customer={{ order.customer.firstName | url_encode }}`;
-    const orderButton = `<tr><td align="center" style="padding:22px 0 10px 0;"><a href="${orderUrl}" style="display:inline-block; background:${options.accentColor}; color:#ffffff; text-decoration:none; font-size:16px; font-weight:bold; padding:14px 22px; border-radius:${options.buttonRadius}px; line-height:1.2;">${escapeHtml(options.mainButtonText)}</a></td></tr>`;
-    const productButtons = `<tr><td style="padding:18px 0 0 0;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">{% for line_item in order.lineItems %}<tr><td style="padding:12px; border:1px solid #e5e7eb; border-radius:12px; background:#ffffff;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td style="font-family:Arial, Helvetica, sans-serif; color:#111827; font-size:14px; font-weight:bold; padding-right:12px;">{{ line_item.title }}</td><td align="right"><a href="${base}/pages/${options.pageHandle}?review_type=product&order={{ order.name | remove: '#' | url_encode }}&email={{ order.customer.email | url_encode }}&product_id={{ line_item.product.id }}&variant_id={{ line_item.variant.id }}&product_title={{ line_item.title | url_encode }}" style="display:inline-block; background:${options.accentColor}; color:#ffffff; text-decoration:none; font-size:14px; font-weight:bold; padding:10px 16px; border-radius:${options.buttonRadius}px; line-height:1.2; white-space:nowrap;">${escapeHtml(options.productButtonText)}</a></td></tr></table></td></tr>{% endfor %}</table></td></tr>`;
-    const links = options.linkMode === 'order' ? orderButton : options.linkMode === 'products' ? productButtons : orderButton + productButtons;
-    return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:${options.bgColor}; margin:0; padding:0; width:100%;"><tr><td align="center" style="padding:24px 12px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px; background:${options.cardColor}; border-radius:12px; overflow:hidden;"><tr><td style="padding:32px 24px; font-family:Arial, Helvetica, sans-serif; text-align:center;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${logoHtml}<tr><td align="center" style="padding:0 0 12px 0;"><h1 style="margin:0; color:#111827; font-size:26px; line-height:1.25; font-weight:700;">${escapeHtml(options.heading)}</h1></td></tr><tr><td align="center" style="padding:0 0 10px 0;"><p style="margin:0; color:#4b5563; font-size:16px; line-height:1.6;">${options.intro}</p></td></tr><tr><td align="center" style="padding:0 0 8px 0;"><p style="margin:0; color:#4b5563; font-size:16px; line-height:1.6;">${escapeHtml(options.body)}</p></td></tr>${links}<tr><td align="center" style="padding:24px 0 0 0;"><p style="margin:0; color:#6b7280; font-size:13px; line-height:1.5;">${escapeHtml(options.signoff)}</p></td></tr><tr><td align="center" style="padding:20px 0 0 0;"><p style="margin:0; color:#9ca3af; font-size:12px; line-height:1.5;">Sent by {{ shop.name }}.</p></td></tr></table></td></tr></table></td></tr></table>`.trim();
+    const logoHtml = o.logo ? `<tr><td align="center" style="padding:0 0 18px 0;"><img src="${escapeHtml(o.logo)}" alt="" style="max-width:160px;height:auto;display:block;"></td></tr>` : '';
+    const orderUrl = `${base}/pages/${o.pageHandle}?review_type=order&order={{ order.name | remove: '#' | url_encode }}&email={{ order.customer.email | url_encode }}`;
+    const orderButton = `<tr><td align="center" style="padding:18px 0 6px 0;"><a href="${orderUrl}" style="display:inline-block;background:${o.accentColor};color:#ffffff;text-decoration:none;font-size:16px;font-weight:bold;padding:14px 22px;border-radius:${o.buttonRadius}px;">${escapeHtml(o.mainButtonText)}</a></td></tr>`;
+    const productButtons = `<tr><td style="padding:18px 0 0 0;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">{% for line_item in order.lineItems %}<tr><td style="padding:12px;border:1px solid #e5e7eb;border-radius:12px;background:#ffffff;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px;font-weight:bold;padding-right:12px;">{{ line_item.title }}</td><td align="right"><a href="${base}/pages/${o.pageHandle}?review_type=product&order={{ order.name | remove: '#' | url_encode }}&email={{ order.customer.email | url_encode }}&product_id={{ line_item.product.id }}&variant_id={{ line_item.variant.id }}&product_title={{ line_item.title | url_encode }}" style="display:inline-block;background:${o.accentColor};color:#ffffff;text-decoration:none;font-size:14px;font-weight:bold;padding:10px 16px;border-radius:${o.buttonRadius}px;white-space:nowrap;">${escapeHtml(o.productButtonText)}</a></td></tr></table></td></tr>{% endfor %}</table></td></tr>`;
+    const links = o.linkMode === 'order' ? orderButton : o.linkMode === 'products' ? productButtons : orderButton + productButtons;
+    return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:${o.bgColor};margin:0;padding:0;width:100%;"><tr><td align="center" style="padding:24px 12px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;background:${o.cardColor};border-radius:12px;overflow:hidden;"><tr><td style="padding:32px 24px;font-family:Arial,Helvetica,sans-serif;text-align:center;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${logoHtml}<tr><td align="center" style="padding:0 0 12px 0;"><h1 style="margin:0;color:#111827;font-size:26px;line-height:1.25;font-weight:700;">${escapeHtml(o.heading)}</h1></td></tr><tr><td align="center" style="padding:0 0 10px 0;"><p style="margin:0;color:#4b5563;font-size:16px;line-height:1.6;">${o.intro}</p></td></tr><tr><td align="center" style="padding:0 0 8px 0;"><p style="margin:0;color:#4b5563;font-size:16px;line-height:1.6;">${escapeHtml(o.body)}</p></td></tr>${links}<tr><td align="center" style="padding:24px 0 0 0;"><p style="margin:0;color:#6b7280;font-size:13px;line-height:1.5;">${escapeHtml(o.signoff)}</p></td></tr><tr><td align="center" style="padding:20px 0 0 0;"><p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;">Sent by {{ shop.name }}.</p></td></tr></table></td></tr></table></td></tr></table>`;
   }
 
-  const products = [];
+  function updatePreview() {
+    const o = opts();
+    const html = buildEmailHtml(o);
+    if (el('msg-email-preview')) el('msg-email-preview').innerHTML = html;
+    if (el('msg-code-output')) el('msg-code-output').value = html;
+    if (el('msg-delay-preview')) el('msg-delay-preview').textContent = o.delayDays;
+  }
 
-  function updateProductList() {
-    const box = document.getElementById('review-test-products');
+  function renderProductList() {
+    const box = el('msg-products');
     if (!box) return;
-    box.innerHTML = products.length ? products.map((p, i) => `<div class="review-test-product"><img src="${escapeHtml(p.image || '')}" alt=""><div><strong>${escapeHtml(p.title)}</strong><small>Product ID: ${escapeHtml(p.id)}${p.variantId ? ` · Variant: ${escapeHtml(p.variantId)}` : ''}</small></div><button type="button" data-remove-product="${i}">×</button></div>`).join('') : '<div class="flow-help-box">No products selected yet.</div>';
-    box.querySelectorAll('[data-remove-product]').forEach((btn) => btn.addEventListener('click', () => { products.splice(Number(btn.dataset.removeProduct), 1); updateProductList(); }));
+    box.innerHTML = products.length ? products.map((p, i) => `<div class="msg-product"><img src="${escapeHtml(p.image || '')}" alt=""><div><strong>${escapeHtml(p.title || 'Product')}</strong><small>Product ID: ${escapeHtml(p.id || '')}${p.variantId ? ` · Variant: ${escapeHtml(p.variantId)}` : ''}</small></div><button type="button" data-remove-product="${i}">×</button></div>`).join('') : '<div class="msg-help">No products selected yet.</div>';
+    box.querySelectorAll('[data-remove-product]').forEach((btn) => btn.addEventListener('click', () => { products.splice(Number(btn.dataset.removeProduct), 1); renderProductList(); }));
   }
 
   function addSampleProducts() {
     products.splice(0, products.length);
-    const count = Math.max(1, Math.min(10, parseInt(val('review-test-count', '2'), 10) || 2));
-    for (let i = 1; i <= count; i += 1) {
-      products.push({ id: `sample-product-${i}`, variantId: `sample-variant-${i}`, title: `Sample Product ${i}`, image: '', quantity: 1 });
-    }
-    updateProductList();
+    const count = Math.max(1, Math.min(10, parseInt(val('msg-test-count', '2'), 10) || 2));
+    for (let i = 1; i <= count; i += 1) products.push({ id: `sample-product-${i}`, variantId: `sample-variant-${i}`, title: `Sample Product ${i}`, image: '', quantity: 1 });
+    renderProductList();
   }
 
-  let productSearchResults = [];
-
   function ensureProductModal() {
-    let modal = document.getElementById('flow-product-modal-backdrop');
+    let modal = el('flow-product-modal-backdrop');
     if (modal) return modal;
     modal = document.createElement('div');
     modal.id = 'flow-product-modal-backdrop';
     modal.className = 'flow-product-modal-backdrop';
-    modal.innerHTML = `
-      <div class="flow-product-modal" role="dialog" aria-modal="true" aria-labelledby="flow-product-modal-title">
-        <div class="flow-product-modal-head">
-          <div>
-            <h3 id="flow-product-modal-title">Select review products</h3>
-            <p>Search Shopify products and choose every item you want included in the test review page.</p>
-          </div>
-          <button type="button" class="flow-product-modal-close" aria-label="Close product selector">×</button>
-        </div>
-        <div class="flow-product-search">
-          <input id="flow-product-search-input" type="search" placeholder="Search by product title, handle or ID">
-          <button type="button" id="flow-product-search-run">Search</button>
-        </div>
-        <div id="flow-product-results" class="flow-product-results"><div class="flow-help-box">Search for products to add them here.</div></div>
-        <div class="flow-product-modal-actions">
-          <button type="button" class="secondary" id="flow-product-modal-cancel">Cancel</button>
-          <button type="button" id="flow-product-add-selected">Add Selected Products</button>
-        </div>
-      </div>`;
+    modal.innerHTML = `<div class="flow-product-modal" role="dialog" aria-modal="true"><div class="flow-product-modal-head"><div><h3>Select review products</h3><p>Search Shopify products and choose every item to include in the test review page.</p></div><button type="button" class="flow-product-modal-close" aria-label="Close">×</button></div><div class="flow-product-search"><input id="flow-product-search-input" type="search" placeholder="Search by product title, handle or ID"><button type="button" id="flow-product-search-run">Search</button></div><div id="flow-product-results" class="flow-product-results"><div class="msg-help">Search for products to add them here.</div></div><div class="flow-product-modal-actions"><button type="button" class="secondary" id="flow-product-modal-cancel">Cancel</button><button type="button" id="flow-product-add-selected">Add Selected Products</button></div></div>`;
     document.body.appendChild(modal);
     modal.querySelector('.flow-product-modal-close')?.addEventListener('click', closeProductModal);
     modal.querySelector('#flow-product-modal-cancel')?.addEventListener('click', closeProductModal);
     modal.addEventListener('click', (event) => { if (event.target === modal) closeProductModal(); });
-    modal.querySelector('#flow-product-search-run')?.addEventListener('click', () => runProductSearch().catch((error) => showToast(error.message || 'Product search failed')));
-    modal.querySelector('#flow-product-search-input')?.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        runProductSearch().catch((error) => showToast(error.message || 'Product search failed'));
-      }
-    });
+    modal.querySelector('#flow-product-search-run')?.addEventListener('click', () => runProductSearch().catch((e) => renderProductSearchResults([], e.message || 'Product search failed')));
+    modal.querySelector('#flow-product-search-input')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); runProductSearch().catch((e) => renderProductSearchResults([], e.message || 'Product search failed')); } });
     modal.querySelector('#flow-product-add-selected')?.addEventListener('click', addSelectedProductsFromModal);
     return modal;
   }
 
-  function closeProductModal() {
-    document.getElementById('flow-product-modal-backdrop')?.classList.remove('active');
-  }
+  function closeProductModal() { el('flow-product-modal-backdrop')?.classList.remove('active'); }
 
-  function renderProductSearchResults(items, message) {
-    const box = document.getElementById('flow-product-results');
+  function renderProductSearchResults(items, message, installUrl) {
+    const box = el('flow-product-results');
     if (!box) return;
-    if (message) {
-      box.innerHTML = `<div class="flow-help-box">${escapeHtml(message)}</div>`;
+    if (installUrl) {
+      box.innerHTML = `<div class="oauth-connect"><div><strong>Product search is not connected yet.</strong><br><span>${escapeHtml(message || 'Install/reinstall through Shopify OAuth to save this shop\'s Admin API token.')}</span></div><a href="${escapeHtml(installUrl)}" target="_top">Connect Shopify</a></div>`;
       return;
     }
-    if (!items.length) {
-      box.innerHTML = '<div class="flow-help-box">No products found. Try a product title, handle, or ID.</div>';
-      return;
-    }
-    box.innerHTML = items.map((product, index) => `
-      <label class="flow-product-row">
-        <input type="checkbox" data-product-result="${index}">
-        <img src="${escapeHtml(product.image || '')}" alt="">
-        <span><strong>${escapeHtml(product.title || 'Product')}</strong><small>Product ID: ${escapeHtml(product.id || '')}${product.variantId ? ` · Variant: ${escapeHtml(product.variantId)}` : ''}</small></span>
-        <button type="button" data-add-one-product="${index}">Add</button>
-      </label>`).join('');
-    box.querySelectorAll('[data-add-one-product]').forEach((btn) => btn.addEventListener('click', (event) => {
-      event.preventDefault();
-      const product = productSearchResults[Number(btn.dataset.addOneProduct)];
-      if (product) addProductToSelection(product);
-    }));
+    if (message) { box.innerHTML = `<div class="msg-help">${escapeHtml(message)}</div>`; return; }
+    if (!items.length) { box.innerHTML = '<div class="msg-help">No products found. Try a product title, handle, or ID.</div>'; return; }
+    box.innerHTML = items.map((product, index) => `<label class="flow-product-row"><input type="checkbox" data-product-result="${index}"><img src="${escapeHtml(product.image || '')}" alt=""><span><strong>${escapeHtml(product.title || 'Product')}</strong><small>Product ID: ${escapeHtml(product.id || '')}${product.variantId ? ` · Variant: ${escapeHtml(product.variantId)}` : ''}</small></span><button type="button" data-add-one-product="${index}">Add</button></label>`).join('');
+    box.querySelectorAll('[data-add-one-product]').forEach((btn) => btn.addEventListener('click', (event) => { event.preventDefault(); const p = productSearchResults[Number(btn.dataset.addOneProduct)]; if (p) addProductToSelection(p); }));
   }
 
   function addProductToSelection(product) {
     if (!product?.id) return;
-    if (!products.some((item) => String(item.id) === String(product.id))) {
-      products.push(product);
-      updateProductList();
-      showToast(`Added ${product.title || 'product'}`);
-    }
+    if (!products.some((item) => String(item.id) === String(product.id))) products.push(product);
+    renderProductList();
+    showToast(`Added ${product.title || 'product'}`);
   }
 
   function addSelectedProductsFromModal() {
     const checked = Array.from(document.querySelectorAll('#flow-product-results [data-product-result]:checked'));
     if (!checked.length) return showToast('Select at least one product first.');
-    checked.forEach((input) => {
-      const product = productSearchResults[Number(input.dataset.productResult)];
-      if (product) addProductToSelection(product);
-    });
+    checked.forEach((input) => { const product = productSearchResults[Number(input.dataset.productResult)]; if (product) addProductToSelection(product); });
     closeProductModal();
   }
 
   async function runProductSearch() {
-    const q = (document.getElementById('flow-product-search-input')?.value || '').trim();
+    const q = (el('flow-product-search-input')?.value || '').trim();
     if (!q) return showToast('Enter a product title or ID first.');
     renderProductSearchResults([], 'Searching Shopify products...');
     const result = await securedFetch(`/admin/products/search?q=${encodeURIComponent(q)}`);
-    if (result.unavailable) {
+    if (result.unavailable || result.requiresOauth) {
       productSearchResults = [];
-      renderProductSearchResults([], 'Product search needs the app to be installed through Shopify OAuth so this shop has a stored access token. Use Sample Products until install has completed.');
+      renderProductSearchResults([], result.message, result.installUrl);
       return;
     }
     productSearchResults = result.products || [];
@@ -381,17 +242,17 @@
   async function searchProducts() {
     const modal = ensureProductModal();
     modal.classList.add('active');
-    setTimeout(() => document.getElementById('flow-product-search-input')?.focus(), 50);
+    setTimeout(() => el('flow-product-search-input')?.focus(), 50);
   }
 
   function testUrl() {
     const o = opts();
     const params = new URLSearchParams();
     params.set('test', '1');
-    params.set('review_type', val('review-test-type', 'order'));
-    params.set('customer', val('review-test-name', 'Alex'));
-    params.set('email', val('review-test-email', 'alex@example.com'));
-    params.set('order', val('review-test-order', '1001'));
+    params.set('review_type', val('msg-test-type', 'order'));
+    params.set('customer', val('msg-test-name', 'Alex'));
+    params.set('email', val('msg-test-email', 'alex@example.com'));
+    params.set('order', val('msg-test-order', '1001'));
     params.set('shop', getShopDomain());
     if (products.length) {
       params.set('products', JSON.stringify(products.map((p) => ({ id: p.id, variantId: p.variantId, title: p.title, image: p.image, quantity: p.quantity || 1 }))));
@@ -402,73 +263,43 @@
     return `${shopUrl()}/pages/${o.pageHandle}?${params.toString()}`;
   }
 
-  function updatePreview() {
-    const options = opts();
-    const html = buildEmailHtml(options);
-    const preview = document.getElementById('flow-email-preview');
-    const output = document.getElementById('flow-code-output');
-    if (preview) preview.innerHTML = html;
-    if (output) output.value = html;
-    const page = document.getElementById('flow-page-preview');
-    if (page) page.textContent = options.pageHandle;
-    const d1 = document.getElementById('flow-delay-preview');
-    const d2 = document.getElementById('flow-delay-copy-preview');
-    if (d1) d1.textContent = options.delayDays;
-    if (d2) d2.textContent = options.delayDays;
+  async function copyText(text, success) {
+    try { await navigator.clipboard.writeText(text); showToast(success || 'Copied'); }
+    catch (_) { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); showToast(success || 'Copied'); }
   }
 
-  async function copyText(text, success) {
+  async function loadShopifyStatus() {
+    const box = el('msg-shopify-status');
+    if (!box) return;
     try {
-      await navigator.clipboard.writeText(text);
-      showToast(success || 'Copied');
-    } catch (_) {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      ta.remove();
-      showToast(success || 'Copied');
-    }
+      const s = await securedFetch('/admin/shopify-status');
+      box.innerHTML = s.connected ? '✅ Shopify product search is connected for this shop.' : `<div class="oauth-connect"><div>${escapeHtml(s.message || 'Connect Shopify OAuth to enable product search.')}</div><a href="${escapeHtml(s.installUrl || `/auth/shopify?shop=${encodeURIComponent(getShopDomain())}`)}" target="_top">Connect Shopify</a></div>`;
+    } catch (error) { box.textContent = error.message || 'Could not check Shopify status.'; }
   }
 
   async function loadEmailSettings() {
-    const state = document.getElementById('smtp-state');
+    const state = el('msg-smtp-state');
     try {
       const s = await securedFetch('/admin/email-settings');
-      document.getElementById('smtp-provider').value = s.provider && s.provider !== 'none' ? s.provider : 'smtp';
-      document.getElementById('smtp-enabled').value = String(s.enabled !== false);
-      document.getElementById('smtp-host').value = s.smtpHost || '';
-      document.getElementById('smtp-port').value = s.smtpPort || 587;
-      document.getElementById('smtp-secure').value = s.secureMode || 'starttls';
-      document.getElementById('smtp-user').value = s.smtpUser || '';
-      document.getElementById('smtp-from-name').value = s.fromName || 'Nectar Reviews';
-      document.getElementById('smtp-from-email').value = s.fromEmail || '';
-      document.getElementById('smtp-reply-to').value = s.replyToEmail || '';
-      if (state) {
-        state.className = `flow-provider-state ${s.enabled && s.smtpPasswordSet ? 'ok' : ''}`;
-        state.textContent = s.enabled && s.smtpPasswordSet ? 'Email provider saved' : 'Email provider not fully configured';
-      }
-    } catch (error) {
-      if (state) { state.className = 'flow-provider-state bad'; state.textContent = error.message || 'Could not load email settings'; }
-    }
+      el('msg-smtp-provider').value = s.provider && s.provider !== 'none' ? s.provider : 'smtp';
+      el('msg-smtp-enabled').value = String(s.enabled !== false);
+      el('msg-smtp-host').value = s.smtpHost || '';
+      el('msg-smtp-port').value = s.smtpPort || 587;
+      el('msg-smtp-secure').value = s.secureMode || 'starttls';
+      el('msg-smtp-user').value = s.smtpUser || '';
+      el('msg-smtp-from-name').value = s.fromName || 'Nectar Reviews';
+      el('msg-smtp-from-email').value = s.fromEmail || '';
+      el('msg-smtp-reply-to').value = s.replyToEmail || '';
+      if (state) { state.className = `msg-state ${s.enabled && s.smtpPasswordSet ? 'ok' : ''}`; state.textContent = s.enabled && s.smtpPasswordSet ? 'Email provider saved' : 'Email provider not fully configured'; }
+    } catch (error) { if (state) { state.className = 'msg-state bad'; state.textContent = error.message || 'Could not load email settings'; } }
   }
 
   async function saveEmailSettings() {
     const payload = {
-      enabled: document.getElementById('smtp-enabled').value === 'true',
-      provider: val('smtp-provider', 'smtp'),
-      smtpHost: val('smtp-host', ''),
-      smtpPort: Number(val('smtp-port', '587')),
-      secureMode: val('smtp-secure', 'starttls'),
-      smtpUser: val('smtp-user', ''),
-      smtpPass: val('smtp-pass', ''),
-      fromName: val('smtp-from-name', 'Nectar Reviews'),
-      fromEmail: val('smtp-from-email', ''),
-      replyToEmail: val('smtp-reply-to', ''),
+      enabled: el('msg-smtp-enabled').value === 'true', provider: val('msg-smtp-provider', 'smtp'), smtpHost: val('msg-smtp-host'), smtpPort: Number(val('msg-smtp-port', '587')), secureMode: val('msg-smtp-secure', 'starttls'), smtpUser: val('msg-smtp-user'), smtpPass: val('msg-smtp-pass'), fromName: val('msg-smtp-from-name', 'Nectar Reviews'), fromEmail: val('msg-smtp-from-email'), replyToEmail: val('msg-smtp-reply-to'),
     };
     await securedFetch('/admin/email-settings', { method: 'PATCH', body: JSON.stringify(payload) });
-    document.getElementById('smtp-pass').value = '';
+    el('msg-smtp-pass').value = '';
     await loadEmailSettings();
     showToast('Email provider saved');
   }
@@ -476,64 +307,66 @@
   async function removeEmailSettings() {
     if (!confirm('Remove saved email provider settings for this shop?')) return;
     await securedFetch('/admin/email-settings', { method: 'DELETE' });
-    ['smtp-host', 'smtp-user', 'smtp-pass', 'smtp-from-email', 'smtp-reply-to'].forEach((id) => { const el = document.getElementById(id); if (el) el.value = ''; });
+    ['msg-smtp-host', 'msg-smtp-user', 'msg-smtp-pass', 'msg-smtp-from-email', 'msg-smtp-reply-to'].forEach((id) => { if (el(id)) el(id).value = ''; });
     await loadEmailSettings();
     showToast('Email provider removed');
   }
 
   async function sendTestEmail() {
-    const to = val('flow-test-recipient', '');
+    const to = val('msg-test-recipient');
     if (!to) return showToast('Enter a test recipient email');
     updatePreview();
-    await securedFetch('/admin/test-email', { method: 'POST', body: JSON.stringify({ to, subject: 'Review request test email', html: document.getElementById('flow-code-output').value }) });
+    await securedFetch('/admin/test-email', { method: 'POST', body: JSON.stringify({ to, subject: 'Review request test email', html: el('msg-code-output').value }) });
     showToast('Test email sent');
   }
 
   async function loadAnalytics() {
     try {
       const a = await securedFetch('/admin/campaign-analytics');
-      const el = document.getElementById('flow-analytics');
-      if (el) el.innerHTML = `<div><span>Sent</span><strong>${Number(a.totals?.sent || 0)}</strong></div><div><span>Open rate</span><strong>${Number(a.openRate || 0)}%</strong></div><div><span>Click rate</span><strong>${Number(a.clickRate || 0)}%</strong></div>`;
-    } catch (error) {
-      console.warn('Campaign analytics unavailable:', error);
-    }
+      const box = el('msg-analytics');
+      if (box) box.innerHTML = `<div><span>Sent</span><strong>${Number(a.totals?.sent || 0)}</strong></div><div><span>Open rate</span><strong>${Number(a.openRate || 0)}%</strong></div><div><span>Click rate</span><strong>${Number(a.clickRate || 0)}%</strong></div>`;
+    } catch (error) { console.warn('Campaign analytics unavailable:', error); }
   }
 
-  function bind() {
-    document.querySelectorAll('#nr-messaging-campaigns-mount input, #nr-messaging-campaigns-mount textarea, #nr-messaging-campaigns-mount select').forEach((el) => el.addEventListener('input', updatePreview));
-    document.getElementById('flow-copy-code-btn')?.addEventListener('click', () => copyText(document.getElementById('flow-code-output').value, 'Email HTML copied'));
-    document.getElementById('review-test-sample-products')?.addEventListener('click', addSampleProducts);
-    document.getElementById('review-test-pick-products')?.addEventListener('click', () => searchProducts().catch((error) => showToast(error.message || 'Product search failed')));
-    document.getElementById('review-test-open')?.addEventListener('click', () => { window.open(testUrl(), '_blank', 'noopener'); });
-    document.getElementById('review-test-copy-url')?.addEventListener('click', () => copyText(testUrl(), 'Test review URL copied'));
-    document.getElementById('flow-preview-desktop')?.addEventListener('click', () => setPreviewMode('desktop'));
-    document.getElementById('flow-preview-mobile')?.addEventListener('click', () => setPreviewMode('mobile'));
-    document.getElementById('smtp-save')?.addEventListener('click', () => saveEmailSettings().catch((error) => showToast(error.message || 'Could not save email provider')));
-    document.getElementById('smtp-remove')?.addEventListener('click', () => removeEmailSettings().catch((error) => showToast(error.message || 'Could not remove email provider')));
-    document.getElementById('flow-send-test-email')?.addEventListener('click', () => sendTestEmail().catch((error) => showToast(error.message || 'Could not send test email')));
+  function switchPane(name) {
+    document.querySelectorAll('#nr-messaging-campaigns-mount .msg-tab').forEach((b) => b.classList.toggle('active', b.dataset.msgTab === name));
+    document.querySelectorAll('#nr-messaging-campaigns-mount .msg-pane').forEach((p) => p.classList.toggle('active', p.id === `msg-pane-${name}`));
   }
 
   function setPreviewMode(mode) {
-    document.getElementById('flow-preview-desktop')?.classList.toggle('active', mode === 'desktop');
-    document.getElementById('flow-preview-mobile')?.classList.toggle('active', mode === 'mobile');
-    document.getElementById('flow-preview-wrap')?.classList.toggle('mobile', mode === 'mobile');
+    el('msg-preview-desktop')?.classList.toggle('active', mode === 'desktop');
+    el('msg-preview-mobile')?.classList.toggle('active', mode === 'mobile');
+    el('msg-preview-wrap')?.classList.toggle('mobile', mode === 'mobile');
+  }
+
+  function bind() {
+    document.querySelectorAll('#nr-messaging-campaigns-mount input,#nr-messaging-campaigns-mount textarea,#nr-messaging-campaigns-mount select').forEach((node) => node.addEventListener('input', updatePreview));
+    document.querySelectorAll('#nr-messaging-campaigns-mount .msg-tab').forEach((btn) => btn.addEventListener('click', () => switchPane(btn.dataset.msgTab)));
+    el('msg-copy-code-btn')?.addEventListener('click', () => copyText(el('msg-code-output').value, 'Email HTML copied'));
+    el('msg-sample-products')?.addEventListener('click', addSampleProducts);
+    el('msg-pick-products')?.addEventListener('click', () => searchProducts().catch((error) => showToast(error.message || 'Product search failed')));
+    el('msg-open-test')?.addEventListener('click', () => window.open(testUrl(), '_blank', 'noopener'));
+    el('msg-copy-test-url')?.addEventListener('click', () => copyText(testUrl(), 'Test review URL copied'));
+    el('msg-preview-desktop')?.addEventListener('click', () => setPreviewMode('desktop'));
+    el('msg-preview-mobile')?.addEventListener('click', () => setPreviewMode('mobile'));
+    el('msg-smtp-save')?.addEventListener('click', () => saveEmailSettings().catch((error) => showToast(error.message || 'Could not save email provider')));
+    el('msg-smtp-remove')?.addEventListener('click', () => removeEmailSettings().catch((error) => showToast(error.message || 'Could not remove email provider')));
+    el('msg-send-test-email')?.addEventListener('click', () => sendTestEmail().catch((error) => showToast(error.message || 'Could not send test email')));
   }
 
   function mount() {
-    const el = document.getElementById('nr-messaging-campaigns-mount');
-    if (!el) return;
+    const mountEl = el('nr-messaging-campaigns-mount');
+    if (!mountEl) return;
     injectStyles();
-    el.classList.remove('panel');
-    el.innerHTML = markup();
+    mountEl.classList.remove('panel');
+    mountEl.innerHTML = markup();
     bind();
     addSampleProducts();
     updatePreview();
+    loadShopifyStatus();
     loadEmailSettings();
     loadAnalytics();
   }
-
-  window.generateFlowCode = function () { updatePreview(); return document.getElementById('flow-code-output')?.value || ''; };
-  window.copyFlowCode = function () { return copyText(window.generateFlowCode(), 'Email HTML copied'); };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount);
   else mount();

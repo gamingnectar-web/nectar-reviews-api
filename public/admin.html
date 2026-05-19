@@ -249,14 +249,19 @@
       box-shadow: inset 0 0 0 1px rgba(255,255,255,.7);
     }
     .admin-attr-notch {
-      position: absolute;
-      top: 50%;
-      width: 9px;
-      height: 11px;
-      border-radius: 2px;
-      background: #111111;
-      transform: translateY(-50%);
-      box-shadow: 0 1px 2px rgba(15,23,42,.22);
+      position: absolute !important;
+      top: 50% !important;
+      width: 10px !important;
+      height: 12px !important;
+      border-radius: 2px !important;
+      background: #111111 !important;
+      transform: translateY(-50%) !important;
+      box-shadow: 0 1px 2px rgba(15,23,42,.22) !important;
+      display: block !important;
+    }
+    .admin-attr-bar {
+      background: #ffffff !important;
+      overflow: visible !important;
     }
     .admin-product-pill {
       display: inline-flex;
@@ -286,6 +291,20 @@
     .sub-preview { display: none; } .sub-preview.active { display: block; }
     .preview-card { border: 1px solid var(--border); border-radius: 10px; background: #ffffff; padding: 24px; }
     .import-inst-box { display: none; } .import-inst-box.active { display: block; }
+    .import-shell { display:grid; gap:22px; }
+    .import-step { border:1px solid var(--border); border-radius:16px; background:#fff; padding:22px; box-shadow:var(--shadow); }
+    .import-step h3 { margin:0 0 10px; font-size:20px; letter-spacing:-.02em; }
+    .import-row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-top:14px; }
+    .import-help { margin:12px 0 0; padding:12px 14px; border-radius:12px; background:#f8fafc; border:1px solid #e4eaf2; color:#475467; line-height:1.5; }
+    .import-upload { display:flex; flex-wrap:wrap; gap:14px; align-items:center; padding:18px; border:1px dashed #c7d2e0; border-radius:14px; background:#fbfdff; }
+    .import-upload input[type=file] { min-height:44px; }
+    .mapper-grid { display:grid; grid-template-columns:repeat(2,minmax(220px,1fr)); gap:14px; }
+    .mapper-card { border:1px solid var(--border); border-radius:12px; padding:14px; background:#fbfdff; }
+    .mapper-card label { display:block; margin-bottom:8px; font-weight:900; }
+    .import-table { width:100%; border-collapse:separate; border-spacing:0; overflow:hidden; border:1px solid var(--border); border-radius:12px; background:#fff; }
+    .import-table th,.import-table td { padding:12px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; }
+    .import-table th { background:#f8fafc; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:#667085; }
+    .import-table tr:last-child td { border-bottom:0; }
     .valid-green { border-color: var(--green) !important; background: #f0fdf4 !important; }
     .invalid-red { border-color: var(--red) !important; background: #fff1f2 !important; }
     .muted { color: var(--text-light); }
@@ -384,22 +403,31 @@
 
       <section id="v-import" class="view">
         <h2 class="page-title">Importer Tool</h2>
-        <div class="panel">
-          <h3>1. Export from your old platform</h3>
-          <label>Platform</label>
-          <select id="import-platform-select" class="filter-select" onchange="window.toggleImportInst()">
-            <option value="generic">Generic / Other Format</option><option value="weebly">Weebly / Square</option><option value="judgeme">Judge.me</option>
-          </select>
-          <div id="inst-generic" class="import-inst-box active"><p>Generic CSV: Ensure your spreadsheet has columns for Product ID, Star Rating, Name, and Review Body.</p></div>
-          <div id="inst-weebly" class="import-inst-box"><p>Weebly / Square: Upload the CSV. The next step creates a staging area where you can map products.</p></div>
-          <div id="inst-judgeme" class="import-inst-box"><p>Judge.me: Export reviews from Judge.me, then map the columns below.</p></div>
-          <hr style="border:0; border-top:1px solid var(--border); margin:24px 0;" />
-          <h3>2. Upload and Map Columns</h3>
-          <input id="csv-file" type="file" accept=".csv" onchange="window.handleFileUpload()" /> <span id="file-name" class="muted">Select CSV File</span>
-          <div id="mapping-ui" style="display:none; margin-top:24px;">
-            <h4>Map your columns</h4>
-            <div id="column-mappers" class="grid-2"></div>
-            <button id="import-submit-btn" class="primary-btn" onclick="window.generateStagingArea()">Preview &amp; Map Products</button>
+        <div class="import-shell">
+          <div class="import-step">
+            <h3>1. Export from your old platform</h3>
+            <p class="muted">Choose the source format, then upload the CSV. Nothing goes live until you review the staging table.</p>
+            <div class="import-row">
+              <label for="import-platform-select" style="font-weight:900;">Platform</label>
+              <select id="import-platform-select" class="filter-select" onchange="window.toggleImportInst()">
+                <option value="generic">Generic / Other Format</option><option value="weebly">Weebly / Square</option><option value="judgeme">Judge.me</option>
+              </select>
+            </div>
+            <div id="inst-generic" class="import-inst-box active"><p class="import-help">Generic CSV: include columns for Product ID, Star Rating, Name, Email, Review Title, Review Body, and Date where available.</p></div>
+            <div id="inst-weebly" class="import-inst-box"><p class="import-help">Weebly / Square: upload the export and map product IDs in the staging step before publishing.</p></div>
+            <div id="inst-judgeme" class="import-inst-box"><p class="import-help">Judge.me: export reviews from Judge.me, upload the CSV, and map the columns below.</p></div>
+          </div>
+          <div class="import-step">
+            <h3>2. Upload and map columns</h3>
+            <div class="import-upload">
+              <input id="csv-file" type="file" accept=".csv" onchange="window.handleFileUpload()" />
+              <span id="file-name" class="muted">No CSV selected yet.</span>
+            </div>
+            <div id="mapping-ui" style="display:none; margin-top:24px;">
+              <h4 style="margin:0 0 14px;">Map your columns</h4>
+              <div id="column-mappers" class="mapper-grid"></div>
+              <p style="margin-top:18px;"><button id="import-submit-btn" class="primary-btn" onclick="window.generateStagingArea()">Preview &amp; Map Products</button></p>
+            </div>
           </div>
         </div>
       </section>
@@ -501,12 +529,12 @@
     </main>
   </div>
 
-  <script src="/admin.js?v=secure-1"></script>
-  <script src="/admin-review-manager-enhancements.js?v=secure-1"></script>
-  <script src="/nectar-score-notch-fix.js?v=secure-1"></script>
-  <script src="/admin-dashboard-analytics.js?v=secure-1"></script>
-  <script src="/admin-email-tracking-enhancer.js?v=secure-1"></script>
-  <script src="/admin-messaging-campaigns.js?v=secure-1"></script>
+  <script src="/admin.js?v=secure-5"></script>
+  <script src="/admin-review-manager-enhancements.js?v=secure-5"></script>
+  <script src="/nectar-score-notch-fix.js?v=secure-5"></script>
+  <script src="/admin-dashboard-analytics.js?v=secure-5"></script>
+  <script src="/admin-email-tracking-enhancer.js?v=secure-5"></script>
+  <script src="/admin-messaging-campaigns.js?v=secure-5"></script>
   <script src="/admin-help-drawer.js" defer></script>
 </body>
 </html>

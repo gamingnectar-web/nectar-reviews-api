@@ -10,13 +10,18 @@ function onePixelGif() {
 }
 
 function itemIdCandidates(value) {
-  const raw = cleanText(value, 160);
+  const raw = cleanText(value, 200);
   const set = new Set();
   if (raw) set.add(raw);
+  if (raw) set.add(raw.replace(/^gid:\/\/shopify\/(Product|Variant)\//, ''));
   const parts = raw.split('/').filter(Boolean);
   if (parts.length) set.add(parts[parts.length - 1]);
-  const digits = raw.match(/\d{6,}/g) || [];
-  digits.forEach((item) => set.add(item));
+  const digits = raw.match(/\d{5,}/g) || [];
+  digits.forEach((item) => {
+    set.add(item);
+    set.add(`gid://shopify/Product/${item}`);
+    set.add(`gid://shopify/Variant/${item}`);
+  });
   return Array.from(set).filter(Boolean);
 }
 

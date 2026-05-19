@@ -1,13 +1,32 @@
 (function () {
+  const DEFAULT_API_BASE = '__APP_URL__/api';
+
+  function cleanDomain(value) {
+    return String(value || '').replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
+  }
+
   function inferApiBase() {
     if (window.NECTAR_API_BASE) return String(window.NECTAR_API_BASE).replace(/\/$/, '');
     const script = document.currentScript || Array.from(document.scripts).find((item) => String(item.src || '').includes('/review-widget.js'));
-    if (script && script.src) {
-      try {
-        return `${new URL(script.src).origin}/api`;
-      } catch (_) {}
+    const bakedBase = DEFAULT_API_BASE && !DEFAULT_API_BASE.includes('__APP_URL__') ? DEFAULT_API_BASE.replace(/\/$/, '') : '';
+    if (script) {
+      const dataBase = script.getAttribute('data-api-base') || script.dataset?.apiBase || '';
+      if (dataBase) return String(dataBase).replace(/\/$/, '');
+      if (script.src) {
+        try {
+          const url = new URL(script.src);
+          const queryBase = url.searchParams.get('apiBase') || url.searchParams.get('api_base') || url.searchParams.get('appUrl') || url.searchParams.get('app_url') || '';
+          if (queryBase) return `${String(queryBase).replace(/\/$/, '')}${String(queryBase).endsWith('/api') ? '' : '/api'}`;
+          const host = url.hostname.toLowerCase();
+          const isShopifyAsset = host.includes('shopify') || host.includes('myshopify.com') || host.includes('cdn');
+          if (!isShopifyAsset) return `${url.origin}/api`;
+        } catch (_) {}
+      }
     }
-    return `${window.location.origin}/api`;
+    if (bakedBase) return bakedBase;
+    // Last-resort fallback for the hosted Nectar API. This keeps storefront widgets working even
+    // when the script is bundled by a Shopify theme/app-extension CDN instead of served directly by Render.
+    return 'https://nectar-reviews-api.onrender.com/api';
   }
   const API_BASE = inferApiBase();
 
@@ -26,11 +45,17 @@
   }
 
   function getProductId(el) {
-    return el.dataset.id || el.dataset.productId || el.getAttribute('data-product-id') || el.getAttribute('data-id') || '';
+    return el.dataset.id || el.dataset.productId || el.dataset.product_id || el.getAttribute('data-product-id') || el.getAttribute('data-product_id') || el.getAttribute('data-id') || window.meta?.product?.id || window.ShopifyAnalytics?.meta?.product?.id || '';
   }
 
   function getShop(el) {
-    return el.dataset.shop || el.dataset.shopDomain || el.getAttribute('data-shop') || el.getAttribute('data-shop-domain') || window.Shopify?.shop || window.NECTAR_SHOP_DOMAIN || '';
+    const globalShop = cleanDomain(window.NECTAR_SHOP_DOMAIN || window.Shopify?.shop || window.ShopifyAnalytics?.meta?.page?.shopId || '');
+    const attrShop = cleanDomain(el.dataset.shop || el.dataset.shopDomain || el.getAttribute('data-shop') || el.getAttribute('data-shop-domain') || '');
+    // Prefer the permanent myshopify.com domain when available. Custom storefront domains will not
+    // match admin data that is stored under the shop's permanent domain.
+    if (globalShop && globalShop.includes('.myshopify.com')) return globalShop;
+    if (attrShop && attrShop.includes('.myshopify.com')) return attrShop;
+    return globalShop || attrShop;
   }
 
   function injectStyles() {

@@ -300,7 +300,7 @@ window.buildCard = function(r, isTrash) {
       attrHtml += `
         <div class="admin-attr-item">
           <div class="admin-attr-head"><span>${escapeHtml(key)}</span><strong>${escapeHtml(val)}/10</strong></div>
-          <div class="admin-attr-bar"><span class="admin-attr-notch" style="left:calc(${pct}% - 4px)"></span></div>
+          <div class="admin-attr-bar" style="background:#fff!important;overflow:visible!important;"><span class="admin-attr-notch" style="left:calc(${pct}% - 5px);width:10px!important;height:12px!important;background:#111!important;"></span></div>
         </div>`;
     }
     attrHtml += '</div>';
@@ -550,7 +550,7 @@ window.buildMappingUI = function() {
       if (f.id === 'map-date' && hL.includes('date')) selected = 'selected';
       options += `<option value="${escapeHtml(h)}" ${selected}>${escapeHtml(h)}</option>`;
     });
-    html += `<label>${escapeHtml(f.label)}<select id="${f.id}" class="filter-select" style="width:100%; margin-top:6px;">${options}</select></label>`;
+    html += `<div class="mapper-card"><label>${escapeHtml(f.label)}</label><select id="${f.id}" class="filter-select" style="width:100%; margin-top:6px;">${options}</select></div>`;
   });
   document.getElementById('column-mappers').innerHTML = html;
   const btn = document.getElementById('import-submit-btn');
@@ -587,7 +587,7 @@ window.generateStagingArea = function() {
     <div id="staging-area" style="margin-top:24px;">
       <h3>3. Smart Product Mapping</h3>
       <p class="muted">Check that every row has the correct numeric Product ID before importing.</p>
-      <table style="width:100%; border-collapse:collapse;"><thead><tr><th>Reviewer</th><th>Rating</th><th>Review</th><th>Target Product ID</th></tr></thead><tbody>${rows}</tbody></table>
+      <table class="import-table"><thead><tr><th>Reviewer</th><th>Rating</th><th>Review</th><th>Target Product ID</th></tr></thead><tbody>${rows}</tbody></table>
       <p><button id="final-import-btn" class="primary-btn" onclick="window.processFinalImport()">Go Live (Import to Database)</button></p>
     </div>`;
   let existing = document.getElementById('staging-area');

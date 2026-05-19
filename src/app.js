@@ -3,6 +3,8 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const { env } = require('./config/env');
+const { Shop } = require('./models');
+const { cleanShopDomain, isValidShopDomain } = require('./utils/validation');
 const publicRoutes = require('./routes/public');
 const adminRoutes = require('./routes/admin');
 const authRoutes = require('./routes/auth');
@@ -39,12 +41,39 @@ app.get('/health', (req, res) => {
   return res.json({ ok: true, status: 'healthy', timestamp: new Date().toISOString() });
 });
 
-app.get('/admin', (req, res) => {
-  const filePath = path.join(publicDir, 'admin.html');
-  const html = fs.readFileSync(filePath, 'utf8')
-    .replace(/__SHOPIFY_API_KEY__/g, env.shopifyApiKey || '')
+app.get('/admin', async (req, res, next) => {
+  try {
+    const shopDomain = cleanShopDomain(req.query.shop || req.query.shopDomain || '');
+    const hasDevSecret = Boolean(req.query.admin_secret);
+    const justInstalled = Boolean(req.query.installed);
+
+    // Public/multi-merchant apps must create a per-shop token via OAuth. If the app is opened
+    // from Shopify Admin and the token is missing, start OAuth automatically instead of asking
+    // the merchant to add a global SHOPIFY_ACCESS_TOKEN in Render.
+    if (shopDomain && isValidShopDomain(shopDomain) && !hasDevSecret && !justInstalled && env.shopifyApiKey && env.shopifyApiSecret && env.appUrl) {
+      const shop = await Shop.findOne({ shopDomain }).select('accessTokenEncrypted').lean();
+      if (!shop?.accessTokenEncrypted) {
+        return res.redirect(302, `/auth/shopify?shop=${encodeURIComponent(shopDomain)}`);
+      }
+    }
+
+    const filePath = path.join(publicDir, 'admin.html');
+    const html = fs.readFileSync(filePath, 'utf8')
+      .replace(/__SHOPIFY_API_KEY__/g, env.shopifyApiKey || '')
+      .replace(/__APP_URL__/g, env.appUrl || '');
+    return res.type('html').send(html);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/review-widget.js', (req, res) => {
+  const filePath = path.join(publicDir, 'review-widget.js');
+  const js = fs.readFileSync(filePath, 'utf8')
     .replace(/__APP_URL__/g, env.appUrl || '');
-  return res.type('html').send(html);
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', env.nodeEnv === 'production' ? 'public, max-age=300' : 'no-store');
+  return res.send(js);
 });
 
 app.use(express.static(publicDir, {

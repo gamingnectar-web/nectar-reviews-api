@@ -9,50 +9,54 @@ function getShopifyStoreUrl(shopDomain) {
     .toLowerCase();
 }
 
-function missingShopifyAccessError() {
-  const err = new Error('Missing Shopify Admin API credentials. Add SHOPIFY_ACCESS_TOKEN/SHOPIFY_ADMIN_ACCESS_TOKEN, store a per-shop access token, or keep the legacy SHOPIFY_API_KEY + SHOPIFY_API_SECRET fallback configured.');
+function missingShopifyAccessError(shopDomain) {
+  const err = new Error('This shop has not completed Shopify OAuth install, so no per-shop Admin API token is available yet.');
   err.code = 'SHOPIFY_ACCESS_MISSING';
+  err.shopDomain = shopDomain || '';
   return err;
 }
 
-function buildLegacyBasicAuthHeader() {
-  if (!env.shopifyApiKey || !env.shopifyApiSecret) return '';
-  return `Basic ${Buffer.from(`${env.shopifyApiKey}:${env.shopifyApiSecret}`).toString('base64')}`;
+async function getShopRecord(shopDomain) {
+  const normalizedShop = getShopifyStoreUrl(shopDomain);
+  if (!normalizedShop) return null;
+  return Shop.findOne({ shopDomain: normalizedShop }).lean();
 }
 
 async function getAccessTokenForShop(shopDomain, explicitToken) {
   if (explicitToken) return explicitToken;
 
   const normalizedShop = getShopifyStoreUrl(shopDomain);
-  if (!normalizedShop) return env.shopifyAccessToken || '';
+  if (!normalizedShop) return '';
 
   try {
-    const shop = await Shop.findOne({ shopDomain: normalizedShop }).lean();
-    if (shop?.accessTokenEncrypted) {
-      return decryptSecret(shop.accessTokenEncrypted);
-    }
+    const shop = await getShopRecord(normalizedShop);
+    if (shop?.accessTokenEncrypted) return decryptSecret(shop.accessTokenEncrypted);
   } catch (error) {
-    // Do not make dashboard/product widgets fail because optional per-shop token lookup failed.
     console.warn('Shop access token lookup skipped:', error.message);
   }
 
-  // Single-store/dev compatibility: this keeps the old working format alive while OAuth/per-shop tokens are added later.
+  // Development-only escape hatch. Public/multi-merchant installs should use OAuth tokens stored per shop.
   return env.shopifyAccessToken || '';
+}
+
+function buildInstallUrl(shopDomain) {
+  const normalizedShop = getShopifyStoreUrl(shopDomain);
+  if (!normalizedShop) return '';
+  const base = env.appUrl || '';
+  const path = `${base.replace(/\/$/, '')}/auth/shopify?shop=${encodeURIComponent(normalizedShop)}`;
+  return base ? path : `/auth/shopify?shop=${encodeURIComponent(normalizedShop)}`;
 }
 
 async function shopifyFetch(pathname, options = {}) {
   const shopDomain = getShopifyStoreUrl(options.shopDomain);
   const accessToken = await getAccessTokenForShop(shopDomain, options.accessToken);
-  const legacyBasicAuth = accessToken ? '' : buildLegacyBasicAuthHeader();
 
   if (!shopDomain) {
     const err = new Error('Missing Shopify shop domain.');
     err.code = 'SHOPIFY_SHOP_MISSING';
     throw err;
   }
-  if (!accessToken && !legacyBasicAuth) {
-    throw missingShopifyAccessError();
-  }
+  if (!accessToken) throw missingShopifyAccessError(shopDomain);
 
   const fetchOptions = { ...options };
   delete fetchOptions.shopDomain;
@@ -62,7 +66,7 @@ async function shopifyFetch(pathname, options = {}) {
     ...fetchOptions,
     headers: {
       'Content-Type': 'application/json',
-      ...(accessToken ? { 'X-Shopify-Access-Token': accessToken } : { Authorization: legacyBasicAuth }),
+      'X-Shopify-Access-Token': accessToken,
       ...(options.headers || {}),
     },
   });
@@ -79,6 +83,7 @@ async function shopifyFetch(pathname, options = {}) {
     const message = data.errors || data.error || response.statusText || 'Shopify request failed';
     const err = new Error(typeof message === 'string' ? message : JSON.stringify(message));
     err.status = response.status;
+    if (response.status === 401 || response.status === 403) err.code = 'SHOPIFY_REINSTALL_REQUIRED';
     throw err;
   }
 
@@ -89,11 +94,16 @@ async function shopifyFetchOptional(pathname, options = {}) {
   try {
     return await shopifyFetch(pathname, options);
   } catch (error) {
-    if (error.code === 'SHOPIFY_ACCESS_MISSING' || error.code === 'SHOPIFY_SHOP_MISSING') {
-      return null;
-    }
+    if (['SHOPIFY_ACCESS_MISSING', 'SHOPIFY_SHOP_MISSING', 'SHOPIFY_REINSTALL_REQUIRED'].includes(error.code)) return null;
     throw error;
   }
 }
 
-module.exports = { shopifyFetch, shopifyFetchOptional, getShopifyStoreUrl };
+module.exports = {
+  shopifyFetch,
+  shopifyFetchOptional,
+  getShopifyStoreUrl,
+  getAccessTokenForShop,
+  getShopRecord,
+  buildInstallUrl,
+};
