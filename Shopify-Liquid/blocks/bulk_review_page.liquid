@@ -1,105 +1,84 @@
-{% assign block_title = block.settings.title | default: "Review Your Recent Order" %}
-{% assign block_intro = block.settings.intro_text | default: "Thank you for shopping with us! Let us know how we did." %}
-{% assign support_heading = block.settings.support_heading | default: "Need help with your order?" %}
-{% assign support_text = block.settings.support_text | default: "If something didn’t go to plan, tell customer service first — we’d love the chance to sort it out." %}
-{% assign support_button = block.settings.support_button | default: "Get help with this order" %}
+{% assign nectar_app_url = block.settings.app_url | default: 'https://nectar-reviews-api.onrender.com' %}
+{% assign nectar_shop_domain = shop.permanent_domain | default: shop.domain %}
+{% assign block_title = block.settings.title | default: 'Review Your Recent Order' %}
+{% assign block_intro = block.settings.intro_text | default: 'Thank you for shopping with us! Let us know how we did.' %}
+{% assign support_heading = block.settings.support_heading | default: 'Need help with your order?' %}
+{% assign support_text = block.settings.support_text | default: 'If something didn’t go to plan, tell customer service first — we’d love the chance to sort it out.' %}
+{% assign support_button = block.settings.support_button | default: 'Get help with this order' %}
 
 {{ 'nectar-review-page.css' | asset_url | stylesheet_tag }}
 
-<div
+<section
   class="nectar-review-page"
-  data-api-url="https://nectar-reviews-api.onrender.com/api"
-  data-shop-domain="{{ shop.domain }}"
+  data-api-url="{{ nectar_app_url }}/api"
+  data-shop-domain="{{ nectar_shop_domain }}"
   data-support-heading="{{ support_heading | escape }}"
   data-support-text="{{ support_text | escape }}"
   data-support-button="{{ support_button | escape }}"
   data-support-email="{{ block.settings.support_email | escape }}"
-  data-support-url="{{ block.settings.support_url | default: '/pages/contact' | escape }}"
-  style="
-    --primary: {{ block.settings.primary_color | default: '#0f172a' }};
-    --accent: {{ block.settings.star_color | default: '#f5b301' }};
-  "
+  data-support-url="{{ block.settings.support_url | escape }}"
+  style="--primary:{{ block.settings.primary_color }};--accent:{{ block.settings.star_color }};"
 >
   {% if block.settings.header_image != blank %}
-    <img
-      src="{{ block.settings.header_image | image_url: width: 1400 }}"
-      alt="Review order"
-      class="nectar-header-image"
-    >
+    <img class="nectar-review-hero" src="{{ block.settings.header_image | image_url: width: 1600 }}" alt="" loading="lazy">
   {% endif %}
 
-  <div class="nectar-review-header">
-    <div id="nectar-preview-pill" class="nectar-review-badge" style="display:none;">Preview Mode</div>
-    <h1 class="nectar-review-title">{{ block_title }}</h1>
-    <p class="nectar-review-intro">{{ block_intro }}</p>
-  </div>
+  <span id="nectar-preview-pill" class="nectar-pill" style="display:none;">Preview Mode</span>
+  <h1>{{ block_title }}</h1>
+  <p class="nectar-intro">{{ block_intro }}</p>
 
-  <div id="nectar-loading" class="nectar-review-state">
+  <div id="nectar-loading" class="nectar-state-card">
     <h2>Finding your order…</h2>
     <p>Loading your items securely.</p>
   </div>
 
-  <div id="nectar-error" class="nectar-review-error" style="display:none;">
+  <div id="nectar-error" class="nectar-state-card" style="display:none;">
     <h2>Order Not Found</h2>
     <p>We couldn't verify this order. Please ensure you clicked the exact link in your email.</p>
   </div>
 
-  <div id="nectar-not-delivered" class="nectar-review-error" style="display:none;">
+  <div id="nectar-not-delivered" class="nectar-state-card" style="display:none;">
     <h2>Your order is not ready for review yet</h2>
     <p>This review link becomes available once your order has been marked as delivered.</p>
   </div>
 
-  <div id="nectar-success" class="nectar-review-success" style="display:none;">
-    <h2>Reviews Submitted! 🎉</h2>
+  <div id="nectar-success" class="nectar-state-card" style="display:none;">
+    <h2>Reviews Submitted!</h2>
     <p>Thank you for sharing your feedback.</p>
-    <a href="/" class="nectar-outline-btn nectar-return-link">Return to Store</a>
+    <a class="nectar-button" href="{{ routes.root_url }}">Return to Store</a>
   </div>
 
   <div id="nectar-main" style="display:none;">
-    <div id="nectar-order-summary" class="nectar-order-summary"></div>
+    <div id="nectar-order-summary" class="nectar-summary-grid"></div>
 
     <div class="nectar-overall-card">
-      <h2 class="nectar-overall-title">1. Your overall review</h2>
-      <p class="nectar-overall-copy">
-        This review text will be used for every item below by default. If you want to leave a different review for a specific product, click <strong>Add a product specific review</strong> on that product and it will override this text for that item only.
-      </p>
-
-      <div class="nectar-field-grid">
-        <input id="nectar-overall-headline" class="nectar-input" placeholder="Review title, for example: Amazing product">
-        <textarea id="nectar-overall-comment" class="nectar-textarea" placeholder="Write your overall review here…"></textarea>
-      </div>
+      <h2>1. Your overall review</h2>
+      <p>This review text will be used for every item below by default. You can also add product-specific wording on each item.</p>
+      <label>Headline<input id="nectar-overall-headline" type="text" placeholder="Amazing quality"></label>
+      <label>Review<textarea id="nectar-overall-comment" placeholder="Tell us what you thought…"></textarea></label>
     </div>
-
-    <div id="nectar-review-list" class="nectar-review-list"></div>
 
     <div id="nectar-help-strip" class="nectar-help-strip">
       <h3 id="nectar-help-heading">{{ support_heading }}</h3>
       <p id="nectar-help-text">{{ support_text }}</p>
-      <span id="nectar-help-button" class="nectar-help-link">{{ support_button }}</span>
+      <button id="nectar-help-button" type="button" class="nectar-button secondary">{{ support_button }}</button>
     </div>
 
-    <div class="nectar-submit-wrap">
-      <button id="nectar-submit-btn" class="nectar-submit-btn">Submit All Reviews</button>
-    </div>
+    <div id="nectar-review-list" class="nectar-product-list"></div>
+    <button id="nectar-submit-btn" type="button" class="nectar-button wide">Submit All Reviews</button>
   </div>
-</div>
 
-<div id="nectar-support-modal-wrap" class="nectar-modal-backdrop">
-  <div class="nectar-modal">
-    <div class="nectar-modal-header">
-      <h3 class="nectar-modal-title">Contact Customer Service</h3>
-      <button class="nectar-close-btn" type="button" data-nectar-close-support>×</button>
-    </div>
-    <p class="nectar-support-note">
-      Use this if there’s an issue with delivery, damage, fit, or anything else you’d like help with before leaving a review.
-    </p>
-    <div class="nectar-field-grid">
-      <input id="nectar-support-subject" class="nectar-input" placeholder="Subject">
-      <textarea id="nectar-support-message" class="nectar-textarea" placeholder="Tell us what happened…"></textarea>
-      <button id="nectar-support-submit" class="nectar-solid-btn" type="button">Send message to customer service</button>
+  <div id="nectar-support-modal-wrap" class="nectar-modal-wrap">
+    <div class="nectar-modal" role="dialog" aria-modal="true">
+      <button type="button" class="nectar-modal-close" data-nectar-close-support>×</button>
+      <h2>Contact Customer Service</h2>
+      <p>Use this if there’s an issue with delivery, damage, fit, or anything else you’d like help with before leaving a review.</p>
+      <label>Subject<input id="nectar-support-subject" type="text"></label>
+      <label>Message<textarea id="nectar-support-message" placeholder="Tell us what happened…"></textarea></label>
+      <button id="nectar-support-submit" type="button" class="nectar-button">Send message to customer service</button>
     </div>
   </div>
-</div>
+</section>
 
 <script src="{{ 'nectar-review-page.js' | asset_url }}" defer></script>
 
@@ -108,64 +87,17 @@
   "name": "Review Page",
   "target": "section",
   "settings": [
-    {
-      "type": "image_picker",
-      "id": "header_image",
-      "label": "Banner image"
-    },
-    {
-      "type": "text",
-      "id": "title",
-      "label": "Page title",
-      "default": "Review Your Recent Order"
-    },
-    {
-      "type": "textarea",
-      "id": "intro_text",
-      "label": "Intro text",
-      "default": "Thank you for shopping with us! Let us know how we did."
-    },
-    {
-      "type": "color",
-      "id": "primary_color",
-      "label": "Primary colour",
-      "default": "#0f172a"
-    },
-    {
-      "type": "color",
-      "id": "star_color",
-      "label": "Star colour",
-      "default": "#f5b301"
-    },
-    {
-      "type": "text",
-      "id": "support_heading",
-      "label": "Support heading",
-      "default": "Need help with your order?"
-    },
-    {
-      "type": "textarea",
-      "id": "support_text",
-      "label": "Support text",
-      "default": "If something didn’t go to plan, tell customer service first — we’d love the chance to sort it out."
-    },
-    {
-      "type": "text",
-      "id": "support_button",
-      "label": "Support button text",
-      "default": "Get help with this order"
-    },
-    {
-      "type": "text",
-      "id": "support_email",
-      "label": "Support email fallback"
-    },
-    {
-      "type": "text",
-      "id": "support_url",
-      "label": "Support/contact page fallback",
-      "default": "/pages/contact"
-    }
+    { "type": "text", "id": "app_url", "label": "Nectar app URL", "default": "https://nectar-reviews-api.onrender.com" },
+    { "type": "image_picker", "id": "header_image", "label": "Banner image" },
+    { "type": "text", "id": "title", "label": "Page title", "default": "Review Your Recent Order" },
+    { "type": "textarea", "id": "intro_text", "label": "Intro text", "default": "Thank you for shopping with us! Let us know how we did." },
+    { "type": "color", "id": "primary_color", "label": "Primary colour", "default": "#0f172a" },
+    { "type": "color", "id": "star_color", "label": "Star colour", "default": "#f5b301" },
+    { "type": "text", "id": "support_heading", "label": "Support heading", "default": "Need help with your order?" },
+    { "type": "textarea", "id": "support_text", "label": "Support text", "default": "If something didn’t go to plan, tell customer service first — we’d love the chance to sort it out." },
+    { "type": "text", "id": "support_button", "label": "Support button text", "default": "Get help with this order" },
+    { "type": "text", "id": "support_email", "label": "Support email fallback" },
+    { "type": "text", "id": "support_url", "label": "Support/contact page fallback", "default": "/pages/contact" }
   ]
 }
 {% endschema %}

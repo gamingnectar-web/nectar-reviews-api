@@ -1,82 +1,34 @@
-<div id="rev-badge-{{ block.id }}" style="display: none; cursor: pointer; align-items: center; gap: 6px; font-family: 'Poppins', sans-serif;">
-  <span class="rev-badge-stars" style="color: #ffc700; font-size: 14px;"></span>
-  <span class="rev-badge-text" style="font-weight: 700; color: #111827; font-size: 14px;"></span>
-</div>
+{% assign nectar_app_url = block.settings.app_url | default: 'https://nectar-reviews-api.onrender.com' %}
+{% assign nectar_shop_domain = shop.permanent_domain | default: shop.domain %}
 
+<span
+  class="nectar-star-badge"
+  data-nectar-card-stars
+  data-product-id="{{ product.id }}"
+  data-shop-domain="{{ nectar_shop_domain }}"
+  data-api-base="{{ nectar_app_url }}/api"
+  style="display:inline-flex;align-items:center;gap:5px;padding:6px 10px;border-radius:999px;background:{{ block.settings.background }};color:{{ block.settings.text_color }};font-weight:700;font-size:{{ block.settings.font_size }}px;"
+></span>
 <script>
-(async function() {
-    const SHOP_DOMAIN = "{{ shop.domain }}";
-    const API = "https://nectar-reviews-api.onrender.com/api";
-    const BLOCK_ID = "{{ block.id }}";
-    const ITEM_ID = "{{ product.id }}";
-    
-    let ratingCount = {{ product.metafields.reviews.rating_count.value | default: 0 }};
-    let ratingValue = {{ product.metafields.reviews.rating.value | default: 0 }};
-
-    const isEditor = {{ request.design_mode | default: 'false' }};
-    const custEmail = "{{ customer.email | default: '' }}".toLowerCase();
-    const badgeEl = document.getElementById(`rev-badge-${BLOCK_ID}`);
-
-    try {
-        // FALLBACK: If Shopify SEO hasn't synced the metafield yet, fetch from live API
-        if (ratingCount === 0) {
-            const revRes = await fetch(`${API}/reviews/${ITEM_ID}?shopDomain=${SHOP_DOMAIN}`);
-            if (revRes.ok) {
-                const reviews = await revRes.json();
-                if (reviews.length > 0) {
-                    ratingCount = reviews.length;
-                    ratingValue = reviews.reduce((sum, r) => sum + r.rating, 0) / ratingCount;
-                }
-            }
-        }
-
-        // If it's TRULY 0 after checking the API, hide the badge.
-        if (ratingCount === 0 && !isEditor) return; 
-
-        const configRes = await fetch(`${API}/widget/config?shopDomain=${SHOP_DOMAIN}&t=${Date.now()}`);
-        if (configRes.ok) {
-            const configData = await configRes.json();
-            
-            // --- BETA MODE GATE ---
-            if (configData.betaMode && configData.betaMode.enabled) {
-                if (!isEditor && custEmail !== (configData.betaMode.email || "").toLowerCase()) return;
-            }
-
-            // We are cleared! Show the badge.
-            badgeEl.style.display = 'flex';
-
-            if (configData.cardStyles) {
-                const starSize = configData.cardStyles.starSize || 14;
-                document.querySelector(`#rev-badge-${BLOCK_ID} .rev-badge-stars`).style.fontSize = `${starSize}px`;
-                if (configData.widgetStyles && configData.widgetStyles.starColor) {
-                    document.querySelector(`#rev-badge-${BLOCK_ID} .rev-badge-stars`).style.color = configData.widgetStyles.starColor;
-                }
-            }
-
-            if (ratingCount > 0) {
-                const fullStars = Math.round(ratingValue);
-                document.querySelector(`#rev-badge-${BLOCK_ID} .rev-badge-stars`).innerText = '★'.repeat(fullStars) + '☆'.repeat(5-fullStars);
-                
-                let countText = ratingValue.toFixed(1);
-                if (configData.cardStyles && configData.cardStyles.showCount !== false) {
-                    countText += ` <span style="font-weight: 400; color: #6b7280; font-size: 13px;">(${ratingCount})</span>`;
-                }
-                document.querySelector(`#rev-badge-${BLOCK_ID} .rev-badge-text`).innerHTML = countText;
-            } else {
-                document.querySelector(`#rev-badge-${BLOCK_ID} .rev-badge-stars`).innerText = '★★★★★';
-                document.querySelector(`#rev-badge-${BLOCK_ID} .rev-badge-text`).innerText = 'No reviews';
-            }
-
-            badgeEl.addEventListener('click', () => {
-                const widget = document.querySelector('[id^="rev-review-section-"]');
-                if (widget) {
-                    widget.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                } else {
-                    window.location.href = "{{ product.url }}#reviews";
-                }
-            });
-        }
-    } catch (e) { console.error("Badge error:", e); }
+(function(){
+  function ready(fn){ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn); else fn(); }
+  ready(function(){
+    document.querySelectorAll('.nectar-star-badge[data-nectar-card-stars]').forEach(function(el){
+      if (el.dataset.loaded === 'true') return;
+      el.dataset.loaded = 'true';
+      var api = (el.dataset.apiBase || 'https://nectar-reviews-api.onrender.com/api').replace(/\/$/, '');
+      var shopDomain = el.dataset.shopDomain || (window.Shopify && window.Shopify.shop) || window.location.hostname;
+      var productId = el.dataset.productId;
+      if (!shopDomain || !productId) return;
+      fetch(api + '/reviews/summary?shopDomain=' + encodeURIComponent(shopDomain) + '&itemId=' + encodeURIComponent(productId))
+        .then(function(res){ return res.ok ? res.json() : null; })
+        .then(function(json){
+          if (!json || !json.count) { el.style.display = 'none'; return; }
+          el.innerHTML = '★ ' + Number(json.average || 0).toFixed(1) + ' (' + json.count + ')';
+        })
+        .catch(function(){ el.style.display = 'none'; });
+    });
+  });
 })();
 </script>
 
@@ -84,6 +36,11 @@
 {
   "name": "Star Rating Badge",
   "target": "section",
-  "settings": []
+  "settings": [
+    { "type": "text", "id": "app_url", "label": "Nectar app URL", "default": "https://nectar-reviews-api.onrender.com" },
+    { "type": "color", "id": "background", "label": "Background", "default": "#111827" },
+    { "type": "color", "id": "text_color", "label": "Text colour", "default": "#ffffff" },
+    { "type": "range", "id": "font_size", "min": 10, "max": 22, "step": 1, "unit": "px", "label": "Font size", "default": 13 }
+  ]
 }
 {% endschema %}
