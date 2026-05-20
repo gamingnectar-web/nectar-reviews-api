@@ -66,15 +66,24 @@
 
   function getMatchingSliders(product) {
     const profiles = appConfig.attributeProfiles || appConfig.profiles || [];
-    const tags = getProductTags(product).map((v) => String(v).toLowerCase());
+    const tags = getProductTags(product).map((v) => String(v).toLowerCase().trim());
+    const haystack = [
+      ...tags,
+      String(product?.title || product?.name || '').toLowerCase(),
+      String(product?.handle || '').toLowerCase(),
+      String(product?.productId || product?.id || '').toLowerCase(),
+    ].filter(Boolean);
     return profiles.filter((profile) => {
-      const type = String(profile.type || profile.ruleType || '').toLowerCase();
+      const type = String(profile.type || profile.ruleType || '').toLowerCase().replace(/[^a-z]/g, '');
       const condition = String(profile.condition || profile.value || '').trim().toLowerCase();
       const label = String(profile.label || '').trim();
-      if (!condition || !label) return false;
-      if (type === 'tag') return tags.includes(condition);
+      if (!label) return false;
       if (type === 'all' || type === 'global') return true;
-      return false;
+      if (!condition) return false;
+      if (type === 'tag' || type === 'producttag') return tags.includes(condition) || haystack.some((part) => part === condition);
+      if (type === 'product' || type === 'productid') return haystack.some((part) => part.includes(condition));
+      if (type === 'metafield' || type === 'metafieldkey') return haystack.some((part) => part.includes(condition));
+      return haystack.some((part) => part === condition);
     });
   }
 
@@ -151,6 +160,8 @@
       image: raw.image || raw.productImage || raw.imageUrl || '',
       quantity: raw.quantity || 1,
       tags: getProductTags(raw),
+      handle: raw.handle || '',
+      metafields: raw.metafields || {},
       matchingSliders: getMatchingSliders(raw),
       raw,
     };
@@ -319,13 +330,15 @@
 
   async function submitReviews() {
     const overall = getOverallReview();
+    const submitEmail = orderData.customerEmail || params.get('email') || (document.getElementById('nectar-customer-email')?.value || '').trim();
+    if (!submitEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(submitEmail)) return alert('A valid email is required before submitting reviews.');
     const payloadReviews = products.map((product) => {
       const specific = getProductSpecificReview(product.productId);
       const state = reviewState[product.productId] || { rating: 5, attributes: {} };
       return {
         itemId: String(product.productId),
         userId: orderData.customerName || 'Verified Customer',
-        email: orderData.customerEmail || params.get('email') || '',
+        email: submitEmail,
         rating: state.rating || 5,
         headline: specific.headline || overall.headline,
         comment: specific.comment || overall.comment,
@@ -341,7 +354,7 @@
       const res = await fetch(`${API}/reviews/bulk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shopDomain: SHOP_DOMAIN, orderId: orderData.orderId, email: orderData.customerEmail || params.get('email') || '', customerName: orderData.customerName, reviews: payloadReviews, isPreview: orderData.preview || params.get('test') === '1' }),
+        body: JSON.stringify({ shopDomain: SHOP_DOMAIN, orderId: orderData.orderId, email: submitEmail, customerName: orderData.customerName, reviews: payloadReviews, isPreview: orderData.preview || params.get('test') === '1' }),
       });
       if (!res.ok) throw new Error('Submit failed');
       show('success');
@@ -389,6 +402,10 @@
       if (!products.length) throw new Error('No products found');
       initReviewState();
       buildSummary(orderData);
+      if (!orderData.customerEmail && !params.get('email')) {
+        const emailWrap = document.getElementById('nectar-email-wrap');
+        if (emailWrap) emailWrap.style.display = 'block';
+      }
       renderProducts();
       show('main');
     } catch (error) {

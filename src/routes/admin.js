@@ -109,13 +109,18 @@ router.patch('/reviews/:id', async (req, res, next) => {
       allowed.deletedAt = allowed.isDeleted ? new Date() : null;
     }
 
+    const existing = await Review.findOne({ _id: req.params.id, shopDomain });
+    if (!existing) return res.status(404).json({ error: 'Review not found.' });
+    if ((existing.isTestReview || existing.testMode) && allowed.status === 'accepted') {
+      return res.status(400).json({ error: 'Test reviews cannot be published to the storefront.' });
+    }
+
     const review = await Review.findOneAndUpdate(
       { _id: req.params.id, shopDomain },
       { $set: allowed },
       { new: true }
     );
 
-    if (!review) return res.status(404).json({ error: 'Review not found.' });
     return res.json(review);
   } catch (error) {
     next(error);
@@ -349,13 +354,34 @@ router.post('/test-email', async (req, res, next) => {
 
     const fromName = settings.fromName || 'Nectar Reviews';
     const fromEmail = settings.fromEmail || settings.smtpUser;
+    const orderId = cleanText(req.body.orderId || 'test-1001', 120);
+    const itemId = cleanText(req.body.itemId || '', 120);
+    const token = cleanText(req.body.token || `test-${Date.now()}`, 200);
+    const trackingPixel = `${env.appUrl || ''}/api/campaign/open?shopDomain=${encodeURIComponent(shopDomain)}&campaign=test_review_request&orderId=${encodeURIComponent(orderId)}&email=${encodeURIComponent(to)}&itemId=${encodeURIComponent(itemId)}&token=${encodeURIComponent(token)}&t=${Date.now()}`;
+    let html = String(req.body.html || '').slice(0, 200000);
+    if (!html.includes('/api/campaign/open')) {
+      html += `<img src="${trackingPixel}" width="1" height="1" alt="" style="display:none;opacity:0;width:1px;height:1px;">`;
+    }
+
     await transporter.sendMail({
       from: `${fromName.replace(/"/g, '')} <${fromEmail}>`,
       to,
       replyTo: settings.replyToEmail || fromEmail,
       subject: cleanText(req.body.subject || 'Review request test email', 160),
-      html: String(req.body.html).slice(0, 200000),
+      html,
     });
+
+    await CampaignEvent.create({
+      shopDomain,
+      campaign: 'test_review_request',
+      eventType: 'sent',
+      orderId,
+      email: to,
+      itemId,
+      token,
+      userAgent: cleanText(req.headers['user-agent'], 500),
+    });
+    await Settings.findOneAndUpdate({ shopDomain }, { $inc: { emailsSentTotal: 1 }, $setOnInsert: { shopDomain } }, { upsert: true });
 
     settings.lastTestedAt = new Date();
     settings.lastTestStatus = 'success';

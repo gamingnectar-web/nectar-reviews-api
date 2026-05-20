@@ -24,19 +24,12 @@
       }
     }
     if (bakedBase) return bakedBase;
-    // Last-resort fallback for the hosted Nectar API. This keeps storefront widgets working even
-    // when the script is bundled by a Shopify theme/app-extension CDN instead of served directly by Render.
     return 'https://nectar-reviews-api.onrender.com/api';
   }
   const API_BASE = inferApiBase();
 
   function escapeHtml(value) {
     return String(value || '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[char]));
-  }
-
-  function toNumber(value, fallback) {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : fallback;
   }
 
   function stars(rating) {
@@ -51,8 +44,6 @@
   function getShop(el) {
     const globalShop = cleanDomain(window.NECTAR_SHOP_DOMAIN || window.Shopify?.shop || window.ShopifyAnalytics?.meta?.page?.shopId || '');
     const attrShop = cleanDomain(el.dataset.shop || el.dataset.shopDomain || el.getAttribute('data-shop') || el.getAttribute('data-shop-domain') || '');
-    // Prefer the permanent myshopify.com domain when available. Custom storefront domains will not
-    // match admin data that is stored under the shop's permanent domain.
     if (globalShop && globalShop.includes('.myshopify.com')) return globalShop;
     if (attrShop && attrShop.includes('.myshopify.com')) return attrShop;
     return globalShop || attrShop;
@@ -67,8 +58,8 @@
       .nectar-review-widget *, .nectar-review-widget *::before, .nectar-review-widget *::after { box-sizing:border-box; }
       .nr-widget-header { display:flex; align-items:center; justify-content:space-between; gap:24px; margin-bottom:28px; }
       .nr-widget-title { margin:0; font-size:28px; line-height:1.15; letter-spacing:-.03em; font-weight:900; }
-      .nr-write-btn, .nr-submit-btn { border:0; background:var(--nr-primary); color:#fff; min-height:46px; padding:12px 22px; font-weight:900; cursor:pointer; }
-      .nr-cancel-btn { border:1px solid var(--nr-border); background:#fff; color:#111827; min-height:44px; padding:10px 18px; font-weight:800; cursor:pointer; }
+      .nr-write-btn, .nr-submit-btn { border:0; background:var(--nr-primary); color:#fff; min-height:46px; padding:12px 22px; font-weight:900; cursor:pointer; border-radius:0; }
+      .nr-cancel-btn { border:1px solid var(--nr-border); background:#fff; color:#111827; min-height:44px; padding:10px 18px; font-weight:800; cursor:pointer; border-radius:0; }
       .nr-summary { display:grid; grid-template-columns:140px minmax(260px, 1fr) minmax(260px, 1fr); gap:46px; padding:40px; border:1px solid var(--nr-border); background:#fbfdff; margin-bottom:34px; }
       .nr-average { font-size:64px; line-height:.9; font-weight:950; letter-spacing:-.07em; margin:0 0 18px; }
       .nr-stars { color:var(--nr-star); letter-spacing:2px; font-size:19px; white-space:nowrap; }
@@ -92,16 +83,28 @@
       .nr-empty { padding:32px; border:1px solid var(--nr-border); background:#fff; color:var(--nr-muted); text-align:center; }
       .nr-modal-backdrop { position:fixed; inset:0; z-index:2147483000; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(15,23,42,.48); }
       .nr-modal-backdrop.active { display:flex; }
-      .nr-modal { width:min(620px, 100%); max-height:90vh; overflow:auto; background:#fff; border-radius:14px; padding:26px; box-shadow:0 24px 80px rgba(0,0,0,.22); }
-      .nr-modal h3 { margin:0 0 8px; font-size:24px; }
+      .nr-modal { width:min(680px, 100%); max-height:90vh; overflow:auto; background:#fff; border-radius:14px; padding:26px; box-shadow:0 24px 80px rgba(0,0,0,.22); }
+      .nr-modal h3 { margin:0 0 8px; font-size:26px; letter-spacing:-.03em; }
       .nr-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
       .nr-field { display:block; margin-top:14px; font-weight:800; font-size:13px; }
-      .nr-field input, .nr-field textarea, .nr-field select { width:100%; min-height:44px; margin-top:7px; border:1px solid #d0d5dd; border-radius:8px; padding:10px 12px; font:inherit; }
+      .nr-field input, .nr-field textarea { width:100%; min-height:44px; margin-top:7px; border:1px solid #d0d5dd; border-radius:8px; padding:10px 12px; font:inherit; }
       .nr-field textarea { min-height:120px; resize:vertical; }
+      .nr-rating-picker { margin-top:16px; }
+      .nr-rating-picker span { display:block; margin-bottom:8px; font-weight:900; }
+      .nr-star-picker { display:inline-flex; gap:6px; align-items:center; }
+      .nr-star-button { border:0; background:transparent; color:#d0d5dd; font-size:34px; line-height:1; padding:0; cursor:pointer; transition:transform .15s ease,color .15s ease,opacity .15s ease; }
+      .nr-star-button.active { color:var(--nr-star); }
+      .nr-star-picker:hover .nr-star-button { opacity:.5; transform:scale(1.02); }
+      .nr-star-picker .nr-star-button:hover, .nr-star-picker .nr-star-button:hover ~ .nr-star-button { opacity:1; }
+      .nr-star-button:hover { transform:scale(1.18); }
+      .nr-slider-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:12px; }
+      .nr-slider-field { display:block; padding:12px; border:1px solid var(--nr-border); border-radius:12px; background:#fbfdff; }
+      .nr-slider-head { display:flex; justify-content:space-between; gap:12px; margin-bottom:8px; color:#344054; font-size:13px; font-weight:950; }
+      .nr-slider-field input[type=range] { width:100%; accent-color:var(--nr-primary); }
       .nr-modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
       .nr-note { color:var(--nr-muted); font-size:13px; margin:0; line-height:1.5; }
       @media (max-width: 900px) { .nr-summary { grid-template-columns:1fr; gap:28px; padding:28px; } .nr-consensus-row { grid-template-columns:130px 1fr 50px; } }
-      @media (max-width: 640px) { .nr-widget-header { align-items:flex-start; flex-direction:column; } .nr-attrs, .nr-form-grid { grid-template-columns:1fr; } .nr-review-top { flex-direction:column; gap:8px; } .nr-average { font-size:54px; } }
+      @media (max-width: 640px) { .nr-widget-header { align-items:flex-start; flex-direction:column; } .nr-attrs, .nr-form-grid, .nr-slider-grid { grid-template-columns:1fr; } .nr-review-top { flex-direction:column; gap:8px; } .nr-average { font-size:54px; } }
     `;
     document.head.appendChild(style);
   }
@@ -171,9 +174,42 @@
       </article>`;
   }
 
-  function buildModal(el, itemId, shopDomain, settings) {
-    const profileLabels = (settings?.attributeProfiles || []).map((profile) => profile.label).filter(Boolean).slice(0, 8);
-    const defaultLabels = profileLabels.length ? profileLabels : [];
+  function sliderLabelsFromSettings(settings) {
+    const profiles = Array.isArray(settings?.attributeProfiles) ? settings.attributeProfiles : [];
+    return profiles.map((profile) => String(profile.label || '').trim()).filter(Boolean).filter((label, index, arr) => arr.indexOf(label) === index).slice(0, 8);
+  }
+
+  function renderStarPicker(rating = 5) {
+    return `<div class="nr-star-picker" data-star-picker>${[1, 2, 3, 4, 5].map((i) => `<button type="button" class="nr-star-button ${i <= rating ? 'active' : ''}" data-rating="${i}" aria-label="${i} stars">★</button>`).join('')}</div><input type="hidden" name="rating" value="${rating}">`;
+  }
+
+  function bindStarPicker(modal) {
+    const picker = modal.querySelector('[data-star-picker]');
+    const input = modal.querySelector('input[name="rating"]');
+    if (!picker || !input) return;
+    const paint = (rating) => picker.querySelectorAll('.nr-star-button').forEach((btn) => btn.classList.toggle('active', Number(btn.dataset.rating) <= rating));
+    picker.querySelectorAll('.nr-star-button').forEach((btn) => {
+      btn.addEventListener('mouseenter', () => paint(Number(btn.dataset.rating || 5)));
+      btn.addEventListener('focus', () => paint(Number(btn.dataset.rating || 5)));
+      btn.addEventListener('click', () => {
+        input.value = String(Number(btn.dataset.rating || 5));
+        paint(Number(input.value || 5));
+      });
+    });
+    picker.addEventListener('mouseleave', () => paint(Number(input.value || 5)));
+  }
+
+  function bindModalSliders(modal) {
+    modal.querySelectorAll('.nr-slider-field input[type="range"]').forEach((input) => {
+      input.addEventListener('input', () => {
+        const output = modal.querySelector(`[data-slider-output="${input.dataset.sliderKey}"]`);
+        if (output) output.textContent = `${input.value}/10`;
+      });
+    });
+  }
+
+  function buildModal(itemId, shopDomain, settings) {
+    const labels = sliderLabelsFromSettings(settings);
     const modalId = `nr-modal-${Math.random().toString(36).slice(2)}`;
     const modal = document.createElement('div');
     modal.className = 'nr-modal-backdrop';
@@ -184,22 +220,28 @@
         <p class="nr-note">Your review will be submitted for moderation.</p>
         <form class="nr-form">
           <div class="nr-form-grid">
-            <label class="nr-field">Name<input name="userId" required placeholder="Your name"></label>
-            <label class="nr-field">Email<input name="email" type="email" placeholder="you@example.com"></label>
+            <label class="nr-field">Name<input name="userId" required placeholder="Your name" autocomplete="name"></label>
+            <label class="nr-field">Email<input name="email" type="email" required placeholder="you@example.com" autocomplete="email"></label>
           </div>
-          <label class="nr-field">Rating<select name="rating" required><option value="5">5 stars</option><option value="4">4 stars</option><option value="3">3 stars</option><option value="2">2 stars</option><option value="1">1 star</option></select></label>
+          <div class="nr-rating-picker"><span>Rating</span>${renderStarPicker(5)}</div>
           <label class="nr-field">Headline<input name="headline" required placeholder="Summarise your review"></label>
           <label class="nr-field">Review<textarea name="comment" required placeholder="What did you think?"></textarea></label>
-          ${defaultLabels.length ? `<div class="nr-form-grid">${defaultLabels.map((label) => `<label class="nr-field">${escapeHtml(label)}<select name="attr:${escapeHtml(label)}">${Array.from({ length: 10 }, (_, index) => `<option value="${index + 1}" ${index === 9 ? 'selected' : ''}>${index + 1}/10</option>`).join('')}</select></label>`).join('')}</div>` : ''}
+          ${labels.length ? `<div class="nr-slider-grid">${labels.map((label) => {
+            const key = label.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+            return `<label class="nr-slider-field"><div class="nr-slider-head"><span>${escapeHtml(label)}</span><strong data-slider-output="${escapeHtml(key)}">10/10</strong></div><input type="range" min="1" max="10" value="10" data-slider-key="${escapeHtml(key)}" name="attr:${escapeHtml(label)}"></label>`;
+          }).join('')}</div>` : ''}
           <div class="nr-modal-actions"><button type="button" class="nr-cancel-btn">Cancel</button><button type="submit" class="nr-submit-btn">Submit Review</button></div>
         </form>
       </div>`;
     document.body.appendChild(modal);
     modal.querySelector('.nr-cancel-btn').addEventListener('click', () => modal.classList.remove('active'));
     modal.addEventListener('click', (event) => { if (event.target === modal) modal.classList.remove('active'); });
+    bindStarPicker(modal);
+    bindModalSliders(modal);
     modal.querySelector('form').addEventListener('submit', async (event) => {
       event.preventDefault();
-      const form = new FormData(event.currentTarget);
+      const formEl = event.currentTarget;
+      const form = new FormData(formEl);
       const attributes = {};
       for (const [key, value] of form.entries()) {
         if (key.startsWith('attr:')) attributes[key.slice(5)] = Number(value);
@@ -224,8 +266,12 @@
             source: 'website',
           }),
         });
-        if (!res.ok) throw new Error('Could not submit review');
-        event.currentTarget.reset();
+        if (!res.ok) {
+          let message = 'Could not submit review';
+          try { const json = await res.json(); message = json.error || message; } catch (_) {}
+          throw new Error(message);
+        }
+        formEl.reset();
         modal.querySelector('.nr-modal').innerHTML = '<h3>It’s on its way for review</h3><p class="nr-note">Thanks for sharing your feedback. Your review has been sent to the store team and will appear once it has been approved.</p><div class="nr-modal-actions"><button type="button" class="nr-cancel-btn">Close</button></div>';
         modal.querySelector('.nr-cancel-btn').addEventListener('click', () => modal.classList.remove('active'));
       } catch (error) {
@@ -253,7 +299,7 @@
     const settings = json.settings || {};
     const title = settings.widgetStyles?.widgetTitle || 'Reviews';
     const styles = settings.widgetStyles || {};
-    const modal = buildModal(el, itemId, shopDomain, settings);
+    const modal = buildModal(itemId, shopDomain, settings);
     el.innerHTML = `
       <section class="nectar-review-widget" style="--nr-primary:${escapeHtml(styles.primaryColor || '#111827')};--nr-star:${escapeHtml(styles.starColor || '#f5a400')};--nr-max-width:${Number(styles.maxWidth || 1160)}px;">
         <div class="nr-widget-header"><h3 class="nr-widget-title">${escapeHtml(title)}</h3><button type="button" class="nr-write-btn">Write a Review</button></div>

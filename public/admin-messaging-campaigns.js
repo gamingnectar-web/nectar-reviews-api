@@ -86,8 +86,8 @@
       <div class="msg-shell">
         <div class="msg-header">
           <div>
-            <h2>Messaging &amp; Campaigns</h2>
-            <p>Build your review request email, test review links, configure delivery, and check tracking without mixing everything into one long screen.</p>
+            <h2>Review request setup</h2>
+            <p>Create the customer email, test the review page, connect delivery, and monitor tracking from four simple tabs.</p>
           </div>
           <div class="msg-flow-card"><span>Recommended flow</span><strong>Order fulfilled → Wait <b id="msg-delay-preview">14</b> days → Send email</strong></div>
         </div>
@@ -106,8 +106,8 @@
               <div class="msg-card"><h3>Review links</h3><div class="msg-two"><div><label>Link mode</label><select id="msg-link-mode"><option value="both">Order and products</option><option value="order">Order only</option><option value="products">Product buttons only</option></select></div><div><label>Review page handle</label><input id="msg-page-handle" type="text" value="leave-review"></div></div><div class="msg-two"><div><label>Main button text</label><input id="msg-main-button-text" type="text" value="Review Your Order"></div><div><label>Product button text</label><input id="msg-product-button-text" type="text" value="Review This Item"></div></div><div class="msg-two"><div><label>Wait after fulfilment</label><select id="msg-delay-days"><option value="7">7 days</option><option value="10">10 days</option><option value="14" selected>14 days</option><option value="21">21 days</option><option value="30">30 days</option></select></div><div><label>Flow action</label><input value="Send email" readonly></div></div><div class="msg-help">In Shopify Flow, add a Send email action, enable HTML, and paste the generated code.</div></div>
             </div>
             <div class="msg-stack">
-              <div class="msg-card msg-preview-card"><div class="msg-preview-head"><div><h3>Live email preview</h3><p>Preview before pasting into Shopify Flow.</p></div><div class="msg-toggle"><button type="button" id="msg-preview-desktop" class="active" data-preview="desktop">Desktop</button><button type="button" id="msg-preview-mobile" data-preview="mobile">Mobile</button></div></div><div class="msg-preview-stage"><div id="msg-preview-wrap" class="msg-preview-wrap"><div id="msg-email-preview"></div></div></div></div>
-              <div class="msg-card" style="padding:0;"><div class="msg-preview-head"><div><h3>Copy email HTML</h3><p>Paste this into Shopify Flow.</p></div><button type="button" id="msg-copy-code-btn" class="msg-btn">Copy Code</button></div><textarea id="msg-code-output" class="msg-code" spellcheck="false" readonly></textarea></div>
+              <div class="msg-card msg-preview-card"><div class="msg-preview-head"><div><h3>Customer email preview</h3><p>This is what the test email will look like. The Shopify Flow code is below.</p></div><div class="msg-toggle"><button type="button" id="msg-preview-desktop" class="active" data-preview="desktop">Desktop</button><button type="button" id="msg-preview-mobile" data-preview="mobile">Mobile</button></div></div><div class="msg-preview-stage"><div id="msg-preview-wrap" class="msg-preview-wrap"><div id="msg-email-preview"></div></div></div></div>
+              <div class="msg-card" style="padding:0;"><div class="msg-preview-head"><div><h3>Copy Shopify Flow HTML</h3><p>Paste this into Shopify Flow. Test emails use the rendered preview, not raw Liquid.</p></div><button type="button" id="msg-copy-code-btn" class="msg-btn">Copy Code</button></div><textarea id="msg-code-output" class="msg-code" spellcheck="false" readonly></textarea></div>
             </div>
           </div>
         </section>
@@ -122,7 +122,7 @@
         <section id="msg-pane-delivery" class="msg-pane">
           <div class="msg-grid">
             <div class="msg-card"><h3>Email provider</h3><p>Optional SMTP setup for test sending and later automation.</p><div class="msg-two"><div><label>Provider</label><select id="msg-smtp-provider"><option value="smtp">SMTP / app password</option><option value="gmail">Gmail app password</option><option value="outlook">Outlook SMTP</option></select></div><div><label>Enabled</label><select id="msg-smtp-enabled"><option value="true">Enabled</option><option value="false">Disabled</option></select></div></div><label>SMTP host</label><input id="msg-smtp-host" type="text" placeholder="smtp.gmail.com"><div class="msg-two"><div><label>Port</label><input id="msg-smtp-port" type="number" value="587"></div><div><label>Security</label><select id="msg-smtp-secure"><option value="starttls">STARTTLS</option><option value="ssl">SSL / 465</option><option value="none">None</option></select></div></div><label>SMTP username</label><input id="msg-smtp-user" type="text" autocomplete="username"><label>SMTP password / app password <span class="muted">leave blank to keep saved</span></label><input id="msg-smtp-pass" type="password" autocomplete="new-password"><div class="msg-two"><div><label>From name</label><input id="msg-smtp-from-name" type="text" value="Nectar Reviews"></div><div><label>From email</label><input id="msg-smtp-from-email" type="email"></div></div><label>Reply-to email</label><input id="msg-smtp-reply-to" type="email"><div id="msg-smtp-state" class="msg-state">Loading email settings...</div><div class="msg-actions"><button type="button" id="msg-smtp-save" class="msg-btn">Save Email Provider</button><button type="button" id="msg-smtp-remove" class="msg-btn secondary">Remove Provider</button></div></div>
-            <div class="msg-card"><h3>Send test email</h3><p>This sends the current HTML from the Email Builder tab.</p><label>Send test to</label><input id="msg-test-recipient" type="email" placeholder="you@example.com"><div class="msg-actions"><button type="button" id="msg-send-test-email" class="msg-btn">Send Test Email</button></div><div class="msg-help">You must save a working email provider before test sending.</div></div>
+            <div class="msg-card"><h3>Send test email</h3><p>This sends the same customer-friendly test email shown in the live preview, with tracking added automatically.</p><label>Send test to</label><input id="msg-test-recipient" type="email" placeholder="you@example.com"><div class="msg-actions"><button type="button" id="msg-send-test-email" class="msg-btn">Send Test Email</button></div><div class="msg-help">You must save a working email provider before test sending.</div></div>
           </div>
         </section>
 
@@ -152,21 +152,100 @@
     };
   }
 
-  function buildEmailHtml(o) {
+  function campaignParams(extra = {}) {
+    const params = new URLSearchParams();
+    params.set('shopDomain', getShopDomain());
+    params.set('campaign', extra.campaign || 'review_request');
+    if (extra.orderId) params.set('orderId', extra.orderId);
+    if (extra.email) params.set('email', extra.email);
+    if (extra.itemId) params.set('itemId', extra.itemId);
+    if (extra.token) params.set('token', extra.token);
+    return params;
+  }
+
+  function trackingOpenPixel(extra = {}) {
+    return `${DEFAULT_API}/campaign/open?${campaignParams(extra).toString()}&t=${Date.now()}`;
+  }
+
+  function trackingClickUrl(url, extra = {}) {
+    const params = campaignParams(extra);
+    params.set('url', url);
+    return `${DEFAULT_API}/campaign/click?${params.toString()}`;
+  }
+
+  function flowReviewUrl(o, mode, productFragment = '') {
     const base = shopUrl();
+    const orderBits = `review_type=${mode}&shop=${encodeURIComponent(getShopDomain())}&order={{ order.name | remove: '#' | url_encode }}&customer={{ order.customer.firstName | url_encode }}&email={{ order.customer.email | url_encode }}`;
+    return `${base}/pages/${o.pageHandle}?${orderBits}${productFragment}`;
+  }
+
+  function testReviewUrl(o, mode, product) {
+    const params = new URLSearchParams();
+    params.set('test', '1');
+    params.set('review_type', mode);
+    params.set('customer', val('msg-test-name', 'Alex'));
+    params.set('email', val('msg-test-email', 'alex@example.com'));
+    params.set('order', val('msg-test-order', '1001'));
+    params.set('shop', getShopDomain());
+    const productList = product ? [product] : products;
+    if (productList.length) {
+      params.set('products', JSON.stringify(productList.map((p) => ({
+        id: p.id,
+        productId: p.id,
+        variantId: p.variantId || '',
+        title: p.title || 'Product',
+        name: p.title || 'Product',
+        image: p.image || '',
+        quantity: p.quantity || 1,
+        tags: Array.isArray(p.tags) ? p.tags : [],
+        handle: p.handle || '',
+      }))));
+      params.set('product_id', productList[0].id || '');
+      params.set('variant_id', productList[0].variantId || '');
+      params.set('product_title', productList[0].title || '');
+    }
+    return `${shopUrl()}/pages/${o.pageHandle}?${params.toString()}`;
+  }
+
+  function buildEmailShell(o, inner, footerExtra = '') {
     const logoHtml = o.logo ? `<tr><td align="center" style="padding:0 0 18px 0;"><img src="${escapeHtml(o.logo)}" alt="" style="max-width:160px;height:auto;display:block;"></td></tr>` : '';
-    const orderUrl = `${base}/pages/${o.pageHandle}?review_type=order&order={{ order.name | remove: '#' | url_encode }}&email={{ order.customer.email | url_encode }}`;
-    const orderButton = `<tr><td align="center" style="padding:18px 0 6px 0;"><a href="${orderUrl}" style="display:inline-block;background:${o.accentColor};color:#ffffff;text-decoration:none;font-size:16px;font-weight:bold;padding:14px 22px;border-radius:${o.buttonRadius}px;">${escapeHtml(o.mainButtonText)}</a></td></tr>`;
-    const productButtons = `<tr><td style="padding:18px 0 0 0;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">{% for line_item in order.lineItems %}<tr><td style="padding:12px;border:1px solid #e5e7eb;border-radius:12px;background:#ffffff;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px;font-weight:bold;padding-right:12px;">{{ line_item.title }}</td><td align="right"><a href="${base}/pages/${o.pageHandle}?review_type=product&order={{ order.name | remove: '#' | url_encode }}&email={{ order.customer.email | url_encode }}&product_id={{ line_item.product.id }}&variant_id={{ line_item.variant.id }}&product_title={{ line_item.title | url_encode }}" style="display:inline-block;background:${o.accentColor};color:#ffffff;text-decoration:none;font-size:14px;font-weight:bold;padding:10px 16px;border-radius:${o.buttonRadius}px;white-space:nowrap;">${escapeHtml(o.productButtonText)}</a></td></tr></table></td></tr>{% endfor %}</table></td></tr>`;
+    return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:${o.bgColor};margin:0;padding:0;width:100%;"><tr><td align="center" style="padding:28px 12px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:620px;background:${o.cardColor};border-radius:16px;overflow:hidden;"><tr><td style="padding:34px 26px;font-family:Arial,Helvetica,sans-serif;text-align:center;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${logoHtml}<tr><td align="center" style="padding:0 0 12px 0;"><h1 style="margin:0;color:#111827;font-size:28px;line-height:1.25;font-weight:700;">${escapeHtml(o.heading)}</h1></td></tr><tr><td align="center" style="padding:0 0 10px 0;"><p style="margin:0;color:#4b5563;font-size:16px;line-height:1.6;">${o.intro}</p></td></tr><tr><td align="center" style="padding:0 0 12px 0;"><p style="margin:0;color:#4b5563;font-size:16px;line-height:1.6;">${escapeHtml(o.body)}</p></td></tr>${inner}<tr><td align="center" style="padding:24px 0 0 0;"><p style="margin:0;color:#6b7280;font-size:13px;line-height:1.5;">${escapeHtml(o.signoff)}</p></td></tr><tr><td align="center" style="padding:20px 0 0 0;"><p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;">${escapeHtml(o.footerLabel || 'Sent by {{ shop.name }}.')} </p></td></tr>${footerExtra}</table></td></tr></table></td></tr></table>`;
+  }
+
+  function buildFlowEmailHtml(o) {
+    const orderUrl = flowReviewUrl(o, 'order');
+    const orderButton = `<tr><td align="center" style="padding:18px 0 8px 0;"><a href="${orderUrl}" style="display:inline-block;background:${o.accentColor};color:#ffffff;text-decoration:none;font-size:16px;font-weight:bold;padding:14px 22px;border-radius:${o.buttonRadius}px;">${escapeHtml(o.mainButtonText)}</a></td></tr>`;
+    const productButtons = `<tr><td style="padding:18px 0 0 0;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">{% for line_item in order.lineItems %}<tr><td style="padding:12px;border:1px solid #e5e7eb;border-radius:12px;background:#ffffff;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px;font-weight:bold;padding-right:12px;">{{ line_item.title }}</td><td align="right"><a href="${flowReviewUrl(o, 'product', '&product_id={{ line_item.product.id }}&variant_id={{ line_item.variant.id }}&product_title={{ line_item.title | url_encode }}')}" style="display:inline-block;background:${o.accentColor};color:#ffffff;text-decoration:none;font-size:14px;font-weight:bold;padding:10px 16px;border-radius:${o.buttonRadius}px;white-space:nowrap;">${escapeHtml(o.productButtonText)}</a></td></tr></table></td></tr>{% endfor %}</table></td></tr>`;
     const links = o.linkMode === 'order' ? orderButton : o.linkMode === 'products' ? productButtons : orderButton + productButtons;
-    return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:${o.bgColor};margin:0;padding:0;width:100%;"><tr><td align="center" style="padding:24px 12px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;background:${o.cardColor};border-radius:12px;overflow:hidden;"><tr><td style="padding:32px 24px;font-family:Arial,Helvetica,sans-serif;text-align:center;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${logoHtml}<tr><td align="center" style="padding:0 0 12px 0;"><h1 style="margin:0;color:#111827;font-size:26px;line-height:1.25;font-weight:700;">${escapeHtml(o.heading)}</h1></td></tr><tr><td align="center" style="padding:0 0 10px 0;"><p style="margin:0;color:#4b5563;font-size:16px;line-height:1.6;">${o.intro}</p></td></tr><tr><td align="center" style="padding:0 0 8px 0;"><p style="margin:0;color:#4b5563;font-size:16px;line-height:1.6;">${escapeHtml(o.body)}</p></td></tr>${links}<tr><td align="center" style="padding:24px 0 0 0;"><p style="margin:0;color:#6b7280;font-size:13px;line-height:1.5;">${escapeHtml(o.signoff)}</p></td></tr><tr><td align="center" style="padding:20px 0 0 0;"><p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;">Sent by {{ shop.name }}.</p></td></tr></table></td></tr></table></td></tr></table>`;
+    const pixel = `<tr><td><img src="${DEFAULT_API}/campaign/open?shopDomain=${encodeURIComponent(getShopDomain())}&campaign=flow_review_request&orderId={{ order.name | remove: '#' | url_encode }}&email={{ order.customer.email | url_encode }}" width="1" height="1" alt="" style="display:none;opacity:0;width:1px;height:1px;"></td></tr>`;
+    return buildEmailShell(o, links, pixel);
+  }
+
+  function buildRenderedTestEmailHtml(o) {
+    const orderId = val('msg-test-order', '1001');
+    const email = val('msg-test-recipient') || val('msg-test-email', 'alex@example.com');
+    const token = `test-${Date.now()}`;
+    const safeProducts = products.length ? products : [{ id: 'sample-product-1', title: 'Sample Product 1', image: '', variantId: '', quantity: 1, tags: [] }];
+    const orderUrl = trackingClickUrl(testReviewUrl(o, 'order'), { campaign: 'test_review_request', orderId, email, token });
+    const orderButton = `<tr><td align="center" style="padding:18px 0 8px 0;"><a href="${orderUrl}" style="display:inline-block;background:${o.accentColor};color:#ffffff;text-decoration:none;font-size:16px;font-weight:bold;padding:14px 22px;border-radius:${o.buttonRadius}px;">${escapeHtml(o.mainButtonText)}</a></td></tr>`;
+    const productRows = `<tr><td style="padding:18px 0 0 0;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${safeProducts.map((product) => {
+      const url = trackingClickUrl(testReviewUrl(o, 'product', product), { campaign: 'test_review_request', orderId, email, itemId: product.id, token });
+      const img = product.image ? `<td width="52" style="padding-right:12px;"><img src="${escapeHtml(product.image)}" width="52" height="52" alt="" style="display:block;object-fit:cover;border-radius:10px;background:#eef2f7;"></td>` : '';
+      return `<tr><td style="padding:10px 0;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border:1px solid #e5e7eb;border-radius:12px;background:#ffffff;"><tr>${img}<td style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px;font-weight:bold;padding:12px;">${escapeHtml(product.title || 'Product')}</td><td align="right" style="padding:12px;"><a href="${url}" style="display:inline-block;background:${o.accentColor};color:#ffffff;text-decoration:none;font-size:14px;font-weight:bold;padding:10px 16px;border-radius:${o.buttonRadius}px;white-space:nowrap;">${escapeHtml(o.productButtonText)}</a></td></tr></table></td></tr>`;
+    }).join('')}</table></td></tr>`;
+    const links = o.linkMode === 'order' ? orderButton : o.linkMode === 'products' ? productRows : orderButton + productRows;
+    const intro = o.intro.replace(/\{\{[^}]+\}\}/g, escapeHtml(val('msg-test-name', 'Alex')));
+    const testOpts = { ...o, intro, footerLabel: `Sent by ${getShopDomain()}.` };
+    const pixel = `<img src="${trackingOpenPixel({ campaign: 'test_review_request', orderId, email, token })}" width="1" height="1" alt="" style="display:none;opacity:0;width:1px;height:1px;">`;
+    return buildEmailShell(testOpts, links, `<tr><td>${pixel}</td></tr>`);
   }
 
   function updatePreview() {
     const o = opts();
-    const html = buildEmailHtml(o);
-    if (el('msg-email-preview')) el('msg-email-preview').innerHTML = html;
-    if (el('msg-code-output')) el('msg-code-output').value = html;
+    const previewHtml = buildRenderedTestEmailHtml(o);
+    const flowHtml = buildFlowEmailHtml(o);
+    if (el('msg-email-preview')) el('msg-email-preview').innerHTML = previewHtml;
+    if (el('msg-code-output')) el('msg-code-output').value = flowHtml;
     if (el('msg-delay-preview')) el('msg-delay-preview').textContent = o.delayDays;
   }
 
@@ -174,14 +253,15 @@
     const box = el('msg-products');
     if (!box) return;
     box.innerHTML = products.length ? products.map((p, i) => `<div class="msg-product"><img src="${escapeHtml(p.image || '')}" alt=""><div><strong>${escapeHtml(p.title || 'Product')}</strong><small>Product ID: ${escapeHtml(p.id || '')}${p.variantId ? ` · Variant: ${escapeHtml(p.variantId)}` : ''}</small></div><button type="button" data-remove-product="${i}">×</button></div>`).join('') : '<div class="msg-help">No products selected yet.</div>';
-    box.querySelectorAll('[data-remove-product]').forEach((btn) => btn.addEventListener('click', () => { products.splice(Number(btn.dataset.removeProduct), 1); renderProductList(); }));
+    box.querySelectorAll('[data-remove-product]').forEach((btn) => btn.addEventListener('click', () => { products.splice(Number(btn.dataset.removeProduct), 1); renderProductList(); updatePreview(); }));
   }
 
   function addSampleProducts() {
     products.splice(0, products.length);
     const count = Math.max(1, Math.min(10, parseInt(val('msg-test-count', '2'), 10) || 2));
-    for (let i = 1; i <= count; i += 1) products.push({ id: `sample-product-${i}`, variantId: `sample-variant-${i}`, title: `Sample Product ${i}`, image: '', quantity: 1 });
+    for (let i = 1; i <= count; i += 1) products.push({ id: `sample-product-${i}`, variantId: `sample-variant-${i}`, title: `Sample Product ${i}`, image: '', quantity: 1, tags: ['Drink', 'Sample'] });
     renderProductList();
+    updatePreview();
   }
 
   function ensureProductModal() {
@@ -228,6 +308,7 @@
     if (!product?.id) return;
     if (!products.some((item) => String(item.id) === String(product.id))) products.push(product);
     renderProductList();
+    updatePreview();
     showToast(`Added ${product.title || 'product'}`);
   }
 
@@ -242,14 +323,20 @@
     const q = (el('flow-product-search-input')?.value || '').trim();
     if (!q) return showToast('Enter a product title or ID first.');
     renderProductSearchResults([], 'Searching Shopify products...');
-    const result = await securedFetch(`/admin/products/search?q=${encodeURIComponent(q)}`);
-    if (result.unavailable || result.requiresOauth) {
+    try {
+      const result = await securedFetch(`/admin/products/search?q=${encodeURIComponent(q)}`);
+      if (result.unavailable || result.requiresOauth) {
+        productSearchResults = [];
+        renderProductSearchResults([], result.message || 'Reconnect Shopify to enable product search.', result.installUrl);
+        return;
+      }
+      productSearchResults = result.products || [];
+      renderProductSearchResults(productSearchResults);
+    } catch (error) {
       productSearchResults = [];
-      renderProductSearchResults([], result.message || 'Reconnect Shopify to enable product search.', result.installUrl);
-      return;
+      const installUrl = error.installUrl || `${window.location.origin}/auth/shopify?shop=${encodeURIComponent(getShopDomain())}`;
+      renderProductSearchResults([], error.status === 401 ? 'Open a secure admin session to search products.' : (error.message || 'Product search failed.'), installUrl);
     }
-    productSearchResults = result.products || [];
-    renderProductSearchResults(productSearchResults);
   }
 
   async function searchProducts() {
@@ -259,21 +346,7 @@
   }
 
   function testUrl() {
-    const o = opts();
-    const params = new URLSearchParams();
-    params.set('test', '1');
-    params.set('review_type', val('msg-test-type', 'order'));
-    params.set('customer', val('msg-test-name', 'Alex'));
-    params.set('email', val('msg-test-email', 'alex@example.com'));
-    params.set('order', val('msg-test-order', '1001'));
-    params.set('shop', getShopDomain());
-    if (products.length) {
-      params.set('products', JSON.stringify(products.map((p) => ({ id: p.id, variantId: p.variantId, title: p.title, image: p.image, quantity: p.quantity || 1 }))));
-      params.set('product_id', products[0].id || '');
-      params.set('variant_id', products[0].variantId || '');
-      params.set('product_title', products[0].title || '');
-    }
-    return `${shopUrl()}/pages/${o.pageHandle}?${params.toString()}`;
+    return testReviewUrl(opts(), val('msg-test-type', 'order'));
   }
 
   async function copyText(text, success) {
@@ -329,8 +402,22 @@
     const to = val('msg-test-recipient');
     if (!to) return showToast('Enter a test recipient email');
     updatePreview();
-    await securedFetch('/admin/test-email', { method: 'POST', body: JSON.stringify({ to, subject: 'Review request test email', html: el('msg-code-output').value }) });
+    const o = opts();
+    const html = buildRenderedTestEmailHtml(o);
+    const first = products[0] || {};
+    await securedFetch('/admin/test-email', {
+      method: 'POST',
+      body: JSON.stringify({
+        to,
+        subject: 'Review request test email',
+        html,
+        orderId: val('msg-test-order', '1001'),
+        itemId: first.id || '',
+        token: `test-${Date.now()}`,
+      }),
+    });
     showToast('Test email sent');
+    await loadAnalytics();
   }
 
   async function loadAnalytics() {

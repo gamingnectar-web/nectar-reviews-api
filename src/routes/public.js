@@ -220,6 +220,8 @@ router.post('/reviews', async (req, res, next) => {
     const rating = clampNumber(req.body.rating, 1, 5, 0);
     if (!itemId) return res.status(400).json({ error: 'itemId is required.' });
     if (!rating) return res.status(400).json({ error: 'rating must be between 1 and 5.' });
+    const email = cleanEmail(req.body.email);
+    if (!email) return res.status(400).json({ error: 'A valid email is required to submit a review.' });
 
     const reviewToken = cleanText(req.body.reviewToken || req.query.token, 200);
     if (reviewToken) {
@@ -234,7 +236,7 @@ router.post('/reviews', async (req, res, next) => {
       itemId,
       rating,
       userId: cleanText(req.body.userId || req.body.name || 'Guest', 120) || 'Guest',
-      email: cleanEmail(req.body.email),
+      email,
       isAnonymous: Boolean(req.body.isAnonymous),
       headline: cleanText(req.body.headline || req.body.title, 160),
       comment: cleanText(req.body.comment || req.body.body, 2500),
@@ -306,6 +308,8 @@ router.post('/reviews/bulk', async (req, res, next) => {
       const used = await Review.findOne({ shopDomain, reviewToken, reviewTokenUsedAt: { $ne: null } }).lean();
       if (used) return res.status(409).json({ error: 'This review link has already been used.' });
     }
+    const submissionEmail = cleanEmail(req.body.email);
+    if (!submissionEmail) return res.status(400).json({ error: 'A valid email is required to submit reviews.' });
     const config = await getSettings(shopDomain);
     const docs = incoming.map((review) => {
       const itemId = cleanText(review.itemId || review.productId, 160);
@@ -317,7 +321,7 @@ router.post('/reviews/bulk', async (req, res, next) => {
         itemId,
         rating,
         userId: cleanText(review.userId || review.name || req.body.customerName || 'Verified Customer', 120) || 'Verified Customer',
-        email: cleanEmail(review.email || req.body.email),
+        email: cleanEmail(review.email || submissionEmail),
         isAnonymous: Boolean(review.isAnonymous),
         headline: cleanText(review.headline || review.title, 160),
         comment: cleanText(review.comment || review.body, 2500),
@@ -372,7 +376,7 @@ router.post('/support-requests', async (req, res, next) => {
       campaign: 'support_request',
       eventType: 'click',
       orderId: cleanText(req.body.orderId, 120),
-      email: cleanEmail(req.body.email),
+      email,
       url: 'support-request',
       userAgent: cleanText(req.headers['user-agent'], 500),
       ipHash: hashValue(getClientIp(req)),
