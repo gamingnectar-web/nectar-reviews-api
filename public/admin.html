@@ -372,6 +372,59 @@
     @media(max-width:1100px){.admin-attr-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.settings-row,.attr-rule-row,.style-control-grid,.trash-tools-grid{grid-template-columns:1fr!important;}.settings-card-header{align-items:flex-start}.main{padding:24px}.grid-2,.grid-3{grid-template-columns:1fr}.app-shell{grid-template-columns:1fr}.sidebar{position:relative;height:auto}}
     @media(max-width:680px){.admin-attr-grid{grid-template-columns:1fr}.review-card>div:first-child{flex-direction:column}.card-side{min-width:0!important;text-align:left!important;border-left:0!important;border-top:1px solid var(--border);padding-left:0!important;padding-top:16px}.settings-card-body{padding:18px}.settings-card-header{padding:18px}.trash-toolbar{flex-direction:column;align-items:stretch}.trash-toolbar .search-input{max-width:none}}
 
+
+    /* v12 product-grade polish */
+    .admin-sub-tabs,.msg-tabs{display:flex;flex-wrap:wrap;gap:10px;border-bottom:1px solid var(--border);margin:0 0 20px;}
+    .admin-sub-tab,.trash-tab{appearance:none;border:0;background:transparent;color:#667085;padding:14px 16px;font-weight:900;cursor:pointer;border-bottom:3px solid transparent;border-radius:0;font:inherit;}
+    .admin-sub-tab.active,.trash-tab.active{color:var(--blue);border-bottom-color:var(--blue);}
+    .admin-sub-tabs.thin{margin-top:10px;}
+    .mgr-pane{display:none;}.mgr-pane.active{display:block;}
+    .admin-filter-card{background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:14px;}
+    .logic-list{display:grid;gap:12px;}
+    .logic-list div{border:1px solid var(--border);border-radius:12px;background:#fbfdff;padding:14px;}
+    .logic-list strong{display:block;margin-bottom:4px;}.logic-list span{color:var(--text-light);line-height:1.5;}
+    .nice-check{display:inline-flex!important;align-items:center;gap:10px;min-height:44px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#fff;font-weight:850!important;}
+
+    .collapse-toggle{display:inline-grid!important;place-items:center!important;width:32px!important;height:32px!important;min-width:32px!important;border:1px solid #d9e0ea!important;border-radius:10px!important;background:#fff!important;color:#111827!important;font-size:18px!important;line-height:1!important;box-shadow:0 1px 2px rgba(15,23,42,.05);}
+    .collapse-toggle:hover{border-color:#aab4c2;background:#f8fafc;}
+    .settings-card-header{position:relative;}
+
+    .reply-panel{background:#f8fafc!important;border:1px solid #d9e0ea!important;border-radius:14px!important;padding:16px!important;}
+    .reply-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+    .reply-input{font:inherit!important;background:#fff!important;border-color:#d9e0ea!important;line-height:1.55;color:#111827;resize:none!important;overflow:hidden!important;min-height:96px!important;}
+    .reply-action-row{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:12px;}
+    .reply-vis-select{min-height:44px;border:1px solid #d1d5db;border-radius:10px;background:#fff;color:#111827;padding:10px 12px;font-weight:850;}
+    .reply-action-row .post-btn{min-width:118px;}
+
+    .admin-attr-bar{position:relative;height:8px!important;border-radius:999px!important;background:#e6ebf1!important;overflow:hidden!important;border:0!important;box-shadow:inset 0 1px 2px rgba(15,23,42,.06)!important;}
+    .admin-attr-fill{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:#111827;display:block;min-width:0;}
+    .admin-attr-notch{display:none!important;}
+
+    .style-control-grid{grid-template-columns:repeat(2,minmax(220px,1fr))!important;gap:18px 24px!important;}
+    .style-control-grid>div{display:grid;grid-template-columns:minmax(145px,1fr) minmax(120px,180px);align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid #eef2f7;}
+    .style-control-grid label{margin:0!important;color:#344054!important;font-size:13px!important;font-weight:900!important;}
+    .style-control-grid input[type="number"],.style-control-grid input[type="text"],.style-control-grid input[type="color"]{width:100%!important;min-height:44px;border:1px solid #d1d5db;border-radius:12px;background:#fff;padding:8px 12px;font:inherit;}
+    .style-control-grid input[type="color"]{padding:6px;height:44px;cursor:pointer;}
+    .style-actions{justify-content:flex-end!important;}
+    .style-actions .primary-btn{min-width:150px;}
+
+
+    .docs-tabs { display:flex; gap:10px; flex-wrap:wrap; border-bottom:1px solid var(--border); margin:0 0 18px; }
+    .docs-tab-btn { border:0; background:transparent; padding:14px 16px; color:var(--text-light); font-weight:900; cursor:pointer; border-bottom:3px solid transparent; }
+    .docs-tab-btn.active { color:var(--blue); border-bottom-color:var(--blue); }
+    .docs-pane { display:none; }
+    .docs-pane.active { display:block; }
+    .doc-card { background:#fff; border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); margin:0 0 14px; overflow:hidden; }
+    .doc-card summary { list-style:none; cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:18px 20px; font-weight:900; }
+    .doc-card summary::-webkit-details-marker { display:none; }
+    .doc-card summary::after { content:'+'; width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:8px; background:#f9fafb; color:#111827; font-size:18px; line-height:1; flex:0 0 auto; }
+    .doc-card[open] summary::after { content:'−'; }
+    .doc-card-body { padding:0 20px 20px; color:#4b5563; line-height:1.6; }
+    .doc-card-body ul { margin:10px 0 0; padding-left:20px; }
+    .doc-note { border-left:4px solid var(--blue); background:#eff6ff; padding:14px 16px; border-radius:10px; color:#1e3a8a; }
+
+    @media(max-width:900px){.style-control-grid{grid-template-columns:1fr!important}.style-control-grid>div{grid-template-columns:1fr}.reply-action-row{flex-direction:column;align-items:stretch}.reply-action-row .post-btn,.reply-vis-select{width:100%;}.admin-sub-tabs{overflow:auto;flex-wrap:nowrap}.admin-sub-tab{white-space:nowrap}}
+
   </style>
 </head>
 <body>
@@ -388,7 +441,6 @@
           <button class="tab-btn active" onclick="window.tab('v-dash')">Dashboard</button>
           <button class="tab-btn" onclick="window.tab('v-mgr')">Review Manager</button>
           <button class="tab-btn" onclick="window.tab('v-msg')">Messaging &amp; Campaigns ✉️</button>
-          <button class="tab-btn" onclick="window.tab('v-trash')">Trash ️</button>
           <button class="tab-btn" onclick="window.tab('v-import')">Import CSV</button>
         </div>
         <div class="nav-group">
@@ -404,6 +456,7 @@
         </div>
         <div class="nav-group">
           <p class="nav-title">Developers</p>
+          <button class="tab-btn" onclick="window.tab('v-docs')">Documentation</button>
           <button class="tab-btn" onclick="window.tab('v-manual')">Manual Setup</button>
         </div>
       </nav>
@@ -426,43 +479,71 @@
 
       <section id="v-mgr" class="view">
         <h2 class="page-title">Review Manager</h2>
-        <div class="filter-row">
-          <input id="search-bar" class="search-input" placeholder="Search by reviewer, email or comment..." oninput="window.renderLists()" />
-          <select id="star-filter" class="filter-select" onchange="window.renderLists()">
-            <option value="all">All Stars</option><option value="5">5 Stars</option><option value="4">4 Stars</option><option value="3">3 Stars</option><option value="2">2 Stars</option><option value="1">1 Star</option>
-          </select>
-          <select id="status-filter" class="filter-select" onchange="window.renderLists()">
-            <option value="all">All Statuses</option><option value="pending">Pending</option><option value="accepted">Accepted</option><option value="hold">On Hold</option><option value="rejected">Rejected</option><option value="spam">Spam / Test</option>
-          </select>
-          <button class="secondary-btn" onclick="window.load()">Refresh</button>
+        <div class="admin-sub-tabs" role="tablist">
+          <button type="button" class="admin-sub-tab active" data-review-tab="reviews" onclick="window.reviewManagerTab('reviews')">Reviews</button>
+          <button type="button" class="admin-sub-tab" data-review-tab="approval" onclick="window.reviewManagerTab('approval')">Approval rules</button>
+          <button type="button" class="admin-sub-tab" data-review-tab="trash" onclick="window.reviewManagerTab('trash')">Trash</button>
         </div>
-        <div id="mgr-list"><p style="text-align:center; padding:40px; color:#999;">Loading reviews...</p></div>
-      </section>
-
-      <section id="v-msg" class="view">
-        <h2 class="page-title">Messaging &amp; Campaigns</h2>
-        <div id="nr-messaging-campaigns-mount" class="panel"><p style="margin:0; color:var(--text-light);">Loading campaign builder...</p></div>
-      </section>
-
-      <section id="v-trash" class="view">
-        <h2 class="page-title">Trash Bin</h2>
-        <p class="muted">Restore deleted reviews, search what is in trash, and manage automatic removal in a separate settings tab.</p>
-        <div class="trash-tools-grid">
-          <div class="trash-tool-card"><span>Total in trash</span><strong id="trash-count">0</strong></div>
-          <div class="trash-tool-card"><span>Oldest deletion</span><strong id="trash-oldest">—</strong></div>
-          <div class="trash-tool-card"><span>Bulk commands</span><div class="trash-actions"><button class="secondary-btn" onclick="window.restoreAllTrash()">Restore all</button><button class="delete-btn" onclick="window.emptyTrash()">Delete all</button></div></div>
+        <div id="mgr-pane-reviews" class="mgr-pane active">
+          <div class="filter-row admin-filter-card">
+            <input id="search-bar" class="search-input" placeholder="Search by reviewer, email or comment..." oninput="window.renderLists()" />
+            <select id="star-filter" class="filter-select" onchange="window.renderLists()">
+              <option value="all">All Stars</option><option value="5">5 Stars</option><option value="4">4 Stars</option><option value="3">3 Stars</option><option value="2">2 Stars</option><option value="1">1 Star</option>
+            </select>
+            <select id="status-filter" class="filter-select" onchange="window.renderLists()">
+              <option value="all">All Statuses</option><option value="pending">Pending</option><option value="accepted">Accepted</option><option value="hold">On Hold</option><option value="rejected">Rejected</option><option value="spam">Spam / Test</option>
+            </select>
+            <button class="secondary-btn" onclick="window.load()">Refresh</button>
+          </div>
+          <div id="mgr-list"><p style="text-align:center; padding:40px; color:#999;">Loading reviews...</p></div>
         </div>
-        <div class="trash-tabs"><button type="button" class="trash-tab active" onclick="window.trashTab('list')">Trash list</button><button type="button" class="trash-tab" onclick="window.trashTab('settings')">Auto-delete settings</button></div>
-        <div id="trash-pane-list" class="trash-pane active">
-          <div class="trash-toolbar"><input id="trash-search" class="search-input" placeholder="Search deleted reviews, email or product ID" oninput="window.renderLists()"><button class="secondary-btn" onclick="window.load()">Refresh</button></div>
-          <div id="trash-list"><p>Loading...</p></div>
+        <div id="mgr-pane-approval" class="mgr-pane">
+          <div class="grid-2">
+            <div class="panel settings-card">
+              <div class="settings-card-header"><div><h3>Publishing controls</h3><p>Choose when reviews can go live. Test reviews are always blocked from the storefront.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
+              <div class="settings-card-body">
+                <div class="settings-row"><label>Developer beta mode<span class="hint">Hide the widget from the public while you test on your live theme.</span></label><label class="nice-check"><input id="set-beta-enable" type="checkbox" /> Enable Beta Mode</label></div>
+                <div class="settings-row"><label>Beta access email<span class="hint">Optional email used while testing.</span></label><input id="set-beta-email" class="premium-input" placeholder="name@example.com" /></div>
+                <div class="settings-row"><label>Google Rich Snippets<span class="hint">Allow structured review data for eligible public reviews.</span></label><label class="nice-check"><input id="set-seo" type="checkbox" checked /> Enable Rich Snippets</label></div>
+                <div class="settings-row"><label>Auto-approve reviews<span class="hint">Use carefully. Reviews matching this rule can go live automatically.</span></label><label class="nice-check"><input id="set-auto-enable" type="checkbox" /> Enable Auto-Approve</label></div>
+                <div class="settings-row"><label>Auto-approve source</label><select id="set-auto-type" class="filter-select"><option value="verified">Verified Purchases Only</option><option value="all">All Reviews (Inc. Unverified)</option></select></div>
+                <div class="settings-row"><label>Minimum star rating</label><select id="set-min-stars" class="filter-select"><option value="5">5 Stars only</option><option value="4">4 Stars &amp; up</option><option value="3">3 Stars &amp; up</option></select></div>
+                <div class="settings-action-row"><button class="primary-btn" onclick="window.saveSettings()">Save approval rules</button></div>
+              </div>
+            </div>
+            <div class="panel settings-card">
+              <div class="settings-card-header"><div><h3>Current safety logic</h3><p>The app applies these safeguards before publishing.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
+              <div class="settings-card-body">
+                <div class="logic-list">
+                  <div><strong>Verified means signed, imported, or manually verified</strong><span>Public storefront submissions cannot mark themselves as verified. Review-request links must contain a signed token generated by the app.</span></div>
+                  <div><strong>One signed token, one submission</strong><span>Signed review links are marked used after submission and cannot be reused.</span></div>
+                  <div><strong>Test reviews never go live</strong><span>Test reviews are excluded from public API responses and cannot be approved.</span></div>
+                  <div><strong>Private notes stay private</strong><span>Only public replies are returned to the storefront.</span></div>
+                  <div><strong>Trashed reviews are hidden</strong><span>Deleted reviews stay hidden until restored.</span></div>
+                  <div><strong>Auto-approve only runs after verification checks</strong><span>If “Verified Purchases Only” is selected, unsigned storefront and Flow reviews remain pending.</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div id="trash-pane-settings" class="trash-pane">
-          <div class="panel settings-card">
-            <div class="settings-card-header"><div><h3>Automatic deletion</h3><p>Choose how long reviews stay in trash before permanent deletion.</p></div></div>
-            <div class="settings-card-body">
-              <div class="settings-row"><label>Keep trashed reviews for<span class="hint">Between 1 and 28 days.</span></label><input id="trash-retention-days" class="premium-input" type="number" min="1" max="28" value="28"></div>
-              <div class="settings-action-row"><button class="secondary-btn" onclick="window.cleanupTrash()">Delete expired now</button><button class="primary-btn" style="margin-left:10px" onclick="window.saveTrashSettings()">Save trash settings</button></div>
+        <div id="mgr-pane-trash" class="mgr-pane">
+          <div class="trash-tools-grid compact">
+            <div class="trash-tool-card"><span>Total in trash</span><strong id="trash-count">0</strong></div>
+            <div class="trash-tool-card"><span>Oldest deletion</span><strong id="trash-oldest">—</strong></div>
+            <div class="trash-tool-card"><span>Bulk commands</span><div class="trash-actions"><button class="secondary-btn" onclick="window.restoreAllTrash()">Restore all</button><button class="delete-btn" onclick="window.emptyTrash()">Delete all</button></div></div>
+          </div>
+          <div class="admin-sub-tabs thin" role="tablist"><button type="button" class="trash-tab active" onclick="window.trashTab('list')">Trash list</button><button type="button" class="trash-tab" onclick="window.trashTab('settings')">Auto-delete settings</button></div>
+          <div id="trash-pane-list" class="trash-pane active">
+            <div class="trash-toolbar"><input id="trash-search" class="search-input" placeholder="Search deleted reviews, email or product ID" oninput="window.renderLists()"><button class="secondary-btn" onclick="window.load()">Refresh</button></div>
+            <div id="trash-list"><p>Loading...</p></div>
+          </div>
+          <div id="trash-pane-settings" class="trash-pane">
+            <div class="panel settings-card">
+              <div class="settings-card-header"><div><h3>Automatic deletion</h3><p>Choose how long reviews stay in trash before permanent deletion.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
+              <div class="settings-card-body">
+                <div class="settings-row"><label>Keep trashed reviews for<span class="hint">Between 1 and 28 days.</span></label><input id="trash-retention-days" class="premium-input" type="number" min="1" max="28" value="28"></div>
+                <div class="settings-action-row"><button class="secondary-btn" onclick="window.cleanupTrash()">Delete expired now</button><button class="primary-btn" style="margin-left:10px" onclick="window.saveTrashSettings()">Save trash settings</button></div>
+              </div>
             </div>
           </div>
         </div>
@@ -503,16 +584,8 @@
         <h2 class="page-title">Rules &amp; Settings</h2>
         <div class="grid-2">
           <div class="panel settings-card">
-            <div class="settings-card-header"><div><h3>Publishing &amp; storefront rules</h3><p>Keep live display safe while reviews are collected.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
-            <div class="settings-card-body">
-              <div class="settings-row"><label>Developer beta mode<span class="hint">Hide the widget from public shoppers while testing.</span></label><label><input id="set-beta-enable" type="checkbox" /> Enable Beta Mode</label></div>
-              <div class="settings-row"><label>Beta tester email<span class="hint">Only this email can preview beta-mode widgets.</span></label><input id="set-beta-email" class="premium-input" placeholder="Beta Tester Email" /></div>
-              <div class="settings-row"><label>Google Rich Snippets<span class="hint">Allow review SEO data on product pages.</span></label><label><input id="set-seo" type="checkbox" checked /> Enable Rich Snippets</label></div>
-              <div class="settings-row"><label>Auto-approve reviews<span class="hint">Use carefully. Test reviews never go live.</span></label><label><input id="set-auto-enable" type="checkbox" /> Enable Auto-Approve</label></div>
-              <div class="settings-row"><label>Auto-approve source</label><select id="set-auto-type" class="filter-select"><option value="verified">Verified Purchases Only</option><option value="all">All Reviews (Inc. Unverified)</option></select></div>
-              <div class="settings-row"><label>Minimum rating</label><select id="set-min-stars" class="filter-select"><option value="5">5 Stars only</option><option value="4">4 Stars &amp; up</option><option value="3">3 Stars &amp; up</option><option value="2">2 Stars &amp; up</option><option value="1">All Ratings</option></select></div>
-              <div class="settings-action-row"><button class="primary-btn" onclick="window.saveSettings()">Save Settings</button></div>
-            </div>
+            <div class="settings-card-header"><div><h3>Review publishing controls moved</h3><p>Auto-approval, beta mode and rich snippet settings now live in Review Manager → Approval rules.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
+            <div class="settings-card-body"><p class="muted">Use this page for conditional slider rules. These decide which product scoring questions appear for matching tags or metafields.</p><button class="secondary-btn" type="button" onclick="window.tab('v-mgr');window.reviewManagerTab('approval')">Open approval rules</button></div>
           </div>
           <div class="panel settings-card">
             <div class="settings-card-header"><div><h3>Smart Conditional Sliders</h3><p>Add the slider questions that should appear for products matching a tag or metafield.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
@@ -541,22 +614,22 @@
             <div id="style-widget" class="sub-view active">
               <p><input id="style-title" class="premium-input" placeholder="Widget Title" value="Customer Reviews" oninput="window.updatePreviews()" /></p>
               <div class="style-control-grid">
-                <div><label>Brand Color</label><input id="style-primary" type="color" value="#000000" oninput="window.updatePreviews()" /></div>
-                <div><label>Star Color</label><input id="style-star" type="color" value="#ffc700" oninput="window.updatePreviews()" /></div>
+                <div><label>Brand Color</label><input id="style-primary" class="premium-input color-text" type="text" value="#000000" oninput="window.updatePreviews()" /></div>
+                <div><label>Star Color</label><input id="style-star" class="premium-input color-text" type="text" value="#ffc700" oninput="window.updatePreviews()" /></div>
                 <div><label>Text Size (px)</label><input id="style-text" class="premium-input" type="number" value="15" oninput="window.updatePreviews()" /></div>
                 <div><label>Widget max width (px)</label><input id="style-width" class="premium-input" type="number" min="720" max="1800" value="1160" oninput="window.updatePreviews()" /></div>
                 <div><label>Review star size (px)</label><input id="style-review-star-size" class="premium-input" type="number" min="24" max="60" value="52" oninput="window.updatePreviews()" /></div>
-                <div><label>Slider track colour</label><input id="style-slider-track" type="color" value="#e6ebf1" oninput="window.updatePreviews()" /></div>
-                <div><label>Slider notch colour</label><input id="style-slider-knob" type="color" value="#111111" oninput="window.updatePreviews()" /></div>
+                <div><label>Slider track colour</label><input id="style-slider-track" class="premium-input color-text" type="text" value="#e6ebf1" oninput="window.updatePreviews()" /></div>
+                <div><label>Slider notch colour</label><input id="style-slider-knob" class="premium-input color-text" type="text" value="#111111" oninput="window.updatePreviews()" /></div>
               </div>
               <div class="style-actions"><button class="primary-btn" onclick="window.saveSettings()">Publish Styles</button></div>
             </div>
             <div id="style-card" class="sub-view">
               <div class="style-control-grid">
                 <div><label>Star Size (px)</label><input id="card-star" class="premium-input" type="number" value="14" min="10" max="32" oninput="window.updatePreviews()" /></div>
-                <div><label>Badge background</label><input id="card-badge-bg" type="color" value="#111827" oninput="window.updatePreviews()" /></div>
-                <div><label>Badge text colour</label><input id="card-badge-text" type="color" value="#ffffff" oninput="window.updatePreviews()" /></div>
-                <div><label>Badge star colour</label><input id="card-badge-star" type="color" value="#ffc700" oninput="window.updatePreviews()" /></div>
+                <div><label>Badge background</label><input id="card-badge-bg" class="premium-input color-text" type="text" value="#111827" oninput="window.updatePreviews()" /></div>
+                <div><label>Badge text colour</label><input id="card-badge-text" class="premium-input color-text" type="text" value="#ffffff" oninput="window.updatePreviews()" /></div>
+                <div><label>Badge star colour</label><input id="card-badge-star" class="premium-input color-text" type="text" value="#ffc700" oninput="window.updatePreviews()" /></div>
                 <div><label>Badge radius (px)</label><input id="card-badge-radius" class="premium-input" type="number" value="999" min="0" max="999" oninput="window.updatePreviews()" /></div>
               </div>
               <p><label><input id="card-count" type="checkbox" checked onchange="window.updatePreviews()" /> Show Count</label></p>
@@ -592,6 +665,50 @@
       <section id="v-loyalty" class="view"><h2 class="page-title">Loyalty</h2><div class="panel lock-box"><h3>Loyalty module placeholder</h3><p class="muted">Reserved for points, tiers, rewards, and merchant loyalty settings. The module is intentionally inactive while the foundation is secured.</p></div></section>
       <section id="v-referrals" class="view"><h2 class="page-title">Referrals</h2><div class="panel lock-box"><h3>Referrals module placeholder</h3><p class="muted">Reserved for referral tracking, advocate links, friend offers, and attribution. The module is intentionally inactive while the foundation is secured.</p></div></section>
 
+
+      <section id="v-docs" class="view">
+        <h2 class="page-title">Documentation</h2>
+        <div class="panel">
+          <div class="docs-tabs" role="tablist">
+            <button type="button" class="docs-tab-btn active" data-doc-tab="reviews" onclick="window.docsTab('reviews')">Reviews</button>
+            <button type="button" class="docs-tab-btn" data-doc-tab="messaging" onclick="window.docsTab('messaging')">Messaging</button>
+            <button type="button" class="docs-tab-btn" data-doc-tab="storefront" onclick="window.docsTab('storefront')">Storefront</button>
+            <button type="button" class="docs-tab-btn" data-doc-tab="security" onclick="window.docsTab('security')">Security &amp; Verification</button>
+            <button type="button" class="docs-tab-btn" data-doc-tab="future" onclick="window.docsTab('future')">Future Products</button>
+          </div>
+
+          <div id="docs-reviews" class="docs-pane active">
+            <details class="doc-card" open><summary>Review Manager</summary><div class="doc-card-body"><p>Manage every review from one place. Reviews can be accepted, held, rejected, trashed, restored, or replied to.</p><ul><li><strong>Public reply:</strong> shown below the review on the storefront.</li><li><strong>Private note:</strong> internal only and never returned by public APIs.</li><li><strong>Trash:</strong> hides reviews immediately and keeps them until the configured retention period expires.</li></ul></div></details>
+            <details class="doc-card"><summary>Approval rules</summary><div class="doc-card-body"><p>Auto-approval only runs after the review has passed source and verification checks. Test reviews cannot be published, even manually.</p><ul><li>Verified-purchase auto-approval only accepts signed request, import, or manual verification.</li><li>Unsigned storefront reviews stay unverified.</li><li>Low-star reviews remain pending if below your threshold.</li></ul></div></details>
+            <details class="doc-card"><summary>Conditional sliders</summary><div class="doc-card-body"><p>Conditional sliders appear when a product matches a tag or metafield rule. Scores are optional and are only saved when the customer moves the slider.</p></div></details>
+          </div>
+
+          <div id="docs-messaging" class="docs-pane">
+            <details class="doc-card" open><summary>Email Builder</summary><div class="doc-card-body"><p>Build a customer-friendly review request email, preview it, then either send a test email or copy the Shopify Flow HTML.</p><ul><li>Test sends are tracked as test campaigns.</li><li>Open and click tracking are added automatically to test emails.</li><li>Shopify Flow HTML is collapsible because it is only needed when pasting into Flow.</li></ul></div></details>
+            <details class="doc-card"><summary>Review Page Tester</summary><div class="doc-card-body"><p>Create reusable test scenarios without placing Shopify orders. Saved templates can be reused and removed later.</p></div></details>
+            <details class="doc-card"><summary>Campaign analytics</summary><div class="doc-card-body"><p>Tracks sent, opens, and clicks by campaign token where available. Older events without a sent event are labelled so merchants can understand why opens may appear before sent counts.</p></div></details>
+          </div>
+
+          <div id="docs-storefront" class="docs-pane">
+            <details class="doc-card" open><summary>Product widget</summary><div class="doc-card-body"><p>Displays the rating snapshot, customer consensus, review list, public merchant replies, and the write-review modal.</p></div></details>
+            <details class="doc-card"><summary>Product card stars and badge</summary><div class="doc-card-body"><p>Small rating displays for collection cards and product summaries. Badge colours, radius, count visibility, and star colour are controlled in Visual Customiser.</p></div></details>
+            <details class="doc-card"><summary>Global carousel</summary><div class="doc-card-body"><p>Reserved for global review display across the store. It uses accepted, non-test, non-deleted reviews only.</p></div></details>
+          </div>
+
+          <div id="docs-security" class="docs-pane">
+            <details class="doc-card" open><summary>Verified purchase logic</summary><div class="doc-card-body"><div class="doc-note"><strong>Verified is now server-controlled.</strong> Public requests cannot set themselves as verified.</div><ul><li><strong>Storefront modal:</strong> always starts unverified.</li><li><strong>Signed review-request link:</strong> verified only when the token signature, shop, email, order, product, and expiry pass.</li><li><strong>Imported reviews:</strong> can be marked verified by the merchant and are labelled as imported.</li><li><strong>Manual admin verification:</strong> sets a manual verification note.</li><li><strong>Test links:</strong> are never verified and never public.</li></ul></div></details>
+            <details class="doc-card"><summary>Review-link expiry and one-time use</summary><div class="doc-card-body"><p>Signed review tokens include an expiry and are marked as used after the first successful submission. Reuse returns an error.</p></div></details>
+            <details class="doc-card"><summary>Auto-approval</summary><div class="doc-card-body"><p>Auto-approval checks rating, test status, deletion status, and verification status. If “Verified Purchases Only” is selected, unsigned reviews stay pending.</p></div></details>
+          </div>
+
+          <div id="docs-future" class="docs-pane">
+            <details class="doc-card" open><summary>Discounts</summary><div class="doc-card-body"><p>Reserved for review-linked offers, discount rules, and Shopify Function-backed incentives.</p></div></details>
+            <details class="doc-card"><summary>Loyalty</summary><div class="doc-card-body"><p>Reserved for points, tiers, rewards, and merchant loyalty settings.</p></div></details>
+            <details class="doc-card"><summary>Referrals</summary><div class="doc-card-body"><p>Reserved for referral links, friend offers, advocate tracking, and attribution.</p></div></details>
+          </div>
+        </div>
+      </section>
+
       <section id="v-manual" class="view">
         <h2 class="page-title">Manual Installation</h2>
         <div class="panel">
@@ -610,12 +727,12 @@
     </main>
   </div>
 
-  <script src="/admin.js?v=secure-5"></script>
-  <script src="/admin-review-manager-enhancements.js?v=secure-5"></script>
-  <script src="/nectar-score-notch-fix.js?v=secure-5"></script>
-  <script src="/admin-dashboard-analytics.js?v=secure-5"></script>
-  <script src="/admin-email-tracking-enhancer.js?v=secure-5"></script>
-  <script src="/admin-messaging-campaigns.js?v=secure-5"></script>
+  <script src="/admin.js?v=secure-6"></script>
+  <script src="/admin-review-manager-enhancements.js?v=secure-6"></script>
+  <script src="/nectar-score-notch-fix.js?v=secure-6"></script>
+  <script src="/admin-dashboard-analytics.js?v=secure-6"></script>
+  <script src="/admin-email-tracking-enhancer.js?v=secure-6"></script>
+  <script src="/admin-messaging-campaigns.js?v=secure-6"></script>
   <script src="/admin-help-drawer.js" defer></script>
 </body>
 </html>

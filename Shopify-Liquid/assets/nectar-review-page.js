@@ -365,7 +365,7 @@
       const res = await fetch(`${API}/reviews/bulk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shopDomain: SHOP_DOMAIN, orderId: orderData.orderId, email: submitEmail, customerName: orderData.customerName, reviews: payloadReviews, isPreview: orderData.preview || params.get('test') === '1' }),
+        body: JSON.stringify({ shopDomain: SHOP_DOMAIN, orderId: orderData.orderId, email: submitEmail, customerName: orderData.customerName, reviews: payloadReviews, reviewToken: params.get('token') || params.get('reviewToken') || '', isPreview: orderData.preview || params.get('test') === '1' }),
       });
       if (!res.ok) throw new Error('Submit failed');
       show('success');

@@ -70,7 +70,7 @@
       .nr-rating-bar { height:7px; border-radius:999px; background:#e4eaf2; overflow:hidden; }
       .nr-rating-fill { display:block; height:100%; border-radius:999px; background:#111; min-width:0; }
       .nr-consensus-bar { position:relative; height:12px; border-radius:999px; background:#e6ebf1; overflow:hidden; box-shadow:inset 0 1px 2px rgba(15,23,42,.06); }
-      .nr-consensus-notch { position:absolute; top:50%; transform:translate(-50%,-50%); width:24px; height:8px; border-radius:3px; background:#111827; box-shadow:0 1px 2px rgba(15,23,42,.22); }
+      .nr-consensus-fill { position:absolute; left:0; top:0; bottom:0; border-radius:999px; background:#111827; display:block; } .nr-consensus-notch { display:none; }
       .nr-review-card { position:relative; padding:32px; border:1px solid var(--nr-border); background:#fff; margin-bottom:20px; }
       .nr-review-top { display:flex; justify-content:space-between; gap:24px; align-items:flex-start; margin-bottom:18px; }
       .nr-author { margin:0; font-size:17px; font-weight:950; }
@@ -81,8 +81,8 @@
       .nr-attrs { display:grid; grid-template-columns:repeat(2,minmax(180px,1fr)); gap:18px 40px; margin-top:24px; padding-top:24px; border-top:1px dashed #e8edf4; }
       .nr-attr-head { display:flex; justify-content:space-between; gap:12px; margin-bottom:9px; color:#667085; text-transform:uppercase; letter-spacing:.04em; font-size:12px; font-weight:950; }
       .nr-attr-bar { position:relative; height:12px; border-radius:999px; background:#e6ebf1; overflow:hidden; box-shadow:inset 0 1px 2px rgba(15,23,42,.06); }
-      .nr-attr-fill { display:none; }
-      .nr-attr-notch { position:absolute; top:50%; transform:translate(-50%,-50%); display:block; width:24px; height:8px; border-radius:3px; background:#111827; box-shadow:0 1px 2px rgba(15,23,42,.22); }
+      .nr-attr-fill { position:absolute; left:0; top:0; bottom:0; border-radius:999px; background:#111827; display:block; }
+      .nr-attr-notch { display:none; }
       .nr-public-reply{margin-top:18px;padding:14px 16px;border-radius:12px;background:#f8fafc;border:1px solid #e5eaf1;color:#344054}.nr-public-reply strong{display:block;margin-bottom:5px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:#667085}.nr-public-reply p{margin:0;line-height:1.55}.nr-empty { padding:32px; border:1px solid var(--nr-border); background:#fff; color:var(--nr-muted); text-align:center; }
       .nr-modal-backdrop { position:fixed; inset:0; z-index:2147483000; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(15,23,42,.48); }
       .nr-modal-backdrop.active { display:flex; }
@@ -153,7 +153,7 @@
           <p class="nr-section-kicker">Customer Consensus</p>
           ${attrs.length ? attrs.map(([key, value]) => {
             const val = Math.max(0, Math.min(10, Number(value || 0)));
-            return `<div class="nr-consensus-row"><span>${escapeHtml(key)}</span><div class="nr-consensus-bar"><span class="nr-consensus-notch" style="left:${Math.max(4, Math.min(96, val * 10))}%"></span></div><span>${val.toFixed(val % 1 ? 1 : 0)}/10</span></div>`;
+            return `<div class="nr-consensus-row"><span>${escapeHtml(key)}</span><div class="nr-consensus-bar"><span class="nr-consensus-fill" style="width:${Math.max(0, Math.min(100, val * 10))}%"></span></div><span>${val.toFixed(val % 1 ? 1 : 0)}/10</span></div>`;
           }).join('') : '<p class="nr-note">Consensus sliders will appear here when reviews include attributes.</p>'}
         </div>
       </div>`;
@@ -172,7 +172,7 @@
         <p class="nr-comment">${escapeHtml(review.comment || '')}</p>${review.reply ? `<div class="nr-public-reply"><strong>Store reply</strong><p>${escapeHtml(review.reply)}</p></div>` : ''}
         ${attrs.length ? `<div class="nr-attrs">${attrs.map(([key, raw]) => {
           const val = Math.max(0, Math.min(10, Number(raw || 0)));
-          return `<div><div class="nr-attr-head"><span>${escapeHtml(key)}</span><strong>${val}/10</strong></div><div class="nr-attr-bar"><span class="nr-attr-notch" style="left:${Math.max(4, Math.min(96, val * 10))}%"></span></div></div>`;
+          return `<div><div class="nr-attr-head"><span>${escapeHtml(key)}</span><strong>${val}/10</strong></div><div class="nr-attr-bar"><span class="nr-attr-fill" style="width:${Math.max(0, Math.min(100, val * 10))}%"></span></div></div>`;
         }).join('')}</div>` : ''}
       </article>`;
   }

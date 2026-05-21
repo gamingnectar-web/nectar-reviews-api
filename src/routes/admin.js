@@ -7,6 +7,7 @@ const { cleanText, cleanEmail, clampNumber, cleanReviewStatus } = require('../ut
 const { encryptSecret, decryptSecret } = require('../utils/crypto');
 const { publicEmailSettings } = require('../utils/emailSettings');
 const { shopifyFetch, shopifyFetchOptional, getAccessTokenForShop, buildInstallUrl } = require('../utils/shopify');
+const { createReviewToken } = require('../utils/reviewTokens');
 
 const router = express.Router();
 
@@ -78,6 +79,27 @@ async function buildCampaignAnalytics(shopDomain) {
   };
 }
 
+
+router.post('/review-tokens', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const body = req.body || {};
+    const token = createReviewToken({
+      shopDomain,
+      email: cleanEmail(body.email),
+      customerName: cleanText(body.customerName || body.name, 120),
+      orderId: cleanText(body.orderId || body.order, 120),
+      products: Array.isArray(body.products) ? body.products : [],
+      expiresDays: clampNumber(body.expiresDays, 1, 90, 30),
+      testMode: Boolean(body.testMode || body.isPreview),
+    });
+    if (!token) return res.status(500).json({ error: 'Could not create signed review token. Check EMAIL_CREDENTIAL_SECRET or SHOPIFY_API_SECRET.' });
+    return res.json({ ok: true, token });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/session', async (req, res) => {
   const shop = await ensureShop(shopDomainFromReq(req));
   return res.json({
@@ -126,7 +148,15 @@ router.patch('/reviews/:id', async (req, res, next) => {
     }
     if (Object.prototype.hasOwnProperty.call(req.body, 'reply')) allowed.reply = cleanText(req.body.reply, 3000);
     if (Object.prototype.hasOwnProperty.call(req.body, 'replyVisibility')) allowed.replyVisibility = ['public', 'private'].includes(req.body.replyVisibility) ? req.body.replyVisibility : 'public';
-    if (Object.prototype.hasOwnProperty.call(req.body, 'verifiedPurchase')) allowed.verifiedPurchase = Boolean(req.body.verifiedPurchase);
+    if (Object.prototype.hasOwnProperty.call(req.body, 'verifiedPurchase')) {
+      allowed.verifiedPurchase = Boolean(req.body.verifiedPurchase);
+      if (allowed.verifiedPurchase && !Object.prototype.hasOwnProperty.call(req.body, 'verificationNote')) {
+        allowed.verificationNote = 'Manually verified by admin';
+      }
+      if (!allowed.verifiedPurchase && !Object.prototype.hasOwnProperty.call(req.body, 'verificationNote')) {
+        allowed.verificationNote = '';
+      }
+    }
     if (Object.prototype.hasOwnProperty.call(req.body, 'verificationNote')) allowed.verificationNote = cleanText(req.body.verificationNote, 250);
     if (Object.prototype.hasOwnProperty.call(req.body, 'isDeleted')) {
       allowed.isDeleted = Boolean(req.body.isDeleted);
@@ -171,6 +201,7 @@ router.post('/reviews/import', async (req, res, next) => {
         source: 'import',
         status: 'accepted',
         verifiedPurchase: Boolean(review.verifiedPurchase),
+        verificationNote: Boolean(review.verifiedPurchase) ? 'Imported by merchant' : '',
         createdAt: review.createdAt ? new Date(review.createdAt) : new Date(),
       };
     }).filter((review) => review.itemId && review.rating);

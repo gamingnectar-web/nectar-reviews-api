@@ -112,6 +112,18 @@ window.tab = function(id) {
   if (['v-discounts', 'v-loyalty', 'v-referrals'].includes(id)) window.loadModules();
 };
 
+
+window.docsTab = function(name) {
+  document.querySelectorAll('#v-docs .docs-tab-btn').forEach((btn) => btn.classList.toggle('active', btn.dataset.docTab === name));
+  document.querySelectorAll('#v-docs .docs-pane').forEach((pane) => pane.classList.toggle('active', pane.id === `docs-${name}`));
+};
+
+window.reviewManagerTab = function(name) {
+  document.querySelectorAll('#v-mgr .admin-sub-tab').forEach((btn) => btn.classList.toggle('active', btn.dataset.reviewTab === name));
+  document.querySelectorAll('#v-mgr .mgr-pane').forEach((pane) => pane.classList.toggle('active', pane.id === `mgr-pane-${name}`));
+  if (name === 'trash') window.renderLists();
+};
+
 window.subTab = function(controlId, previewId) {
   document.querySelectorAll('.sub-view, .sub-tab-btn').forEach((el) => el.classList.remove('active'));
   document.getElementById(controlId)?.classList.add('active');
@@ -332,6 +344,7 @@ window.toggleCard = function(button) {
   const collapsed = body.style.display === 'none';
   body.style.display = collapsed ? '' : 'none';
   button.textContent = collapsed ? '−' : '+';
+  button.classList.toggle('is-collapsed', !collapsed);
 };
 
 
@@ -353,7 +366,7 @@ window.buildCard = function(r, isTrash) {
       attrHtml += `
         <div class="admin-attr-item">
           <div class="admin-attr-head"><span>${escapeHtml(key)}</span><strong>${escapeHtml(val)}/10</strong></div>
-          <div class="admin-attr-bar"><span class="admin-attr-notch" style="left:${Math.max(4, Math.min(96, pct))}%"></span></div>
+          <div class="admin-attr-bar"><span class="admin-attr-fill" style="width:${pct}%"></span></div>
         </div>`;
     }
     attrHtml += '</div>';
@@ -395,9 +408,9 @@ window.buildCard = function(r, isTrash) {
       <div style="width:100%; margin-top:15px; border-top:1px dashed var(--border); padding-top:15px;">
         <button class="reply-toggle" onclick="window.toggleReplyBox('${r._id}')">💬 Reply to Customer</button>
         <div id="reply-box-${r._id}" class="reply-panel" style="display:${r.reply ? 'block' : 'none'};">
-          <div class="reply-toolbar"><strong>Reply to customer</strong><label class="reply-visibility">Visibility <select id="reply-vis-${r._id}"><option value="public" ${(r.replyVisibility || 'public') === 'public' ? 'selected' : ''}>Public</option><option value="private" ${r.replyVisibility === 'private' ? 'selected' : ''}>Private note</option></select></label></div>
+          <div class="reply-toolbar"><strong>Reply to customer</strong></div>
           <textarea id="reply-text-${r._id}" class="reply-input" rows="3" placeholder="Write a reply. Public replies are shown under the review; private notes stay inside admin.">${escapeHtml(r.reply || '')}</textarea>
-          <div style="display:flex;justify-content:flex-end;margin-top:12px;"><button id="reply-btn-${r._id}" class="post-btn" onclick="window.saveReply('${r._id}')">Save Reply</button></div>
+          <div class="reply-action-row"><select id="reply-vis-${r._id}" class="reply-vis-select" aria-label="Reply visibility"><option value="public" ${(r.replyVisibility || 'public') === 'public' ? 'selected' : ''}>Public</option><option value="private" ${r.replyVisibility === 'private' ? 'selected' : ''}>Private note</option></select><button id="reply-btn-${r._id}" class="post-btn" onclick="window.saveReply('${r._id}')">Save Reply</button></div>
         </div>
       </div>
     </div>`;
@@ -494,14 +507,14 @@ window.restoreAllTrash = async function() {
 
 window.saveReply = async function(id) {
   const btn = document.getElementById(`reply-btn-${id}`);
-  const originalText = btn?.innerText || 'Publish Reply';
-  if (btn) { btn.innerText = 'Publishing...'; btn.disabled = true; }
+  const originalText = btn?.innerText || 'Save Reply';
+  if (btn) { btn.innerText = 'Saving...'; btn.disabled = true; }
   const text = document.getElementById(`reply-text-${id}`)?.value || '';
   const visibility = document.getElementById(`reply-vis-${id}`)?.value || 'public';
   try {
     await window.patchReview(id, { reply: text, replyVisibility: visibility });
     if (btn) btn.innerText = 'Published!';
-    window.showToast('Reply published successfully');
+    window.showToast(visibility === 'private' ? 'Private note saved' : 'Public reply saved');
     setTimeout(() => { if (btn) { btn.innerText = originalText; btn.disabled = false; } }, 1500);
   } catch (error) {
     if (btn) btn.innerText = 'Error saving';
@@ -851,7 +864,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   enhanceModernColorPickers();
-  injectReviewManagerTabs();
   window.load();
-  setTimeout(() => { enhanceModernColorPickers(); window.autoResizeReplyBoxes?.(); injectReviewManagerTabs(); }, 400);
+  setTimeout(() => { enhanceModernColorPickers(); window.autoResizeReplyBoxes?.(); }, 400);
 });
+
+
+window.enableAutoGrowTextareas = function() {
+  document.querySelectorAll('textarea.reply-input').forEach((ta) => {
+    if (ta.dataset.autogrowBound) return;
+    ta.dataset.autogrowBound = '1';
+    const grow = () => { ta.style.height = 'auto'; ta.style.height = `${Math.max(96, ta.scrollHeight)}px`; };
+    ta.addEventListener('input', grow);
+    grow();
+  });
+};
+window.autoResizeReplyBoxes = window.enableAutoGrowTextareas;

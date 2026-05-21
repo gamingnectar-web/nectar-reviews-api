@@ -3,6 +3,7 @@ const { Review, Settings, CampaignEvent } = require('../models');
 const { cleanShopDomain, isValidShopDomain, cleanText, cleanEmail, clampNumber, getClientIp } = require('../utils/validation');
 const { hashValue } = require('../utils/crypto');
 const { shopifyFetchOptional } = require('../utils/shopify');
+const { verifyReviewToken, productMatchesToken, normaliseProduct } = require('../utils/reviewTokens');
 
 const router = express.Router();
 
@@ -53,6 +54,31 @@ function publicSettings(config) {
   };
 }
 
+
+
+function isTestSubmission(body = {}, query = {}) {
+  return Boolean(body.isTestReview || body.testMode || body.isPreview || query.preview === '1' || query.test === '1' || query.testMode === '1');
+}
+
+function resolveVerification({ token, shopDomain, email, orderId, itemId, isTest = false }) {
+  if (!token || isTest) {
+    return {
+      verifiedPurchase: false,
+      tokenValid: false,
+      tokenPayload: null,
+      verificationNote: isTest ? 'Test review; never verified or published' : '',
+    };
+  }
+  const verified = verifyReviewToken(token, { shopDomain, email, orderId, itemId });
+  if (!verified.ok) return { verifiedPurchase: false, tokenValid: false, tokenPayload: null, error: verified.error, verificationNote: '' };
+  if (verified.payload.testMode) return { verifiedPurchase: false, tokenValid: true, tokenPayload: verified.payload, verificationNote: 'Signed test link; never verified or published' };
+  return {
+    verifiedPurchase: true,
+    tokenValid: true,
+    tokenPayload: verified.payload,
+    verificationNote: 'Verified by signed review request link',
+  };
+}
 
 function liveReviewMatch(extra = {}) {
   return {
@@ -225,14 +251,21 @@ router.post('/reviews', async (req, res, next) => {
     const email = cleanEmail(req.body.email);
     if (!email) return res.status(400).json({ error: 'A valid email is required to submit a review.' });
 
-    const reviewToken = cleanText(req.body.reviewToken || req.query.token, 200);
-    if (reviewToken) {
-      const used = await Review.findOne({ shopDomain, reviewToken, reviewTokenUsedAt: { $ne: null } }).lean();
+    const reviewToken = cleanText(req.body.reviewToken || req.query.token, 3000);
+    const isTest = isTestSubmission(req.body, req.query);
+    const orderId = cleanText(req.body.orderId, 120);
+    const verification = resolveVerification({ token: reviewToken, shopDomain, email, orderId, itemId, isTest });
+    if (reviewToken && !isTest && !verification.tokenValid) {
+      return res.status(400).json({ error: verification.error || 'Invalid review verification link.' });
+    }
+    const reviewTokenKey = verification.tokenValid ? hashValue(reviewToken) : '';
+    if (verification.tokenValid) {
+      const used = await Review.findOne({ shopDomain, reviewToken: reviewTokenKey, reviewTokenUsedAt: { $ne: null } }).lean();
       if (used) return res.status(409).json({ error: 'This review link has already been used.' });
     }
 
     const config = await getSettings(shopDomain);
-    const verifiedPurchase = Boolean(req.body.verifiedPurchase);
+    const verifiedPurchase = verification.verifiedPurchase;
     const payload = {
       shopDomain,
       itemId,
@@ -246,13 +279,13 @@ router.post('/reviews', async (req, res, next) => {
       productTags: Array.isArray(req.body.productTags) ? req.body.productTags.map((tag) => cleanText(tag, 80)).filter(Boolean) : [],
       source: ['website', 'email', 'import'].includes(req.body.source) ? req.body.source : 'website',
       verifiedPurchase,
-      verificationNote: verifiedPurchase ? 'Marked as verified by review source' : '',
-      orderId: cleanText(req.body.orderId, 120),
-      reviewToken,
-      reviewTokenUsedAt: reviewToken ? new Date() : null,
-      status: (Boolean(req.body.isTestReview) || Boolean(req.body.testMode)) ? 'spam' : shouldAutoApprove(config, { rating, verifiedPurchase }),
-      isTestReview: Boolean(req.body.isTestReview) || Boolean(req.body.testMode),
-      testMode: Boolean(req.body.testMode),
+      verificationNote: verification.verificationNote,
+      orderId,
+      reviewToken: reviewTokenKey,
+      reviewTokenUsedAt: verification.tokenValid ? new Date() : null,
+      status: isTest ? 'spam' : shouldAutoApprove(config, { rating, verifiedPurchase }),
+      isTestReview: isTest,
+      testMode: Boolean(req.body.testMode || req.body.isPreview || req.query.testMode === '1'),
       testLabel: cleanText(req.body.testLabel, 80),
     };
 
@@ -305,19 +338,30 @@ router.post('/reviews/bulk', async (req, res, next) => {
     const incoming = Array.isArray(req.body.reviews) ? req.body.reviews : [];
     if (!incoming.length) return res.status(400).json({ error: 'No reviews supplied.' });
     if (incoming.length > 50) return res.status(400).json({ error: 'Bulk review limit is 50 at a time.' });
-    const reviewToken = cleanText(req.body.reviewToken || req.query.token, 200);
-    if (reviewToken) {
-      const used = await Review.findOne({ shopDomain, reviewToken, reviewTokenUsedAt: { $ne: null } }).lean();
-      if (used) return res.status(409).json({ error: 'This review link has already been used.' });
-    }
+    const reviewToken = cleanText(req.body.reviewToken || req.query.token, 3000);
+    const isTest = isTestSubmission(req.body, req.query);
     const submissionEmail = cleanEmail(req.body.email);
     if (!submissionEmail) return res.status(400).json({ error: 'A valid email is required to submit reviews.' });
+    const orderId = cleanText(req.body.orderId || req.body.order, 120);
+    let tokenPayload = null;
+    let tokenValid = false;
+    let reviewTokenKey = '';
+    if (reviewToken && !isTest) {
+      const verified = verifyReviewToken(reviewToken, { shopDomain, email: submissionEmail, orderId });
+      if (!verified.ok) return res.status(400).json({ error: verified.error || 'Invalid review verification link.' });
+      tokenValid = true;
+      tokenPayload = verified.payload;
+      reviewTokenKey = hashValue(reviewToken);
+      const used = await Review.findOne({ shopDomain, reviewToken: reviewTokenKey, reviewTokenUsedAt: { $ne: null } }).lean();
+      if (used) return res.status(409).json({ error: 'This review link has already been used.' });
+    }
     const config = await getSettings(shopDomain);
     const docs = incoming.map((review) => {
       const itemId = cleanText(review.itemId || review.productId, 160);
       const rating = clampNumber(review.rating, 1, 5, 0);
       if (!itemId || !rating) return null;
-      const verifiedPurchase = review.verifiedPurchase !== false;
+      const productIsInSignedRequest = tokenValid && productMatchesToken(itemId, tokenPayload);
+      const verifiedPurchase = Boolean(productIsInSignedRequest && !tokenPayload?.testMode && !isTest);
       return {
         shopDomain,
         itemId,
@@ -331,14 +375,14 @@ router.post('/reviews/bulk', async (req, res, next) => {
         productTags: Array.isArray(review.productTags) ? review.productTags.map((tag) => cleanText(tag, 80)).filter(Boolean) : [],
         source: 'email',
         verifiedPurchase,
-        verificationNote: verifiedPurchase ? 'Submitted through review request page' : '',
+        verificationNote: verifiedPurchase ? 'Verified by signed review request link' : '',
         orderId: cleanText(req.body.orderId || review.orderId, 120),
-        reviewToken,
-        reviewTokenUsedAt: reviewToken ? new Date() : null,
-        status: Boolean(req.body.isPreview || req.body.testMode || review.isTestReview || review.testMode) ? 'spam' : shouldAutoApprove(config, { rating, verifiedPurchase }),
-        isTestReview: Boolean(req.body.isPreview || req.body.testMode || review.isTestReview || review.testMode),
-        testMode: Boolean(req.body.isPreview || req.body.testMode || review.testMode),
-        testLabel: Boolean(req.body.isPreview || req.body.testMode || review.testMode) ? 'Review page test' : '',
+        reviewToken: reviewTokenKey,
+        reviewTokenUsedAt: tokenValid ? new Date() : null,
+        status: Boolean(isTest || review.isTestReview || review.testMode) ? 'spam' : shouldAutoApprove(config, { rating, verifiedPurchase }),
+        isTestReview: Boolean(isTest || review.isTestReview || review.testMode),
+        testMode: Boolean(isTest || review.testMode),
+        testLabel: Boolean(isTest || review.isTestReview || review.testMode) ? 'Review page test' : '',
       };
     }).filter(Boolean);
     if (!docs.length) return res.status(400).json({ error: 'No valid reviews supplied.' });
@@ -353,15 +397,30 @@ router.get('/magic-link/order', async (req, res, next) => {
   try {
     const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop);
     if (!shopDomain || !isValidShopDomain(shopDomain)) return res.status(400).json({ error: 'Valid shopDomain is required.' });
-    const products = productsFromQuery(req.query);
+    const reviewToken = cleanText(req.query.token || req.query.reviewToken, 3000);
+    let tokenPayload = null;
+    let tokenVerified = false;
+    if (reviewToken) {
+      const verified = verifyReviewToken(reviewToken, { shopDomain, email: cleanEmail(req.query.email), orderId: cleanText(req.query.orderId || req.query.order, 120) });
+      if (verified.ok) {
+        tokenVerified = true;
+        tokenPayload = verified.payload;
+      } else if (req.query.preview !== '1' && req.query.test !== '1') {
+        return res.status(400).json({ error: verified.error || 'Invalid review verification link.' });
+      }
+    }
+    const queryProducts = productsFromQuery(req.query);
+    const tokenProducts = tokenPayload?.products?.map(normaliseProduct).filter((product) => product.id) || [];
+    const products = queryProducts.length ? queryProducts : tokenProducts;
     if (!products.length) return res.status(404).json({ error: 'No review products were included in this link.' });
     return res.json({
-      orderId: cleanText(req.query.orderId || req.query.order || '1001', 120),
-      customerName: cleanText(req.query.customer || req.query.name || 'Customer', 120),
-      customerEmail: cleanEmail(req.query.email),
+      orderId: cleanText(tokenPayload?.orderId || req.query.orderId || req.query.order || '1001', 120),
+      customerName: cleanText(tokenPayload?.customerName || req.query.customer || req.query.name || 'Customer', 120),
+      customerEmail: cleanEmail(tokenPayload?.email || req.query.email),
       products,
       delivered: true,
-      preview: req.query.preview === '1' || req.query.preview === 'true' || req.query.test === '1',
+      verifiedLink: tokenVerified && !tokenPayload?.testMode,
+      preview: tokenPayload?.testMode || req.query.preview === '1' || req.query.preview === 'true' || req.query.test === '1',
       support: {},
     });
   } catch (error) {
