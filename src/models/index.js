@@ -10,6 +10,7 @@ const reviewSchema = new mongoose.Schema({
   headline: { type: String, default: '' },
   comment: { type: String, default: '' },
   reply: { type: String, default: '' },
+  replyVisibility: { type: String, enum: ['public', 'private'], default: 'public' },
   attributes: { type: Map, of: Number },
   productTags: { type: Array, default: [] },
   source: { type: String, enum: ['website', 'email', 'import'], default: 'website' },

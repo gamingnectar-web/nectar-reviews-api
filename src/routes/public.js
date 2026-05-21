@@ -2,6 +2,7 @@ const express = require('express');
 const { Review, Settings, CampaignEvent } = require('../models');
 const { cleanShopDomain, isValidShopDomain, cleanText, cleanEmail, clampNumber, getClientIp } = require('../utils/validation');
 const { hashValue } = require('../utils/crypto');
+const { shopifyFetchOptional } = require('../utils/shopify');
 
 const router = express.Router();
 
@@ -74,7 +75,8 @@ function normaliseReviewForPublic(review) {
     rating: plain.rating,
     headline: plain.headline,
     comment: plain.comment,
-    reply: plain.reply,
+    reply: plain.replyVisibility === 'private' ? '' : plain.reply,
+    replyVisibility: plain.replyVisibility || 'public',
     attributes: plain.attributes,
     productTags: plain.productTags || [],
     source: plain.source,
@@ -440,6 +442,33 @@ router.get('/campaign/click', async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+
+
+router.get('/products/search', async (req, res, next) => {
+  try {
+    const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop || req.headers['x-shop-domain'] || '');
+    if (!shopDomain || !isValidShopDomain(shopDomain)) return res.status(400).json({ error: 'Valid shopDomain is required.' });
+    const queryText = cleanText(req.query.q, 120).toLowerCase();
+    if (!queryText) return res.json({ products: [] });
+    const data = await shopifyFetchOptional(`/admin/api/${process.env.SHOPIFY_API_VERSION || '2026-07'}/products.json?limit=250&fields=id,title,handle,image,variants,tags`, { shopDomain });
+    if (!data) return res.json({ products: [], unavailable: true, requiresOauth: true, message: 'Connect this shop through Shopify OAuth to enable product search.' });
+    const products = (data.products || [])
+      .filter((product) => String(product.title || '').toLowerCase().includes(queryText) || String(product.handle || '').toLowerCase().includes(queryText) || String(product.id || '').includes(queryText))
+      .slice(0, 10)
+      .map((product) => ({
+        id: String(product.id || ''),
+        title: product.title || 'Product',
+        handle: product.handle || '',
+        image: product.image?.src || '',
+        variantId: product.variants?.[0]?.id ? String(product.variants[0].id) : '',
+        quantity: 1,
+        tags: typeof product.tags === 'string' ? product.tags.split(',').map((tag) => tag.trim()).filter(Boolean) : [],
+        metafields: {},
+      }));
+    return res.json({ products });
+  } catch (error) { next(error); }
 });
 
 module.exports = router;

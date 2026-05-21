@@ -54,7 +54,18 @@ async function buildCampaignAnalytics(shopDomain) {
     item.clickRate = item.sent ? Number(((item.click / item.sent) * 100).toFixed(1)) : 0;
   });
 
-  const sent = totals.sent || 0;
+  const inferredTokens = new Set(events.filter((event) => event.eventType !== 'sent').map((event) => event.token || `${event.campaign}:${event.email}:${event.orderId}`).filter(Boolean));
+  const rawSent = totals.sent || 0;
+  const sent = Math.max(rawSent, inferredTokens.size, totals.open ? 1 : 0);
+  totals.rawSent = rawSent;
+  totals.sent = sent;
+  Object.values(byCampaign).forEach((item) => {
+    const inferred = Math.max(item.sent || 0, item.open ? 1 : 0, item.click ? 1 : 0);
+    item.rawSent = item.sent || 0;
+    item.sent = inferred;
+    item.openRate = inferred ? Number(((item.open / inferred) * 100).toFixed(1)) : 0;
+    item.clickRate = inferred ? Number(((item.click / inferred) * 100).toFixed(1)) : 0;
+  });
   return {
     windowDays: 30,
     totals,
@@ -114,6 +125,7 @@ router.patch('/reviews/:id', async (req, res, next) => {
       allowed.status = status;
     }
     if (Object.prototype.hasOwnProperty.call(req.body, 'reply')) allowed.reply = cleanText(req.body.reply, 3000);
+    if (Object.prototype.hasOwnProperty.call(req.body, 'replyVisibility')) allowed.replyVisibility = ['public', 'private'].includes(req.body.replyVisibility) ? req.body.replyVisibility : 'public';
     if (Object.prototype.hasOwnProperty.call(req.body, 'verifiedPurchase')) allowed.verifiedPurchase = Boolean(req.body.verifiedPurchase);
     if (Object.prototype.hasOwnProperty.call(req.body, 'verificationNote')) allowed.verificationNote = cleanText(req.body.verificationNote, 250);
     if (Object.prototype.hasOwnProperty.call(req.body, 'isDeleted')) {

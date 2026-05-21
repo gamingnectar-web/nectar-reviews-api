@@ -307,6 +307,7 @@ window.renderLists = function() {
   if (mgrList) mgrList.innerHTML = active.length ? active.map((r) => window.buildCard(r, false)).join('') : '<div class="panel"><p>No reviews match this filter.</p></div>';
   if (trashList) trashList.innerHTML = trash.length ? trash.map((r) => window.buildCard(r, true)).join('') : '<div class="panel"><p>Trash is empty.</p></div>';
   window.renderTrashStats(trash);
+  window.autoResizeReplyBoxes?.();
 };
 
 window.renderTrashStats = function(trash) {
@@ -393,9 +394,10 @@ window.buildCard = function(r, isTrash) {
       </div>
       <div style="width:100%; margin-top:15px; border-top:1px dashed var(--border); padding-top:15px;">
         <button class="reply-toggle" onclick="window.toggleReplyBox('${r._id}')">💬 Reply to Customer</button>
-        <div id="reply-box-${r._id}" class="reply-panel" style="display:${r.reply ? 'block' : 'none'}; margin-top:15px;">
-          <textarea id="reply-text-${r._id}" class="reply-input" placeholder="Type your public reply...">${escapeHtml(r.reply || '')}</textarea>
-          <div style="text-align:right; margin-top:10px;"><button id="reply-btn-${r._id}" class="post-btn" onclick="window.saveReply('${r._id}')">Publish Reply</button></div>
+        <div id="reply-box-${r._id}" class="reply-panel" style="display:${r.reply ? 'block' : 'none'};">
+          <div class="reply-toolbar"><strong>Reply to customer</strong><label class="reply-visibility">Visibility <select id="reply-vis-${r._id}"><option value="public" ${(r.replyVisibility || 'public') === 'public' ? 'selected' : ''}>Public</option><option value="private" ${r.replyVisibility === 'private' ? 'selected' : ''}>Private note</option></select></label></div>
+          <textarea id="reply-text-${r._id}" class="reply-input" rows="3" placeholder="Write a reply. Public replies are shown under the review; private notes stay inside admin.">${escapeHtml(r.reply || '')}</textarea>
+          <div style="display:flex;justify-content:flex-end;margin-top:12px;"><button id="reply-btn-${r._id}" class="post-btn" onclick="window.saveReply('${r._id}')">Save Reply</button></div>
         </div>
       </div>
     </div>`;
@@ -495,8 +497,9 @@ window.saveReply = async function(id) {
   const originalText = btn?.innerText || 'Publish Reply';
   if (btn) { btn.innerText = 'Publishing...'; btn.disabled = true; }
   const text = document.getElementById(`reply-text-${id}`)?.value || '';
+  const visibility = document.getElementById(`reply-vis-${id}`)?.value || 'public';
   try {
-    await window.patchReview(id, { reply: text });
+    await window.patchReview(id, { reply: text, replyVisibility: visibility });
     if (btn) btn.innerText = 'Published!';
     window.showToast('Reply published successfully');
     setTimeout(() => { if (btn) { btn.innerText = originalText; btn.disabled = false; } }, 1500);
@@ -753,6 +756,90 @@ window.copyFlowCode = function() {
   window.showToast('Copied to clipboard!');
 };
 
+
+
+function autoResizeTextarea(textarea) {
+  if (!textarea) return;
+  textarea.style.height = 'auto';
+  textarea.style.height = `${Math.max(90, textarea.scrollHeight)}px`;
+}
+window.autoResizeReplyBoxes = function() {
+  document.querySelectorAll('.reply-input').forEach((textarea) => {
+    autoResizeTextarea(textarea);
+    if (textarea.dataset.autoresizeBound === 'true') return;
+    textarea.dataset.autoresizeBound = 'true';
+    textarea.addEventListener('input', () => autoResizeTextarea(textarea));
+  });
+};
+
+function enhanceModernColorPickers() {
+  const ids = ['style-primary','style-star','style-slider-track','style-slider-knob','card-badge-bg','card-badge-text','card-badge-star'];
+  ids.forEach((id) => {
+    const input = document.getElementById(id);
+    if (!input || input.dataset.modernColor === 'true') return;
+    const current = /^#[0-9a-f]{6}$/i.test(input.value) ? input.value : '#111827';
+    input.type = 'text';
+    input.value = current;
+    input.dataset.modernColor = 'true';
+    input.setAttribute('inputmode', 'text');
+    input.setAttribute('maxlength', '7');
+    const wrap = document.createElement('div');
+    wrap.className = 'nr-color-input-wrap';
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'nr-color-swatch-btn';
+    btn.style.setProperty('--swatch', input.value);
+    btn.setAttribute('aria-label', `Choose colour for ${id}`);
+    wrap.appendChild(btn);
+    input.addEventListener('input', () => { if (/^#[0-9a-f]{6}$/i.test(input.value)) { btn.style.setProperty('--swatch', input.value); window.updatePreviews?.(); } });
+    btn.addEventListener('click', () => openModernColorPicker(input, btn));
+  });
+}
+
+function openModernColorPicker(input, swatch) {
+  let modal = document.getElementById('nr-color-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'nr-color-modal';
+    modal.className = 'nr-color-modal-backdrop';
+    const palette = ['#111827','#000000','#ffffff','#ffc700','#f5a400','#005bd3','#008060','#d72c0d','#f97316','#7c3aed','#ec4899','#0ea5e9','#10b981','#64748b','#e6ebf1','#f8fafc'];
+    modal.innerHTML = `<div class="nr-color-modal" role="dialog" aria-modal="true"><h3>Choose colour</h3><p>Pick a brand colour or paste a hex value.</p><div class="nr-color-grid">${palette.map((c) => `<button type="button" class="nr-color-chip" data-colour="${c}" style="--chip:${c}" aria-label="${c}"></button>`).join('')}</div><div class="nr-color-modal-actions"><input id="nr-color-value" value="#111827"><button type="button" class="secondary-btn" data-close-colour>Cancel</button><button type="button" class="primary-btn" data-apply-colour>Apply</button></div></div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (event) => { if (event.target === modal || event.target.matches('[data-close-colour]')) modal.classList.remove('open'); });
+  }
+  const value = modal.querySelector('#nr-color-value');
+  value.value = /^#[0-9a-f]{6}$/i.test(input.value) ? input.value : '#111827';
+  modal.querySelectorAll('[data-colour]').forEach((chip) => chip.onclick = () => { value.value = chip.dataset.colour; });
+  modal.querySelector('[data-apply-colour]').onclick = () => {
+    const next = /^#[0-9a-f]{6}$/i.test(value.value) ? value.value : input.value;
+    input.value = next;
+    swatch.style.setProperty('--swatch', next);
+    modal.classList.remove('open');
+    window.updatePreviews?.();
+  };
+  modal.classList.add('open');
+}
+
+function injectReviewManagerTabs() {
+  const mgr = document.getElementById('v-mgr');
+  if (!mgr || mgr.dataset.tabsReady === 'true') return;
+  mgr.dataset.tabsReady = 'true';
+  const title = mgr.querySelector('.page-title');
+  const tabs = document.createElement('div');
+  tabs.className = 'review-manager-tabs';
+  tabs.innerHTML = '<button type="button" class="active" data-review-sub="reviews">Reviews</button><button type="button" data-review-sub="rules">Approval rules</button><button type="button" data-review-sub="trash">Trash</button>';
+  title?.after(tabs);
+  tabs.addEventListener('click', (event) => {
+    const btn = event.target.closest('button[data-review-sub]');
+    if (!btn) return;
+    tabs.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
+    if (btn.dataset.reviewSub === 'rules') window.tab('v-settings');
+    if (btn.dataset.reviewSub === 'trash') window.tab('v-trash');
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const labelInput = document.getElementById('attr-label');
   if (labelInput) {
@@ -763,5 +850,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+  enhanceModernColorPickers();
+  injectReviewManagerTabs();
   window.load();
+  setTimeout(() => { enhanceModernColorPickers(); window.autoResizeReplyBoxes?.(); injectReviewManagerTabs(); }, 400);
 });

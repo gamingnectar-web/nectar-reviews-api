@@ -106,8 +106,8 @@
           <div class="msg-grid">
             <div class="msg-stack">
               <div class="msg-card"><h3>Brand</h3><p>Keep this simple for Shopify Flow.</p><label>Brand logo URL</label><input id="msg-logo" type="url" placeholder="https://cdn.shopify.com/.../logo.png"><div class="msg-two"><div><label>Button colour</label><input id="msg-color" type="color" value="#111827"></div><div><label>Button radius</label><input id="msg-button-radius" type="number" min="0" max="40" value="8"></div></div><div class="msg-two"><div><label>Email background</label><input id="msg-bg-color" type="color" value="#f3f4f6"></div><div><label>Email card</label><input id="msg-card-color" type="color" value="#ffffff"></div></div></div>
-              <div class="msg-card"><h3>Email copy</h3><label>Heading</label><input id="msg-heading" type="text" value="How did we do?"><label>Intro line</label><input id="msg-intro" type="text" value='Hi {{ order.customer.firstName | default: "there" }}'><label>Body</label><textarea id="msg-body">We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?</textarea><label>Sign-off</label><input id="msg-signoff" type="text" value="Your feedback helps other customers make confident choices."></div>
-              <div class="msg-card"><h3>Review links</h3><div class="msg-two"><div><label>Link mode</label><select id="msg-link-mode"><option value="both">Order and products</option><option value="order">Order only</option><option value="products">Product buttons only</option></select></div><div><label>Review page handle</label><input id="msg-page-handle" type="text" value="leave-review"></div></div><div class="msg-two"><div><label>Main button text</label><input id="msg-main-button-text" type="text" value="Review Your Order"></div><div><label>Product button text</label><input id="msg-product-button-text" type="text" value="Review This Item"></div></div><div class="msg-two"><div><label>Wait after fulfilment</label><select id="msg-delay-days"><option value="7">7 days</option><option value="10">10 days</option><option value="14" selected>14 days</option><option value="21">21 days</option><option value="30">30 days</option></select></div><div><label>Flow action</label><input value="Send email" readonly></div></div><div class="msg-help">In Shopify Flow, add a Send email action, enable HTML, and paste the generated code.</div></div>
+              <div class="msg-card"><h3>Email copy</h3><label>Heading</label><input id="msg-heading" type="text" value="How did we do?"><label>Intro line</label><input id="msg-intro" type="text" value='Hi {{ order.customer.firstName | default: "there" }}'><label>Body</label><textarea id="msg-body">We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?</textarea><label>Sign-off</label><input id="msg-signoff" type="text" value="Your feedback helps other customers make confident choices."></div><div class="msg-card"><h3>Email sections</h3><p>Add simple extra blocks before or after the products without editing code.</p><div class="msg-builder-section-controls"><div class="msg-input-action"><select id="msg-section-template"><option value="notice">Notice box</option><option value="promo">Promo / offer box</option><option value="support">Support reminder</option><option value="text">Plain text section</option></select><button type="button" id="msg-add-section" class="msg-btn secondary">Add section</button></div><div id="msg-section-list" class="msg-products"></div></div></div>
+              <div class="msg-card msg-link-compact"><h3>Review link defaults</h3><div class="msg-two"><div><label>Link mode</label><select id="msg-link-mode"><option value="both">Order and products</option><option value="order">Order only</option><option value="products">Product buttons only</option></select></div><div><label>Review page handle</label><input id="msg-page-handle" type="text" value="leave-review"></div></div><div class="msg-two"><div><label>Main button text</label><input id="msg-main-button-text" type="text" value="Review Your Order"></div><div><label>Product button text</label><input id="msg-product-button-text" type="text" value="Review This Item"></div></div><div class="msg-two"><div><label>Wait after fulfilment</label><select id="msg-delay-days"><option value="7">7 days</option><option value="10">10 days</option><option value="14" selected>14 days</option><option value="21">21 days</option><option value="30">30 days</option></select></div><div><label>Flow action</label><input value="Send email" readonly></div></div><div class="msg-help">Advanced conditional wording now lives in the Settings tab.</div></div>
             </div>
             <div class="msg-stack">
               <div class="msg-card msg-preview-card"><div class="msg-preview-head"><div><h3>Customer email preview</h3><p>This is what the test email will look like. The Shopify Flow code is below.</p></div><div class="msg-toggle"><button type="button" id="msg-preview-desktop" class="active" data-preview="desktop">Desktop</button><button type="button" id="msg-preview-mobile" data-preview="mobile">Mobile</button></div></div><div class="msg-preview-stage"><div id="msg-preview-wrap" class="msg-preview-wrap"><div id="msg-email-preview"></div></div></div></div>
@@ -129,7 +129,7 @@
         <section id="msg-pane-delivery" class="msg-pane">
           <div class="msg-grid">
             <div class="msg-card"><h3>Email provider</h3><p>Connect a simple SMTP/app password sender for test emails and campaign automation.</p><div id="msg-provider-status-card" class="msg-provider-status"><span class="icon">!</span><div><strong>Email provider not checked yet</strong><span>Loading current connection status...</span></div></div><div class="msg-two"><div><label>Provider</label><select id="msg-smtp-provider"><option value="smtp">SMTP / app password</option><option value="gmail">Gmail app password</option><option value="outlook">Outlook SMTP</option></select></div><div><label>Enabled</label><select id="msg-smtp-enabled"><option value="true">Enabled</option><option value="false">Disabled</option></select></div></div><label>SMTP host</label><input id="msg-smtp-host" type="text" placeholder="smtp.gmail.com"><div class="msg-two"><div><label>Port</label><input id="msg-smtp-port" type="number" value="587"></div><div><label>Security</label><select id="msg-smtp-secure"><option value="starttls">STARTTLS</option><option value="ssl">SSL / 465</option><option value="none">None</option></select></div></div><label>SMTP username</label><input id="msg-smtp-user" type="text" autocomplete="username"><label>SMTP password / app password <span class="muted">leave blank to keep saved</span></label><input id="msg-smtp-pass" type="password" autocomplete="new-password"><div class="msg-two"><div><label>From name</label><input id="msg-smtp-from-name" type="text" value="Nectar Reviews"></div><div><label>From email</label><input id="msg-smtp-from-email" type="email"></div></div><label>Reply-to email</label><input id="msg-smtp-reply-to" type="email"><div id="msg-smtp-state" class="msg-state">Loading email settings...</div><div class="msg-actions"><button type="button" id="msg-smtp-save" class="msg-btn">Save Email Provider</button><button type="button" id="msg-smtp-remove" class="msg-btn secondary">Remove Provider</button></div></div>
-            <div class="msg-card"><h3>Send test email</h3><p>This sends the same customer-friendly test email shown in the live preview, with tracking added automatically.</p><label>Send test to</label><input id="msg-test-recipient" type="email" placeholder="you@example.com"><div class="msg-actions"><button type="button" id="msg-send-test-email" class="msg-btn">Send Test Email</button></div><div class="msg-help">You must save a working email provider before test sending.</div></div>
+            <div class="msg-card"><h3>Send test email</h3><p>This sends the same customer-friendly test email shown in the live preview, with tracking added automatically.</p><label>Send test to</label><div class="msg-input-action"><input id="msg-test-recipient" type="email" placeholder="you@example.com"><button type="button" id="msg-send-test-email" class="msg-btn">Send Test Email</button></div><div id="msg-test-email-help" class="msg-help">When the provider status is green, this will send the exact customer preview with tracking added.</div></div>
           </div>
         </section>
 
@@ -142,13 +142,19 @@
               <div class="msg-card"><h3>Review link rules</h3><p>Create conditional wording for product buttons based on product tags or metafields. This follows the same idea as conditional sliders.</p><div class="msg-link-rule-row"><div><label>Check</label><select id="msg-link-rule-type"><option value="tag">Product tag</option><option value="metafield">Metafield</option></select></div><div><label>Value</label><input id="msg-link-rule-condition" type="text" placeholder="e.g. Snowboard"></div><div><label>Use button text</label><input id="msg-link-rule-text" type="text" placeholder="Review this board"></div><button type="button" id="msg-add-link-rule" class="msg-btn secondary">Add rule</button></div><div id="msg-link-rule-list" class="msg-link-rule-list"></div></div>
               <div class="msg-card"><h3>Shopify Flow guidance</h3><p>Paste the HTML on the right into a Shopify Flow “Send email” action with HTML enabled.</p><div class="msg-help">Recommended flow: Order fulfilled → Wait <span id="msg-delay-preview-settings">14</span> days → Send email.</div></div>
             </div>
-            <div class="msg-card msg-code-card" style="padding:0;"><div class="msg-preview-head"><div><h3>Copy Shopify Flow HTML</h3><p>This contains Liquid variables and tracking links for live automated emails.</p></div><button type="button" id="msg-copy-code-btn" class="msg-btn">Copy Code</button></div><textarea id="msg-code-output" class="msg-code" spellcheck="false" readonly></textarea></div>
+            <div class="msg-card msg-code-card" style="padding:0;"><details class="msg-collapsible-code"><summary><div>Copy Shopify Flow HTML<br><span>Open only when you need to paste code into Shopify Flow.</span></div><button type="button" id="msg-copy-code-btn" class="msg-btn">Copy Code</button></summary><textarea id="msg-code-output" class="msg-code" spellcheck="false" readonly></textarea></details></div>
           </div>
         </section>
       </div>`;
   }
 
 
+
+
+  const emailSections = [];
+  function sectionLabel(type){ return ({ notice:'Notice box', promo:'Promo / offer box', support:'Support reminder', text:'Plain text section' }[type] || 'Custom section'); }
+  function renderEmailSections(){ const box = el('msg-section-list'); if(!box) return; box.innerHTML = emailSections.length ? emailSections.map((item,i)=>`<div class="msg-section-row"><span><strong>${escapeHtml(sectionLabel(item.type))}</strong><small style="display:block;color:#667085;">${escapeHtml(item.text || 'Edit the generated section copy in the preview text fields.')}</small></span><button type="button" data-move-section="${i}" data-dir="up">↑</button><button type="button" data-remove-section="${i}">×</button></div>`).join('') : '<div class="msg-help">No extra sections yet. The email remains simple by default.</div>'; box.querySelectorAll('[data-remove-section]').forEach((btn)=>btn.addEventListener('click',()=>{ emailSections.splice(Number(btn.dataset.removeSection),1); renderEmailSections(); updatePreview(); })); box.querySelectorAll('[data-move-section]').forEach((btn)=>btn.addEventListener('click',()=>{ const i=Number(btn.dataset.moveSection); if(i>0){ const x=emailSections.splice(i,1)[0]; emailSections.splice(i-1,0,x); renderEmailSections(); updatePreview(); }})); }
+  function addEmailSection(){ const type = val('msg-section-template','notice'); const defaults = { notice:'A quick note before you review: your feedback helps other customers choose confidently.', promo:'Thanks again for shopping with us — we appreciate your support.', support:'Need help before leaving a review? Reply to this email and we will sort it.', text:'Add your custom message here.' }; emailSections.push({ type, text: defaults[type] || defaults.text }); renderEmailSections(); updatePreview(); }
 
   function storageKey(name) { return `nectar_${name}_${getShopDomain()}`; }
   function loadTemplates() { try { reviewTemplates = JSON.parse(localStorage.getItem(storageKey('review_templates')) || '[]'); } catch (_) { reviewTemplates = []; } renderTemplates(); }
@@ -362,10 +368,17 @@
     if (!q) return showToast('Enter a product title or ID first.');
     renderProductSearchResults([], 'Searching Shopify products...');
     try {
-      const result = await securedFetch(`/admin/products/search?q=${encodeURIComponent(q)}`);
+      let result;
+      try {
+        result = await securedFetch(`/admin/products/search?q=${encodeURIComponent(q)}`);
+      } catch (adminError) {
+        if (adminError.status !== 401 && adminError.status !== 403) throw adminError;
+        const publicRes = await fetch(`${DEFAULT_API}/products/search?shopDomain=${encodeURIComponent(getShopDomain())}&q=${encodeURIComponent(q)}`);
+        result = publicRes.ok ? await publicRes.json() : { products: [], unavailable: true, message: 'Open a secure admin session to search products.' };
+      }
       if (result.unavailable || result.requiresOauth) {
         productSearchResults = [];
-        renderProductSearchResults([], result.message || 'Reconnect Shopify to enable product search.', result.installUrl);
+        renderProductSearchResults([], result.message || 'Reconnect Shopify to enable product search.', result.installUrl || `${window.location.origin}/auth/shopify?shop=${encodeURIComponent(getShopDomain())}`);
         return;
       }
       productSearchResults = result.products || [];
@@ -415,6 +428,7 @@
       el('msg-smtp-from-email').value = s.fromEmail || '';
       el('msg-smtp-reply-to').value = s.replyToEmail || '';
       if (state) { state.className = `msg-state ${s.enabled && s.smtpPasswordSet ? 'ok' : 'bad'}`; state.textContent = s.enabled && s.smtpPasswordSet ? 'Email provider saved' : 'Email provider not fully configured'; }
+      const help = el('msg-test-email-help'); if (help) { const ready = s.enabled && s.smtpPasswordSet; help.textContent = ready ? 'Ready to send. Test emails are tracked as test_review_request.' : 'Save a working email provider before test sending.'; help.className = `msg-help ${ready ? '' : 'warning'}`; }
       const statusCard = el('msg-provider-status-card');
       if (statusCard) { const ok = s.enabled && s.smtpPasswordSet; statusCard.className = `msg-provider-status ${ok ? 'ok' : ''}`; statusCard.innerHTML = ok ? `<span class="icon">✓</span><div><strong>${escapeHtml((s.provider || 'SMTP').toUpperCase())} connected</strong><span>Sending from ${escapeHtml(s.fromEmail || s.smtpUser || 'saved provider')}.</span></div>` : `<span class="icon">!</span><div><strong>There’s an issue with email delivery</strong><span>${escapeHtml(s.lastTestError || 'Save a provider and send a test email to confirm it is working.')}</span></div>`; }
     } catch (error) { if (state) { state.className = 'msg-state bad'; state.textContent = error.message || 'Could not load email settings'; } }
@@ -464,7 +478,9 @@
     try {
       const a = await securedFetch('/admin/campaign-analytics');
       const box = el('msg-analytics');
-      if (box) box.innerHTML = `<div><span>Sent</span><strong>${Number(a.totals?.sent || 0)}</strong></div><div><span>Open rate</span><strong>${Number(a.openRate || 0)}%</strong></div><div><span>Click rate</span><strong>${Number(a.clickRate || 0)}%</strong></div>`;
+      const rawSent = Number(a.totals?.rawSent || a.totals?.sent || 0);
+      const inferredSent = Number(a.totals?.sent || 0);
+      if (box) box.innerHTML = `<div><span>Sent</span><strong>${inferredSent}</strong>${rawSent !== inferredSent ? '<small>inferred from tracked opens</small>' : ''}</div><div><span>Open rate</span><strong>${Number(a.openRate || 0)}%</strong></div><div><span>Click rate</span><strong>${Number(a.clickRate || 0)}%</strong></div>`;
       const breakdown = el('msg-analytics-breakdown');
       if (breakdown) { const rows = Object.entries(a.byCampaign || {}); breakdown.innerHTML = rows.length ? rows.map(([name,item]) => `<div class="msg-link-rule-pill"><span><strong>${escapeHtml(name)}</strong> · Sent ${Number(item.sent||0)} · Opens ${Number(item.open||0)} · Clicks ${Number(item.click||0)}</span><span>${Number(item.openRate||0)}% open / ${Number(item.clickRate||0)}% click</span></div>`).join('') : '<div class="msg-help">No campaign events yet. Send a test email and open/click it to confirm tracking.</div>'; }
     } catch (error) { console.warn('Campaign analytics unavailable:', error); }
@@ -490,6 +506,7 @@
     el('msg-open-test')?.addEventListener('click', () => window.open(testUrl(), '_blank', 'noopener'));
     el('msg-copy-test-url')?.addEventListener('click', () => copyText(testUrl(), 'Test review URL copied'));
     el('msg-save-template')?.addEventListener('click', saveTemplate);
+    el('msg-add-section')?.addEventListener('click', addEmailSection);
     el('msg-add-link-rule')?.addEventListener('click', addLinkRule);
     el('msg-preview-desktop')?.addEventListener('click', () => setPreviewMode('desktop'));
     el('msg-preview-mobile')?.addEventListener('click', () => setPreviewMode('mobile'));
@@ -508,6 +525,7 @@
     addSampleProducts();
     updatePreview();
     loadTemplates();
+    renderEmailSections();
     loadLinkRules();
     loadShopifyStatus();
     loadEmailSettings();

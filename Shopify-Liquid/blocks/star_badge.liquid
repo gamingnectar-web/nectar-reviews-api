@@ -30,20 +30,20 @@
       var showEmpty = el.dataset.showEmpty === 'true';
       if (!shopDomain || !productId) return;
       Promise.all([
-        fetch(api + '/reviews/summary?shopDomain=' + encodeURIComponent(shopDomain) + '&itemId=' + encodeURIComponent(productId)).then(function(res){ return res.ok ? res.json() : null; }).catch(function(){ return null; }),
-        fetch(api + '/widget/config?shopDomain=' + encodeURIComponent(shopDomain)).then(function(res){ return res.ok ? res.json() : null; }).catch(function(){ return null; })
+        fetch(api + '/reviews/summary?shopDomain=' + encodeURIComponent(shopDomain) + '&itemId=' + encodeURIComponent(productId) + '&t=' + Date.now(), { cache: 'no-store' }).then(function(res){ return res.ok ? res.json() : null; }).catch(function(){ return null; }),
+        fetch(api + '/widget/config?shopDomain=' + encodeURIComponent(shopDomain) + '&t=' + Date.now(), { cache: 'no-store' }).then(function(res){ return res.ok ? res.json() : null; }).catch(function(){ return null; })
       ]).then(function(results){
         var json = results[0] || {};
         var config = results[1] || {};
         var card = config.cardStyles || {};
-        el.style.background = card.badgeBackground || blockBg;
-        if (card.badgeTextColor) el.style.color = card.badgeTextColor;
-        if (card.badgeRadius !== undefined) el.style.borderRadius = Number(card.badgeRadius || 999) + 'px';
-        if (card.starSize) el.style.fontSize = Number(card.starSize || {{ block.settings.font_size }}) + 'px';
-        starColor = card.badgeStarColor || card.starColor || starColor;
+        el.style.setProperty('background', card.badgeBackground || blockBg, 'important');
+        if (card.badgeTextColor) el.style.setProperty('color', card.badgeTextColor, 'important');
+        if (card.badgeRadius !== undefined) el.style.setProperty('border-radius', Number(card.badgeRadius || 999) + 'px', 'important');
+        if (card.starSize) el.style.setProperty('font-size', Number(card.starSize || {{ block.settings.font_size }}) + 'px', 'important');
+        starColor = card.badgeStarColor || card.starColor || starColor || '#ffc700';
         var count = Number(json.count || 0);
         if (!count && !showEmpty) { el.style.display = 'none'; return; }
-        el.innerHTML = '<span aria-hidden="true" style="color:' + escapeHtml(starColor) + ';font-size:1.15em;line-height:1;">★</span><strong>' + Number(json.average || 0).toFixed(1) + '</strong><span>(' + escapeHtml(count) + ')</span>';
+        el.innerHTML = '<span aria-hidden="true" style="color:' + escapeHtml(starColor) + '!important;font-size:1.15em;line-height:1;">★</span><strong>' + Number(json.average || 0).toFixed(1) + '</strong><span>(' + escapeHtml(count) + ')</span>';
       }).catch(function(){ if (!showEmpty) el.style.display = 'none'; });
     });
   });
@@ -62,7 +62,7 @@
     { "type": "range", "id": "font_size", "min": 10, "max": 26, "step": 1, "unit": "px", "label": "Font size", "default": 14 },
     { "type": "range", "id": "height", "min": 24, "max": 60, "step": 2, "unit": "px", "label": "Badge height", "default": 34 },
     { "type": "range", "id": "min_width", "min": 40, "max": 160, "step": 4, "unit": "px", "label": "Minimum width", "default": 76 },
-    { "type": "range", "id": "radius", "min": 0, "max": 40, "step": 1, "unit": "px", "label": "Corner radius", "default": 999 },
+    { "type": "range", "id": "radius", "min": 0, "max": 40, "step": 1, "unit": "px", "label": "Corner radius", "default": 40 },
     { "type": "checkbox", "id": "show_empty", "label": "Show badge before first review", "default": true }
   ]
 }

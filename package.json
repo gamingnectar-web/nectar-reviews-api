@@ -1,6 +1,6 @@
 {
   "name": "nectar-reviews-api",
-  "version": "1.1.5-oauth-ui-v10",
+  "version": "1.1.6-oauth-ui-v11",
   "description": "Nectar Reviews API - secure OAuth foundation with preserved UI",
   "main": "server.js",
   "scripts": {
