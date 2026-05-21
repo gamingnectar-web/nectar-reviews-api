@@ -8,6 +8,7 @@ const { encryptSecret, decryptSecret } = require('../utils/crypto');
 const { publicEmailSettings } = require('../utils/emailSettings');
 const { shopifyFetch, shopifyFetchOptional, getAccessTokenForShop, buildInstallUrl } = require('../utils/shopify');
 const { createReviewToken } = require('../utils/reviewTokens');
+const { awardForReview } = require('../modules/loyalty/loyalty.service');
 
 const router = express.Router();
 
@@ -39,40 +40,50 @@ async function ensureShop(shopDomain) {
 async function buildCampaignAnalytics(shopDomain) {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const events = await CampaignEvent.find({ shopDomain, createdAt: { $gte: since } }).lean();
-  const totals = { sent: 0, open: 0, click: 0 };
-  events.forEach((event) => {
-    if (totals[event.eventType] !== undefined) totals[event.eventType] += 1;
-  });
-
+  const totals = { sent: 0, open: 0, click: 0, rawOpenEvents: 0, rawClickEvents: 0 };
   const byCampaign = {};
+
+  const eventKey = (event) => event.uniqueKey || event.token || `${event.campaign || 'review_request'}:${event.email || ''}:${event.orderId || ''}:${event.itemId || ''}:${event.eventType}`;
+  const uniqueByType = { sent: new Set(), open: new Set(), click: new Set() };
+  const uniqueByCampaign = {};
+
   events.forEach((event) => {
-    const key = event.campaign || 'review_request';
-    if (!byCampaign[key]) byCampaign[key] = { sent: 0, open: 0, click: 0, openRate: 0, clickRate: 0 };
-    if (byCampaign[key][event.eventType] !== undefined) byCampaign[key][event.eventType] += 1;
-  });
-  Object.values(byCampaign).forEach((item) => {
-    item.openRate = item.sent ? Number(((item.open / item.sent) * 100).toFixed(1)) : 0;
-    item.clickRate = item.sent ? Number(((item.click / item.sent) * 100).toFixed(1)) : 0;
+    const type = event.eventType;
+    const campaign = event.campaign || 'review_request';
+    if (!uniqueByCampaign[campaign]) uniqueByCampaign[campaign] = { sent: new Set(), open: new Set(), click: new Set() };
+    if (uniqueByType[type]) {
+      uniqueByType[type].add(eventKey(event));
+      uniqueByCampaign[campaign][type].add(eventKey(event));
+    }
+    if (type === 'open') totals.rawOpenEvents += 1;
+    if (type === 'click') totals.rawClickEvents += 1;
   });
 
-  const inferredTokens = new Set(events.filter((event) => event.eventType !== 'sent').map((event) => event.token || `${event.campaign}:${event.email}:${event.orderId}`).filter(Boolean));
-  const rawSent = totals.sent || 0;
-  const sent = Math.max(rawSent, inferredTokens.size, totals.open ? 1 : 0);
-  totals.rawSent = rawSent;
-  totals.sent = sent;
-  Object.values(byCampaign).forEach((item) => {
-    const inferred = Math.max(item.sent || 0, item.open ? 1 : 0, item.click ? 1 : 0);
-    item.rawSent = item.sent || 0;
-    item.sent = inferred;
-    item.openRate = inferred ? Number(((item.open / inferred) * 100).toFixed(1)) : 0;
-    item.clickRate = inferred ? Number(((item.click / inferred) * 100).toFixed(1)) : 0;
+  totals.sent = uniqueByType.sent.size;
+  totals.open = uniqueByType.open.size;
+  totals.click = uniqueByType.click.size;
+
+  Object.entries(uniqueByCampaign).forEach(([campaign, sets]) => {
+    const sent = Math.max(sets.sent.size, sets.open.size ? 1 : 0, sets.click.size ? 1 : 0);
+    byCampaign[campaign] = {
+      sent,
+      rawSent: sets.sent.size,
+      open: sets.open.size,
+      click: sets.click.size,
+      openRate: sent ? Number(((sets.open.size / sent) * 100).toFixed(1)) : 0,
+      clickRate: sent ? Number(((sets.click.size / sent) * 100).toFixed(1)) : 0,
+    };
   });
+
+  const inferredSent = Math.max(totals.sent, totals.open ? 1 : 0, totals.click ? 1 : 0);
+  totals.rawSent = totals.sent;
+  totals.sent = inferredSent;
   return {
     windowDays: 30,
     totals,
     byCampaign,
-    openRate: sent ? Number(((totals.open / sent) * 100).toFixed(1)) : 0,
-    clickRate: sent ? Number(((totals.click / sent) * 100).toFixed(1)) : 0,
+    openRate: inferredSent ? Number(((totals.open / inferredSent) * 100).toFixed(1)) : 0,
+    clickRate: inferredSent ? Number(((totals.click / inferredSent) * 100).toFixed(1)) : 0,
     recentEvents: events
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       .slice(0, 20),
@@ -174,6 +185,10 @@ router.patch('/reviews/:id', async (req, res, next) => {
       { $set: allowed },
       { new: true }
     );
+
+    if (allowed.status === 'accepted') {
+      await awardForReview({ shopDomain, review, trigger: 'review_approved' }).catch((error) => console.warn('Loyalty award skipped:', error.message));
+    }
 
     return res.json(review);
   } catch (error) {

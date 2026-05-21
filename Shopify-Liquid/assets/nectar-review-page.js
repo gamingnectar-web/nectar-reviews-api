@@ -181,6 +181,47 @@
     });
   }
 
+
+  async function markAlreadyReviewedProducts() {
+    const email = orderData?.customerEmail || params.get('email') || '';
+    if (!email || !products.length) return [];
+    const query = new URLSearchParams({
+      shopDomain: SHOP_DOMAIN,
+      email,
+      orderId: orderData?.orderId || params.get('orderId') || params.get('order') || '',
+      products: JSON.stringify(products.map((product) => ({ productId: product.productId, id: product.id }))),
+    });
+    try {
+      const res = await fetch(`${API}/reviews/already-reviewed?${query.toString()}&t=${Date.now()}`);
+      if (!res.ok) return [];
+      const json = await res.json();
+      const reviewed = new Set((json.reviewedProductIds || orderData?.alreadyReviewedProductIds || []).map(String));
+      products = products.map((product) => ({ ...product, alreadyReviewed: reviewed.has(String(product.productId)) || reviewed.has(String(product.id)) }));
+      return Array.from(reviewed);
+    } catch (error) {
+      console.warn('Could not check already-reviewed products:', error);
+      return [];
+    }
+  }
+
+  function showAlreadyReviewedNotice(allReviewed) {
+    let notice = document.getElementById('nectar-already-reviewed-notice');
+    if (!notice) {
+      notice = document.createElement('div');
+      notice.id = 'nectar-already-reviewed-notice';
+      notice.className = 'nectar-already-reviewed-notice';
+      ui.main?.insertBefore(notice, ui.list);
+    }
+    notice.innerHTML = allReviewed
+      ? '<strong>You’ve already reviewed these products.</strong><span>Thanks again — this review link cannot be used a second time for the same products.</span>'
+      : '<strong>Some products have already been reviewed.</strong><span>You can still review the remaining products below.</span>';
+    notice.style.display = 'block';
+    if (ui.submit && allReviewed) {
+      ui.submit.disabled = true;
+      ui.submit.textContent = 'Already reviewed';
+    }
+  }
+
   function buildSummary(data) {
     ui.summary.innerHTML = `
       <div><span>Customer</span><strong>${escapeHtml(data.customerName || 'Customer')}</strong></div>
@@ -211,6 +252,15 @@
   }
 
   function renderProductCard(product) {
+    if (product.alreadyReviewed) {
+      return `<article id="card-${escapeHtml(product.productId)}" class="nectar-product-card nectar-product-reviewed">
+        <div class="nectar-product-main-row">
+          <div class="nectar-product-head">${product.image ? `<img src="${escapeHtml(product.image)}" alt="">` : '<div class="nectar-product-img-placeholder"></div>'}<div><h3>${escapeHtml(product.name)}</h3><small>Product ID: ${escapeHtml(product.productId)}</small></div></div>
+          <span class="nectar-reviewed-pill">Already reviewed</span>
+        </div>
+        <p class="nectar-panel-help">You have already submitted a review for this product. It cannot be submitted again from this link.</p>
+      </article>`;
+    }
     return `<article id="card-${escapeHtml(product.productId)}" class="nectar-product-card">
       <div class="nectar-product-main-row">
         <div class="nectar-product-head">${product.image ? `<img src="${escapeHtml(product.image)}" alt="">` : '<div class="nectar-product-img-placeholder"></div>'}<div><h3>${escapeHtml(product.name)}</h3><small>Product ID: ${escapeHtml(product.productId)}</small></div></div>
@@ -343,7 +393,12 @@
     const overall = getOverallReview();
     const submitEmail = orderData.customerEmail || params.get('email') || (document.getElementById('nectar-customer-email')?.value || '').trim();
     if (!submitEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(submitEmail)) return alert('A valid email is required before submitting reviews.');
-    const payloadReviews = products.map((product) => {
+    const reviewableProducts = products.filter((product) => !product.alreadyReviewed);
+    if (!reviewableProducts.length) {
+      showAlreadyReviewedNotice(true);
+      return;
+    }
+    const payloadReviews = reviewableProducts.map((product) => {
       const specific = getProductSpecificReview(product.productId);
       const state = reviewState[product.productId] || { rating: 5, attributes: {} };
       return {
@@ -367,7 +422,21 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ shopDomain: SHOP_DOMAIN, orderId: orderData.orderId, email: submitEmail, customerName: orderData.customerName, reviews: payloadReviews, reviewToken: params.get('token') || params.get('reviewToken') || '', isPreview: orderData.preview || params.get('test') === '1' }),
       });
-      if (!res.ok) throw new Error('Submit failed');
+      if (!res.ok) {
+        let message = 'Submit failed';
+        let json = null;
+        try { json = await res.json(); message = json.error || message; } catch (_) {}
+        if (json?.alreadyReviewed || res.status === 409) {
+          const reviewed = new Set((json.reviewedItemIds || json.reviewedProductIds || []).map(String));
+          products = products.map((product) => ({ ...product, alreadyReviewed: reviewed.has(String(product.productId)) || reviewed.has(String(product.id)) || !reviewed.size }));
+          renderProducts();
+          showAlreadyReviewedNotice(true);
+          ui.submit.disabled = true;
+          ui.submit.textContent = 'Already reviewed';
+          return;
+        }
+        throw new Error(message);
+      }
       show('success');
       showSubmitConfirmation();
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -411,6 +480,13 @@
       supportConfig = { ...supportConfig, ...(orderData.support || {}) };
       products = uniqueProducts((orderData.products || []).map(normaliseProduct));
       if (!products.length) throw new Error('No products found');
+      await markAlreadyReviewedProducts();
+      const alreadyReviewedIds = new Set([...(orderData.alreadyReviewedProductIds || [])].map(String));
+      if (alreadyReviewedIds.size) {
+        products = products.map((product) => ({ ...product, alreadyReviewed: product.alreadyReviewed || alreadyReviewedIds.has(String(product.productId)) || alreadyReviewedIds.has(String(product.id)) }));
+      }
+      const allReviewed = products.length && products.every((product) => product.alreadyReviewed);
+      if (products.some((product) => product.alreadyReviewed)) showAlreadyReviewedNotice(allReviewed);
       initReviewState();
       buildSummary(orderData);
       if (!orderData.customerEmail && !params.get('email')) {

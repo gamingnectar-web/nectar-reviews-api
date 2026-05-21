@@ -4,6 +4,7 @@ const { cleanShopDomain, isValidShopDomain, cleanText, cleanEmail, clampNumber, 
 const { hashValue } = require('../utils/crypto');
 const { shopifyFetchOptional } = require('../utils/shopify');
 const { verifyReviewToken, productMatchesToken, normaliseProduct } = require('../utils/reviewTokens');
+const { awardForReview } = require('../modules/loyalty/loyalty.service');
 
 const router = express.Router();
 
@@ -88,6 +89,62 @@ function liveReviewMatch(extra = {}) {
     isTestReview: { $ne: true },
     testMode: { $ne: true },
   };
+}
+
+
+function duplicateReviewBase({ shopDomain, email, orderId, itemId }) {
+  const match = {
+    shopDomain,
+    email: cleanEmail(email),
+    isDeleted: false,
+    isTestReview: { $ne: true },
+    testMode: { $ne: true },
+    status: { $ne: 'spam' },
+  };
+  if (itemId) match.itemId = { $in: itemIdCandidates(itemId) };
+  const cleanedOrder = cleanText(orderId, 120);
+  if (cleanedOrder) match.orderId = cleanedOrder;
+  return match;
+}
+
+async function alreadyReviewedProductIds({ shopDomain, email, orderId, products = [] }) {
+  const cleanedEmail = cleanEmail(email);
+  if (!cleanedEmail || !Array.isArray(products) || !products.length) return [];
+  const ids = products.map((product) => cleanText(product.productId || product.itemId || product.id, 160)).filter(Boolean);
+  if (!ids.length) return [];
+  const candidates = ids.flatMap(itemIdCandidates);
+  const match = duplicateReviewBase({ shopDomain, email: cleanedEmail, orderId });
+  match.itemId = { $in: candidates };
+  const existing = await Review.find(match).select('itemId').lean();
+  const reviewed = new Set();
+  existing.forEach((row) => {
+    const rowCandidates = itemIdCandidates(row.itemId);
+    ids.forEach((id) => {
+      const inputCandidates = itemIdCandidates(id);
+      if (rowCandidates.some((candidate) => inputCandidates.includes(candidate))) reviewed.add(id);
+    });
+  });
+  return Array.from(reviewed);
+}
+
+function uniqueCampaignKey({ shopDomain, campaign, eventType, token, email, orderId, itemId }) {
+  const tokenKey = cleanText(token, 200) || `${cleanEmail(email)}:${cleanText(orderId, 120)}:${cleanText(itemId, 120)}`;
+  if (!shopDomain || !campaign || !eventType || !tokenKey) return '';
+  return hashValue(`${shopDomain}:${campaign}:${eventType}:${tokenKey}`);
+}
+
+async function recordCampaignEventOnce(payload, { once = false } = {}) {
+  const uniqueKey = uniqueCampaignKey(payload);
+  const doc = {
+    ...payload,
+    uniqueKey,
+  };
+  if (once && uniqueKey) {
+    const existing = await CampaignEvent.findOne({ shopDomain: payload.shopDomain, eventType: payload.eventType, uniqueKey }).lean();
+    if (existing) return { created: false, existing };
+  }
+  const created = await CampaignEvent.create(doc);
+  return { created: true, event: created };
 }
 
 function normaliseReviewForPublic(review) {
@@ -239,6 +296,24 @@ router.get('/reviews', async (req, res, next) => {
   }
 });
 
+
+router.get('/reviews/already-reviewed', async (req, res, next) => {
+  try {
+    const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop);
+    if (!shopDomain || !isValidShopDomain(shopDomain)) return res.status(400).json({ error: 'Valid shopDomain is required.' });
+    const email = cleanEmail(req.query.email);
+    const orderId = cleanText(req.query.orderId || req.query.order, 120);
+    let products = [];
+    try { products = JSON.parse(String(req.query.products || '[]')); } catch (_) { products = []; }
+    const single = cleanText(req.query.itemId || req.query.productId, 160);
+    if (single) products.push({ id: single, productId: single });
+    const reviewedProductIds = await alreadyReviewedProductIds({ shopDomain, email, orderId, products });
+    return res.json({ alreadyReviewed: reviewedProductIds.length > 0, reviewedProductIds });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post('/reviews', async (req, res, next) => {
   try {
     const shopDomain = cleanShopDomain(req.body.shopDomain || req.body.shop);
@@ -250,6 +325,11 @@ router.post('/reviews', async (req, res, next) => {
     if (!rating) return res.status(400).json({ error: 'rating must be between 1 and 5.' });
     const email = cleanEmail(req.body.email);
     if (!email) return res.status(400).json({ error: 'A valid email is required to submit a review.' });
+
+    const existingReview = await Review.findOne(duplicateReviewBase({ shopDomain, email, orderId: cleanText(req.body.orderId, 120), itemId })).lean();
+    if (existingReview) {
+      return res.status(409).json({ error: 'You have already reviewed this product.', alreadyReviewed: true, reviewedItemIds: [itemId] });
+    }
 
     const reviewToken = cleanText(req.body.reviewToken || req.query.token, 3000);
     const isTest = isTestSubmission(req.body, req.query);
@@ -290,6 +370,7 @@ router.post('/reviews', async (req, res, next) => {
     };
 
     const saved = await Review.create(payload);
+    await awardForReview({ shopDomain, review: saved, trigger: 'review_submitted' }).catch((error) => console.warn('Loyalty submit award skipped:', error.message));
     return res.status(201).json({ ok: true, review: saved });
   } catch (error) {
     next(error);
@@ -338,6 +419,11 @@ router.post('/reviews/bulk', async (req, res, next) => {
     const incoming = Array.isArray(req.body.reviews) ? req.body.reviews : [];
     if (!incoming.length) return res.status(400).json({ error: 'No reviews supplied.' });
     if (incoming.length > 50) return res.status(400).json({ error: 'Bulk review limit is 50 at a time.' });
+    const existingReview = await Review.findOne(duplicateReviewBase({ shopDomain, email, orderId: cleanText(req.body.orderId, 120), itemId })).lean();
+    if (existingReview) {
+      return res.status(409).json({ error: 'You have already reviewed this product.', alreadyReviewed: true, reviewedItemIds: [itemId] });
+    }
+
     const reviewToken = cleanText(req.body.reviewToken || req.query.token, 3000);
     const isTest = isTestSubmission(req.body, req.query);
     const submissionEmail = cleanEmail(req.body.email);
@@ -355,8 +441,23 @@ router.post('/reviews/bulk', async (req, res, next) => {
       const used = await Review.findOne({ shopDomain, reviewToken: reviewTokenKey, reviewTokenUsedAt: { $ne: null } }).lean();
       if (used) return res.status(409).json({ error: 'This review link has already been used.' });
     }
+    const reviewedProductIds = await alreadyReviewedProductIds({
+      shopDomain,
+      email: submissionEmail,
+      orderId,
+      products: incoming.map((review) => ({ id: review.itemId || review.productId, productId: review.itemId || review.productId })),
+    });
+    const reviewedSet = new Set(reviewedProductIds.map(String));
+    if (reviewedSet.size && incoming.every((review) => reviewedSet.has(String(review.itemId || review.productId)))) {
+      return res.status(409).json({
+        error: 'You have already reviewed these products.',
+        alreadyReviewed: true,
+        reviewedItemIds: Array.from(reviewedSet),
+      });
+    }
+
     const config = await getSettings(shopDomain);
-    const docs = incoming.map((review) => {
+    const docs = incoming.filter((review) => !reviewedSet.has(String(review.itemId || review.productId))).map((review) => {
       const itemId = cleanText(review.itemId || review.productId, 160);
       const rating = clampNumber(review.rating, 1, 5, 0);
       if (!itemId || !rating) return null;
@@ -387,7 +488,10 @@ router.post('/reviews/bulk', async (req, res, next) => {
     }).filter(Boolean);
     if (!docs.length) return res.status(400).json({ error: 'No valid reviews supplied.' });
     const saved = await Review.insertMany(docs, { ordered: true });
-    return res.status(201).json({ ok: true, reviews: saved.map(normaliseReviewForPublic), count: saved.length });
+    for (const review of saved) {
+      await awardForReview({ shopDomain, review, trigger: 'review_submitted' }).catch((error) => console.warn('Loyalty bulk submit award skipped:', error.message));
+    }
+    return res.status(201).json({ ok: true, reviews: saved.map(normaliseReviewForPublic), count: saved.length, alreadyReviewedItemIds: reviewedProductIds });
   } catch (error) {
     next(error);
   }
@@ -418,6 +522,7 @@ router.get('/magic-link/order', async (req, res, next) => {
       customerName: cleanText(tokenPayload?.customerName || req.query.customer || req.query.name || 'Customer', 120),
       customerEmail: cleanEmail(tokenPayload?.email || req.query.email),
       products,
+      alreadyReviewedProductIds: await alreadyReviewedProductIds({ shopDomain, email: cleanEmail(tokenPayload?.email || req.query.email), orderId: cleanText(tokenPayload?.orderId || req.query.orderId || req.query.order, 120), products }),
       delivered: true,
       verifiedLink: tokenVerified && !tokenPayload?.testMode,
       preview: tokenPayload?.testMode || req.query.preview === '1' || req.query.preview === 'true' || req.query.test === '1',
@@ -452,7 +557,7 @@ router.get('/campaign/open', async (req, res, next) => {
   try {
     const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop);
     if (shopDomain && isValidShopDomain(shopDomain)) {
-      await CampaignEvent.create({
+      await recordCampaignEventOnce({
         shopDomain,
         campaign: cleanText(req.query.campaign || 'review_request', 120),
         eventType: 'open',
@@ -462,7 +567,7 @@ router.get('/campaign/open', async (req, res, next) => {
         token: cleanText(req.query.token, 200),
         userAgent: cleanText(req.headers['user-agent'], 500),
         ipHash: hashValue(getClientIp(req)),
-      });
+      }, { once: true });
     }
     res.setHeader('Content-Type', 'image/gif');
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -484,7 +589,7 @@ router.get('/campaign/click', async (req, res, next) => {
     } catch (_) {}
 
     if (shopDomain && isValidShopDomain(shopDomain)) {
-      await CampaignEvent.create({
+      await recordCampaignEventOnce({
         shopDomain,
         campaign: cleanText(req.query.campaign || 'review_request', 120),
         eventType: 'click',
@@ -495,7 +600,7 @@ router.get('/campaign/click', async (req, res, next) => {
         token: cleanText(req.query.token, 200),
         userAgent: cleanText(req.headers['user-agent'], 500),
         ipHash: hashValue(getClientIp(req)),
-      });
+      }, { once: true });
     }
     return res.redirect(302, redirectUrl);
   } catch (error) {

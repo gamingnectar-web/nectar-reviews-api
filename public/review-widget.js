@@ -279,7 +279,13 @@
         });
         if (!res.ok) {
           let message = 'Could not submit review';
-          try { const json = await res.json(); message = json.error || message; } catch (_) {}
+          let json = null;
+          try { json = await res.json(); message = json.error || message; } catch (_) {}
+          if (json?.alreadyReviewed || res.status === 409) {
+            modal.querySelector('.nr-modal').innerHTML = '<h3>You’ve already reviewed this product</h3><p class="nr-note">Thanks again — this product cannot be reviewed a second time using the same details.</p><div class="nr-modal-actions"><button type="button" class="nr-cancel-btn">Close</button></div>';
+            modal.querySelector('.nr-cancel-btn').addEventListener('click', () => modal.classList.remove('active'));
+            return;
+          }
           throw new Error(message);
         }
         formEl.reset();

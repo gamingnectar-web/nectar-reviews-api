@@ -110,6 +110,7 @@ window.tab = function(id) {
   if (activeBtn) activeBtn.classList.add('active');
   if (id === 'v-dash') window.loadStats();
   if (['v-discounts', 'v-loyalty', 'v-referrals'].includes(id)) window.loadModules();
+  if (id === 'v-loyalty') window.loadLoyaltyConfig?.();
 };
 
 
@@ -204,6 +205,7 @@ window.load = async function() {
     window.renderLists();
     window.loadStats();
     window.loadModules();
+    window.loadLoyaltyConfig?.();
     window.generateFlowCode();
   } catch (error) {
     console.error('Init error:', error);
@@ -926,3 +928,94 @@ window.enableAutoGrowTextareas = function() {
   });
 };
 window.autoResizeReplyBoxes = window.enableAutoGrowTextareas;
+
+function getLoyaltyPayload() {
+  const discountValue = Number(document.getElementById('loyalty-discount-value')?.value || 10);
+  const points = Number(document.getElementById('loyalty-points-value')?.value || 100);
+  return {
+    enabled: Boolean(document.getElementById('loyalty-enabled')?.checked),
+    rewardTemplates: [{
+      id: window.currentLoyaltyConfig?.rewardTemplates?.[0]?.id || undefined,
+      name: document.getElementById('loyalty-discount-name')?.value || 'Review thank-you discount',
+      enabled: true,
+      trigger: document.getElementById('loyalty-discount-trigger')?.value || 'review_approved',
+      discountType: 'percentage',
+      discountValue,
+      delayDays: Number(document.getElementById('loyalty-discount-delay')?.value || 0),
+      verifiedOnly: Boolean(document.getElementById('loyalty-discount-verified')?.checked),
+      minStars: Number(document.getElementById('loyalty-discount-stars')?.value || 1),
+      reusableTemplate: true,
+      messageTemplate: document.getElementById('loyalty-discount-message')?.value || 'Thanks for your review — here is {{ discount_value }}% off your next order.',
+    }],
+    pointsRules: [{
+      id: window.currentLoyaltyConfig?.pointsRules?.[0]?.id || undefined,
+      name: document.getElementById('loyalty-points-name')?.value || 'Review approved points',
+      enabled: true,
+      trigger: document.getElementById('loyalty-points-trigger')?.value || 'review_approved',
+      points,
+      delayDays: Number(document.getElementById('loyalty-points-delay')?.value || 28),
+      verifiedOnly: Boolean(document.getElementById('loyalty-points-verified')?.checked),
+      minStars: Number(document.getElementById('loyalty-points-stars')?.value || 1),
+      maxAwardsPerOrder: 1,
+    }],
+  };
+}
+
+function hydrateLoyalty(config = {}) {
+  window.currentLoyaltyConfig = config;
+  const reward = (config.rewardTemplates || [])[0] || {};
+  const points = (config.pointsRules || [])[0] || {};
+  if (document.getElementById('loyalty-enabled')) document.getElementById('loyalty-enabled').checked = Boolean(config.enabled);
+  if (document.getElementById('loyalty-status-text')) document.getElementById('loyalty-status-text').textContent = config.enabled ? 'Enabled' : 'Configured but inactive';
+  if (document.getElementById('loyalty-status-help')) document.getElementById('loyalty-status-help').textContent = config.enabled ? 'Review rewards can be created when rules match.' : 'Turn on the module when you are ready to award points/discounts.';
+
+  if (document.getElementById('loyalty-discount-name')) document.getElementById('loyalty-discount-name').value = reward.name || 'Review thank-you discount';
+  if (document.getElementById('loyalty-discount-value')) document.getElementById('loyalty-discount-value').value = reward.discountValue ?? 10;
+  if (document.getElementById('loyalty-discount-trigger')) document.getElementById('loyalty-discount-trigger').value = reward.trigger || 'review_approved';
+  if (document.getElementById('loyalty-discount-delay')) document.getElementById('loyalty-discount-delay').value = reward.delayDays ?? 0;
+  if (document.getElementById('loyalty-discount-stars')) document.getElementById('loyalty-discount-stars').value = reward.minStars || 1;
+  if (document.getElementById('loyalty-discount-verified')) document.getElementById('loyalty-discount-verified').checked = reward.verifiedOnly !== false;
+  if (document.getElementById('loyalty-discount-message')) document.getElementById('loyalty-discount-message').value = reward.messageTemplate || 'Thanks for your review — here is {{ discount_value }}% off your next order.';
+
+  if (document.getElementById('loyalty-points-name')) document.getElementById('loyalty-points-name').value = points.name || 'Review approved points';
+  if (document.getElementById('loyalty-points-value')) document.getElementById('loyalty-points-value').value = points.points ?? 100;
+  if (document.getElementById('loyalty-points-trigger')) document.getElementById('loyalty-points-trigger').value = points.trigger || 'review_approved';
+  if (document.getElementById('loyalty-points-delay')) document.getElementById('loyalty-points-delay').value = points.delayDays ?? 28;
+  if (document.getElementById('loyalty-points-stars')) document.getElementById('loyalty-points-stars').value = points.minStars || 1;
+  if (document.getElementById('loyalty-points-verified')) document.getElementById('loyalty-points-verified').checked = points.verifiedOnly !== false;
+}
+
+window.loadLoyaltyConfig = async function() {
+  try {
+    const config = await adminFetch('/admin/loyalty/config');
+    hydrateLoyalty(config || {});
+    const ledger = await adminFetch('/admin/loyalty/ledger?limit=25');
+    const list = document.getElementById('loyalty-ledger-list');
+    if (list) {
+      const rows = ledger.rows || [];
+      list.innerHTML = rows.length ? rows.map((row) => `
+        <div class="loyalty-ledger-row">
+          <div><strong>${escapeHtml(row.ruleName || row.eventType)}</strong><br><code>${escapeHtml(row.customerRefHash || '')}</code></div>
+          <div><span class="loyalty-ledger-pill">${escapeHtml(row.status || 'pending')}</span></div>
+          <div>${row.points ? `${Number(row.points)} points` : `${Number(row.discountValue || 0)}${row.discountType === 'percentage' ? '%' : ''} discount`}</div>
+          <div>${row.availableAt ? new Date(row.availableAt).toLocaleDateString() : '—'}</div>
+        </div>`).join('') : '<p class="muted">No loyalty ledger rows yet. Rows will appear after matching review events.</p>';
+    }
+  } catch (error) {
+    console.warn('Could not load loyalty config:', error);
+    window.showToast(error.message || 'Could not load loyalty config');
+  }
+};
+
+window.saveLoyaltyConfig = async function() {
+  try {
+    const saved = await adminFetch('/admin/loyalty/config', {
+      method: 'PATCH',
+      body: JSON.stringify(getLoyaltyPayload()),
+    });
+    hydrateLoyalty(saved || {});
+    window.showToast('Loyalty settings saved');
+  } catch (error) {
+    window.showToast(error.message || 'Could not save loyalty settings');
+  }
+};

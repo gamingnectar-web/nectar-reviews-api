@@ -90,3 +90,51 @@ Signed review tokens are hashed before storage. Once a signed token is used succ
 ### Test reviews
 
 Test and preview review links always become `spam`/test records and can never be approved to the storefront.
+
+## v15 additions: email dedupe, duplicate-review blocking, and Loyalty foundation
+
+### Email open/click tracking
+
+Open tracking is now counted once per campaign recipient token. Re-opening the same email does not create another counted open. Click tracking also uses the same one-event-per-token approach, so analytics stay closer to unique recipient engagement rather than raw reloads.
+
+Campaign events still include the campaign name, order id, item id, token, user agent, and hashed IP. For future privacy tightening, emails can be removed from tracking events once every email send path provides a non-PII recipient token.
+
+### Duplicate review prevention
+
+The public review APIs now reject duplicate review submissions for the same shop, customer email, order, and product. Review pages also check for already-reviewed products and show a customer-facing message instead of allowing a second submission.
+
+Signed review links remain one-use, and test/preview reviews remain blocked from public storefront display.
+
+### Loyalty module foundation
+
+The Loyalty module now has its own route and service files:
+
+```txt
+src/routes/loyalty.js
+src/modules/loyalty/loyalty.service.js
+```
+
+The module stores rewards in a private loyalty ledger using only:
+
+```txt
+shopDomain
+customerRefHash
+sourceReviewHash
+orderIdHash
+itemId
+ruleId/ruleName
+points or discount metadata
+status and availability date
+```
+
+It deliberately does not store customer names, customer email addresses, phone numbers, delivery addresses, or other customer-facing personal details in the loyalty ledger.
+
+### MongoDB collections added
+
+```txt
+loyalty_programs
+loyalty_ledger
+```
+
+No manual MongoDB commands are required. Mongoose creates the collections/indexes when the app first reads or writes loyalty data.
+

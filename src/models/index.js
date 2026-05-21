@@ -87,12 +87,14 @@ const campaignEventSchema = new mongoose.Schema({
   itemId: { type: String, default: '' },
   url: { type: String, default: '' },
   token: { type: String, default: '' },
+  uniqueKey: { type: String, default: '', index: true },
   userAgent: { type: String, default: '' },
   ipHash: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now, index: true },
 });
 campaignEventSchema.index({ shopDomain: 1, eventType: 1, createdAt: -1 });
 campaignEventSchema.index({ shopDomain: 1, token: 1, eventType: 1 });
+campaignEventSchema.index({ shopDomain: 1, uniqueKey: 1, eventType: 1 });
 
 const emailProviderSettingsSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, unique: true, index: true },
@@ -110,6 +112,63 @@ const emailProviderSettingsSchema = new mongoose.Schema({
   lastTestStatus: { type: String, default: '' },
   lastTestError: { type: String, default: '' },
 }, { timestamps: true });
+
+
+const loyaltyRewardTemplateSchema = new mongoose.Schema({
+  id: { type: String, required: true },
+  name: { type: String, default: 'Review thank-you discount' },
+  enabled: { type: Boolean, default: false },
+  trigger: { type: String, enum: ['review_submitted', 'review_approved'], default: 'review_approved' },
+  discountType: { type: String, enum: ['percentage', 'fixed_amount'], default: 'percentage' },
+  discountValue: { type: Number, default: 10, min: 0 },
+  delayDays: { type: Number, default: 0, min: 0, max: 365 },
+  verifiedOnly: { type: Boolean, default: true },
+  minStars: { type: Number, default: 1, min: 1, max: 5 },
+  reusableTemplate: { type: Boolean, default: true },
+  messageTemplate: { type: String, default: 'Thanks for your review — here is {{ discount_value }}% off your next order.' },
+}, { _id: false });
+
+const loyaltyPointsRuleSchema = new mongoose.Schema({
+  id: { type: String, required: true },
+  name: { type: String, default: 'Review approved points' },
+  enabled: { type: Boolean, default: false },
+  trigger: { type: String, enum: ['review_submitted', 'review_approved'], default: 'review_approved' },
+  points: { type: Number, default: 100, min: 0 },
+  delayDays: { type: Number, default: 28, min: 0, max: 365 },
+  verifiedOnly: { type: Boolean, default: true },
+  minStars: { type: Number, default: 1, min: 1, max: 5 },
+  maxAwardsPerOrder: { type: Number, default: 1, min: 0, max: 50 },
+}, { _id: false });
+
+const loyaltyProgramSchema = new mongoose.Schema({
+  shopDomain: { type: String, required: true, unique: true, index: true },
+  enabled: { type: Boolean, default: false },
+  privacyMode: { type: String, default: 'hashed_customer_ref' },
+  rewardTemplates: { type: [loyaltyRewardTemplateSchema], default: [] },
+  pointsRules: { type: [loyaltyPointsRuleSchema], default: [] },
+}, { timestamps: true });
+
+const loyaltyLedgerSchema = new mongoose.Schema({
+  shopDomain: { type: String, required: true, index: true },
+  customerRefHash: { type: String, required: true, index: true },
+  eventType: { type: String, enum: ['points_award', 'discount_reward'], required: true },
+  source: { type: String, default: 'review' },
+  sourceReviewHash: { type: String, default: '', index: true },
+  orderIdHash: { type: String, default: '' },
+  itemId: { type: String, default: '' },
+  points: { type: Number, default: 0 },
+  discountType: { type: String, enum: ['percentage', 'fixed_amount', 'none'], default: 'none' },
+  discountValue: { type: Number, default: 0 },
+  status: { type: String, enum: ['pending', 'available', 'cancelled', 'redeemed'], default: 'pending', index: true },
+  availableAt: { type: Date, default: Date.now, index: true },
+  awardedAt: { type: Date, default: null },
+  redeemedAt: { type: Date, default: null },
+  ruleId: { type: String, default: '' },
+  ruleName: { type: String, default: '' },
+  privateNote: { type: String, default: '' },
+}, { timestamps: true });
+loyaltyLedgerSchema.index({ shopDomain: 1, customerRefHash: 1, createdAt: -1 });
+loyaltyLedgerSchema.index({ shopDomain: 1, customerRefHash: 1, sourceReviewHash: 1, ruleId: 1, eventType: 1 });
 
 const shopSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, unique: true, index: true },
@@ -134,4 +193,6 @@ module.exports = {
   CampaignEvent: mongoose.models.CampaignEvent || mongoose.model('CampaignEvent', campaignEventSchema, 'campaign_events'),
   EmailProviderSettings: mongoose.models.EmailProviderSettings || mongoose.model('EmailProviderSettings', emailProviderSettingsSchema, 'email_provider_settings'),
   Shop: mongoose.models.Shop || mongoose.model('Shop', shopSchema, 'shops'),
+  LoyaltyProgram: mongoose.models.LoyaltyProgram || mongoose.model('LoyaltyProgram', loyaltyProgramSchema, 'loyalty_programs'),
+  LoyaltyLedger: mongoose.models.LoyaltyLedger || mongoose.model('LoyaltyLedger', loyaltyLedgerSchema, 'loyalty_ledger'),
 };

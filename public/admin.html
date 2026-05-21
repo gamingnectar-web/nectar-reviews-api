@@ -458,6 +458,23 @@
     .nr-color-modal-actions{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;}
     .nr-color-modal-actions input{min-height:44px;border:1px solid #d1d5db;border-radius:12px;padding:10px 12px;font:inherit;}
 
+
+    .loyalty-status-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px;}
+    .loyalty-status-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:var(--shadow);}
+    .loyalty-status-card span{display:block;color:var(--text-light);font-size:11px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;}
+    .loyalty-status-card strong{display:block;font-size:20px;letter-spacing:-.03em;margin-bottom:5px;}
+    .loyalty-status-card p{margin:0;color:var(--text-light);line-height:1.45;}
+    .loyalty-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:end;}
+    .loyalty-form-grid label,.loyalty-full-label{display:block;font-size:12px;font-weight:900;color:#344054;}
+    .loyalty-form-grid input,.loyalty-form-grid select,.loyalty-full-label textarea{width:100%;margin-top:7px;}
+    .loyalty-check{align-self:center;margin-top:23px;}
+    .loyalty-full-label{margin-top:14px;}
+    .loyalty-ledger-list{display:grid;gap:10px;}
+    .loyalty-ledger-row{display:grid;grid-template-columns:1.2fr 1fr .8fr .8fr;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:#f9fafb;}
+    .loyalty-ledger-row code{font-size:11px;color:#475569;word-break:break-all;}
+    .loyalty-ledger-pill{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:5px 9px;background:#eef2ff;color:#3730a3;font-size:11px;font-weight:900;text-transform:uppercase;}
+    @media(max-width:900px){.loyalty-status-grid,.loyalty-form-grid,.loyalty-ledger-row{grid-template-columns:1fr;}}
+
     .preview-carousel-demo{display:grid!important;grid-template-columns:44px minmax(0,1fr) 44px;gap:12px;align-items:center;}
     .carousel-track-demo{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
     .carousel-review{border:1px solid var(--border);border-radius:14px;background:#fbfdff;padding:16px;min-height:160px;}
@@ -497,7 +514,7 @@
         <div class="nav-group">
           <p class="nav-title">Future Products</p>
           <button class="tab-btn" onclick="window.tab('v-discounts')">Discounts <span class="pill">Soon</span></button>
-          <button class="tab-btn" onclick="window.tab('v-loyalty')">Loyalty <span class="pill">Soon</span></button>
+          <button class="tab-btn" onclick="window.tab('v-loyalty')">Loyalty <span class="pill">Beta</span></button>
           <button class="tab-btn" onclick="window.tab('v-referrals')">Referrals <span class="pill">Soon</span></button>
         </div>
         <div class="nav-group">
@@ -760,7 +777,55 @@
       </section>
 
       <section id="v-discounts" class="view"><h2 class="page-title">Discounts</h2><div class="panel lock-box"><h3>Discounts module placeholder</h3><p class="muted">Reserved for review-linked incentives, discount rules, and Shopify Function-backed offers. The module is intentionally inactive while the foundation is secured.</p></div></section>
-      <section id="v-loyalty" class="view"><h2 class="page-title">Loyalty</h2><div class="panel lock-box"><h3>Loyalty module placeholder</h3><p class="muted">Reserved for points, tiers, rewards, and merchant loyalty settings. The module is intentionally inactive while the foundation is secured.</p></div></section>
+      <section id="v-loyalty" class="view">
+        <div class="dash-header">
+          <div>
+            <h2 class="page-title">Loyalty</h2>
+            <p class="dash-subtitle">Private, store-scoped rewards for review activity. No customer names or emails are stored in the loyalty ledger.</p>
+          </div>
+          <button class="primary-btn" type="button" onclick="window.saveLoyaltyConfig()">Save Loyalty Settings</button>
+        </div>
+        <div class="loyalty-status-grid">
+          <div class="loyalty-status-card"><span>Status</span><strong id="loyalty-status-text">Loading…</strong><p id="loyalty-status-help">Checking module configuration.</p></div>
+          <div class="loyalty-status-card"><span>Privacy model</span><strong>Hashed customer reference</strong><p>No loyalty ledger row stores customer email or name.</p></div>
+          <div class="loyalty-status-card"><span>Activation</span><label class="nice-check"><input id="loyalty-enabled" type="checkbox"> Enable loyalty module</label></div>
+        </div>
+        <div class="grid-2">
+          <div class="panel loyalty-panel">
+            <div class="settings-card-header"><div><h3>Review discount template</h3><p>Offer a reusable discount reward when a customer writes or has a review approved.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
+            <div class="settings-card-body">
+              <div class="loyalty-form-grid">
+                <label>Template name<input id="loyalty-discount-name" class="premium-input" value="Review thank-you discount"></label>
+                <label>Discount %<input id="loyalty-discount-value" class="premium-input" type="number" min="1" max="100" value="10"></label>
+                <label>Trigger<select id="loyalty-discount-trigger" class="filter-select"><option value="review_approved">When review is approved</option><option value="review_submitted">When review is written</option></select></label>
+                <label>Delay days<input id="loyalty-discount-delay" class="premium-input" type="number" min="0" max="365" value="0"></label>
+                <label>Minimum stars<select id="loyalty-discount-stars" class="filter-select"><option value="1">Any rating</option><option value="4">4 stars & up</option><option value="5">5 stars only</option></select></label>
+                <label class="nice-check loyalty-check"><input id="loyalty-discount-verified" type="checkbox" checked> Verified only</label>
+              </div>
+              <label class="loyalty-full-label">Message template<textarea id="loyalty-discount-message" class="premium-input" rows="3">Thanks for your review — here is {{ discount_value }}% off your next order.</textarea></label>
+              <p class="muted">Discount code creation is intentionally separated from review storage. This template can later feed Shopify Discounts/Functions without storing personal data.</p>
+            </div>
+          </div>
+          <div class="panel loyalty-panel">
+            <div class="settings-card-header"><div><h3>Points rule</h3><p>Allocate points after a condition is met, such as approved verified reviews after 28 days.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
+            <div class="settings-card-body">
+              <div class="loyalty-form-grid">
+                <label>Rule name<input id="loyalty-points-name" class="premium-input" value="Review approved points"></label>
+                <label>Points<input id="loyalty-points-value" class="premium-input" type="number" min="1" value="100"></label>
+                <label>Trigger<select id="loyalty-points-trigger" class="filter-select"><option value="review_approved">When review is approved</option><option value="review_submitted">When review is written</option></select></label>
+                <label>Available after days<input id="loyalty-points-delay" class="premium-input" type="number" min="0" max="365" value="28"></label>
+                <label>Minimum stars<select id="loyalty-points-stars" class="filter-select"><option value="1">Any rating</option><option value="4">4 stars & up</option><option value="5">5 stars only</option></select></label>
+                <label class="nice-check loyalty-check"><input id="loyalty-points-verified" type="checkbox" checked> Verified only</label>
+              </div>
+              <p class="muted">Ledger entries store a shop-scoped hash, rule id, review id, status, points and availability date. They do not store customer email, name or address.</p>
+            </div>
+          </div>
+        </div>
+        <div class="panel loyalty-panel">
+          <div class="settings-card-header"><div><h3>Private loyalty ledger preview</h3><p>Recent reward rows. Customer identity is deliberately represented only as a hashed store-scoped reference.</p></div><button class="secondary-btn" type="button" onclick="window.loadLoyaltyConfig()">Refresh</button></div>
+          <div id="loyalty-ledger-list" class="loyalty-ledger-list"><p class="muted">No loyalty ledger rows yet.</p></div>
+        </div>
+      </section>
       <section id="v-referrals" class="view"><h2 class="page-title">Referrals</h2><div class="panel lock-box"><h3>Referrals module placeholder</h3><p class="muted">Reserved for referral tracking, advocate links, friend offers, and attribution. The module is intentionally inactive while the foundation is secured.</p></div></section>
 
 
@@ -801,7 +866,7 @@
 
           <div id="docs-future" class="docs-pane">
             <details class="doc-card" open><summary>Discounts</summary><div class="doc-card-body"><p>Reserved for review-linked offers, discount rules, and Shopify Function-backed incentives.</p></div></details>
-            <details class="doc-card"><summary>Loyalty</summary><div class="doc-card-body"><p>Reserved for points, tiers, rewards, and merchant loyalty settings.</p></div></details>
+            <details class="doc-card"><summary>Loyalty</summary><div class="doc-card-body"><p>The Loyalty beta stores rewards using a shop-scoped hashed customer reference only. It supports review-triggered discount templates and points rules with delays, verified-only controls, and minimum-star conditions.</p><ul><li><strong>Discount templates:</strong> percentage or future fixed-value thank-you rewards after review submission or approval.</li><li><strong>Points rules:</strong> award points after conditions such as approved verified review after 28 days.</li><li><strong>Privacy:</strong> loyalty ledger rows do not store customer names, emails, addresses, or phone numbers.</li></ul></div></details>
             <details class="doc-card"><summary>Referrals</summary><div class="doc-card-body"><p>Reserved for referral links, friend offers, advocate tracking, and attribution.</p></div></details>
           </div>
         </div>

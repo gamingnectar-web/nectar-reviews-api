@@ -2,3 +2,29 @@
 
 /* v11 polish */
 .nectar-button.wide{border-radius:10px}.nectar-product-card .nectar-detail-panel{background:#fbfdff}.nectar-range-row:has(.nectar-range.is-inactive) output{color:#0f172a}.nectar-star{font-size:var(--nectar-review-star-size);}.nectar-product-main-row{grid-template-columns:minmax(0,1fr) minmax(320px,420px)}@media(max-width:760px){.nectar-product-main-row{grid-template-columns:1fr}.nectar-product-main-row .nectar-stars{justify-self:start;width:100%;}.nectar-range{width:calc(100% - 28px)!important}.nectar-range-row{grid-template-columns:1fr}.nectar-range-row output{justify-self:start}}
+
+.nectar-already-reviewed-notice {
+  display: none;
+  margin: 0 0 18px;
+  padding: 16px 18px;
+  border: 1px solid #bfdbfe;
+  border-radius: 14px;
+  background: #eff6ff;
+  color: #1e3a8a;
+}
+.nectar-already-reviewed-notice strong { display:block; margin-bottom:4px; color:#111827; }
+.nectar-already-reviewed-notice span { display:block; color:#475569; }
+.nectar-product-reviewed { opacity: .78; background: #f8fafc; }
+.nectar-reviewed-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #047857;
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+}

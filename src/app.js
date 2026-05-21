@@ -8,6 +8,7 @@ const { cleanShopDomain, isValidShopDomain } = require('./utils/validation');
 const publicRoutes = require('./routes/public');
 const adminRoutes = require('./routes/admin');
 const authRoutes = require('./routes/auth');
+const loyaltyRoutes = require('./routes/loyalty');
 const { securityHeaders, corsOptions, makeRateLimiter, errorHandler, requireAdminSession, setAdminSessionCookie } = require('./utils/security');
 
 const app = express();
@@ -110,6 +111,7 @@ app.use(express.static(publicDir, {
 app.use('/auth', authRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api', publicRoutes);
+app.use('/api/admin/loyalty', loyaltyRoutes);
 app.use('/api/admin', adminRoutes);
 
 // Backwards-compatible admin update/import paths used by the older dashboard JS.
