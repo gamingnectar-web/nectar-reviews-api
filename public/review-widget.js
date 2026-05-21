@@ -91,8 +91,8 @@
       .nr-field textarea { min-height:120px; resize:vertical; }
       .nr-rating-picker { margin-top:16px; }
       .nr-rating-picker span { display:block; margin-bottom:8px; font-weight:900; }
-      .nr-star-picker { display:inline-flex; gap:6px; align-items:center; }
-      .nr-star-button { border:0; background:transparent; color:#d0d5dd; font-size:34px; line-height:1; padding:0; cursor:pointer; transition:transform .15s ease,color .15s ease,opacity .15s ease; }
+      .nr-star-picker { display:flex; gap:8px; align-items:center; justify-content:center; padding:4px 0; }
+      .nr-star-button { border:0; background:transparent; color:#d0d5dd; font-size:42px; line-height:1; padding:0; cursor:pointer; transition:transform .15s ease,color .15s ease,opacity .15s ease; }
       .nr-star-button.active { color:var(--nr-star); }
       .nr-star-picker:hover .nr-star-button { opacity:.5; transform:scale(1.02); }
       .nr-star-picker .nr-star-button:hover, .nr-star-picker .nr-star-button:hover ~ .nr-star-button { opacity:1; }
@@ -100,8 +100,8 @@
       .nr-slider-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:12px; }
       .nr-slider-field { display:block; padding:12px; border:1px solid var(--nr-border); border-radius:12px; background:#fbfdff; }
       .nr-slider-head { display:flex; justify-content:space-between; gap:12px; margin-bottom:8px; color:#344054; font-size:13px; font-weight:950; }
-      .nr-slider-field input[type=range] { width:100%; accent-color:var(--nr-primary); }
-      .nr-modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+      .nr-slider-field input[type=range] { appearance:none; -webkit-appearance:none; width:100%; height:8px; padding:0; border:1px solid #e4eaf2; border-radius:999px; background:#fff; box-shadow:inset 0 1px 2px rgba(15,23,42,.08); cursor:pointer; } .nr-slider-field input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:999px;background:#fff;} .nr-slider-field input[type=range]::-moz-range-track{height:8px;border-radius:999px;background:#fff;} .nr-slider-field input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:13px;border-radius:3px;background:#111827;border:0;margin-top:-3px;box-shadow:0 1px 3px rgba(15,23,42,.22);} .nr-slider-field input[type=range]::-moz-range-thumb{width:22px;height:13px;border-radius:3px;background:#111827;border:0;box-shadow:0 1px 3px rgba(15,23,42,.22);} .nr-slider-field input[type=range].inactive{opacity:.7;}
+      .nr-modal-actions { position:sticky; bottom:-26px; background:linear-gradient(180deg,rgba(255,255,255,.92),#fff 35%); display:flex; justify-content:flex-end; gap:10px; margin:22px -26px -26px; padding:18px 26px; border-top:1px solid #eef2f7; }
       .nr-note { color:var(--nr-muted); font-size:13px; margin:0; line-height:1.5; }
       @media (max-width: 900px) { .nr-summary { grid-template-columns:1fr; gap:28px; padding:28px; } .nr-consensus-row { grid-template-columns:130px 1fr 50px; } }
       @media (max-width: 640px) { .nr-widget-header { align-items:flex-start; flex-direction:column; } .nr-attrs, .nr-form-grid, .nr-slider-grid { grid-template-columns:1fr; } .nr-review-top { flex-direction:column; gap:8px; } .nr-average { font-size:54px; } }
@@ -203,7 +203,9 @@
     modal.querySelectorAll('.nr-slider-field input[type="range"]').forEach((input) => {
       input.addEventListener('input', () => {
         const output = modal.querySelector(`[data-slider-output="${input.dataset.sliderKey}"]`);
-        if (output) output.textContent = `${input.value}/10`;
+        const numeric = Number(input.value || 0);
+        input.classList.toggle('inactive', numeric <= 0);
+        if (output) output.textContent = numeric > 0 ? `${numeric}/10` : 'Not scored';
       });
     });
   }
@@ -228,7 +230,7 @@
           <label class="nr-field">Review<textarea name="comment" required placeholder="What did you think?"></textarea></label>
           ${labels.length ? `<div class="nr-slider-grid">${labels.map((label) => {
             const key = label.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-            return `<label class="nr-slider-field"><div class="nr-slider-head"><span>${escapeHtml(label)}</span><strong data-slider-output="${escapeHtml(key)}">10/10</strong></div><input type="range" min="1" max="10" value="10" data-slider-key="${escapeHtml(key)}" name="attr:${escapeHtml(label)}"></label>`;
+            return `<label class="nr-slider-field"><div class="nr-slider-head"><span>${escapeHtml(label)}</span><strong data-slider-output="${escapeHtml(key)}">Not scored</strong></div><input class="inactive" type="range" min="0" max="10" value="0" data-slider-key="${escapeHtml(key)}" name="attr:${escapeHtml(label)}"></label>`;
           }).join('')}</div>` : ''}
           <div class="nr-modal-actions"><button type="button" class="nr-cancel-btn">Cancel</button><button type="submit" class="nr-submit-btn">Submit Review</button></div>
         </form>
@@ -244,7 +246,7 @@
       const form = new FormData(formEl);
       const attributes = {};
       for (const [key, value] of form.entries()) {
-        if (key.startsWith('attr:')) attributes[key.slice(5)] = Number(value);
+        if (key.startsWith('attr:') && Number(value) > 0) attributes[key.slice(5)] = Number(value);
       }
       const button = modal.querySelector('.nr-submit-btn');
       const original = button.textContent;

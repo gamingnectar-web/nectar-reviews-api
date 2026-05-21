@@ -26,13 +26,18 @@
       var shopDomain = el.dataset.shopDomain || (window.Shopify && window.Shopify.shop) || window.location.hostname;
       var productId = el.dataset.productId;
       if (!shopDomain || !productId) return;
-      fetch(api + '/reviews/summary?shopDomain=' + encodeURIComponent(shopDomain) + '&itemId=' + encodeURIComponent(productId))
-        .then(function(res){ return res.ok ? res.json() : null; })
-        .then(function(json){
-          if (!json || !json.count) return;
-          el.innerHTML = '<span aria-hidden="true">★</span> <strong>' + Number(json.average || 0).toFixed(1) + '</strong> <span>(' + escapeHtml(json.count) + ')</span>';
-        })
-        .catch(function(){});
+      Promise.all([
+        fetch(api + '/reviews/summary?shopDomain=' + encodeURIComponent(shopDomain) + '&itemId=' + encodeURIComponent(productId)).then(function(res){ return res.ok ? res.json() : null; }).catch(function(){ return null; }),
+        fetch(api + '/widget/config?shopDomain=' + encodeURIComponent(shopDomain)).then(function(res){ return res.ok ? res.json() : null; }).catch(function(){ return null; })
+      ]).then(function(results){
+        var json = results[0] || {};
+        var config = results[1] || {};
+        var card = config.cardStyles || {};
+        var starColor = card.badgeStarColor || card.starColor || '{{ block.settings.star_color }}';
+        if (card.starSize) el.style.fontSize = Number(card.starSize || 14) + 'px';
+        if (!json.count) return;
+        el.innerHTML = '<span aria-hidden="true" style="color:' + escapeHtml(starColor) + ';">★</span> <strong>' + Number(json.average || 0).toFixed(1) + '</strong> <span>(' + escapeHtml(json.count) + ')</span>';
+      }).catch(function(){});
     });
   });
 })();

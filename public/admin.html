@@ -211,6 +211,12 @@
     .attr-rule-field .premium-input, .attr-rule-field .filter-select { width:100%; }
     .style-control-grid { display:grid; grid-template-columns:repeat(2,minmax(180px,1fr)); gap:14px; align-items:end; }
     .style-control-grid label { display:block; margin:0 0 7px; color:#344054; font-size:12px; font-weight:900; }
+    .trash-tools-grid { display:grid; grid-template-columns:repeat(4,minmax(180px,1fr)); gap:14px; margin:18px 0; }
+    .trash-tool-card { background:#fff; border:1px solid var(--border); border-radius:14px; padding:16px; box-shadow:var(--shadow); }
+    .trash-tool-card span { display:block; color:var(--text-light); font-size:11px; text-transform:uppercase; letter-spacing:.06em; font-weight:900; margin-bottom:7px; }
+    .trash-tool-card strong { display:block; font-size:24px; letter-spacing:-.04em; }
+    .trash-tool-card input { width:100%; margin-top:8px; }
+    .trash-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
 
     .test-label {
       display: inline-flex;
@@ -328,7 +334,7 @@
       .review-card > div:first-child { flex-direction: column; }
       .card-side { min-width: 0 !important; text-align: left !important; border-left: 0 !important; border-top: 1px solid var(--border); padding-left: 0 !important; padding-top: 18px; }
       .admin-attr-grid { grid-template-columns: 1fr; }
-      .attr-rule-row, .style-control-grid { grid-template-columns: 1fr; }
+      .attr-rule-row, .style-control-grid, .trash-tools-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -404,7 +410,13 @@
 
       <section id="v-trash" class="view">
         <h2 class="page-title">Trash Bin</h2>
-        <p class="muted">Reviews here will be permanently deleted after 28 days.</p>
+        <p class="muted">Restore reviews, permanently remove unwanted entries, and choose how long deleted reviews are kept. Retention can be set between 1 and 28 days.</p>
+        <div class="trash-tools-grid">
+          <div class="trash-tool-card"><span>In trash</span><strong id="trash-count">0</strong></div>
+          <div class="trash-tool-card"><span>Oldest deletion</span><strong id="trash-oldest">—</strong></div>
+          <div class="trash-tool-card"><span>Retention days</span><input id="trash-retention-days" class="premium-input" type="number" min="1" max="28" value="28"><div class="trash-actions"><button class="secondary-btn" onclick="window.saveTrashSettings()">Save</button></div></div>
+          <div class="trash-tool-card"><span>Bulk actions</span><div class="trash-actions"><button class="secondary-btn" onclick="window.restoreAllTrash()">Restore all</button><button class="delete-btn" onclick="window.emptyTrash()">Delete all</button><button class="secondary-btn" onclick="window.cleanupTrash()">Delete expired</button></div></div>
+        </div>
         <div id="trash-list"><p>Loading...</p></div>
       </section>
 
@@ -485,12 +497,21 @@
                 <div><label>Star Color</label><input id="style-star" type="color" value="#ffc700" oninput="window.updatePreviews()" /></div>
                 <div><label>Text Size (px)</label><input id="style-text" class="premium-input" type="number" value="15" oninput="window.updatePreviews()" /></div>
                 <div><label>Widget max width (px)</label><input id="style-width" class="premium-input" type="number" min="720" max="1800" value="1160" oninput="window.updatePreviews()" /></div>
+                <div><label>Review star size (px)</label><input id="style-review-star-size" class="premium-input" type="number" min="24" max="60" value="38" oninput="window.updatePreviews()" /></div>
+                <div><label>Slider track colour</label><input id="style-slider-track" type="color" value="#ffffff" oninput="window.updatePreviews()" /></div>
+                <div><label>Slider notch colour</label><input id="style-slider-knob" type="color" value="#111111" oninput="window.updatePreviews()" /></div>
               </div>
               <p><button class="primary-btn" onclick="window.saveSettings()">Publish Styles</button></p>
             </div>
             <div id="style-card" class="sub-view">
-              <p><label>Star Size (px)</label><br><input id="card-star" class="premium-input" type="number" value="14" oninput="window.updatePreviews()" /></p>
-              <label><input id="card-count" type="checkbox" checked onchange="window.updatePreviews()" /> Show Count</label>
+              <div class="style-control-grid">
+                <div><label>Star Size (px)</label><input id="card-star" class="premium-input" type="number" value="14" min="10" max="32" oninput="window.updatePreviews()" /></div>
+                <div><label>Badge background</label><input id="card-badge-bg" type="color" value="#111827" oninput="window.updatePreviews()" /></div>
+                <div><label>Badge text colour</label><input id="card-badge-text" type="color" value="#ffffff" oninput="window.updatePreviews()" /></div>
+                <div><label>Badge star colour</label><input id="card-badge-star" type="color" value="#ffc700" oninput="window.updatePreviews()" /></div>
+                <div><label>Badge radius (px)</label><input id="card-badge-radius" class="premium-input" type="number" value="999" min="0" max="999" oninput="window.updatePreviews()" /></div>
+              </div>
+              <p><label><input id="card-count" type="checkbox" checked onchange="window.updatePreviews()" /> Show Count</label></p>
               <p><button class="primary-btn" onclick="window.saveSettings()">Publish Styles</button></p>
             </div>
             <div id="style-carousel" class="sub-view">
@@ -512,7 +533,7 @@
                 <p class="pre-color-star" style="font-size:22px;">★★★★★</p>
                 <h4>Amazing Quality</h4><p class="pre-color-text">This product is absolutely amazing! The quality is top notch and it arrived perfectly.</p><p>Jane Doe ✓ Verified</p>
               </div>
-              <div id="preview-card" class="sub-preview preview-card"><span id="pre-card-icon" class="pre-color-star">★</span> <span id="pre-card-count">4.8 (12)</span><h4>Sample Product</h4><p>$29.99</p></div>
+              <div id="preview-card" class="sub-preview preview-card"><span id="pre-card-badge" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;min-width:76px;padding:6px 12px;border-radius:999px;background:#111827;color:#fff;font-weight:800;"><span id="pre-card-icon" class="pre-color-star">★</span> <span id="pre-card-count">4.8 (12)</span></span><h4>Sample Product</h4><p>$29.99</p></div>
               <div id="preview-carousel" class="sub-preview preview-card"><p class="pre-color-star">★★★★★</p><h4>Incredible!</h4><p>Best purchase I've made all year.</p><p>Sarah M.</p></div>
             </div>
           </div>

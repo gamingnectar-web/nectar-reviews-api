@@ -95,6 +95,10 @@
       const styles = appConfig.widgetStyles || appConfig.styles || {};
       if (styles.primaryColor) root.style.setProperty('--primary', styles.primaryColor);
       if (styles.starColor) root.style.setProperty('--accent', styles.starColor);
+      root.style.setProperty('--nectar-review-star-size', `${Number(styles.reviewStarSize || 38)}px`);
+      root.style.setProperty('--nectar-slider-track', styles.sliderTrackColor || '#ffffff');
+      root.style.setProperty('--nectar-slider-knob', styles.sliderKnobColor || '#111111');
+      root.dataset.starAlign = styles.reviewStarAlignment || 'center';
     } catch (error) {
       console.warn('Nectar review page config unavailable:', error);
     }
@@ -196,24 +200,25 @@
   function renderSliderPanel(product) {
     if (!product.matchingSliders.length) return '';
     return `<div id="sliders-${escapeHtml(product.productId)}" class="nectar-detail-panel nectar-slider-panel open">
-      <h4>Confirm the product scores</h4>
-      <p class="nectar-panel-help">These start at 5/10. Move each slider to confirm the customer score for this item.</p>
+      <h4>Optional product scores</h4>
+      <p class="nectar-panel-help">Scores start at 0 and are only submitted when a customer moves the slider.</p>
       ${product.matchingSliders.map((slider) => {
         const label = slider.label || '';
         const key = sliderKey(product.productId, label);
-        return `<label class="nectar-range-row"><span>${escapeHtml(label)}</span><input id="slider-input-${key}" class="nectar-range" type="range" min="1" max="10" value="5" data-active="true" data-product-id="${escapeHtml(product.productId)}" data-slider-label="${escapeHtml(label)}" data-slider-key="${key}"><output id="slider-value-${key}">5/10</output><button type="button" data-clear-slider="true" data-product-id="${escapeHtml(product.productId)}" data-slider-key="${key}">Reset</button></label>`;
+        return `<label class="nectar-range-row"><span>${escapeHtml(label)}</span><input id="slider-input-${key}" class="nectar-range is-inactive" type="range" min="0" max="10" value="0" data-active="false" data-product-id="${escapeHtml(product.productId)}" data-slider-label="${escapeHtml(label)}" data-slider-key="${key}"><output id="slider-value-${key}">Not scored</output><button type="button" data-clear-slider="true" data-product-id="${escapeHtml(product.productId)}" data-slider-key="${key}">Clear</button></label>`;
       }).join('')}
     </div>`;
   }
 
   function renderProductCard(product) {
     return `<article id="card-${escapeHtml(product.productId)}" class="nectar-product-card">
-      <div class="nectar-product-head">${product.image ? `<img src="${escapeHtml(product.image)}" alt="">` : '<div class="nectar-product-img-placeholder"></div>'}<div><h3>${escapeHtml(product.name)}</h3><small>Product ID: ${escapeHtml(product.productId)}</small></div></div>
-      ${renderStars(product.productId)}
-      <button type="button" class="nectar-link-btn" data-toggle-composer="${escapeHtml(product.productId)}">Add a product specific review</button>
-
-      <div id="composer-${escapeHtml(product.productId)}" class="nectar-detail-panel"><label>Product headline<input id="headline-${escapeHtml(product.productId)}" type="text"></label><label>Product review<textarea id="comment-${escapeHtml(product.productId)}"></textarea></label></div>
+      <div class="nectar-product-main-row">
+        <div class="nectar-product-head">${product.image ? `<img src="${escapeHtml(product.image)}" alt="">` : '<div class="nectar-product-img-placeholder"></div>'}<div><h3>${escapeHtml(product.name)}</h3><small>Product ID: ${escapeHtml(product.productId)}</small></div></div>
+        ${renderStars(product.productId)}
+      </div>
       ${renderSliderPanel(product)}
+      <button type="button" class="nectar-link-btn" data-toggle-composer="${escapeHtml(product.productId)}">Add a product specific review</button>
+      <div id="composer-${escapeHtml(product.productId)}" class="nectar-detail-panel"><label>Product headline<input id="headline-${escapeHtml(product.productId)}" type="text"></label><label>Product review<textarea id="comment-${escapeHtml(product.productId)}"></textarea></label></div>
     </article>`;
   }
 
@@ -232,11 +237,19 @@
     ui.list.querySelectorAll('.nectar-range').forEach((input) => input.addEventListener('input', function () {
       const productId = this.dataset.productId;
       const label = this.dataset.sliderLabel;
-      this.dataset.active = 'true';
-      this.classList.remove('is-inactive');
-      reviewState[productId].attributes[label] = Number(this.value);
+      const numeric = Number(this.value || 0);
       const target = document.getElementById(`slider-value-${this.dataset.sliderKey}`);
-      if (target) target.textContent = `${this.value}/10`;
+      if (numeric > 0) {
+        this.dataset.active = 'true';
+        this.classList.remove('is-inactive');
+        reviewState[productId].attributes[label] = numeric;
+        if (target) target.textContent = `${numeric}/10`;
+      } else {
+        this.dataset.active = 'false';
+        this.classList.add('is-inactive');
+        delete reviewState[productId].attributes[label];
+        if (target) target.textContent = 'Not scored';
+      }
     }));
     ui.list.querySelectorAll('[data-clear-slider]').forEach((btn) => btn.addEventListener('click', () => clearSlider(btn.dataset.productId, btn.dataset.sliderKey)));
     ui.list.querySelectorAll('[data-toggle-composer]').forEach((btn) => btn.addEventListener('click', () => toggleComposer(btn.dataset.toggleComposer)));
@@ -273,11 +286,11 @@
     const value = document.getElementById(`slider-value-${key}`);
     if (!input || !value) return;
     const label = input.dataset.sliderLabel;
-    input.value = 5;
-    input.dataset.active = 'true';
-    input.classList.remove('is-inactive');
-    value.textContent = '5/10';
-    reviewState[productId].attributes[label] = 5;
+    input.value = 0;
+    input.dataset.active = 'false';
+    input.classList.add('is-inactive');
+    value.textContent = 'Not scored';
+    delete reviewState[productId].attributes[label];
   }
 
   function toggleComposer(productId) { document.getElementById(`composer-${productId}`)?.classList.toggle('open'); }
@@ -286,9 +299,7 @@
   function initReviewState() {
     reviewState = {};
     products.forEach((product) => {
-      const attributes = {};
-      (product.matchingSliders || []).forEach((slider) => { if (slider.label) attributes[slider.label] = 5; });
-      reviewState[product.productId] = { rating: Number(params.get('rating') || 5), attributes };
+      reviewState[product.productId] = { rating: Number(params.get('rating') || 5), attributes: {} };
     });
   }
 
@@ -342,7 +353,7 @@
         rating: state.rating || 5,
         headline: specific.headline || overall.headline,
         comment: specific.comment || overall.comment,
-        attributes: state.attributes || {},
+        attributes: Object.fromEntries(Object.entries(state.attributes || {}).filter(([, value]) => Number(value) > 0)),
         productTags: getProductTags(product.raw || product),
       };
     }).filter((review) => review.headline || review.comment);

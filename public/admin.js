@@ -220,10 +220,18 @@ function hydrateSettings(config) {
     document.getElementById('style-star').value = config.widgetStyles.starColor || '#ffc700';
     document.getElementById('style-text').value = config.widgetStyles.textSize || 15;
     if (document.getElementById('style-width')) document.getElementById('style-width').value = config.widgetStyles.maxWidth || 1160;
+    if (document.getElementById('style-review-star-size')) document.getElementById('style-review-star-size').value = config.widgetStyles.reviewStarSize || 38;
+    if (document.getElementById('style-slider-track')) document.getElementById('style-slider-track').value = config.widgetStyles.sliderTrackColor || '#ffffff';
+    if (document.getElementById('style-slider-knob')) document.getElementById('style-slider-knob').value = config.widgetStyles.sliderKnobColor || '#111111';
   }
+  if (document.getElementById('trash-retention-days')) document.getElementById('trash-retention-days').value = config.trashRetentionDays || 28;
   if (config.cardStyles) {
     document.getElementById('card-star').value = config.cardStyles.starSize || 14;
     document.getElementById('card-count').checked = config.cardStyles.showCount !== false;
+    if (document.getElementById('card-badge-bg')) document.getElementById('card-badge-bg').value = config.cardStyles.badgeBackground || '#111827';
+    if (document.getElementById('card-badge-text')) document.getElementById('card-badge-text').value = config.cardStyles.badgeTextColor || '#ffffff';
+    if (document.getElementById('card-badge-star')) document.getElementById('card-badge-star').value = config.cardStyles.badgeStarColor || config.cardStyles.starColor || '#ffc700';
+    if (document.getElementById('card-badge-radius')) document.getElementById('card-badge-radius').value = config.cardStyles.badgeRadius ?? 999;
   }
   if (config.carouselStyles) {
     document.getElementById('car-layout').value = config.carouselStyles.layout || 'infinite';
@@ -296,6 +304,17 @@ window.renderLists = function() {
   const trashList = document.getElementById('trash-list');
   if (mgrList) mgrList.innerHTML = active.length ? active.map((r) => window.buildCard(r, false)).join('') : '<div class="panel"><p>No reviews match this filter.</p></div>';
   if (trashList) trashList.innerHTML = trash.length ? trash.map((r) => window.buildCard(r, true)).join('') : '<div class="panel"><p>Trash is empty.</p></div>';
+  window.renderTrashStats(trash);
+};
+
+window.renderTrashStats = function(trash) {
+  const countEl = document.getElementById('trash-count');
+  const oldestEl = document.getElementById('trash-oldest');
+  if (countEl) countEl.textContent = String(trash.length || 0);
+  if (oldestEl) {
+    const dates = trash.map((r) => r.deletedAt || r.updatedAt || r.createdAt).filter(Boolean).map((d) => new Date(d)).filter((d) => !Number.isNaN(d.getTime())).sort((a,b) => a - b);
+    oldestEl.textContent = dates.length ? dates[0].toLocaleDateString() : '—';
+  }
 };
 
 window.buildCard = function(r, isTrash) {
@@ -418,6 +437,42 @@ window.toggleBin = async function(id, isDeleted) {
   }
 };
 
+window.saveTrashSettings = async function() {
+  await window.saveSettings();
+  window.showToast('Trash retention updated');
+};
+
+window.emptyTrash = async function() {
+  const trash = data.filter((r) => r.isDeleted);
+  if (!trash.length) return window.showToast('Trash is already empty');
+  if (!confirm(`Permanently delete ${trash.length} review${trash.length === 1 ? '' : 's'} from trash? This cannot be undone.`)) return;
+  try {
+    const result = await adminFetch('/admin/trash/empty', { method: 'POST', body: JSON.stringify({}) });
+    window.showToast(`Deleted ${result.deleted || 0} review${result.deleted === 1 ? '' : 's'}`);
+    await window.load();
+  } catch (error) { window.showToast(error.message || 'Could not empty trash'); }
+};
+
+window.cleanupTrash = async function() {
+  const days = Math.max(1, Math.min(28, parseInt(document.getElementById('trash-retention-days')?.value || '28', 10)));
+  try {
+    const result = await adminFetch('/admin/trash/cleanup', { method: 'POST', body: JSON.stringify({ retentionDays: days }) });
+    window.showToast(`Deleted ${result.deleted || 0} expired review${result.deleted === 1 ? '' : 's'}`);
+    await window.load();
+  } catch (error) { window.showToast(error.message || 'Could not delete expired reviews'); }
+};
+
+window.restoreAllTrash = async function() {
+  const trash = data.filter((r) => r.isDeleted);
+  if (!trash.length) return window.showToast('No trashed reviews to restore');
+  if (!confirm(`Restore ${trash.length} review${trash.length === 1 ? '' : 's'} from trash?`)) return;
+  try {
+    const result = await adminFetch('/admin/trash/restore-all', { method: 'POST', body: JSON.stringify({}) });
+    window.showToast(`Restored ${result.restored || 0} review${result.restored === 1 ? '' : 's'}`);
+    await window.load();
+  } catch (error) { window.showToast(error.message || 'Could not restore trash'); }
+};
+
 window.saveReply = async function(id) {
   const btn = document.getElementById(`reply-btn-${id}`);
   const originalText = btn?.innerText || 'Publish Reply';
@@ -482,6 +537,10 @@ window.updatePreviews = function() {
   const txt = `${document.getElementById('style-text')?.value || 15}px`;
   const cardStar = `${document.getElementById('card-star')?.value || 14}px`;
   const maxWidth = `${document.getElementById('style-width')?.value || 1160}px`;
+  const badgeBg = document.getElementById('card-badge-bg')?.value || '#111827';
+  const badgeText = document.getElementById('card-badge-text')?.value || '#ffffff';
+  const badgeStar = document.getElementById('card-badge-star')?.value || star;
+  const badgeRadius = `${document.getElementById('card-badge-radius')?.value || 999}px`;
   const preTitle = document.getElementById('pre-title');
   if (preTitle) preTitle.innerText = title;
   document.querySelectorAll('.pre-color-primary').forEach((el) => { el.style.background = primary; });
@@ -491,7 +550,9 @@ window.updatePreviews = function() {
   const cardIcon = document.getElementById('pre-card-icon');
   const previewWrap = document.getElementById('preview-container-wrap');
   if (previewWrap && previewWrap.style.maxWidth !== '375px') previewWrap.style.maxWidth = maxWidth;
-  if (cardIcon) cardIcon.style.fontSize = cardStar;
+  if (cardIcon) { cardIcon.style.fontSize = cardStar; cardIcon.style.color = badgeStar; }
+  const badge = document.getElementById('pre-card-badge');
+  if (badge) { badge.style.background = badgeBg; badge.style.color = badgeText; badge.style.borderRadius = badgeRadius; }
   const cardCount = document.getElementById('pre-card-count');
   if (cardCount) cardCount.style.display = document.getElementById('card-count')?.checked ? 'inline' : 'none';
 };
@@ -511,8 +572,19 @@ window.saveSettings = async function() {
       starColor: document.getElementById('style-star').value,
       textSize: parseInt(document.getElementById('style-text').value, 10),
       maxWidth: parseInt(document.getElementById('style-width')?.value || '1160', 10),
+      reviewStarSize: parseInt(document.getElementById('style-review-star-size')?.value || '38', 10),
+      sliderTrackColor: document.getElementById('style-slider-track')?.value || '#ffffff',
+      sliderKnobColor: document.getElementById('style-slider-knob')?.value || '#111111',
     },
-    cardStyles: { starSize: parseInt(document.getElementById('card-star').value, 10), showCount: document.getElementById('card-count').checked },
+    trashRetentionDays: Math.max(1, Math.min(28, parseInt(document.getElementById('trash-retention-days')?.value || '28', 10))),
+    cardStyles: {
+      starSize: parseInt(document.getElementById('card-star').value, 10),
+      showCount: document.getElementById('card-count').checked,
+      badgeBackground: document.getElementById('card-badge-bg')?.value || '#111827',
+      badgeTextColor: document.getElementById('card-badge-text')?.value || '#ffffff',
+      badgeStarColor: document.getElementById('card-badge-star')?.value || '#ffc700',
+      badgeRadius: parseInt(document.getElementById('card-badge-radius')?.value || '999', 10),
+    },
     carouselStyles: {
       layout: document.getElementById('car-layout').value,
       autoplay: document.getElementById('car-autoplay').checked,

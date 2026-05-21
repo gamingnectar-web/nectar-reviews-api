@@ -376,7 +376,7 @@ router.post('/support-requests', async (req, res, next) => {
       campaign: 'support_request',
       eventType: 'click',
       orderId: cleanText(req.body.orderId, 120),
-      email,
+      email: cleanEmail(req.body.email),
       url: 'support-request',
       userAgent: cleanText(req.headers['user-agent'], 500),
       ipHash: hashValue(getClientIp(req)),

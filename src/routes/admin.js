@@ -181,6 +181,7 @@ router.patch('/settings', async (req, res, next) => {
         enabled: Boolean(body.betaMode?.enabled),
         email: cleanEmail(body.betaMode?.email),
       },
+      trashRetentionDays: clampNumber(body.trashRetentionDays, 1, 28, 28),
       autoApproveEnabled: Boolean(body.autoApproveEnabled),
       autoApproveType: body.autoApproveType === 'all' ? 'all' : 'verified',
       autoApproveMinStars: clampNumber(body.autoApproveMinStars, 1, 5, 4),
@@ -200,10 +201,18 @@ router.patch('/settings', async (req, res, next) => {
         emptyMode: cleanText(body.widgetStyles?.emptyMode || 'stars_text', 40),
         emptyText: cleanText(body.widgetStyles?.emptyText || 'No reviews yet.', 160),
         maxWidth: clampNumber(body.widgetStyles?.maxWidth, 720, 1800, 1160),
+        reviewStarSize: clampNumber(body.widgetStyles?.reviewStarSize, 24, 60, 38),
+        reviewStarAlignment: ['left', 'center', 'right'].includes(body.widgetStyles?.reviewStarAlignment) ? body.widgetStyles.reviewStarAlignment : 'center',
+        sliderTrackColor: cleanText(body.widgetStyles?.sliderTrackColor || '#ffffff', 20),
+        sliderKnobColor: cleanText(body.widgetStyles?.sliderKnobColor || '#111111', 20),
       },
       cardStyles: {
         starSize: clampNumber(body.cardStyles?.starSize, 10, 40, 14),
         showCount: body.cardStyles?.showCount !== false,
+        badgeBackground: cleanText(body.cardStyles?.badgeBackground || '#111827', 20),
+        badgeTextColor: cleanText(body.cardStyles?.badgeTextColor || '#ffffff', 20),
+        badgeStarColor: cleanText(body.cardStyles?.badgeStarColor || body.cardStyles?.starColor || '#ffc700', 20),
+        badgeRadius: clampNumber(body.cardStyles?.badgeRadius, 0, 999, 999),
       },
       carouselStyles: {
         layout: ['grid', 'infinite', 'masonry'].includes(body.carouselStyles?.layout) ? body.carouselStyles.layout : 'infinite',
@@ -219,6 +228,45 @@ router.patch('/settings', async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+
+router.get('/trash/summary', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const config = await Settings.findOne({ shopDomain }).lean();
+    const rows = await Review.find({ shopDomain, isDeleted: true }).select('deletedAt updatedAt createdAt').lean();
+    const oldest = rows
+      .map((row) => row.deletedAt || row.updatedAt || row.createdAt)
+      .filter(Boolean)
+      .sort((a, b) => new Date(a) - new Date(b))[0] || null;
+    return res.json({ count: rows.length, oldestDeletedAt: oldest, retentionDays: config?.trashRetentionDays || 28 });
+  } catch (error) { next(error); }
+});
+
+router.post('/trash/empty', async (req, res, next) => {
+  try {
+    const result = await Review.deleteMany({ shopDomain: shopDomainFromReq(req), isDeleted: true });
+    return res.json({ ok: true, deleted: result.deletedCount || 0 });
+  } catch (error) { next(error); }
+});
+
+router.post('/trash/cleanup', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const retentionDays = clampNumber(req.body?.retentionDays, 1, 28, 28);
+    await Settings.findOneAndUpdate({ shopDomain }, { $set: { shopDomain, trashRetentionDays: retentionDays } }, { upsert: true, setDefaultsOnInsert: true });
+    const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+    const result = await Review.deleteMany({ shopDomain, isDeleted: true, deletedAt: { $lte: cutoff } });
+    return res.json({ ok: true, deleted: result.deletedCount || 0, retentionDays });
+  } catch (error) { next(error); }
+});
+
+router.post('/trash/restore-all', async (req, res, next) => {
+  try {
+    const result = await Review.updateMany({ shopDomain: shopDomainFromReq(req), isDeleted: true }, { $set: { isDeleted: false, deletedAt: null } });
+    return res.json({ ok: true, restored: result.modifiedCount || 0 });
+  } catch (error) { next(error); }
 });
 
 router.get('/stats', async (req, res, next) => {
