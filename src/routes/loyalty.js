@@ -1,5 +1,6 @@
 const express = require('express');
-const { LoyaltyProgram, LoyaltyLedger, Shop } = require('../models');
+const { Shop } = require('../models');
+const { getLoyaltyModels } = require('../modules/loyalty/loyalty.models');
 const { requireAdminSession } = require('../utils/security');
 const { cleanText, clampNumber } = require('../utils/validation');
 const { getOrCreateLoyaltyProgram, cleanLoyaltyConfig, cleanRewardTemplate, cleanPointsRule } = require('../modules/loyalty/loyalty.service');
@@ -30,6 +31,7 @@ router.patch('/config', async (req, res, next) => {
   try {
     const shopDomain = shopDomainFromReq(req);
     const update = cleanLoyaltyConfig(shopDomain, req.body || {});
+    const { LoyaltyProgram } = getLoyaltyModels();
     const program = await LoyaltyProgram.findOneAndUpdate(
       { shopDomain },
       { $set: update },
@@ -102,6 +104,7 @@ router.get('/ledger', async (req, res, next) => {
   try {
     const shopDomain = shopDomainFromReq(req);
     const limit = clampNumber(req.query.limit, 1, 100, 25);
+    const { LoyaltyLedger } = getLoyaltyModels();
     const rows = await LoyaltyLedger.find({ shopDomain })
       .sort({ createdAt: -1 })
       .limit(limit)

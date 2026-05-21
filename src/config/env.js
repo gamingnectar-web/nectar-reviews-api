@@ -16,6 +16,7 @@ const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: Number(process.env.PORT || 3000),
   mongoUri: process.env.MONGODB_URI || process.env.MONGO_URI || '',
+  loyaltyMongoUri: process.env.LOYALTY_MONGODB_URI || '',
   appUrl,
   shopifyApiKey: process.env.SHOPIFY_API_KEY || '',
   shopifyApiSecret: process.env.SHOPIFY_API_SECRET || '',

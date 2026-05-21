@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const { env } = require('./env');
 
+let loyaltyConnection = null;
+
 async function connectDb() {
   if (!env.mongoUri) {
     console.warn('⚠️ Missing MONGODB_URI / MONGO_URI. API will start, but database routes will fail.');
@@ -12,7 +14,19 @@ async function connectDb() {
     serverSelectionTimeoutMS: 15000,
   });
   console.log('✅ DB Connected');
+
+  if (env.loyaltyMongoUri) {
+    loyaltyConnection = await mongoose.createConnection(env.loyaltyMongoUri, {
+      serverSelectionTimeoutMS: 15000,
+    }).asPromise();
+    console.log('✅ Loyalty DB Connected');
+  }
+
   return mongoose.connection;
 }
 
-module.exports = { connectDb };
+function getLoyaltyConnection() {
+  return loyaltyConnection || mongoose.connection;
+}
+
+module.exports = { connectDb, getLoyaltyConnection };

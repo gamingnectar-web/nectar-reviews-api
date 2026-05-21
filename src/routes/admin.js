@@ -39,57 +39,129 @@ async function ensureShop(shopDomain) {
 
 async function buildCampaignAnalytics(shopDomain) {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const events = await CampaignEvent.find({ shopDomain, createdAt: { $gte: since } }).lean();
-  const totals = { sent: 0, open: 0, click: 0, rawOpenEvents: 0, rawClickEvents: 0 };
-  const byCampaign = {};
+  const [events, reviews] = await Promise.all([
+    CampaignEvent.find({ shopDomain, createdAt: { $gte: since } }).lean(),
+    Review.find({ shopDomain, createdAt: { $gte: since } }).lean(),
+  ]);
 
-  const eventKey = (event) => event.uniqueKey || event.token || `${event.campaign || 'review_request'}:${event.email || ''}:${event.orderId || ''}:${event.itemId || ''}:${event.eventType}`;
-  const uniqueByType = { sent: new Set(), open: new Set(), click: new Set() };
-  const uniqueByCampaign = {};
+  const campaignMap = {};
+  const makeRecipientKey = (event = {}) => {
+    const token = cleanText(event.token, 200);
+    if (token) return `token:${token}`;
+    const email = cleanEmail(event.email);
+    const orderId = cleanText(event.orderId, 120);
+    const itemId = cleanText(event.itemId, 120);
+    return `fallback:${email}:${orderId}:${itemId || 'order'}`;
+  };
+  const ensure = (campaign) => {
+    const name = campaign || 'review_request';
+    if (!campaignMap[name]) {
+      campaignMap[name] = {
+        sent: new Map(),
+        open: new Map(),
+        click: new Map(),
+        reviewed: new Map(),
+        rawOpenEvents: 0,
+        rawClickEvents: 0,
+      };
+    }
+    return campaignMap[name];
+  };
+  const safeEvent = (event) => ({
+    campaign: event.campaign || 'review_request',
+    eventType: event.eventType,
+    email: event.email || '',
+    orderId: event.orderId || '',
+    itemId: event.itemId || '',
+    token: event.token || '',
+    createdAt: event.createdAt,
+    isTest: String(event.campaign || '').toLowerCase().includes('test') || String(event.token || '').toLowerCase().startsWith('test'),
+  });
 
   events.forEach((event) => {
     const type = event.eventType;
-    const campaign = event.campaign || 'review_request';
-    if (!uniqueByCampaign[campaign]) uniqueByCampaign[campaign] = { sent: new Set(), open: new Set(), click: new Set() };
-    if (uniqueByType[type]) {
-      uniqueByType[type].add(eventKey(event));
-      uniqueByCampaign[campaign][type].add(eventKey(event));
+    const group = ensure(event.campaign || 'review_request');
+    const key = makeRecipientKey(event);
+    if (type === 'open') group.rawOpenEvents += 1;
+    if (type === 'click') group.rawClickEvents += 1;
+    if (['sent', 'open', 'click'].includes(type) && key) {
+      if (!group[type].has(key)) group[type].set(key, safeEvent(event));
     }
-    if (type === 'open') totals.rawOpenEvents += 1;
-    if (type === 'click') totals.rawClickEvents += 1;
   });
 
-  totals.sent = uniqueByType.sent.size;
-  totals.open = uniqueByType.open.size;
-  totals.click = uniqueByType.click.size;
+  reviews.forEach((review) => {
+    const campaign = review.isTestReview || review.testMode ? 'test_review_request' : (review.campaign || review.source === 'email' ? 'review_request' : 'storefront_review');
+    const group = ensure(campaign);
+    const key = `review:${cleanEmail(review.email)}:${cleanText(review.orderId, 120)}:${cleanText(review.itemId, 120) || String(review._id)}`;
+    if (!group.reviewed.has(key)) {
+      group.reviewed.set(key, {
+        campaign,
+        eventType: 'reviewed',
+        email: review.email || '',
+        orderId: review.orderId || '',
+        itemId: review.itemId || '',
+        createdAt: review.createdAt,
+        isTest: Boolean(review.isTestReview || review.testMode),
+      });
+    }
+  });
 
-  Object.entries(uniqueByCampaign).forEach(([campaign, sets]) => {
-    const sent = Math.max(sets.sent.size, sets.open.size ? 1 : 0, sets.click.size ? 1 : 0);
+  const byCampaign = {};
+  const totals = { sent: 0, open: 0, click: 0, reviewed: 0, rawOpenEvents: 0, rawClickEvents: 0 };
+  const lists = { sent: [], opened: [], clicked: [], reviewed: [] };
+
+  Object.entries(campaignMap).forEach(([campaign, group]) => {
+    const rawSent = group.sent.size;
+    const rawOpen = group.open.size;
+    const rawClick = group.click.size;
+    const sent = Math.max(rawSent, rawOpen ? 1 : 0, rawClick ? 1 : 0, group.reviewed.size ? 1 : 0);
+    const open = sent ? Math.min(rawOpen, sent) : 0;
+    const click = sent ? Math.min(rawClick, sent) : 0;
+    const reviewed = group.reviewed.size;
+    const openRate = sent ? Math.min(100, Number(((open / sent) * 100).toFixed(1))) : 0;
+    const clickRate = sent ? Math.min(100, Number(((click / sent) * 100).toFixed(1))) : 0;
     byCampaign[campaign] = {
       sent,
-      rawSent: sets.sent.size,
-      open: sets.open.size,
-      click: sets.click.size,
-      openRate: sent ? Number(((sets.open.size / sent) * 100).toFixed(1)) : 0,
-      clickRate: sent ? Number(((sets.click.size / sent) * 100).toFixed(1)) : 0,
+      rawSent,
+      open,
+      rawOpen,
+      click,
+      rawClick,
+      reviewed,
+      rawOpenEvents: group.rawOpenEvents,
+      rawClickEvents: group.rawClickEvents,
+      openRate,
+      clickRate,
+      isTest: campaign.toLowerCase().includes('test'),
     };
+    totals.sent += sent;
+    totals.open += open;
+    totals.click += click;
+    totals.reviewed += reviewed;
+    totals.rawOpenEvents += group.rawOpenEvents;
+    totals.rawClickEvents += group.rawClickEvents;
+    group.sent.forEach((event) => lists.sent.push(event));
+    group.open.forEach((event) => lists.opened.push(event));
+    group.click.forEach((event) => lists.clicked.push(event));
+    group.reviewed.forEach((event) => lists.reviewed.push(event));
   });
 
-  const inferredSent = Math.max(totals.sent, totals.open ? 1 : 0, totals.click ? 1 : 0);
-  totals.rawSent = totals.sent;
-  totals.sent = inferredSent;
+  Object.keys(lists).forEach((key) => {
+    lists[key] = lists[key].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 50);
+  });
+
   return {
     windowDays: 30,
     totals,
     byCampaign,
-    openRate: inferredSent ? Number(((totals.open / inferredSent) * 100).toFixed(1)) : 0,
-    clickRate: inferredSent ? Number(((totals.click / inferredSent) * 100).toFixed(1)) : 0,
+    openRate: totals.sent ? Math.min(100, Number(((totals.open / totals.sent) * 100).toFixed(1))) : 0,
+    clickRate: totals.sent ? Math.min(100, Number(((totals.click / totals.sent) * 100).toFixed(1))) : 0,
+    lists,
     recentEvents: events
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       .slice(0, 20),
   };
 }
-
 
 router.post('/review-tokens', async (req, res, next) => {
   try {

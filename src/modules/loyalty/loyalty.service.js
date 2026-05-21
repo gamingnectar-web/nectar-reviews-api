@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { LoyaltyProgram, LoyaltyLedger } = require('../../models');
+const { getLoyaltyModels } = require('./loyalty.models');
 const { cleanText, clampNumber } = require('../../utils/validation');
 const { hashValue } = require('../../utils/crypto');
 
@@ -31,6 +31,8 @@ function defaultLoyaltyConfig(shopDomain) {
         minStars: 1,
         reusableTemplate: true,
         messageTemplate: 'Thanks for your review — here is {{ discount_value }}% off your next order.',
+        emailSubject: 'Your review reward is ready',
+        emailBody: 'Thanks for leaving a review. Your {{ reward_type }} is now ready.',
       },
     ],
     pointsRules: [
@@ -50,6 +52,7 @@ function defaultLoyaltyConfig(shopDomain) {
 }
 
 async function getOrCreateLoyaltyProgram(shopDomain) {
+  const { LoyaltyProgram } = getLoyaltyModels();
   let program = await LoyaltyProgram.findOne({ shopDomain });
   if (program) return program;
   const defaults = defaultLoyaltyConfig(shopDomain);
@@ -74,6 +77,8 @@ function cleanRewardTemplate(input = {}) {
     minStars: clampNumber(input.minStars, 1, 5, 1),
     reusableTemplate: input.reusableTemplate !== false,
     messageTemplate: cleanText(input.messageTemplate || 'Thanks for your review — here is {{ discount_value }}% off your next order.', 500),
+    emailSubject: cleanText(input.emailSubject || 'Your review reward is ready', 160),
+    emailBody: cleanText(input.emailBody || 'Thanks for leaving a review. Your {{ reward_type }} is now ready.', 1000),
   };
 }
 
@@ -113,6 +118,7 @@ function reviewMatchesRule(review, rule) {
 }
 
 async function awardForReview({ shopDomain, review, trigger }) {
+  const { LoyaltyProgram, LoyaltyLedger } = getLoyaltyModels();
   const program = await LoyaltyProgram.findOne({ shopDomain }).lean();
   if (!program?.enabled || !review || review.isTestReview || review.testMode) return { created: 0 };
 

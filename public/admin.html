@@ -313,10 +313,33 @@
     .mapper-grid { display:grid; grid-template-columns:repeat(2,minmax(220px,1fr)); gap:14px; }
     .mapper-card { border:1px solid var(--border); border-radius:12px; padding:14px; background:#fbfdff; }
     .mapper-card label { display:block; margin-bottom:8px; font-weight:900; }
-    .import-table { width:100%; border-collapse:separate; border-spacing:0; overflow:hidden; border:1px solid var(--border); border-radius:12px; background:#fff; }
+    .import-table-wrap { width:100%; overflow:auto; border:1px solid var(--border); border-radius:14px; background:#fff; }
+    .import-table { width:100%; min-width:980px; border-collapse:separate; border-spacing:0; background:#fff; }
     .import-table th,.import-table td { padding:12px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; }
     .import-table th { background:#f8fafc; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:#667085; }
     .import-table tr:last-child td { border-bottom:0; }
+    .import-product-cell { display:grid; gap:8px; min-width:300px; }
+    .import-product-field { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; }
+    .import-product-status { font-size:12px; color:#667085; line-height:1.35; }
+    .import-product-status.matched { color:#027a48; font-weight:800; }
+    .import-product-status.warning { color:#b54708; font-weight:800; }
+    .import-product-tools { display:flex; gap:8px; flex-wrap:wrap; }
+    .import-mini-btn { min-height:36px; padding:8px 10px; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--text); font-weight:900; cursor:pointer; }
+    .import-mini-btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+    .import-modal-backdrop { position:fixed; inset:0; z-index:2147483000; display:none; align-items:center; justify-content:center; padding:24px; background:rgba(15,23,42,.56); }
+    .import-modal-backdrop.active { display:flex; }
+    .import-modal { width:min(860px,100%); max-height:88vh; overflow:auto; background:#fff; border-radius:18px; box-shadow:0 28px 90px rgba(15,23,42,.32); border:1px solid var(--border); }
+    .import-modal-head { display:flex; justify-content:space-between; gap:16px; padding:22px 24px; border-bottom:1px solid var(--border); }
+    .import-modal-head h3 { margin:0 0 5px; font-size:20px; }
+    .import-modal-head p { margin:0; color:#667085; }
+    .import-modal-close { border:0; background:#f3f4f6; width:36px; height:36px; border-radius:999px; cursor:pointer; font-weight:900; }
+    .import-modal-search { display:grid; grid-template-columns:1fr auto; gap:10px; padding:18px 24px; border-bottom:1px solid var(--border); }
+    .import-modal-search input { min-height:44px; border:1px solid #cfd5dd; border-radius:10px; padding:10px 12px; font:inherit; }
+    .import-modal-results { padding:12px 24px 24px; display:grid; gap:10px; }
+    .import-product-result { display:grid; grid-template-columns:56px 1fr auto; gap:12px; align-items:center; padding:12px; border:1px solid var(--border); border-radius:14px; background:#fbfdff; }
+    .import-product-result img { width:56px; height:56px; object-fit:cover; border-radius:10px; background:#eef2f7; }
+    .import-product-result strong { display:block; }
+    .import-product-result small { color:#667085; }
     .valid-green { border-color: var(--green) !important; background: #f0fdf4 !important; }
     .invalid-red { border-color: var(--red) !important; background: #fff1f2 !important; }
     .muted { color: var(--text-light); }
@@ -468,6 +491,11 @@
     .loyalty-form-grid label,.loyalty-full-label{display:block;font-size:12px;font-weight:900;color:#344054;}
     .loyalty-form-grid input,.loyalty-form-grid select,.loyalty-full-label textarea{width:100%;margin-top:7px;}
     .loyalty-check{align-self:center;margin-top:23px;}
+    .loyalty-pill-check{display:inline-flex!important;align-items:center;gap:10px;border:1px solid #d0d5dd;border-radius:999px;background:#fff;padding:9px 13px;font-weight:900;color:#344054;cursor:pointer;white-space:nowrap;}
+    .loyalty-pill-check input{width:auto;margin:0;accent-color:#008060;}
+    .loyalty-pill-check:has(input:checked){background:#ecfdf3;border-color:#abefc6;color:#027a48;}
+    .loyalty-email-card{margin-top:18px;}
+    .loyalty-email-card textarea{resize:none;min-height:110px;}
     .loyalty-full-label{margin-top:14px;}
     .loyalty-ledger-list{display:grid;gap:10px;}
     .loyalty-ledger-row{display:grid;grid-template-columns:1.2fr 1fr .8fr .8fr;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:#f9fafb;}
@@ -668,9 +696,9 @@
                 <option value="generic">Generic / Other Format</option><option value="weebly">Weebly / Square</option><option value="judgeme">Judge.me</option>
               </select>
             </div>
-            <div id="inst-generic" class="import-inst-box active"><p class="import-help">Generic CSV: include columns for Product ID, Star Rating, Name, Email, Review Title, Review Body, and Date where available.</p></div>
-            <div id="inst-weebly" class="import-inst-box"><p class="import-help">Weebly / Square: upload the export and map product IDs in the staging step before publishing.</p></div>
-            <div id="inst-judgeme" class="import-inst-box"><p class="import-help">Judge.me: export reviews from Judge.me, upload the CSV, and map the columns below.</p></div>
+            <div id="inst-generic" class="import-inst-box active"><p class="import-help">Generic CSV: include Product ID where possible. If your export only has Product Name/Title, upload it and use Smart Product Mapping to select the correct Shopify product before import.</p></div>
+            <div id="inst-weebly" class="import-inst-box"><p class="import-help">Weebly / Square: upload the export, map the product title/name column, then choose the matching Shopify product in the staging step before publishing.</p></div>
+            <div id="inst-judgeme" class="import-inst-box"><p class="import-help">Judge.me: export reviews, map Product ID or Product Title, then review product matches before publishing.</p></div>
           </div>
           <div class="import-step">
             <h3>2. Upload and map columns</h3>
@@ -788,7 +816,7 @@
         <div class="loyalty-status-grid">
           <div class="loyalty-status-card"><span>Status</span><strong id="loyalty-status-text">Loading…</strong><p id="loyalty-status-help">Checking module configuration.</p></div>
           <div class="loyalty-status-card"><span>Privacy model</span><strong>Hashed customer reference</strong><p>No loyalty ledger row stores customer email or name.</p></div>
-          <div class="loyalty-status-card"><span>Activation</span><label class="nice-check"><input id="loyalty-enabled" type="checkbox"> Enable loyalty module</label></div>
+          <div class="loyalty-status-card"><span>Activation</span><label class="loyalty-pill-check"><input id="loyalty-enabled" type="checkbox"> <strong>Enable loyalty module</strong></label><p class="muted">Updates instantly when toggled.</p></div>
         </div>
         <div class="grid-2">
           <div class="panel loyalty-panel">
@@ -800,10 +828,18 @@
                 <label>Trigger<select id="loyalty-discount-trigger" class="filter-select"><option value="review_approved">When review is approved</option><option value="review_submitted">When review is written</option></select></label>
                 <label>Delay days<input id="loyalty-discount-delay" class="premium-input" type="number" min="0" max="365" value="0"></label>
                 <label>Minimum stars<select id="loyalty-discount-stars" class="filter-select"><option value="1">Any rating</option><option value="4">4 stars & up</option><option value="5">5 stars only</option></select></label>
-                <label class="nice-check loyalty-check"><input id="loyalty-discount-verified" type="checkbox" checked> Verified only</label>
+                <label class="loyalty-pill-check loyalty-check"><input id="loyalty-discount-verified" type="checkbox" checked> Verified only</label>
               </div>
               <label class="loyalty-full-label">Message template<textarea id="loyalty-discount-message" class="premium-input" rows="3">Thanks for your review — here is {{ discount_value }}% off your next order.</textarea></label>
               <p class="muted">Discount code creation is intentionally separated from review storage. This template can later feed Shopify Discounts/Functions without storing personal data.</p>
+            </div>
+          </div>
+          <div class="panel loyalty-panel loyalty-email-card">
+            <div class="settings-card-header"><div><h3>Loyalty message template</h3><p>Uses the main email provider by default, but keeps loyalty wording separate from review requests.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
+            <div class="settings-card-body">
+              <label class="loyalty-full-label">Subject<input id="loyalty-email-subject" class="premium-input" value="Your review reward is ready"></label>
+              <label class="loyalty-full-label">Email body<textarea id="loyalty-email-body" class="premium-input" rows="4">Thanks for leaving a review. Your {{ reward_type }} is now ready.</textarea></label>
+              <p class="muted">Future campaigns can use a dedicated loyalty sender, but this starts by reusing the existing email provider to avoid duplicate setup.</p>
             </div>
           </div>
           <div class="panel loyalty-panel">
@@ -815,7 +851,7 @@
                 <label>Trigger<select id="loyalty-points-trigger" class="filter-select"><option value="review_approved">When review is approved</option><option value="review_submitted">When review is written</option></select></label>
                 <label>Available after days<input id="loyalty-points-delay" class="premium-input" type="number" min="0" max="365" value="28"></label>
                 <label>Minimum stars<select id="loyalty-points-stars" class="filter-select"><option value="1">Any rating</option><option value="4">4 stars & up</option><option value="5">5 stars only</option></select></label>
-                <label class="nice-check loyalty-check"><input id="loyalty-points-verified" type="checkbox" checked> Verified only</label>
+                <label class="loyalty-pill-check loyalty-check"><input id="loyalty-points-verified" type="checkbox" checked> Verified only</label>
               </div>
               <p class="muted">Ledger entries store a shop-scoped hash, rule id, review id, status, points and availability date. They do not store customer email, name or address.</p>
             </div>

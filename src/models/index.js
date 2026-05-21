@@ -126,6 +126,8 @@ const loyaltyRewardTemplateSchema = new mongoose.Schema({
   minStars: { type: Number, default: 1, min: 1, max: 5 },
   reusableTemplate: { type: Boolean, default: true },
   messageTemplate: { type: String, default: 'Thanks for your review — here is {{ discount_value }}% off your next order.' },
+  emailSubject: { type: String, default: 'Your review reward is ready' },
+  emailBody: { type: String, default: 'Thanks for leaving a review. Your {{ reward_type }} is now ready.' },
 }, { _id: false });
 
 const loyaltyPointsRuleSchema = new mongoose.Schema({

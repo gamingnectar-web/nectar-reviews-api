@@ -28,6 +28,11 @@
   }
   const API_BASE = inferApiBase();
 
+  function maskName(name) {
+    const clean = String(name || 'Guest').trim();
+    return clean ? `${clean.charAt(0).toUpperCase()}***` : 'Guest';
+  }
+
   function escapeHtml(value) {
     return String(value || '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[char]));
   }
@@ -164,7 +169,7 @@
     return `
       <article class="nr-review-card">
         <div class="nr-review-top">
-          <p class="nr-author">${escapeHtml(review.userId || 'Guest')}${review.verifiedPurchase ? '<span class="nr-verified">✓ Verified buyer</span>' : ''}</p>
+          <p class="nr-author">${escapeHtml(review.isAnonymous ? maskName(review.userId || 'Guest') : (review.userId || 'Guest'))}${review.verifiedPurchase ? '<span class="nr-verified">✓ Verified buyer</span>' : ''}</p>
           <span class="nr-date">${new Date(review.createdAt || Date.now()).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}</span>
         </div>
         <div class="nr-stars">${stars(review.rating)}</div>
@@ -234,7 +239,7 @@
             <label class="nr-field">Name<input name="userId" required placeholder="Your name" autocomplete="name"></label>
             <label class="nr-field">Email<input name="email" type="email" required placeholder="you@example.com" autocomplete="email"></label>
           </div>
-          <div class="nr-rating-picker"><span>Rating</span>${renderStarPicker(5)}</div>
+          <label class="nr-anonymous-toggle"><input type="checkbox" name="isAnonymous"><span>Hide my public name</span><small>A***</small></label><div class="nr-rating-picker"><span>Rating</span>${renderStarPicker(5)}</div>
           <label class="nr-field">Headline<input name="headline" required placeholder="Summarise your review"></label>
           <label class="nr-field">Review<textarea name="comment" required placeholder="What did you think?"></textarea></label>
           ${labels.length ? `<div class="nr-slider-grid">${labels.map((label) => {
@@ -275,6 +280,7 @@
             comment: form.get('comment'),
             attributes,
             source: 'website',
+            isAnonymous: form.get('isAnonymous') === 'on',
           }),
         });
         if (!res.ok) {
@@ -336,3 +342,4 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
 })();
+

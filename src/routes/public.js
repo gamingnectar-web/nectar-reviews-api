@@ -147,13 +147,20 @@ async function recordCampaignEventOnce(payload, { once = false } = {}) {
   return { created: true, event: created };
 }
 
+
+function maskPublicName(name) {
+  const clean = cleanText(name || 'Customer', 120) || 'Customer';
+  const first = clean.trim().charAt(0).toUpperCase();
+  return first ? `${first}***` : 'Customer';
+}
+
 function normaliseReviewForPublic(review) {
   const plain = review && typeof review.toObject === 'function' ? review.toObject() : review;
   if (!plain) return plain;
   return {
     _id: plain._id,
     itemId: plain.itemId,
-    userId: plain.userId,
+    userId: Boolean(plain.isAnonymous) ? maskPublicName(plain.userId) : plain.userId,
     isAnonymous: Boolean(plain.isAnonymous),
     rating: plain.rating,
     headline: plain.headline,

@@ -17,6 +17,7 @@
   data-support-button="{{ support_button | escape }}"
   data-support-email="{{ block.settings.support_email | escape }}"
   data-support-url="{{ block.settings.support_url | escape }}"
+  data-customer-logged-in="{% if customer %}true{% else %}false{% endif %}"
   style="--primary:{{ block.settings.primary_color }};--accent:{{ block.settings.star_color }};--nectar-review-width:{{ block.settings.max_width }}px;"
 >
   {% if block.settings.header_image != blank %}
@@ -51,18 +52,19 @@
   <div id="nectar-main" style="display:none;">
     <div id="nectar-order-summary" class="nectar-summary-grid"></div>
 
-    <div class="nectar-overall-card">
-      <h2>1. Your overall review</h2>
-      <p>This review text will be used for every item below by default. You can also add product-specific wording on each item.</p>
-      <div id="nectar-email-wrap" style="display:none;"><label>Email<input id="nectar-customer-email" type="email" placeholder="you@example.com"></label></div>
-      <label>Headline<input id="nectar-overall-headline" type="text" placeholder="Amazing quality"></label>
-      <label>Review<textarea id="nectar-overall-comment" placeholder="Tell us what you thought…"></textarea></label>
-    </div>
-
     <div id="nectar-help-strip" class="nectar-help-strip">
       <h3 id="nectar-help-heading">{{ support_heading }}</h3>
       <p id="nectar-help-text">{{ support_text }}</p>
       <button id="nectar-help-button" type="button" class="nectar-button secondary">{{ support_button }}</button>
+    </div>
+
+    <div class="nectar-overall-card">
+      <h2>1. Your overall review</h2>
+      <p>This review text will be used for every item below by default. You can also add product-specific wording on each item.</p>
+      <div id="nectar-email-wrap" style="display:none;"><label>Email<input id="nectar-customer-email" type="email" placeholder="you@example.com"></label></div>
+      <label class="nectar-hide-name"><input id="nectar-hide-name" type="checkbox" {% unless customer %}checked{% endunless %}><span class="eye">◐</span><span>Hide my public name</span><small id="nectar-name-preview">A***</small></label>
+      <label>Headline<input id="nectar-overall-headline" type="text" placeholder="Amazing quality"></label>
+      <label>Review<textarea id="nectar-overall-comment" placeholder="Tell us what you thought…"></textarea></label>
     </div>
 
     <div id="nectar-review-list" class="nectar-product-list"></div>

@@ -691,40 +691,63 @@ window.handleFileUpload = function() {
     header: true,
     skipEmptyLines: true,
     complete(results) {
-      parsedCSVData = results.data;
+      parsedCSVData = results.data || [];
       csvHeaders = results.meta.fields || [];
+      mappedReviews = [];
       window.buildMappingUI();
+    },
+    error(error) {
+      window.showToast(error.message || 'Could not parse CSV');
     },
   });
 };
 
+function normaliseHeaderName(header) {
+  return String(header || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function pickDefaultHeader(fieldId, header) {
+  const h = normaliseHeaderName(header);
+  if (fieldId === 'map-itemId') return /(^| )(product id|product_id|item id|item_id|shopify product id|product gid|productid)( |$)/.test(h) || (h.includes('product') && h.includes('id'));
+  if (fieldId === 'map-productTitle') return h.includes('product title') || h.includes('product name') || h === 'product' || h === 'item' || h.includes('item title') || h.includes('item name');
+  if (fieldId === 'map-rating') return h.includes('score') || h.includes('rating') || h.includes('stars') || h === 'star rating';
+  if (fieldId === 'map-userId') return h.includes('reviewer name') || h.includes('author') || h.includes('customer name') || h === 'name' || h.includes('user');
+  if (fieldId === 'map-email') return h.includes('email');
+  if (fieldId === 'map-headline') return h.includes('title') || h.includes('headline') || h.includes('summary');
+  if (fieldId === 'map-comment') return h.includes('body') || h.includes('content') || h.includes('review text') || h === 'review' || h.includes('comment');
+  if (fieldId === 'map-date') return h.includes('date') || h.includes('created') || h.includes('submitted');
+  if (fieldId === 'map-verified') return h.includes('verified');
+  return false;
+}
+
 window.buildMappingUI = function() {
   document.getElementById('mapping-ui').style.display = 'block';
   const reqFields = [
-    { id: 'map-itemId', label: 'Product ID (Req)' },
+    { id: 'map-itemId', label: 'Product ID', hint: 'Optional if Product Title is mapped.' },
+    { id: 'map-productTitle', label: 'Product Title / Name', hint: 'Used for automatic Shopify matching.' },
     { id: 'map-rating', label: 'Star Rating (Req)' },
     { id: 'map-userId', label: 'Reviewer Name' },
     { id: 'map-email', label: 'Reviewer Email' },
     { id: 'map-headline', label: 'Review Title' },
     { id: 'map-comment', label: 'Review Body' },
     { id: 'map-date', label: 'Review Date' },
+    { id: 'map-verified', label: 'Verified Purchase' },
   ];
+  const usedDefaults = new Set();
   let html = '';
   reqFields.forEach((f) => {
     let options = '<option value="">-- Ignore --</option>';
+    let selectedOnce = false;
     csvHeaders.forEach((h) => {
-      const hL = h.toLowerCase();
       let selected = '';
-      if (f.id === 'map-itemId' && (hL.includes('product') || hL.includes('id'))) selected = 'selected';
-      if (f.id === 'map-rating' && (hL.includes('score') || hL.includes('rating'))) selected = 'selected';
-      if (f.id === 'map-userId' && (hL.includes('name') || hL.includes('user'))) selected = 'selected';
-      if (f.id === 'map-email' && hL.includes('email')) selected = 'selected';
-      if (f.id === 'map-headline' && hL.includes('title')) selected = 'selected';
-      if (f.id === 'map-comment' && (hL.includes('body') || hL.includes('content') || hL.includes('review'))) selected = 'selected';
-      if (f.id === 'map-date' && hL.includes('date')) selected = 'selected';
+      if (!selectedOnce && !usedDefaults.has(h) && pickDefaultHeader(f.id, h)) {
+        selected = 'selected';
+        selectedOnce = true;
+        usedDefaults.add(h);
+      }
       options += `<option value="${escapeHtml(h)}" ${selected}>${escapeHtml(h)}</option>`;
     });
-    html += `<div class="mapper-card"><label>${escapeHtml(f.label)}</label><select id="${f.id}" class="filter-select" style="width:100%; margin-top:6px;">${options}</select></div>`;
+    html += `<div class="mapper-card"><label>${escapeHtml(f.label)}</label>${f.hint ? `<p class="muted" style="margin:0 0 8px;font-size:12px;">${escapeHtml(f.hint)}</p>` : ''}<select id="${f.id}" class="filter-select" style="width:100%; margin-top:6px;">${options}</select></div>`;
   });
   document.getElementById('column-mappers').innerHTML = html;
   const btn = document.getElementById('import-submit-btn');
@@ -732,37 +755,87 @@ window.buildMappingUI = function() {
   btn.onclick = window.generateStagingArea;
 };
 
+function csvValue(row, header) {
+  return header ? row[header] : '';
+}
+
+function coerceRating(value) {
+  const n = parseFloat(String(value || '').replace(/[^0-9.]/g, ''));
+  if (!Number.isFinite(n)) return 5;
+  return Math.max(1, Math.min(5, Math.round(n)));
+}
+
+function coerceBool(value) {
+  const v = String(value || '').trim().toLowerCase();
+  return ['true', 'yes', 'y', '1', 'verified', 'verified purchase', 'verified buyer'].includes(v);
+}
+
+function renderImportProductCell(review, index) {
+  const statusClass = review.itemId ? 'matched' : 'warning';
+  const statusText = review.itemId
+    ? `Selected product ID: ${escapeHtml(review.itemId)}`
+    : 'No product selected yet. Search Shopify and choose the correct product before import.';
+  return `
+    <div class="import-product-cell" data-import-row="${index}">
+      <div class="import-product-field">
+        <input id="stage-item-${index}" class="premium-input" value="${escapeHtml(review.itemId || '')}" placeholder="Target Shopify Product ID" />
+        <button type="button" class="import-mini-btn primary" onclick="window.openImportProductPicker(${index})">Choose</button>
+      </div>
+      <div id="stage-status-${index}" class="import-product-status ${statusClass}">${statusText}</div>
+      <div class="import-product-tools">
+        <button type="button" class="import-mini-btn" onclick="window.autoMatchImportProduct(${index})">Auto match</button>
+        <button type="button" class="import-mini-btn" onclick="window.clearImportProduct(${index})">Clear</button>
+      </div>
+    </div>`;
+}
+
 window.generateStagingArea = function() {
   const map = {
-    itemId: document.getElementById('map-itemId').value,
-    rating: document.getElementById('map-rating').value,
-    userId: document.getElementById('map-userId').value,
-    email: document.getElementById('map-email').value,
-    headline: document.getElementById('map-headline').value,
-    comment: document.getElementById('map-comment').value,
-    createdAt: document.getElementById('map-date').value,
+    itemId: document.getElementById('map-itemId')?.value || '',
+    productTitle: document.getElementById('map-productTitle')?.value || '',
+    rating: document.getElementById('map-rating')?.value || '',
+    userId: document.getElementById('map-userId')?.value || '',
+    email: document.getElementById('map-email')?.value || '',
+    headline: document.getElementById('map-headline')?.value || '',
+    comment: document.getElementById('map-comment')?.value || '',
+    createdAt: document.getElementById('map-date')?.value || '',
+    verifiedPurchase: document.getElementById('map-verified')?.value || '',
   };
-  if (!map.itemId || !map.rating) {
-    alert('Product ID and Star Rating must be mapped.');
+  if (!map.rating) {
+    window.showToast('Star Rating must be mapped.');
+    return;
+  }
+  if (!map.itemId && !map.productTitle) {
+    window.showToast('Map either Product ID or Product Title so reviews can be attached to products.');
     return;
   }
   mappedReviews = parsedCSVData.map((row) => ({
-    itemId: row[map.itemId],
-    rating: row[map.rating],
-    userId: row[map.userId],
-    email: row[map.email],
-    headline: row[map.headline],
-    comment: row[map.comment],
-    createdAt: row[map.createdAt],
-  }));
+    itemId: String(csvValue(row, map.itemId) || '').trim(),
+    productTitle: String(csvValue(row, map.productTitle) || '').trim(),
+    rating: coerceRating(csvValue(row, map.rating)),
+    userId: String(csvValue(row, map.userId) || 'Imported Customer').trim(),
+    email: String(csvValue(row, map.email) || '').trim(),
+    headline: String(csvValue(row, map.headline) || '').trim(),
+    comment: String(csvValue(row, map.comment) || '').trim(),
+    createdAt: String(csvValue(row, map.createdAt) || '').trim(),
+    verifiedPurchase: coerceBool(csvValue(row, map.verifiedPurchase)),
+  })).filter((r) => r.rating && (r.comment || r.headline));
+
   const rows = mappedReviews.map((r, i) => `
-    <tr><td>${escapeHtml(r.userId || '')}</td><td>${'★'.repeat(parseInt(r.rating, 10) || 5)}</td><td>${escapeHtml(String(r.comment || '').slice(0, 80))}</td><td><input id="stage-item-${i}" class="premium-input" value="${escapeHtml(r.itemId || '')}" style="width:100%;" /></td></tr>`).join('');
+    <tr>
+      <td><strong>${escapeHtml(r.userId || 'Imported Customer')}</strong>${r.email ? `<br><small>${escapeHtml(r.email)}</small>` : ''}</td>
+      <td><span style="color:#ffae00;letter-spacing:1px;">${'★'.repeat(parseInt(r.rating, 10) || 5)}</span></td>
+      <td><strong>${escapeHtml(r.headline || '')}</strong><br><span>${escapeHtml(String(r.comment || '').slice(0, 120))}</span></td>
+      <td>${escapeHtml(r.productTitle || '')}${r.itemId ? `<br><small>CSV ID: ${escapeHtml(r.itemId)}</small>` : ''}</td>
+      <td>${renderImportProductCell(r, i)}</td>
+    </tr>`).join('');
   const stagingHtml = `
     <div id="staging-area" style="margin-top:24px;">
       <h3>3. Smart Product Mapping</h3>
-      <p class="muted">Check that every row has the correct numeric Product ID before importing.</p>
-      <table class="import-table"><thead><tr><th>Reviewer</th><th>Rating</th><th>Review</th><th>Target Product ID</th></tr></thead><tbody>${rows}</tbody></table>
-      <p><button id="final-import-btn" class="primary-btn" onclick="window.processFinalImport()">Go Live (Import to Database)</button></p>
+      <p class="muted">Every review needs a target Shopify Product ID. If the CSV did not include one, use Auto match or Choose to select the correct product from Shopify.</p>
+      <div class="import-product-tools" style="margin:0 0 12px;"><button type="button" class="secondary-btn" onclick="window.autoMatchAllImportProducts()">Auto match all by title</button><button type="button" class="secondary-btn" onclick="window.showUnmatchedImportRows()">Show unmatched only</button><button type="button" class="secondary-btn" onclick="window.showAllImportRows()">Show all rows</button></div>
+      <div class="import-table-wrap"><table class="import-table"><thead><tr><th>Reviewer</th><th>Rating</th><th>Review</th><th>CSV product</th><th>Target product</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p style="display:flex;justify-content:flex-end;margin-top:18px;"><button id="final-import-btn" class="primary-btn" onclick="window.processFinalImport()">Go Live (Import to Database)</button></p>
     </div>`;
   let existing = document.getElementById('staging-area');
   if (!existing) {
@@ -773,10 +846,136 @@ window.generateStagingArea = function() {
   existing.outerHTML = stagingHtml;
 };
 
+function ensureImportProductModal() {
+  let modal = document.getElementById('import-product-modal');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.id = 'import-product-modal';
+  modal.className = 'import-modal-backdrop';
+  modal.innerHTML = `
+    <div class="import-modal" role="dialog" aria-modal="true">
+      <div class="import-modal-head"><div><h3>Select target Shopify product</h3><p>Choose where this imported review should appear.</p></div><button type="button" class="import-modal-close" aria-label="Close">×</button></div>
+      <div class="import-modal-search"><input id="import-product-search-input" type="search" placeholder="Search by product title, handle or ID"><button type="button" class="primary-btn" id="import-product-search-run">Search</button></div>
+      <div id="import-product-results" class="import-modal-results"><div class="import-help">Search for a product to select it.</div></div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', (event) => { if (event.target === modal || event.target.matches('.import-modal-close')) modal.classList.remove('active'); });
+  modal.querySelector('#import-product-search-run')?.addEventListener('click', () => window.runImportProductSearch());
+  modal.querySelector('#import-product-search-input')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); window.runImportProductSearch(); } });
+  return modal;
+}
+
+async function fetchShopifyProductMatches(query) {
+  if (!query) return [];
+  const res = await adminFetch(`/admin/products/search?q=${encodeURIComponent(query)}`);
+  return res.products || [];
+}
+
+window.openImportProductPicker = function(index) {
+  const modal = ensureImportProductModal();
+  modal.dataset.importIndex = String(index);
+  const input = modal.querySelector('#import-product-search-input');
+  input.value = mappedReviews[index]?.productTitle || mappedReviews[index]?.itemId || '';
+  modal.querySelector('#import-product-results').innerHTML = '<div class="import-help">Search for a product to select it.</div>';
+  modal.classList.add('active');
+  setTimeout(() => input.focus(), 50);
+};
+
+window.runImportProductSearch = async function() {
+  const modal = ensureImportProductModal();
+  const index = parseInt(modal.dataset.importIndex || '0', 10);
+  const box = modal.querySelector('#import-product-results');
+  const query = modal.querySelector('#import-product-search-input')?.value.trim() || '';
+  if (!query) { box.innerHTML = '<div class="import-help">Enter a product title or ID first.</div>'; return; }
+  box.innerHTML = '<div class="import-help">Searching Shopify products…</div>';
+  try {
+    const products = await fetchShopifyProductMatches(query);
+    if (!products.length) { box.innerHTML = '<div class="import-help">No products found. Try a shorter title or use the Product ID directly.</div>'; return; }
+    box.innerHTML = products.map((p) => `
+      <div class="import-product-result">
+        <img src="${escapeHtml(p.image || '')}" alt="">
+        <div><strong>${escapeHtml(p.title || 'Product')}</strong><small>Product ID: ${escapeHtml(p.id || '')}${p.handle ? ` · ${escapeHtml(p.handle)}` : ''}</small></div>
+        <button type="button" class="primary-btn" onclick="window.selectImportProduct(${index}, '${escapeHtml(p.id || '')}', '${escapeHtml(p.title || '')}')">Select</button>
+      </div>`).join('');
+  } catch (error) {
+    const installUrl = error.installUrl || `${window.location.origin}/auth/shopify?shop=${encodeURIComponent(SHOP_DOMAIN)}`;
+    box.innerHTML = `<div class="import-help"><strong>Product search needs Shopify connection.</strong><br>${escapeHtml(error.message || 'Reconnect through Shopify OAuth to search products.')}<br><br><a class="primary-btn" href="${escapeHtml(installUrl)}" target="_top" style="display:inline-flex;text-decoration:none;">Connect Shopify</a></div>`;
+  }
+};
+
+window.selectImportProduct = function(index, productId, title) {
+  mappedReviews[index].itemId = String(productId || '').trim();
+  if (title) mappedReviews[index].matchedProductTitle = title;
+  const input = document.getElementById(`stage-item-${index}`);
+  if (input) input.value = mappedReviews[index].itemId;
+  const status = document.getElementById(`stage-status-${index}`);
+  if (status) {
+    status.className = 'import-product-status matched';
+    status.innerHTML = `Selected: ${escapeHtml(title || 'Shopify product')}<br><small>Product ID: ${escapeHtml(productId)}</small>`;
+  }
+  document.getElementById('import-product-modal')?.classList.remove('active');
+};
+
+window.clearImportProduct = function(index) {
+  if (!mappedReviews[index]) return;
+  mappedReviews[index].itemId = '';
+  mappedReviews[index].matchedProductTitle = '';
+  const input = document.getElementById(`stage-item-${index}`);
+  if (input) input.value = '';
+  const status = document.getElementById(`stage-status-${index}`);
+  if (status) { status.className = 'import-product-status warning'; status.innerText = 'No product selected yet.'; }
+};
+
+window.autoMatchImportProduct = async function(index) {
+  const review = mappedReviews[index];
+  if (!review) return;
+  const query = review.productTitle || review.itemId || '';
+  if (!query) { window.showToast('No product title or ID available to match.'); return; }
+  const status = document.getElementById(`stage-status-${index}`);
+  if (status) { status.className = 'import-product-status'; status.innerText = 'Searching Shopify…'; }
+  try {
+    const products = await fetchShopifyProductMatches(query);
+    const exact = products.find((p) => String(p.title || '').toLowerCase() === String(review.productTitle || '').toLowerCase()) || products[0];
+    if (!exact) {
+      if (status) { status.className = 'import-product-status warning'; status.innerText = 'No match found. Choose manually.'; }
+      return;
+    }
+    window.selectImportProduct(index, exact.id, exact.title);
+  } catch (error) {
+    if (status) { status.className = 'import-product-status warning'; status.innerText = error.message || 'Auto match failed.'; }
+  }
+};
+
+window.autoMatchAllImportProducts = async function() {
+  for (let i = 0; i < mappedReviews.length; i += 1) {
+    if (!document.getElementById(`stage-item-${i}`)?.value.trim()) {
+      await window.autoMatchImportProduct(i);
+    }
+  }
+  window.showToast('Auto matching complete. Check any unmatched rows before importing.');
+};
+
+window.showUnmatchedImportRows = function() {
+  mappedReviews.forEach((_, i) => {
+    const row = document.querySelector(`[data-import-row="${i}"]`)?.closest('tr');
+    if (row) row.style.display = document.getElementById(`stage-item-${i}`)?.value.trim() ? 'none' : '';
+  });
+};
+
+window.showAllImportRows = function() {
+  document.querySelectorAll('#staging-area tbody tr').forEach((row) => { row.style.display = ''; });
+};
+
 window.processFinalImport = async function() {
   const btn = document.getElementById('final-import-btn');
   if (btn) { btn.innerText = 'Importing...'; btn.disabled = true; }
-  const finalPayload = mappedReviews.map((r, i) => ({ ...r, itemId: document.getElementById(`stage-item-${i}`).value.trim() }));
+  const finalPayload = mappedReviews.map((r, i) => ({ ...r, itemId: document.getElementById(`stage-item-${i}`)?.value.trim() || '' }));
+  const missing = finalPayload.filter((r) => !r.itemId).length;
+  if (missing) {
+    window.showToast(`${missing} review${missing === 1 ? '' : 's'} still need a target product.`);
+    if (btn) { btn.innerText = 'Go Live (Import to Database)'; btn.disabled = false; }
+    return;
+  }
   try {
     const result = await adminFetch('/reviews/import', {
       method: 'POST',
@@ -915,6 +1114,7 @@ document.addEventListener('DOMContentLoaded', () => {
   enhanceModernColorPickers();
   window.load();
   setTimeout(() => { enhanceModernColorPickers(); window.autoResizeReplyBoxes?.(); }, 400);
+  document.getElementById('loyalty-enabled')?.addEventListener('change', () => window.saveLoyaltyConfig?.());
 });
 
 
@@ -946,6 +1146,8 @@ function getLoyaltyPayload() {
       minStars: Number(document.getElementById('loyalty-discount-stars')?.value || 1),
       reusableTemplate: true,
       messageTemplate: document.getElementById('loyalty-discount-message')?.value || 'Thanks for your review — here is {{ discount_value }}% off your next order.',
+      emailSubject: document.getElementById('loyalty-email-subject')?.value || 'Your review reward is ready',
+      emailBody: document.getElementById('loyalty-email-body')?.value || 'Thanks for leaving a review. Your {{ reward_type }} is now ready.',
     }],
     pointsRules: [{
       id: window.currentLoyaltyConfig?.pointsRules?.[0]?.id || undefined,
@@ -976,6 +1178,8 @@ function hydrateLoyalty(config = {}) {
   if (document.getElementById('loyalty-discount-stars')) document.getElementById('loyalty-discount-stars').value = reward.minStars || 1;
   if (document.getElementById('loyalty-discount-verified')) document.getElementById('loyalty-discount-verified').checked = reward.verifiedOnly !== false;
   if (document.getElementById('loyalty-discount-message')) document.getElementById('loyalty-discount-message').value = reward.messageTemplate || 'Thanks for your review — here is {{ discount_value }}% off your next order.';
+  if (document.getElementById('loyalty-email-subject')) document.getElementById('loyalty-email-subject').value = reward.emailSubject || 'Your review reward is ready';
+  if (document.getElementById('loyalty-email-body')) document.getElementById('loyalty-email-body').value = reward.emailBody || 'Thanks for leaving a review. Your {{ reward_type }} is now ready.';
 
   if (document.getElementById('loyalty-points-name')) document.getElementById('loyalty-points-name').value = points.name || 'Review approved points';
   if (document.getElementById('loyalty-points-value')) document.getElementById('loyalty-points-value').value = points.points ?? 100;

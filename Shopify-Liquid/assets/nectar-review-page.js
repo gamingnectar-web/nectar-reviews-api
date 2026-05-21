@@ -4,6 +4,7 @@
 
   const API = (root.dataset.apiUrl || 'https://nectar-reviews-api.onrender.com/api').replace(/\/$/, '');
   const SHOP_DOMAIN = root.dataset.shopDomain || (window.Shopify && window.Shopify.shop) || window.location.hostname;
+  const CUSTOMER_LOGGED_IN = root.dataset.customerLoggedIn === 'true';
   const params = new URLSearchParams(window.location.search);
 
   const ui = {
@@ -222,9 +223,17 @@
     }
   }
 
+  function maskName(name) {
+    const clean = String(name || 'Customer').trim();
+    return clean ? `${clean.charAt(0).toUpperCase()}***` : 'Customer';
+  }
+
   function buildSummary(data) {
+    const publicName = CUSTOMER_LOGGED_IN ? (data.customerName || 'Customer') : maskName(data.customerName || 'Customer');
+    const preview = document.getElementById('nectar-name-preview');
+    if (preview) preview.textContent = maskName(data.customerName || 'Customer');
     ui.summary.innerHTML = `
-      <div><span>Customer</span><strong>${escapeHtml(data.customerName || 'Customer')}</strong></div>
+      <div><span>Customer</span><strong>${escapeHtml(publicName)}</strong></div>
       <div><span>Order</span><strong>#${escapeHtml(String(data.orderId || '—').replace(/^#/, ''))}</strong></div>
       <div><span>Reviewing</span><strong>${products.length} item${products.length === 1 ? '' : 's'}</strong></div>`;
   }
@@ -246,7 +255,7 @@
       ${product.matchingSliders.map((slider) => {
         const label = slider.label || '';
         const key = sliderKey(product.productId, label);
-        return `<label class="nectar-range-row"><span>${escapeHtml(label)}</span><input id="slider-input-${key}" class="nectar-range is-inactive" type="range" min="0" max="10" value="0" data-active="false" data-product-id="${escapeHtml(product.productId)}" data-slider-label="${escapeHtml(label)}" data-slider-key="${key}"><output id="slider-value-${key}">Not scored</output><button type="button" data-clear-slider="true" data-product-id="${escapeHtml(product.productId)}" data-slider-key="${key}">Clear</button></label>`;
+        return `<label class="nectar-range-row"><span>${escapeHtml(label)}</span><div class="nectar-range-wrap"><input id="slider-input-${key}" class="nectar-range is-inactive" type="range" min="0" max="10" value="0" data-active="false" data-product-id="${escapeHtml(product.productId)}" data-slider-label="${escapeHtml(label)}" data-slider-key="${key}"><button class="nectar-clear-slider" type="button" data-clear-slider="true" data-product-id="${escapeHtml(product.productId)}" data-slider-key="${key}" aria-label="Clear ${escapeHtml(label)}">×</button></div><output id="slider-value-${key}">Not scored</output></label>`;
       }).join('')}
     </div>`;
   }
@@ -410,6 +419,7 @@
         comment: specific.comment || overall.comment,
         attributes: Object.fromEntries(Object.entries(state.attributes || {}).filter(([, value]) => Number(value) > 0)),
         productTags: getProductTags(product.raw || product),
+        isAnonymous: Boolean(document.getElementById('nectar-hide-name')?.checked),
       };
     }).filter((review) => review.headline || review.comment);
 

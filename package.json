@@ -1,6 +1,6 @@
 {
   "name": "nectar-reviews-api",
-  "version": "1.2.0-email-dedupe-loyalty-v15",
+  "version": "1.2.2-import-mapping-fix-v16-1",
   "description": "Nectar Reviews API - v15 email dedupe, duplicate review blocking and loyalty foundation",
   "main": "server.js",
   "scripts": {
