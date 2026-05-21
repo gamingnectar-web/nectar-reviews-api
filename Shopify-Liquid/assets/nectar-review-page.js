@@ -95,8 +95,8 @@
       const styles = appConfig.widgetStyles || appConfig.styles || {};
       if (styles.primaryColor) root.style.setProperty('--primary', styles.primaryColor);
       if (styles.starColor) root.style.setProperty('--accent', styles.starColor);
-      root.style.setProperty('--nectar-review-star-size', `${Number(styles.reviewStarSize || 38)}px`);
-      root.style.setProperty('--nectar-slider-track', styles.sliderTrackColor || '#ffffff');
+      root.style.setProperty('--nectar-review-star-size', `${Number(styles.reviewStarSize || 52)}px`);
+      root.style.setProperty('--nectar-slider-track', (styles.sliderTrackColor && styles.sliderTrackColor !== '#ffffff') ? styles.sliderTrackColor : '#e6ebf1');
       root.style.setProperty('--nectar-slider-knob', styles.sliderKnobColor || '#111111');
       root.dataset.starAlign = styles.reviewStarAlignment || 'center';
     } catch (error) {

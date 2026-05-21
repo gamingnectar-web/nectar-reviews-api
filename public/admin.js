@@ -220,8 +220,8 @@ function hydrateSettings(config) {
     document.getElementById('style-star').value = config.widgetStyles.starColor || '#ffc700';
     document.getElementById('style-text').value = config.widgetStyles.textSize || 15;
     if (document.getElementById('style-width')) document.getElementById('style-width').value = config.widgetStyles.maxWidth || 1160;
-    if (document.getElementById('style-review-star-size')) document.getElementById('style-review-star-size').value = config.widgetStyles.reviewStarSize || 38;
-    if (document.getElementById('style-slider-track')) document.getElementById('style-slider-track').value = config.widgetStyles.sliderTrackColor || '#ffffff';
+    if (document.getElementById('style-review-star-size')) document.getElementById('style-review-star-size').value = config.widgetStyles.reviewStarSize || 52;
+    if (document.getElementById('style-slider-track')) document.getElementById('style-slider-track').value = (config.widgetStyles.sliderTrackColor && config.widgetStyles.sliderTrackColor !== '#ffffff') ? config.widgetStyles.sliderTrackColor : '#e6ebf1';
     if (document.getElementById('style-slider-knob')) document.getElementById('style-slider-knob').value = config.widgetStyles.sliderKnobColor || '#111111';
   }
   if (document.getElementById('trash-retention-days')) document.getElementById('trash-retention-days').value = config.trashRetentionDays || 28;
@@ -298,7 +298,9 @@ window.renderLists = function() {
   if (status !== 'all') active = active.filter((r) => r.status === status);
   if (starF !== 'all') active = active.filter((r) => Number(r.rating) === parseInt(starF, 10));
   if (query) active = active.filter((r) => `${r.userId || ''} ${r.email || ''} ${r.comment || ''}`.toLowerCase().includes(query));
-  const trash = data.filter((r) => r.isDeleted);
+  let trash = data.filter((r) => r.isDeleted);
+  const trashQuery = (document.getElementById('trash-search')?.value || '').toLowerCase();
+  if (trashQuery) trash = trash.filter((r) => `${r.userId || ''} ${r.email || ''} ${r.comment || ''} ${r.headline || ''} ${r.itemId || ''}`.toLowerCase().includes(trashQuery));
 
   const mgrList = document.getElementById('mgr-list');
   const trashList = document.getElementById('trash-list');
@@ -316,6 +318,21 @@ window.renderTrashStats = function(trash) {
     oldestEl.textContent = dates.length ? dates[0].toLocaleDateString() : '—';
   }
 };
+
+window.trashTab = function(name) {
+  document.querySelectorAll('.trash-tab').forEach((btn) => btn.classList.toggle('active', btn.textContent.toLowerCase().includes(name === 'list' ? 'trash list' : 'auto-delete')));
+  document.querySelectorAll('.trash-pane').forEach((pane) => pane.classList.toggle('active', pane.id === `trash-pane-${name}` || (name === 'settings' && pane.id === 'trash-pane-settings')));
+};
+
+window.toggleCard = function(button) {
+  const card = button.closest('.settings-card');
+  const body = card?.querySelector('.settings-card-body');
+  if (!body) return;
+  const collapsed = body.style.display === 'none';
+  body.style.display = collapsed ? '' : 'none';
+  button.textContent = collapsed ? '−' : '+';
+};
+
 
 window.buildCard = function(r, isTrash) {
   const rating = Number(r.rating || 0);
@@ -335,7 +352,7 @@ window.buildCard = function(r, isTrash) {
       attrHtml += `
         <div class="admin-attr-item">
           <div class="admin-attr-head"><span>${escapeHtml(key)}</span><strong>${escapeHtml(val)}/10</strong></div>
-          <div class="admin-attr-bar" style="background:#fff!important;overflow:visible!important;"><span class="admin-attr-notch" style="left:calc(${pct}% - 5px);width:10px!important;height:12px!important;background:#111!important;"></span></div>
+          <div class="admin-attr-bar"><span class="admin-attr-notch" style="left:${Math.max(4, Math.min(96, pct))}%"></span></div>
         </div>`;
     }
     attrHtml += '</div>';
@@ -572,8 +589,8 @@ window.saveSettings = async function() {
       starColor: document.getElementById('style-star').value,
       textSize: parseInt(document.getElementById('style-text').value, 10),
       maxWidth: parseInt(document.getElementById('style-width')?.value || '1160', 10),
-      reviewStarSize: parseInt(document.getElementById('style-review-star-size')?.value || '38', 10),
-      sliderTrackColor: document.getElementById('style-slider-track')?.value || '#ffffff',
+      reviewStarSize: parseInt(document.getElementById('style-review-star-size')?.value || '52', 10),
+      sliderTrackColor: document.getElementById('style-slider-track')?.value || '#e6ebf1',
       sliderKnobColor: document.getElementById('style-slider-knob')?.value || '#111111',
     },
     trashRetentionDays: Math.max(1, Math.min(28, parseInt(document.getElementById('trash-retention-days')?.value || '28', 10))),

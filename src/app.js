@@ -3,7 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const { env } = require('./config/env');
-const { Shop } = require('./models');
+const { Shop, Review, Settings } = require('./models');
 const { cleanShopDomain, isValidShopDomain } = require('./utils/validation');
 const publicRoutes = require('./routes/public');
 const adminRoutes = require('./routes/admin');
@@ -12,6 +12,28 @@ const { securityHeaders, corsOptions, makeRateLimiter, errorHandler, requireAdmi
 
 const app = express();
 const publicDir = path.join(__dirname, '..', 'public');
+
+let trashCleanupStarted = false;
+function startTrashAutoCleanup() {
+  if (trashCleanupStarted) return;
+  trashCleanupStarted = true;
+  const run = async () => {
+    try {
+      const configs = await Settings.find({}).select('shopDomain trashRetentionDays').lean();
+      for (const config of configs) {
+        const days = Math.max(1, Math.min(28, Number(config.trashRetentionDays || 28)));
+        const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        await Review.deleteMany({ shopDomain: config.shopDomain, isDeleted: true, deletedAt: { $lte: cutoff } });
+      }
+    } catch (error) {
+      console.warn('Trash auto-cleanup skipped:', error.message);
+    }
+  };
+  setTimeout(run, 30 * 1000);
+  setInterval(run, 6 * 60 * 60 * 1000);
+}
+startTrashAutoCleanup();
+
 
 app.disable('x-powered-by');
 app.set('trust proxy', 1);

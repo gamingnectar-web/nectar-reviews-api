@@ -67,8 +67,10 @@
       .nr-section-kicker { margin:0 0 22px; color:#344054; text-transform:uppercase; letter-spacing:.16em; font-size:12px; font-weight:950; }
       .nr-rating-row, .nr-consensus-row { display:grid; grid-template-columns:22px 1fr 38px; gap:14px; align-items:center; margin-bottom:16px; font-weight:900; }
       .nr-consensus-row { grid-template-columns:170px 1fr 56px; }
-      .nr-rating-bar, .nr-consensus-bar { height:7px; border-radius:999px; background:#e4eaf2; overflow:hidden; }
-      .nr-rating-fill, .nr-consensus-fill { display:block; height:100%; border-radius:999px; background:#111; min-width:0; }
+      .nr-rating-bar { height:7px; border-radius:999px; background:#e4eaf2; overflow:hidden; }
+      .nr-rating-fill { display:block; height:100%; border-radius:999px; background:#111; min-width:0; }
+      .nr-consensus-bar { position:relative; height:12px; border-radius:999px; background:#e6ebf1; overflow:hidden; box-shadow:inset 0 1px 2px rgba(15,23,42,.06); }
+      .nr-consensus-notch { position:absolute; top:50%; transform:translate(-50%,-50%); width:24px; height:8px; border-radius:3px; background:#111827; box-shadow:0 1px 2px rgba(15,23,42,.22); }
       .nr-review-card { position:relative; padding:32px; border:1px solid var(--nr-border); background:#fff; margin-bottom:20px; }
       .nr-review-top { display:flex; justify-content:space-between; gap:24px; align-items:flex-start; margin-bottom:18px; }
       .nr-author { margin:0; font-size:17px; font-weight:950; }
@@ -78,8 +80,9 @@
       .nr-comment { margin:0; color:#475467; line-height:1.65; font-size:16px; }
       .nr-attrs { display:grid; grid-template-columns:repeat(2,minmax(180px,1fr)); gap:18px 40px; margin-top:24px; padding-top:24px; border-top:1px dashed #e8edf4; }
       .nr-attr-head { display:flex; justify-content:space-between; gap:12px; margin-bottom:9px; color:#667085; text-transform:uppercase; letter-spacing:.04em; font-size:12px; font-weight:950; }
-      .nr-attr-bar { height:7px; border-radius:999px; background:#e4eaf2; overflow:hidden; }
-      .nr-attr-fill { display:block; height:100%; border-radius:999px; background:#111; }
+      .nr-attr-bar { position:relative; height:12px; border-radius:999px; background:#e6ebf1; overflow:hidden; box-shadow:inset 0 1px 2px rgba(15,23,42,.06); }
+      .nr-attr-fill { display:none; }
+      .nr-attr-notch { position:absolute; top:50%; transform:translate(-50%,-50%); display:block; width:24px; height:8px; border-radius:3px; background:#111827; box-shadow:0 1px 2px rgba(15,23,42,.22); }
       .nr-empty { padding:32px; border:1px solid var(--nr-border); background:#fff; color:var(--nr-muted); text-align:center; }
       .nr-modal-backdrop { position:fixed; inset:0; z-index:2147483000; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(15,23,42,.48); }
       .nr-modal-backdrop.active { display:flex; }
@@ -91,8 +94,8 @@
       .nr-field textarea { min-height:120px; resize:vertical; }
       .nr-rating-picker { margin-top:16px; }
       .nr-rating-picker span { display:block; margin-bottom:8px; font-weight:900; }
-      .nr-star-picker { display:flex; gap:8px; align-items:center; justify-content:center; padding:4px 0; }
-      .nr-star-button { border:0; background:transparent; color:#d0d5dd; font-size:42px; line-height:1; padding:0; cursor:pointer; transition:transform .15s ease,color .15s ease,opacity .15s ease; }
+      .nr-star-picker { display:flex; gap:clamp(8px,2vw,22px); align-items:center; justify-content:space-between; width:100%; padding:12px 2px 8px; }
+      .nr-star-button { flex:1; border:0; background:transparent; color:#d0d5dd; font-size:var(--nr-review-star-size,52px); line-height:1; padding:0; cursor:pointer; transition:transform .15s ease,color .15s ease,opacity .15s ease; text-align:center; }
       .nr-star-button.active { color:var(--nr-star); }
       .nr-star-picker:hover .nr-star-button { opacity:.5; transform:scale(1.02); }
       .nr-star-picker .nr-star-button:hover, .nr-star-picker .nr-star-button:hover ~ .nr-star-button { opacity:1; }
@@ -100,7 +103,7 @@
       .nr-slider-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:12px; }
       .nr-slider-field { display:block; padding:12px; border:1px solid var(--nr-border); border-radius:12px; background:#fbfdff; }
       .nr-slider-head { display:flex; justify-content:space-between; gap:12px; margin-bottom:8px; color:#344054; font-size:13px; font-weight:950; }
-      .nr-slider-field input[type=range] { appearance:none; -webkit-appearance:none; width:100%; height:8px; padding:0; border:1px solid #e4eaf2; border-radius:999px; background:#fff; box-shadow:inset 0 1px 2px rgba(15,23,42,.08); cursor:pointer; } .nr-slider-field input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:999px;background:#fff;} .nr-slider-field input[type=range]::-moz-range-track{height:8px;border-radius:999px;background:#fff;} .nr-slider-field input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:13px;border-radius:3px;background:#111827;border:0;margin-top:-3px;box-shadow:0 1px 3px rgba(15,23,42,.22);} .nr-slider-field input[type=range]::-moz-range-thumb{width:22px;height:13px;border-radius:3px;background:#111827;border:0;box-shadow:0 1px 3px rgba(15,23,42,.22);} .nr-slider-field input[type=range].inactive{opacity:.7;}
+      .nr-slider-field input[type=range] { appearance:none; -webkit-appearance:none; width:100%; height:14px; padding:0; border:0; border-radius:999px; background:transparent; cursor:pointer; } .nr-slider-field input[type=range]::-webkit-slider-runnable-track{height:12px;border-radius:999px;background:var(--nr-slider-track,#e6ebf1);box-shadow:inset 0 1px 2px rgba(15,23,42,.06);} .nr-slider-field input[type=range]::-moz-range-track{height:12px;border-radius:999px;background:var(--nr-slider-track,#e6ebf1);box-shadow:inset 0 1px 2px rgba(15,23,42,.06);} .nr-slider-field input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:8px;border-radius:3px;background:var(--nr-slider-knob,#111827);border:0;margin-top:2px;box-shadow:0 1px 2px rgba(15,23,42,.22);} .nr-slider-field input[type=range]::-moz-range-thumb{width:24px;height:8px;border-radius:3px;background:var(--nr-slider-knob,#111827);border:0;box-shadow:0 1px 2px rgba(15,23,42,.22);} .nr-slider-field input[type=range].inactive{opacity:.7;}
       .nr-modal-actions { position:sticky; bottom:-26px; background:linear-gradient(180deg,rgba(255,255,255,.92),#fff 35%); display:flex; justify-content:flex-end; gap:10px; margin:22px -26px -26px; padding:18px 26px; border-top:1px solid #eef2f7; }
       .nr-note { color:var(--nr-muted); font-size:13px; margin:0; line-height:1.5; }
       @media (max-width: 900px) { .nr-summary { grid-template-columns:1fr; gap:28px; padding:28px; } .nr-consensus-row { grid-template-columns:130px 1fr 50px; } }
@@ -150,7 +153,7 @@
           <p class="nr-section-kicker">Customer Consensus</p>
           ${attrs.length ? attrs.map(([key, value]) => {
             const val = Math.max(0, Math.min(10, Number(value || 0)));
-            return `<div class="nr-consensus-row"><span>${escapeHtml(key)}</span><div class="nr-consensus-bar"><span class="nr-consensus-fill" style="width:${val * 10}%"></span></div><span>${val.toFixed(val % 1 ? 1 : 0)}/10</span></div>`;
+            return `<div class="nr-consensus-row"><span>${escapeHtml(key)}</span><div class="nr-consensus-bar"><span class="nr-consensus-notch" style="left:${Math.max(4, Math.min(96, val * 10))}%"></span></div><span>${val.toFixed(val % 1 ? 1 : 0)}/10</span></div>`;
           }).join('') : '<p class="nr-note">Consensus sliders will appear here when reviews include attributes.</p>'}
         </div>
       </div>`;
@@ -169,7 +172,7 @@
         <p class="nr-comment">${escapeHtml(review.comment || '')}</p>
         ${attrs.length ? `<div class="nr-attrs">${attrs.map(([key, raw]) => {
           const val = Math.max(0, Math.min(10, Number(raw || 0)));
-          return `<div><div class="nr-attr-head"><span>${escapeHtml(key)}</span><strong>${val}/10</strong></div><div class="nr-attr-bar"><span class="nr-attr-fill" style="width:${val * 10}%"></span></div></div>`;
+          return `<div><div class="nr-attr-head"><span>${escapeHtml(key)}</span><strong>${val}/10</strong></div><div class="nr-attr-bar"><span class="nr-attr-notch" style="left:${Math.max(4, Math.min(96, val * 10))}%"></span></div></div>`;
         }).join('')}</div>` : ''}
       </article>`;
   }
@@ -215,6 +218,12 @@
     const modalId = `nr-modal-${Math.random().toString(36).slice(2)}`;
     const modal = document.createElement('div');
     modal.className = 'nr-modal-backdrop';
+    const styles = settings?.widgetStyles || settings?.styles || {};
+    modal.style.setProperty('--nr-star', styles.starColor || '#f5a400');
+    modal.style.setProperty('--nr-review-star-size', `${Number(styles.reviewStarSize || 52)}px`);
+    const track = styles.sliderTrackColor && styles.sliderTrackColor !== '#ffffff' ? styles.sliderTrackColor : '#e6ebf1';
+    modal.style.setProperty('--nr-slider-track', track);
+    modal.style.setProperty('--nr-slider-knob', styles.sliderKnobColor || '#111827');
     modal.id = modalId;
     modal.innerHTML = `
       <div class="nr-modal" role="dialog" aria-modal="true" aria-label="Write a review">
@@ -303,7 +312,7 @@
     const styles = settings.widgetStyles || {};
     const modal = buildModal(itemId, shopDomain, settings);
     el.innerHTML = `
-      <section class="nectar-review-widget" style="--nr-primary:${escapeHtml(styles.primaryColor || '#111827')};--nr-star:${escapeHtml(styles.starColor || '#f5a400')};--nr-max-width:${Number(styles.maxWidth || 1160)}px;">
+      <section class="nectar-review-widget" style="--nr-primary:${escapeHtml(styles.primaryColor || '#111827')};--nr-star:${escapeHtml(styles.starColor || '#f5a400')};--nr-review-star-size:${Number(styles.reviewStarSize || 52)}px;--nr-slider-track:${escapeHtml((styles.sliderTrackColor && styles.sliderTrackColor !== '#ffffff') ? styles.sliderTrackColor : '#e6ebf1')};--nr-slider-knob:${escapeHtml(styles.sliderKnobColor || '#111827')};--nr-max-width:${Number(styles.maxWidth || 1160)}px;">
         <div class="nr-widget-header"><h3 class="nr-widget-title">${escapeHtml(title)}</h3><button type="button" class="nr-write-btn">Write a Review</button></div>
         ${reviews.length || Number(json.count || 0) ? buildSummary(json, reviews) : '<div class="nr-empty">No reviews yet. Be the first to write one.</div>'}
         <div class="nr-review-list">${reviews.map(buildReview).join('')}</div>

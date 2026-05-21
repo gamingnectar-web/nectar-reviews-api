@@ -3,7 +3,7 @@
 
 <span
   class="nectar-star-badge"
-  data-nectar-card-stars
+  data-nectar-star-badge
   data-product-id="{{ product.id }}"
   data-shop-domain="{{ nectar_shop_domain }}"
   data-api-base="{{ nectar_app_url }}/api"
@@ -19,13 +19,14 @@
   function ready(fn){ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn); else fn(); }
   function escapeHtml(value){ return String(value || '').replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]; }); }
   ready(function(){
-    document.querySelectorAll('.nectar-star-badge[data-nectar-card-stars]').forEach(function(el){
-      if (el.dataset.loaded === 'true') return;
-      el.dataset.loaded = 'true';
+    document.querySelectorAll('.nectar-star-badge[data-nectar-star-badge]').forEach(function(el){
+      if (el.dataset.badgeLoaded === 'true') return;
+      el.dataset.badgeLoaded = 'true';
       var api = (el.dataset.apiBase || 'https://nectar-reviews-api.onrender.com/api').replace(/\/$/, '');
       var shopDomain = el.dataset.shopDomain || (window.Shopify && window.Shopify.shop) || window.location.hostname;
       var productId = el.dataset.productId;
       var starColor = el.dataset.starColor || '#ffc700';
+      var blockBg = el.style.background || '#111827';
       var showEmpty = el.dataset.showEmpty === 'true';
       if (!shopDomain || !productId) return;
       Promise.all([
@@ -35,10 +36,10 @@
         var json = results[0] || {};
         var config = results[1] || {};
         var card = config.cardStyles || {};
-        if (card.badgeBackground) el.style.background = card.badgeBackground;
+        el.style.background = card.badgeBackground || blockBg;
         if (card.badgeTextColor) el.style.color = card.badgeTextColor;
         if (card.badgeRadius !== undefined) el.style.borderRadius = Number(card.badgeRadius || 999) + 'px';
-        if (card.starSize) el.style.fontSize = Number(card.starSize || 14) + 'px';
+        if (card.starSize) el.style.fontSize = Number(card.starSize || {{ block.settings.font_size }}) + 'px';
         starColor = card.badgeStarColor || card.starColor || starColor;
         var count = Number(json.count || 0);
         if (!count && !showEmpty) { el.style.display = 'none'; return; }

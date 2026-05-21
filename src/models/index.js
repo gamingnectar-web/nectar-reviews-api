@@ -55,9 +55,9 @@ const settingsSchema = new mongoose.Schema({
     emptyMode: { type: String, default: 'stars_text' },
     emptyText: { type: String, default: 'No reviews yet.' },
     maxWidth: { type: Number, default: 1160 },
-    reviewStarSize: { type: Number, default: 38 },
+    reviewStarSize: { type: Number, default: 52 },
     reviewStarAlignment: { type: String, default: 'center' },
-    sliderTrackColor: { type: String, default: '#ffffff' },
+    sliderTrackColor: { type: String, default: '#e6ebf1' },
     sliderKnobColor: { type: String, default: '#111111' },
   },
   cardStyles: {

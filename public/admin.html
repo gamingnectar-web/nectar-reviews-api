@@ -336,6 +336,42 @@
       .admin-attr-grid { grid-template-columns: 1fr; }
       .attr-rule-row, .style-control-grid, .trash-tools-grid { grid-template-columns: 1fr; }
     }
+
+    /* v10 polish: consistent slider bars, cleaner forms, collapsible admin cards */
+    .admin-attr-grid{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:16px;margin-top:18px;border-top:1px dashed var(--border);padding-top:16px;}
+    .admin-attr-item{min-width:0;}
+    .admin-attr-head{display:flex;justify-content:space-between;gap:10px;color:#667085;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;}
+    .admin-attr-bar{position:relative;height:12px;border-radius:999px;background:#e6ebf1!important;overflow:hidden!important;box-shadow:inset 0 1px 2px rgba(15,23,42,.06);}
+    .admin-attr-notch{position:absolute;top:50%;transform:translate(-50%,-50%);display:block;width:24px!important;height:8px!important;border-radius:3px;background:#111827!important;box-shadow:0 1px 2px rgba(15,23,42,.22);}
+    .reply-panel{background:#f8fafc;border:1px solid var(--border);border-radius:14px;padding:16px;}
+    .reply-input{font:inherit!important;background:#fff!important;border-color:#d9e0ea!important;line-height:1.55;color:#111827;}
+    .reply-panel .post-btn{border-radius:10px;}
+    .settings-card{padding:0;overflow:hidden;}
+    .settings-card-header{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:22px 26px;border-bottom:1px solid var(--border);}
+    .settings-card-header h3{margin:0;font-size:19px;letter-spacing:-.02em;}
+    .settings-card-header p{margin:5px 0 0;color:var(--text-light);line-height:1.45;}
+    .collapse-toggle{border:1px solid var(--border);background:#fff;border-radius:999px;width:36px;height:36px;cursor:pointer;font-weight:900;}
+    .settings-card-body{padding:24px 26px;}
+    .settings-row{display:grid;grid-template-columns:minmax(190px,1fr) minmax(240px,1.3fr);gap:22px;align-items:center;margin-bottom:18px;}
+    .settings-row label:first-child{font-weight:850;color:#344054;line-height:1.4;}
+    .settings-row .hint{display:block;color:var(--text-light);font-size:13px;font-weight:500;margin-top:3px;}
+    .settings-action-row{display:flex;justify-content:flex-end;border-top:1px solid var(--border);padding-top:18px;margin-top:18px;}
+    .attr-rule-row{grid-template-columns:160px minmax(180px,1fr) minmax(180px,1fr) auto!important;align-items:end;}
+    .style-actions{display:flex;justify-content:flex-end;border-top:1px solid var(--border);padding-top:18px;margin-top:24px;}
+    .style-control-grid{grid-template-columns:repeat(2,minmax(180px,1fr));gap:18px 22px;}
+    .style-control-grid input[type=color]{width:64px;height:42px;padding:4px;border:1px solid #d1d5db;border-radius:10px;background:#fff;}
+    .primary-btn,.post-btn,.msg-btn{border-radius:12px!important;box-shadow:0 1px 0 rgba(15,23,42,.04);}
+    .secondary-btn{border-radius:12px!important;}
+    .trash-tabs{display:flex;gap:8px;border-bottom:1px solid var(--border);margin:16px 0 18px;}
+    .trash-tab{border:0;background:transparent;color:#667085;padding:12px 14px;font-weight:900;cursor:pointer;border-bottom:3px solid transparent;}
+    .trash-tab.active{color:var(--blue);border-bottom-color:var(--blue);}
+    .trash-pane{display:none}.trash-pane.active{display:block}
+    .trash-toolbar{display:flex;gap:12px;align-items:center;margin-bottom:14px;}
+    .trash-toolbar .search-input{max-width:380px;min-width:220px;}
+    .trash-tools-grid{grid-template-columns:repeat(3,minmax(180px,1fr))!important;}
+    @media(max-width:1100px){.admin-attr-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.settings-row,.attr-rule-row,.style-control-grid,.trash-tools-grid{grid-template-columns:1fr!important;}.settings-card-header{align-items:flex-start}.main{padding:24px}.grid-2,.grid-3{grid-template-columns:1fr}.app-shell{grid-template-columns:1fr}.sidebar{position:relative;height:auto}}
+    @media(max-width:680px){.admin-attr-grid{grid-template-columns:1fr}.review-card>div:first-child{flex-direction:column}.card-side{min-width:0!important;text-align:left!important;border-left:0!important;border-top:1px solid var(--border);padding-left:0!important;padding-top:16px}.settings-card-body{padding:18px}.settings-card-header{padding:18px}.trash-toolbar{flex-direction:column;align-items:stretch}.trash-toolbar .search-input{max-width:none}}
+
   </style>
 </head>
 <body>
@@ -410,14 +446,26 @@
 
       <section id="v-trash" class="view">
         <h2 class="page-title">Trash Bin</h2>
-        <p class="muted">Restore reviews, permanently remove unwanted entries, and choose how long deleted reviews are kept. Retention can be set between 1 and 28 days.</p>
+        <p class="muted">Restore deleted reviews, search what is in trash, and manage automatic removal in a separate settings tab.</p>
         <div class="trash-tools-grid">
-          <div class="trash-tool-card"><span>In trash</span><strong id="trash-count">0</strong></div>
+          <div class="trash-tool-card"><span>Total in trash</span><strong id="trash-count">0</strong></div>
           <div class="trash-tool-card"><span>Oldest deletion</span><strong id="trash-oldest">—</strong></div>
-          <div class="trash-tool-card"><span>Retention days</span><input id="trash-retention-days" class="premium-input" type="number" min="1" max="28" value="28"><div class="trash-actions"><button class="secondary-btn" onclick="window.saveTrashSettings()">Save</button></div></div>
-          <div class="trash-tool-card"><span>Bulk actions</span><div class="trash-actions"><button class="secondary-btn" onclick="window.restoreAllTrash()">Restore all</button><button class="delete-btn" onclick="window.emptyTrash()">Delete all</button><button class="secondary-btn" onclick="window.cleanupTrash()">Delete expired</button></div></div>
+          <div class="trash-tool-card"><span>Bulk commands</span><div class="trash-actions"><button class="secondary-btn" onclick="window.restoreAllTrash()">Restore all</button><button class="delete-btn" onclick="window.emptyTrash()">Delete all</button></div></div>
         </div>
-        <div id="trash-list"><p>Loading...</p></div>
+        <div class="trash-tabs"><button type="button" class="trash-tab active" onclick="window.trashTab('list')">Trash list</button><button type="button" class="trash-tab" onclick="window.trashTab('settings')">Auto-delete settings</button></div>
+        <div id="trash-pane-list" class="trash-pane active">
+          <div class="trash-toolbar"><input id="trash-search" class="search-input" placeholder="Search deleted reviews, email or product ID" oninput="window.renderLists()"><button class="secondary-btn" onclick="window.load()">Refresh</button></div>
+          <div id="trash-list"><p>Loading...</p></div>
+        </div>
+        <div id="trash-pane-settings" class="trash-pane">
+          <div class="panel settings-card">
+            <div class="settings-card-header"><div><h3>Automatic deletion</h3><p>Choose how long reviews stay in trash before permanent deletion.</p></div></div>
+            <div class="settings-card-body">
+              <div class="settings-row"><label>Keep trashed reviews for<span class="hint">Between 1 and 28 days.</span></label><input id="trash-retention-days" class="premium-input" type="number" min="1" max="28" value="28"></div>
+              <div class="settings-action-row"><button class="secondary-btn" onclick="window.cleanupTrash()">Delete expired now</button><button class="primary-btn" style="margin-left:10px" onclick="window.saveTrashSettings()">Save trash settings</button></div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section id="v-import" class="view">
@@ -454,29 +502,29 @@
       <section id="v-settings" class="view">
         <h2 class="page-title">Rules &amp; Settings</h2>
         <div class="grid-2">
-          <div class="panel">
-            <h3>Developer Beta Mode</h3>
-            <p class="muted">Hide the widget from the public while you test on your live theme.</p>
-            <label><input id="set-beta-enable" type="checkbox" /> Enable Beta Mode</label>
-            <p><input id="set-beta-email" class="premium-input" placeholder="Beta Tester Email" /></p>
-            <h3>Google Rich Snippets (SEO)</h3>
-            <label><input id="set-seo" type="checkbox" checked /> Enable Rich Snippets</label>
-            <h3>Automated Publishing</h3>
-            <label><input id="set-auto-enable" type="checkbox" /> Enable Auto-Approve</label>
-            <p><select id="set-auto-type" class="filter-select"><option value="verified">Verified Purchases Only</option><option value="all">All Reviews (Inc. Unverified)</option></select></p>
-            <p><select id="set-min-stars" class="filter-select"><option value="5">5 Stars only</option><option value="4">4 Stars &amp; up</option><option value="3">3 Stars &amp; up</option><option value="2">2 Stars &amp; up</option><option value="1">All Ratings</option></select></p>
-            <button class="primary-btn" onclick="window.saveSettings()">Save Settings</button>
-          </div>
-          <div class="panel">
-            <h3>Smart Conditional Sliders</h3>
-            <p class="muted">Add the slider questions that should appear for products matching a tag or metafield.</p>
-            <div class="attr-rule-row">
-              <div class="attr-rule-field"><label>Condition type</label><select id="attr-rule-type" class="filter-select" onchange="window.toggleRuleInput()"><option value="tag">Product Tag</option><option value="metafield">Metafield Key</option></select></div>
-              <div class="attr-rule-field"><label>Condition</label><input id="attr-rule-val-tag" class="premium-input" placeholder="e.g. Drink" /><select id="attr-rule-val-meta" class="filter-select" style="display:none;"><option value="">Loading Shopify Metafields...</option></select></div>
-              <div class="attr-rule-field"><label>Slider label</label><input id="attr-label" class="premium-input" placeholder="e.g. Mixability" /></div>
-              <button class="secondary-btn" onclick="window.addAttribute()">+ Create Rule</button>
+          <div class="panel settings-card">
+            <div class="settings-card-header"><div><h3>Publishing &amp; storefront rules</h3><p>Keep live display safe while reviews are collected.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
+            <div class="settings-card-body">
+              <div class="settings-row"><label>Developer beta mode<span class="hint">Hide the widget from public shoppers while testing.</span></label><label><input id="set-beta-enable" type="checkbox" /> Enable Beta Mode</label></div>
+              <div class="settings-row"><label>Beta tester email<span class="hint">Only this email can preview beta-mode widgets.</span></label><input id="set-beta-email" class="premium-input" placeholder="Beta Tester Email" /></div>
+              <div class="settings-row"><label>Google Rich Snippets<span class="hint">Allow review SEO data on product pages.</span></label><label><input id="set-seo" type="checkbox" checked /> Enable Rich Snippets</label></div>
+              <div class="settings-row"><label>Auto-approve reviews<span class="hint">Use carefully. Test reviews never go live.</span></label><label><input id="set-auto-enable" type="checkbox" /> Enable Auto-Approve</label></div>
+              <div class="settings-row"><label>Auto-approve source</label><select id="set-auto-type" class="filter-select"><option value="verified">Verified Purchases Only</option><option value="all">All Reviews (Inc. Unverified)</option></select></div>
+              <div class="settings-row"><label>Minimum rating</label><select id="set-min-stars" class="filter-select"><option value="5">5 Stars only</option><option value="4">4 Stars &amp; up</option><option value="3">3 Stars &amp; up</option><option value="2">2 Stars &amp; up</option><option value="1">All Ratings</option></select></div>
+              <div class="settings-action-row"><button class="primary-btn" onclick="window.saveSettings()">Save Settings</button></div>
             </div>
-            <div id="attributes-list"></div>
+          </div>
+          <div class="panel settings-card">
+            <div class="settings-card-header"><div><h3>Smart Conditional Sliders</h3><p>Add the slider questions that should appear for products matching a tag or metafield.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
+            <div class="settings-card-body">
+              <div class="attr-rule-row">
+                <div class="attr-rule-field"><label>Condition type</label><select id="attr-rule-type" class="filter-select" onchange="window.toggleRuleInput()"><option value="tag">Product Tag</option><option value="metafield">Metafield Key</option></select></div>
+                <div class="attr-rule-field"><label>Condition</label><input id="attr-rule-val-tag" class="premium-input" placeholder="e.g. Drink" /><select id="attr-rule-val-meta" class="filter-select" style="display:none;"><option value="">Loading Shopify Metafields...</option></select></div>
+                <div class="attr-rule-field"><label>Slider label</label><input id="attr-label" class="premium-input" placeholder="e.g. Mixability" /></div>
+                <button class="secondary-btn" onclick="window.addAttribute()">+ Create Rule</button>
+              </div>
+              <div id="attributes-list"></div>
+            </div>
           </div>
         </div>
       </section>
@@ -497,11 +545,11 @@
                 <div><label>Star Color</label><input id="style-star" type="color" value="#ffc700" oninput="window.updatePreviews()" /></div>
                 <div><label>Text Size (px)</label><input id="style-text" class="premium-input" type="number" value="15" oninput="window.updatePreviews()" /></div>
                 <div><label>Widget max width (px)</label><input id="style-width" class="premium-input" type="number" min="720" max="1800" value="1160" oninput="window.updatePreviews()" /></div>
-                <div><label>Review star size (px)</label><input id="style-review-star-size" class="premium-input" type="number" min="24" max="60" value="38" oninput="window.updatePreviews()" /></div>
-                <div><label>Slider track colour</label><input id="style-slider-track" type="color" value="#ffffff" oninput="window.updatePreviews()" /></div>
+                <div><label>Review star size (px)</label><input id="style-review-star-size" class="premium-input" type="number" min="24" max="60" value="52" oninput="window.updatePreviews()" /></div>
+                <div><label>Slider track colour</label><input id="style-slider-track" type="color" value="#e6ebf1" oninput="window.updatePreviews()" /></div>
                 <div><label>Slider notch colour</label><input id="style-slider-knob" type="color" value="#111111" oninput="window.updatePreviews()" /></div>
               </div>
-              <p><button class="primary-btn" onclick="window.saveSettings()">Publish Styles</button></p>
+              <div class="style-actions"><button class="primary-btn" onclick="window.saveSettings()">Publish Styles</button></div>
             </div>
             <div id="style-card" class="sub-view">
               <div class="style-control-grid">
@@ -512,7 +560,7 @@
                 <div><label>Badge radius (px)</label><input id="card-badge-radius" class="premium-input" type="number" value="999" min="0" max="999" oninput="window.updatePreviews()" /></div>
               </div>
               <p><label><input id="card-count" type="checkbox" checked onchange="window.updatePreviews()" /> Show Count</label></p>
-              <p><button class="primary-btn" onclick="window.saveSettings()">Publish Styles</button></p>
+              <div class="style-actions"><button class="primary-btn" onclick="window.saveSettings()">Publish Styles</button></div>
             </div>
             <div id="style-carousel" class="sub-view">
               <p><select id="car-layout" class="filter-select"><option value="infinite">Infinite Auto-Scroll</option><option value="grid">Standard Grid</option><option value="masonry">Pinterest Masonry</option></select></p>
@@ -520,7 +568,7 @@
               <p><input id="car-delay" class="premium-input" type="number" value="4000" placeholder="Slide Delay (ms)" /></p>
               <label><input id="car-arrows" type="checkbox" /> Show Arrows</label>
               <p><input id="car-limit" class="premium-input" type="number" value="10" placeholder="Max Reviews" /></p>
-              <button class="primary-btn" onclick="window.saveSettings()">Publish Styles</button>
+              <div class="style-actions"><button class="primary-btn" onclick="window.saveSettings()">Publish Styles</button></div>
             </div>
           </div>
           <div class="panel">

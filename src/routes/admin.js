@@ -43,10 +43,22 @@ async function buildCampaignAnalytics(shopDomain) {
     if (totals[event.eventType] !== undefined) totals[event.eventType] += 1;
   });
 
+  const byCampaign = {};
+  events.forEach((event) => {
+    const key = event.campaign || 'review_request';
+    if (!byCampaign[key]) byCampaign[key] = { sent: 0, open: 0, click: 0, openRate: 0, clickRate: 0 };
+    if (byCampaign[key][event.eventType] !== undefined) byCampaign[key][event.eventType] += 1;
+  });
+  Object.values(byCampaign).forEach((item) => {
+    item.openRate = item.sent ? Number(((item.open / item.sent) * 100).toFixed(1)) : 0;
+    item.clickRate = item.sent ? Number(((item.click / item.sent) * 100).toFixed(1)) : 0;
+  });
+
   const sent = totals.sent || 0;
   return {
     windowDays: 30,
     totals,
+    byCampaign,
     openRate: sent ? Number(((totals.open / sent) * 100).toFixed(1)) : 0,
     clickRate: sent ? Number(((totals.click / sent) * 100).toFixed(1)) : 0,
     recentEvents: events
@@ -201,9 +213,9 @@ router.patch('/settings', async (req, res, next) => {
         emptyMode: cleanText(body.widgetStyles?.emptyMode || 'stars_text', 40),
         emptyText: cleanText(body.widgetStyles?.emptyText || 'No reviews yet.', 160),
         maxWidth: clampNumber(body.widgetStyles?.maxWidth, 720, 1800, 1160),
-        reviewStarSize: clampNumber(body.widgetStyles?.reviewStarSize, 24, 60, 38),
+        reviewStarSize: clampNumber(body.widgetStyles?.reviewStarSize, 24, 72, 52),
         reviewStarAlignment: ['left', 'center', 'right'].includes(body.widgetStyles?.reviewStarAlignment) ? body.widgetStyles.reviewStarAlignment : 'center',
-        sliderTrackColor: cleanText(body.widgetStyles?.sliderTrackColor || '#ffffff', 20),
+        sliderTrackColor: cleanText(body.widgetStyles?.sliderTrackColor || '#e6ebf1', 20),
         sliderKnobColor: cleanText(body.widgetStyles?.sliderKnobColor || '#111111', 20),
       },
       cardStyles: {
