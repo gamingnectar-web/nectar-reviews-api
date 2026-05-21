@@ -54,6 +54,24 @@
     return globalShop || attrShop;
   }
 
+  function splitList(value) {
+    if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean);
+    return String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
+  }
+
+  function getProductMeta(el, itemId) {
+    const analyticsProduct = window.ShopifyAnalytics?.meta?.product || window.meta?.product || {};
+    const tags = splitList(el.dataset.productTags || el.getAttribute('data-product-tags') || analyticsProduct.tags || '');
+    return {
+      id: String(itemId || analyticsProduct.id || ''),
+      title: el.dataset.productTitle || el.getAttribute('data-product-title') || document.querySelector('h1')?.textContent || analyticsProduct.title || '',
+      handle: el.dataset.productHandle || el.getAttribute('data-product-handle') || analyticsProduct.handle || '',
+      vendor: el.dataset.productVendor || el.getAttribute('data-product-vendor') || analyticsProduct.vendor || '',
+      type: el.dataset.productType || el.getAttribute('data-product-type') || analyticsProduct.type || '',
+      tags,
+    };
+  }
+
   function injectStyles() {
     if (document.getElementById('nectar-review-widget-styles')) return;
     const style = document.createElement('style');
@@ -159,7 +177,7 @@
           ${attrs.length ? attrs.map(([key, value]) => {
             const val = Math.max(0, Math.min(10, Number(value || 0)));
             return `<div class="nr-consensus-row"><span>${escapeHtml(key)}</span><div class="nr-consensus-bar"><span class="nr-consensus-fill" style="width:${Math.max(0, Math.min(100, val * 10))}%"></span></div><span>${val.toFixed(val % 1 ? 1 : 0)}/10</span></div>`;
-          }).join('') : '<p class="nr-note">Consensus sliders will appear here when reviews include attributes.</p>'}
+          }).join('') : ''}
         </div>
       </div>`;
   }
@@ -182,9 +200,31 @@
       </article>`;
   }
 
-  function sliderLabelsFromSettings(settings) {
+  function sliderLabelsFromSettings(settings, productMeta = {}) {
     const profiles = Array.isArray(settings?.attributeProfiles) ? settings.attributeProfiles : [];
-    return profiles.map((profile) => String(profile.label || '').trim()).filter(Boolean).filter((label, index, arr) => arr.indexOf(label) === index).slice(0, 8);
+    const tags = splitList(productMeta.tags).map((tag) => tag.toLowerCase());
+    const exacts = [productMeta.id, productMeta.handle, productMeta.vendor, productMeta.type]
+      .map((item) => String(item || '').trim().toLowerCase())
+      .filter(Boolean);
+    const text = [productMeta.title, productMeta.handle, productMeta.vendor, productMeta.type]
+      .map((item) => String(item || '').trim().toLowerCase())
+      .filter(Boolean)
+      .join(' ');
+
+    return profiles.filter((profile) => {
+      const label = String(profile.label || '').trim();
+      if (!label) return false;
+      const type = String(profile.type || profile.ruleType || '').toLowerCase().replace(/[^a-z]/g, '');
+      const condition = String(profile.condition || profile.value || '').trim().toLowerCase();
+      if (type === 'all' || type === 'global') return true;
+      if (!condition) return false;
+      if (type === 'tag' || type === 'producttag') return tags.includes(condition);
+      if (type === 'product' || type === 'productid') return exacts.includes(condition) || String(productMeta.id || '').toLowerCase() === condition;
+      if (type === 'vendor') return String(productMeta.vendor || '').toLowerCase() === condition;
+      if (type === 'type' || type === 'producttype') return String(productMeta.type || '').toLowerCase() === condition;
+      if (type === 'metafield' || type === 'metafieldkey') return text.includes(condition);
+      return exacts.includes(condition);
+    }).map((profile) => String(profile.label || '').trim()).filter(Boolean).filter((label, index, arr) => arr.indexOf(label) === index).slice(0, 8);
   }
 
   function renderStarPicker(rating = 5) {
@@ -218,8 +258,8 @@
     });
   }
 
-  function buildModal(itemId, shopDomain, settings) {
-    const labels = sliderLabelsFromSettings(settings);
+  function buildModal(itemId, shopDomain, settings, productMeta = {}) {
+    const labels = sliderLabelsFromSettings(settings, productMeta);
     const modalId = `nr-modal-${Math.random().toString(36).slice(2)}`;
     const modal = document.createElement('div');
     modal.className = 'nr-modal-backdrop';
@@ -320,9 +360,10 @@
     const json = await res.json();
     const reviews = json.reviews || [];
     const settings = json.settings || {};
+    const productMeta = getProductMeta(el, itemId);
     const title = settings.widgetStyles?.widgetTitle || 'Reviews';
     const styles = settings.widgetStyles || {};
-    const modal = buildModal(itemId, shopDomain, settings);
+    const modal = buildModal(itemId, shopDomain, settings, productMeta);
     el.innerHTML = `
       <section class="nectar-review-widget" style="--nr-primary:${escapeHtml(styles.primaryColor || '#111827')};--nr-star:${escapeHtml(styles.starColor || '#f5a400')};--nr-review-star-size:${Number(styles.reviewStarSize || 52)}px;--nr-slider-track:${escapeHtml((styles.sliderTrackColor && styles.sliderTrackColor !== '#ffffff') ? styles.sliderTrackColor : '#e6ebf1')};--nr-slider-knob:${escapeHtml(styles.sliderKnobColor || '#111827')};--nr-max-width:${Number(styles.maxWidth || 1160)}px;">
         <div class="nr-widget-header"><h3 class="nr-widget-title">${escapeHtml(title)}</h3><button type="button" class="nr-write-btn">Write a Review</button></div>

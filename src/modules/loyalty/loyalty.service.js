@@ -18,6 +18,10 @@ function defaultLoyaltyConfig(shopDomain) {
     shopDomain,
     enabled: false,
     privacyMode: 'hashed_customer_ref',
+    pointName: 'Nectar Points',
+    emailTemplates: [{ id: 'loyalty_email_primary', name: 'Reward ready', primary: true, status: 'primary', subject: 'Your review reward is ready', heading: 'Your reward is ready', body: 'Thanks for leaving a review. Your {{ reward_type }} is now ready.', accentColor: '#111827', buttonText: 'Shop now' }],
+    tiers: [{ id: 'bronze', name: 'Bronze', threshold: 0, multiplier: 1 }, { id: 'silver', name: 'Silver', threshold: 500, multiplier: 1.2 }, { id: 'gold', name: 'Gold', threshold: 1500, multiplier: 1.5 }],
+    redemptionRewards: [{ id: 'reward_checkout_discount', name: '£5 off coupon', type: 'discount', pointsCost: 500, discountValue: 5, enabled: true }],
     rewardTemplates: [
       {
         id: makeId('reward'),
@@ -64,12 +68,47 @@ async function getOrCreateLoyaltyProgram(shopDomain) {
   return program;
 }
 
+
+function cleanEmailTemplate(input = {}) {
+  return {
+    id: cleanText(input.id, 80) || makeId('loyalty_email'),
+    name: cleanText(input.name || 'Reward ready', 120),
+    primary: input.primary !== false,
+    status: ['primary', 'draft', 'archived'].includes(input.status) ? input.status : (input.primary === false ? 'draft' : 'primary'),
+    subject: cleanText(input.subject || 'Your review reward is ready', 160),
+    heading: cleanText(input.heading || 'Your reward is ready', 160),
+    body: cleanText(input.body || 'Thanks for leaving a review. Your {{ reward_type }} is now ready.', 1200),
+    accentColor: cleanText(input.accentColor || '#111827', 20),
+    buttonText: cleanText(input.buttonText || 'Shop now', 80),
+  };
+}
+
+function cleanTier(input = {}) {
+  return {
+    id: cleanText(input.id, 80) || makeId('tier'),
+    name: cleanText(input.name || 'Tier', 80),
+    threshold: clampNumber(input.threshold, 0, 100000000, 0),
+    multiplier: clampNumber(input.multiplier, 0, 100, 1),
+  };
+}
+
+function cleanRedemptionReward(input = {}) {
+  return {
+    id: cleanText(input.id, 80) || makeId('redeem'),
+    name: cleanText(input.name || 'Checkout discount', 120),
+    type: input.type === 'catalogue_item' ? 'catalogue_item' : 'discount',
+    pointsCost: clampNumber(input.pointsCost, 0, 100000000, 500),
+    discountValue: clampNumber(input.discountValue, 0, 1000000, 5),
+    enabled: input.enabled !== false,
+  };
+}
+
 function cleanRewardTemplate(input = {}) {
   return {
     id: cleanText(input.id, 80) || makeId('reward'),
     name: cleanText(input.name || 'Review thank-you discount', 120),
     enabled: Boolean(input.enabled),
-    trigger: ['review_submitted', 'review_approved'].includes(input.trigger) ? input.trigger : 'review_approved',
+    trigger: ['review_submitted', 'review_approved', 'purchase_completed', 'birthday', 'manual_adjustment'].includes(input.trigger) ? input.trigger : 'review_approved',
     discountType: input.discountType === 'fixed_amount' ? 'fixed_amount' : 'percentage',
     discountValue: clampNumber(input.discountValue, 1, 100, 10),
     delayDays: clampNumber(input.delayDays, 0, 365, 0),
@@ -87,7 +126,7 @@ function cleanPointsRule(input = {}) {
     id: cleanText(input.id, 80) || makeId('points'),
     name: cleanText(input.name || 'Review approved points', 120),
     enabled: Boolean(input.enabled),
-    trigger: ['review_submitted', 'review_approved'].includes(input.trigger) ? input.trigger : 'review_approved',
+    trigger: ['review_submitted', 'review_approved', 'purchase_completed', 'birthday', 'manual_adjustment'].includes(input.trigger) ? input.trigger : 'review_approved',
     points: clampNumber(input.points, 1, 100000, 100),
     delayDays: clampNumber(input.delayDays, 0, 365, 28),
     verifiedOnly: input.verifiedOnly !== false,
@@ -97,16 +136,27 @@ function cleanPointsRule(input = {}) {
 }
 
 function cleanLoyaltyConfig(shopDomain, body = {}) {
+  const defaults = defaultLoyaltyConfig(shopDomain);
   return {
     shopDomain,
     enabled: Boolean(body.enabled),
     privacyMode: 'hashed_customer_ref',
+    pointName: cleanText(body.pointName || defaults.pointName, 80),
+    emailTemplates: Array.isArray(body.emailTemplates)
+      ? body.emailTemplates.slice(0, 20).map(cleanEmailTemplate)
+      : defaults.emailTemplates,
+    tiers: Array.isArray(body.tiers)
+      ? body.tiers.slice(0, 10).map(cleanTier)
+      : defaults.tiers,
+    redemptionRewards: Array.isArray(body.redemptionRewards)
+      ? body.redemptionRewards.slice(0, 20).map(cleanRedemptionReward)
+      : defaults.redemptionRewards,
     rewardTemplates: Array.isArray(body.rewardTemplates)
       ? body.rewardTemplates.slice(0, 20).map(cleanRewardTemplate)
-      : defaultLoyaltyConfig(shopDomain).rewardTemplates,
+      : defaults.rewardTemplates,
     pointsRules: Array.isArray(body.pointsRules)
       ? body.pointsRules.slice(0, 20).map(cleanPointsRule)
-      : defaultLoyaltyConfig(shopDomain).pointsRules,
+      : defaults.pointsRules,
   };
 }
 
@@ -191,5 +241,8 @@ module.exports = {
   cleanLoyaltyConfig,
   cleanRewardTemplate,
   cleanPointsRule,
+  cleanEmailTemplate,
+  cleanTier,
+  cleanRedemptionReward,
   awardForReview,
 };

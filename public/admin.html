@@ -520,6 +520,28 @@
     @media(max-width:1200px){.dash-stats-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.dash-grid-main{grid-template-columns:1fr}.dash-card.wide{grid-column:span 1}.carousel-track-demo{grid-template-columns:1fr}.preview-carousel-demo{grid-template-columns:40px minmax(0,1fr) 40px;}}
     @media(max-width:760px){.dash-header{flex-direction:column}.dash-actions,.dash-actions .filter-select,.dash-actions .secondary-btn{width:100%;}.dash-stats-grid{grid-template-columns:1fr}.dash-chart-wrap,.dash-chart-wrap.large{height:240px}.style-control-grid>div{grid-template-columns:1fr!important}.nr-color-modal-actions{grid-template-columns:1fr}.carousel-arrow{display:none}.preview-carousel-demo{grid-template-columns:1fr}}
 
+
+
+    /* v17 loyalty framework + clean tab polish */
+    .loyalty-tabs { margin: 12px 0 18px; }
+    .loyalty-tab-panel { display:none; }
+    .loyalty-tab-panel.active { display:block; }
+    .loyalty-email-layout { align-items:start; }
+    .loyalty-preview-panel { min-height:520px; }
+    .input-action-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:end; }
+    .loyalty-clean-list { margin:0; padding-left:18px; color:#475467; line-height:1.7; }
+    .loyalty-tier-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }
+    .loyalty-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+    .loyalty-form-grid label, .loyalty-tier-grid label, .loyalty-full-label { color:#111827; font-size:13px; font-weight:800; }
+    .loyalty-form-grid input, .loyalty-form-grid select, .loyalty-tier-grid input, .loyalty-full-label input, .loyalty-full-label textarea { margin-top:7px; }
+    .loyalty-pill-check { min-height:44px; display:inline-flex; align-items:center; gap:10px; width:max-content; max-width:100%; padding:10px 14px; border:1px solid #bbf7d0; border-radius:999px; background:#ecfdf3; color:#067647; font-weight:900; }
+    .loyalty-pill-check input { width:auto; margin:0; accent-color:#008060; }
+    .loyalty-ledger-row { display:grid; grid-template-columns:1fr auto auto; gap:12px; align-items:center; padding:12px; border:1px solid #e5eaf1; border-radius:12px; background:#fff; margin-bottom:8px; }
+    .loyalty-ledger-row strong { display:block; font-size:14px; }
+    .loyalty-ledger-row span { color:#667085; font-size:12px; }
+    .loyalty-ledger-badge { display:inline-flex; align-items:center; justify-content:center; border-radius:999px; padding:6px 10px; background:#eef2ff; color:#3730a3; font-weight:900; font-size:12px; }
+    @media (max-width: 900px){ .loyalty-form-grid, .loyalty-tier-grid, .input-action-row { grid-template-columns:1fr; } }
+
   </style>
 </head>
 <body>
@@ -815,62 +837,120 @@
         <div class="dash-header">
           <div>
             <h2 class="page-title">Loyalty</h2>
-            <p class="dash-subtitle">Private, store-scoped rewards for review activity. No customer names or emails are stored in the loyalty ledger.</p>
+            <p class="dash-subtitle">Private, store-scoped rewards. The ledger uses a hashed customer reference only, while each shop can name points, tiers and rewards.</p>
           </div>
           <button class="primary-btn" type="button" onclick="window.saveLoyaltyConfig()">Save Loyalty Settings</button>
         </div>
-        <div class="loyalty-status-grid">
-          <div class="loyalty-status-card"><span>Status</span><strong id="loyalty-status-text">Loading…</strong><p id="loyalty-status-help">Checking module configuration.</p></div>
-          <div class="loyalty-status-card"><span>Privacy model</span><strong>Hashed customer reference</strong><p>No loyalty ledger row stores customer email or name.</p></div>
-          <div class="loyalty-status-card"><span>Activation</span><label class="loyalty-pill-check"><input id="loyalty-enabled" type="checkbox"> <strong>Enable loyalty module</strong></label><p class="muted">Updates instantly when toggled.</p></div>
+
+        <div class="sub-tabs loyalty-tabs" role="tablist">
+          <button type="button" class="active" data-loyalty-tab="overview">Overview</button>
+          <button type="button" data-loyalty-tab="email">Email Builder</button>
+          <button type="button" data-loyalty-tab="members">Userboard</button>
+          <button type="button" data-loyalty-tab="rules">Points Rules</button>
+          <button type="button" data-loyalty-tab="tiers">Tiers</button>
+          <button type="button" data-loyalty-tab="rewards">Rewards</button>
+          <button type="button" data-loyalty-tab="settings">Settings</button>
         </div>
-        <div class="grid-2">
-          <div class="panel loyalty-panel">
-            <div class="settings-card-header"><div><h3>Review discount template</h3><p>Offer a reusable discount reward when a customer writes or has a review approved.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
-            <div class="settings-card-body">
-              <div class="loyalty-form-grid">
-                <label>Template name<input id="loyalty-discount-name" class="premium-input" value="Review thank-you discount"></label>
-                <label>Discount %<input id="loyalty-discount-value" class="premium-input" type="number" min="1" max="100" value="10"></label>
-                <label>Trigger<select id="loyalty-discount-trigger" class="filter-select"><option value="review_approved">When review is approved</option><option value="review_submitted">When review is written</option></select></label>
-                <label>Delay days<input id="loyalty-discount-delay" class="premium-input" type="number" min="0" max="365" value="0"></label>
-                <label>Minimum stars<select id="loyalty-discount-stars" class="filter-select"><option value="1">Any rating</option><option value="4">4 stars & up</option><option value="5">5 stars only</option></select></label>
-                <label class="loyalty-pill-check loyalty-check"><input id="loyalty-discount-verified" type="checkbox" checked> Verified only</label>
-              </div>
-              <label class="loyalty-full-label">Message template<textarea id="loyalty-discount-message" class="premium-input" rows="3">Thanks for your review — here is {{ discount_value }}% off your next order.</textarea></label>
-              <p class="muted">Discount code creation is intentionally separated from review storage. This template can later feed Shopify Discounts/Functions without storing personal data.</p>
-            </div>
+
+        <div class="loyalty-tab-panel active" id="loyalty-tab-overview">
+          <div class="loyalty-status-grid">
+            <div class="loyalty-status-card"><span>Status</span><strong id="loyalty-status-text">Loading…</strong><p id="loyalty-status-help">Checking module configuration.</p></div>
+            <div class="loyalty-status-card"><span>Privacy model</span><strong>Hashed customer reference</strong><p>No loyalty ledger row stores customer email, name, phone or address.</p></div>
+            <div class="loyalty-status-card"><span>Activation</span><label class="loyalty-pill-check"><input id="loyalty-enabled" type="checkbox"> <strong>Enable loyalty module</strong></label><p class="muted">Updates instantly when toggled.</p></div>
           </div>
-          <div class="panel loyalty-panel loyalty-email-card">
-            <div class="settings-card-header"><div><h3>Loyalty message template</h3><p>Uses the main email provider by default, but keeps loyalty wording separate from review requests.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
-            <div class="settings-card-body">
-              <label class="loyalty-full-label">Subject<input id="loyalty-email-subject" class="premium-input" value="Your review reward is ready" oninput="window.updateLoyaltyPreview()"></label>
-              <label class="loyalty-full-label">Email body<textarea id="loyalty-email-body" class="premium-input" rows="4" oninput="window.updateLoyaltyPreview()">Thanks for leaving a review. Your {{ reward_type }} is now ready.</textarea></label>
-              <div class="loyalty-preview-shell" id="loyalty-email-preview"></div>
-              <div class="loyalty-test-row">
-                <label class="loyalty-full-label" style="margin:0;">Send test reward email<input id="loyalty-test-to" class="premium-input" placeholder="you@example.com"></label>
-                <button class="primary-btn" type="button" onclick="window.sendLoyaltyTestEmail()">Send Test</button>
-              </div>
-              <p class="muted">Uses the main email provider by default. A dedicated loyalty sender can be added later without duplicating customer data.</p>
-            </div>
-          </div>
-          <div class="panel loyalty-panel">
-            <div class="settings-card-header"><div><h3>Points rule</h3><p>Allocate points after a condition is met, such as approved verified reviews after 28 days.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
-            <div class="settings-card-body">
-              <div class="loyalty-form-grid">
-                <label>Rule name<input id="loyalty-points-name" class="premium-input" value="Review approved points"></label>
-                <label>Points<input id="loyalty-points-value" class="premium-input" type="number" min="1" value="100"></label>
-                <label>Trigger<select id="loyalty-points-trigger" class="filter-select"><option value="review_approved">When review is approved</option><option value="review_submitted">When review is written</option></select></label>
-                <label>Available after days<input id="loyalty-points-delay" class="premium-input" type="number" min="0" max="365" value="28"></label>
-                <label>Minimum stars<select id="loyalty-points-stars" class="filter-select"><option value="1">Any rating</option><option value="4">4 stars & up</option><option value="5">5 stars only</option></select></label>
-                <label class="loyalty-pill-check loyalty-check"><input id="loyalty-points-verified" type="checkbox" checked> Verified only</label>
-              </div>
-              <p class="muted">Ledger entries store a shop-scoped hash, rule id, review id, status, points and availability date. They do not store customer email, name or address.</p>
-            </div>
+          <div class="grid-2">
+            <div class="panel loyalty-panel"><div class="settings-card-header"><div><h3>How rewards are created</h3><p>Reviews, purchases, birthdays and admin adjustments can award points once the matching rule is active.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div><div class="settings-card-body"><ul class="loyalty-clean-list"><li>Verified review rewards can wait until approval.</li><li>Delayed rewards can become available after 28 days or any period you choose.</li><li>Discount issuing is separated from review storage and can later feed Shopify Discounts/Functions.</li></ul></div></div>
+            <div class="panel loyalty-panel"><div class="settings-card-header"><div><h3>Current programme language</h3><p>Customers will see your custom points name in loyalty emails and widgets.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div><div class="settings-card-body"><label>Points name<input id="loyalty-points-label-overview" class="premium-input" value="Nectar Points" oninput="document.getElementById('loyalty-points-label').value=this.value"></label><p class="muted">Example: Nectar Points, Coins, Stars, Credits.</p></div></div>
           </div>
         </div>
-        <div class="panel loyalty-panel">
-          <div class="settings-card-header"><div><h3>Private loyalty ledger preview</h3><p>Recent reward rows. Customer identity is deliberately represented only as a hashed store-scoped reference.</p></div><button class="secondary-btn" type="button" onclick="window.loadLoyaltyConfig()">Refresh</button></div>
-          <div id="loyalty-ledger-list" class="loyalty-ledger-list"><p class="muted">No loyalty ledger rows yet.</p></div>
+
+        <div class="loyalty-tab-panel" id="loyalty-tab-email">
+          <div class="grid-2 loyalty-email-layout">
+            <div class="panel loyalty-panel">
+              <div class="settings-card-header"><div><h3>Loyalty email template</h3><p>Create a customer-friendly reward email. More templates can be added later while the primary one stays live.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
+              <div class="settings-card-body">
+                <div class="loyalty-form-grid">
+                  <label>Template name<input id="loyalty-email-template-name" class="premium-input" value="Reward ready"></label>
+                  <label>Status<select id="loyalty-email-template-primary" class="filter-select"><option value="primary">Primary/live</option><option value="draft">Draft</option></select></label>
+                </div>
+                <label class="loyalty-full-label">Subject<input id="loyalty-email-subject" class="premium-input" value="Your review reward is ready" oninput="window.updateLoyaltyPreview()"></label>
+                <label class="loyalty-full-label">Heading<input id="loyalty-email-heading" class="premium-input" value="Your reward is ready" oninput="window.updateLoyaltyPreview()"></label>
+                <label class="loyalty-full-label">Email body<textarea id="loyalty-email-body" class="premium-input" rows="4" oninput="window.updateLoyaltyPreview()">Thanks for leaving a review. Your {{ reward_type }} is now ready.</textarea></label>
+                <div class="loyalty-form-grid">
+                  <label>Accent colour<input id="loyalty-email-accent" class="premium-input" value="#111827" oninput="window.updateLoyaltyPreview()"></label>
+                  <label>Button text<input id="loyalty-email-button" class="premium-input" value="Shop now" oninput="window.updateLoyaltyPreview()"></label>
+                </div>
+                <div class="loyalty-test-row input-action-row">
+                  <input id="loyalty-test-to" class="premium-input" placeholder="you@example.com">
+                  <button class="primary-btn" type="button" onclick="window.sendLoyaltyTestEmail()">Send Test</button>
+                </div>
+                <p class="muted">Uses the main email provider by default. A dedicated loyalty sender can be added later without duplicating customer data.</p>
+              </div>
+            </div>
+            <div class="panel loyalty-panel loyalty-preview-panel"><h3>Live preview</h3><div class="loyalty-preview-shell" id="loyalty-email-preview"></div></div>
+          </div>
+        </div>
+
+        <div class="loyalty-tab-panel" id="loyalty-tab-members">
+          <div class="grid-2">
+            <div class="panel loyalty-panel">
+              <div class="settings-card-header"><div><h3>Userboard</h3><p>Track rewards by private store-scoped customer reference. No email or name is stored here.</p></div><button class="secondary-btn" type="button" onclick="window.loadLoyaltyConfig()">Refresh</button></div>
+              <div id="loyalty-ledger-list" class="loyalty-ledger-list"><p class="muted">No loyalty ledger rows yet.</p></div>
+            </div>
+            <div class="panel loyalty-panel">
+              <div class="settings-card-header"><div><h3>Manual points adjustment</h3><p>Add or remove points using the shop-only customer reference/code available to the merchant.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
+              <div class="settings-card-body">
+                <label>Customer reference/code<input id="loyalty-adjust-ref" class="premium-input" placeholder="Shop customer code or Shopify customer ID"></label>
+                <div class="loyalty-form-grid"><label>Points change<input id="loyalty-adjust-points" class="premium-input" type="number" value="100"></label><label>Status<select id="loyalty-adjust-status" class="filter-select"><option value="available">Available now</option><option value="pending">Pending</option></select></label></div>
+                <label>Reason<input id="loyalty-adjust-reason" class="premium-input" placeholder="Manual support adjustment"></label>
+                <button class="primary-btn" type="button" onclick="window.manualLoyaltyAdjustment()">Save adjustment</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="loyalty-tab-panel" id="loyalty-tab-rules">
+          <div class="grid-2">
+            <div class="panel loyalty-panel">
+              <div class="settings-card-header"><div><h3>Review discount rule</h3><p>Offer a reusable discount reward when a customer writes or has a review approved.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
+              <div class="settings-card-body">
+                <div class="loyalty-form-grid">
+                  <label>Template name<input id="loyalty-discount-name" class="premium-input" value="Review thank-you discount"></label>
+                  <label>Discount %<input id="loyalty-discount-value" class="premium-input" type="number" min="1" max="100" value="10"></label>
+                  <label>Trigger<select id="loyalty-discount-trigger" class="filter-select"><option value="review_approved">When review is approved</option><option value="review_submitted">When review is written</option></select></label>
+                  <label>Delay days<input id="loyalty-discount-delay" class="premium-input" type="number" min="0" max="365" value="0"></label>
+                  <label>Minimum stars<select id="loyalty-discount-stars" class="filter-select"><option value="1">Any rating</option><option value="4">4 stars & up</option><option value="5">5 stars only</option></select></label>
+                  <label class="loyalty-pill-check loyalty-check"><input id="loyalty-discount-verified" type="checkbox" checked> Verified only</label>
+                </div>
+                <label class="loyalty-full-label">Reward message<textarea id="loyalty-discount-message" class="premium-input" rows="3">Thanks for your review — here is {{ discount_value }}% off your next order.</textarea></label>
+              </div>
+            </div>
+            <div class="panel loyalty-panel">
+              <div class="settings-card-header"><div><h3>Points rule</h3><p>Allocate points after a condition is met, such as approved verified reviews after 28 days.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
+              <div class="settings-card-body">
+                <div class="loyalty-form-grid">
+                  <label>Rule name<input id="loyalty-points-name" class="premium-input" value="Review approved points"></label>
+                  <label>Points<input id="loyalty-points-value" class="premium-input" type="number" min="1" value="100"></label>
+                  <label>Trigger<select id="loyalty-points-trigger" class="filter-select"><option value="review_approved">Review approved</option><option value="review_submitted">Review written</option><option value="purchase_completed">Purchase completed</option><option value="birthday">Birthday</option></select></label>
+                  <label>Available after days<input id="loyalty-points-delay" class="premium-input" type="number" min="0" max="365" value="28"></label>
+                  <label>Minimum stars<select id="loyalty-points-stars" class="filter-select"><option value="1">Any rating</option><option value="4">4 stars & up</option><option value="5">5 stars only</option></select></label>
+                  <label class="loyalty-pill-check loyalty-check"><input id="loyalty-points-verified" type="checkbox" checked> Verified only</label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="loyalty-tab-panel" id="loyalty-tab-tiers">
+          <div class="panel loyalty-panel"><div class="settings-card-header"><div><h3>Tiers</h3><p>Give power users better earn rates as their points grow.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div><div class="settings-card-body"><div class="loyalty-tier-grid"><label>Bronze from<input id="loyalty-tier-bronze" class="premium-input" type="number" value="0"></label><label>Silver from<input id="loyalty-tier-silver" class="premium-input" type="number" value="500"></label><label>Gold from<input id="loyalty-tier-gold" class="premium-input" type="number" value="1500"></label><label>Gold earn multiplier<input id="loyalty-tier-gold-multiplier" class="premium-input" type="number" step="0.1" value="1.5"></label></div></div></div>
+        </div>
+
+        <div class="loyalty-tab-panel" id="loyalty-tab-rewards">
+          <div class="panel loyalty-panel"><div class="settings-card-header"><div><h3>Redeemable rewards</h3><p>Plan how customers trade points for discounts or catalogue rewards.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div><div class="settings-card-body"><div class="loyalty-form-grid"><label>Reward name<input id="loyalty-reward-name" class="premium-input" value="£5 off coupon"></label><label>Cost in points<input id="loyalty-reward-cost" class="premium-input" type="number" value="500"></label><label>Reward type<select id="loyalty-reward-type" class="filter-select"><option value="discount">Checkout discount</option><option value="catalogue_item">Catalogue item</option></select></label><label>Discount value<input id="loyalty-reward-value" class="premium-input" type="number" value="5"></label></div><p class="muted">Checkout redemption will later connect to Shopify discount creation/checkout extensions.</p></div></div>
+        </div>
+
+        <div class="loyalty-tab-panel" id="loyalty-tab-settings">
+          <div class="grid-2"><div class="panel loyalty-panel"><div class="settings-card-header"><div><h3>Programme settings</h3><p>Control naming and privacy defaults.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div><div class="settings-card-body"><label>Points name<input id="loyalty-points-label" class="premium-input" value="Nectar Points"></label><label class="loyalty-pill-check loyalty-check"><input id="loyalty-reuse-email-provider" type="checkbox" checked> Reuse Reviews email provider</label><p class="muted">Loyalty has its own database connection when LOYALTY_MONGODB_URI is set, and no ledger row stores customer PII.</p></div></div><div class="panel loyalty-panel"><h3>Privacy boundaries</h3><p class="muted">Use a shop-only customer reference/code for manual adjustments. The system hashes it with the shop domain before writing to the loyalty database.</p></div></div>
         </div>
       </section>
       <section id="v-referrals" class="view"><h2 class="page-title">Referrals</h2><div class="panel lock-box"><h3>Referrals module placeholder</h3><p class="muted">Reserved for referral tracking, advocate links, friend offers, and attribution. The module is intentionally inactive while the foundation is secured.</p></div></section>

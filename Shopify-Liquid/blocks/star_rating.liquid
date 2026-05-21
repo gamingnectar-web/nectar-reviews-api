@@ -8,6 +8,10 @@
   data-product-id="{{ product.id }}"
   data-shop="{{ nectar_shop_domain }}"
   data-shop-domain="{{ nectar_shop_domain }}"
+  data-product-tags="{{ product.tags | join: "," | escape }}"
+  data-product-type="{{ product.type | escape }}"
+  data-product-vendor="{{ product.vendor | escape }}"
+  data-product-handle="{{ product.handle | escape }}"
 ></div>
 
 <script>

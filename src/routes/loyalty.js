@@ -6,7 +6,7 @@ const { requireAdminSession } = require('../utils/security');
 const { cleanText, cleanEmail, clampNumber } = require('../utils/validation');
 const { env } = require('../config/env');
 const { decryptSecret } = require('../utils/crypto');
-const { getOrCreateLoyaltyProgram, cleanLoyaltyConfig, cleanRewardTemplate, cleanPointsRule } = require('../modules/loyalty/loyalty.service');
+const { getOrCreateLoyaltyProgram, cleanLoyaltyConfig, cleanRewardTemplate, cleanPointsRule, normaliseCustomerRef } = require('../modules/loyalty/loyalty.service');
 
 const router = express.Router();
 router.use(requireAdminSession);
@@ -113,6 +113,33 @@ router.get('/ledger', async (req, res, next) => {
       .limit(limit)
       .lean();
     return res.json({ rows });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/ledger/manual-adjust', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const customerRef = cleanText(req.body.customerRef, 180);
+    const points = clampNumber(req.body.points, -1000000, 1000000, 0);
+    if (!customerRef || !points) return res.status(400).json({ error: 'Customer reference and points change are required.' });
+    const customerRefHash = normaliseCustomerRef({ shopDomain, customerId: customerRef });
+    if (!customerRefHash) return res.status(400).json({ error: 'Could not create a private customer reference.' });
+    const { LoyaltyLedger } = getLoyaltyModels();
+    const row = await LoyaltyLedger.create({
+      shopDomain,
+      customerRefHash,
+      eventType: 'manual_adjustment',
+      source: 'admin',
+      points,
+      status: ['pending', 'available', 'cancelled'].includes(req.body.status) ? req.body.status : 'available',
+      availableAt: new Date(),
+      ruleId: 'manual_adjustment',
+      ruleName: points >= 0 ? 'Manual points added' : 'Manual points removed',
+      privateNote: cleanText(req.body.reason || 'Manual adjustment', 300),
+    });
+    return res.status(201).json({ ok: true, row });
   } catch (error) {
     next(error);
   }

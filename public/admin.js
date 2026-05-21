@@ -1198,8 +1198,34 @@ window.autoResizeReplyBoxes = window.enableAutoGrowTextareas;
 function getLoyaltyPayload() {
   const discountValue = Number(document.getElementById('loyalty-discount-value')?.value || 10);
   const points = Number(document.getElementById('loyalty-points-value')?.value || 100);
+  const pointName = document.getElementById('loyalty-points-label')?.value || document.getElementById('loyalty-points-label-overview')?.value || 'Nectar Points';
   return {
     enabled: Boolean(document.getElementById('loyalty-enabled')?.checked),
+    pointName,
+    emailTemplates: [{
+      id: window.currentLoyaltyConfig?.emailTemplates?.[0]?.id || 'loyalty_email_primary',
+      name: document.getElementById('loyalty-email-template-name')?.value || 'Reward ready',
+      primary: (document.getElementById('loyalty-email-template-primary')?.value || 'primary') === 'primary',
+      status: document.getElementById('loyalty-email-template-primary')?.value || 'primary',
+      subject: document.getElementById('loyalty-email-subject')?.value || 'Your review reward is ready',
+      heading: document.getElementById('loyalty-email-heading')?.value || 'Your reward is ready',
+      body: document.getElementById('loyalty-email-body')?.value || 'Thanks for leaving a review. Your {{ reward_type }} is now ready.',
+      accentColor: document.getElementById('loyalty-email-accent')?.value || '#111827',
+      buttonText: document.getElementById('loyalty-email-button')?.value || 'Shop now',
+    }],
+    tiers: [
+      { id: 'bronze', name: 'Bronze', threshold: Number(document.getElementById('loyalty-tier-bronze')?.value || 0), multiplier: 1 },
+      { id: 'silver', name: 'Silver', threshold: Number(document.getElementById('loyalty-tier-silver')?.value || 500), multiplier: 1.2 },
+      { id: 'gold', name: 'Gold', threshold: Number(document.getElementById('loyalty-tier-gold')?.value || 1500), multiplier: Number(document.getElementById('loyalty-tier-gold-multiplier')?.value || 1.5) },
+    ],
+    redemptionRewards: [{
+      id: window.currentLoyaltyConfig?.redemptionRewards?.[0]?.id || 'reward_checkout_discount',
+      name: document.getElementById('loyalty-reward-name')?.value || '£5 off coupon',
+      type: document.getElementById('loyalty-reward-type')?.value || 'discount',
+      pointsCost: Number(document.getElementById('loyalty-reward-cost')?.value || 500),
+      discountValue: Number(document.getElementById('loyalty-reward-value')?.value || 5),
+      enabled: true,
+    }],
     rewardTemplates: [{
       id: window.currentLoyaltyConfig?.rewardTemplates?.[0]?.id || undefined,
       name: document.getElementById('loyalty-discount-name')?.value || 'Review thank-you discount',
@@ -1233,9 +1259,14 @@ function hydrateLoyalty(config = {}) {
   window.currentLoyaltyConfig = config;
   const reward = (config.rewardTemplates || [])[0] || {};
   const points = (config.pointsRules || [])[0] || {};
+  const emailTemplate = (config.emailTemplates || [])[0] || {};
+  const tiers = config.tiers || [];
+  const redemption = (config.redemptionRewards || [])[0] || {};
   if (document.getElementById('loyalty-enabled')) document.getElementById('loyalty-enabled').checked = Boolean(config.enabled);
   if (document.getElementById('loyalty-status-text')) document.getElementById('loyalty-status-text').textContent = config.enabled ? 'Enabled' : 'Configured but inactive';
   if (document.getElementById('loyalty-status-help')) document.getElementById('loyalty-status-help').textContent = config.enabled ? 'Review rewards can be created when rules match.' : 'Turn on the module when you are ready to award points/discounts.';
+  if (document.getElementById('loyalty-points-label')) document.getElementById('loyalty-points-label').value = config.pointName || 'Nectar Points';
+  if (document.getElementById('loyalty-points-label-overview')) document.getElementById('loyalty-points-label-overview').value = config.pointName || 'Nectar Points';
 
   if (document.getElementById('loyalty-discount-name')) document.getElementById('loyalty-discount-name').value = reward.name || 'Review thank-you discount';
   if (document.getElementById('loyalty-discount-value')) document.getElementById('loyalty-discount-value').value = reward.discountValue ?? 10;
@@ -1244,8 +1275,14 @@ function hydrateLoyalty(config = {}) {
   if (document.getElementById('loyalty-discount-stars')) document.getElementById('loyalty-discount-stars').value = reward.minStars || 1;
   if (document.getElementById('loyalty-discount-verified')) document.getElementById('loyalty-discount-verified').checked = reward.verifiedOnly !== false;
   if (document.getElementById('loyalty-discount-message')) document.getElementById('loyalty-discount-message').value = reward.messageTemplate || 'Thanks for your review — here is {{ discount_value }}% off your next order.';
-  if (document.getElementById('loyalty-email-subject')) document.getElementById('loyalty-email-subject').value = reward.emailSubject || 'Your review reward is ready';
-  if (document.getElementById('loyalty-email-body')) document.getElementById('loyalty-email-body').value = reward.emailBody || 'Thanks for leaving a review. Your {{ reward_type }} is now ready.';
+
+  if (document.getElementById('loyalty-email-template-name')) document.getElementById('loyalty-email-template-name').value = emailTemplate.name || 'Reward ready';
+  if (document.getElementById('loyalty-email-template-primary')) document.getElementById('loyalty-email-template-primary').value = emailTemplate.status || (emailTemplate.primary === false ? 'draft' : 'primary');
+  if (document.getElementById('loyalty-email-subject')) document.getElementById('loyalty-email-subject').value = emailTemplate.subject || reward.emailSubject || 'Your review reward is ready';
+  if (document.getElementById('loyalty-email-heading')) document.getElementById('loyalty-email-heading').value = emailTemplate.heading || 'Your reward is ready';
+  if (document.getElementById('loyalty-email-body')) document.getElementById('loyalty-email-body').value = emailTemplate.body || reward.emailBody || 'Thanks for leaving a review. Your {{ reward_type }} is now ready.';
+  if (document.getElementById('loyalty-email-accent')) document.getElementById('loyalty-email-accent').value = emailTemplate.accentColor || '#111827';
+  if (document.getElementById('loyalty-email-button')) document.getElementById('loyalty-email-button').value = emailTemplate.buttonText || 'Shop now';
 
   if (document.getElementById('loyalty-points-name')) document.getElementById('loyalty-points-name').value = points.name || 'Review approved points';
   if (document.getElementById('loyalty-points-value')) document.getElementById('loyalty-points-value').value = points.points ?? 100;
@@ -1253,14 +1290,30 @@ function hydrateLoyalty(config = {}) {
   if (document.getElementById('loyalty-points-delay')) document.getElementById('loyalty-points-delay').value = points.delayDays ?? 28;
   if (document.getElementById('loyalty-points-stars')) document.getElementById('loyalty-points-stars').value = points.minStars || 1;
   if (document.getElementById('loyalty-points-verified')) document.getElementById('loyalty-points-verified').checked = points.verifiedOnly !== false;
-}
 
+  const tierById = Object.fromEntries(tiers.map((t) => [t.id, t]));
+  if (document.getElementById('loyalty-tier-bronze')) document.getElementById('loyalty-tier-bronze').value = tierById.bronze?.threshold ?? 0;
+  if (document.getElementById('loyalty-tier-silver')) document.getElementById('loyalty-tier-silver').value = tierById.silver?.threshold ?? 500;
+  if (document.getElementById('loyalty-tier-gold')) document.getElementById('loyalty-tier-gold').value = tierById.gold?.threshold ?? 1500;
+  if (document.getElementById('loyalty-tier-gold-multiplier')) document.getElementById('loyalty-tier-gold-multiplier').value = tierById.gold?.multiplier ?? 1.5;
+
+  if (document.getElementById('loyalty-reward-name')) document.getElementById('loyalty-reward-name').value = redemption.name || '£5 off coupon';
+  if (document.getElementById('loyalty-reward-cost')) document.getElementById('loyalty-reward-cost').value = redemption.pointsCost ?? 500;
+  if (document.getElementById('loyalty-reward-type')) document.getElementById('loyalty-reward-type').value = redemption.type || 'discount';
+  if (document.getElementById('loyalty-reward-value')) document.getElementById('loyalty-reward-value').value = redemption.discountValue ?? 5;
+  window.updateLoyaltyPreview?.();
+}
 
 function buildLoyaltyPreviewHtml() {
   const subject = document.getElementById('loyalty-email-subject')?.value || 'Your review reward is ready';
+  const heading = document.getElementById('loyalty-email-heading')?.value || 'Your reward is ready';
   const body = document.getElementById('loyalty-email-body')?.value || 'Thanks for leaving a review. Your reward is now ready.';
   const discount = document.getElementById('loyalty-discount-value')?.value || '10';
-  return `<div style="background:#f3f4f6;padding:28px;font-family:Arial,Helvetica,sans-serif;color:#111827;"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:18px;padding:30px;border:1px solid #e5e7eb;text-align:center;"><div style="font-size:13px;font-weight:800;color:#008060;margin-bottom:12px;">Reward ready</div><h1 style="margin:0 0 12px;font-size:28px;line-height:1.15;">${escapeHtml(subject)}</h1><p style="font-size:16px;line-height:1.6;color:#4b5563;">${escapeHtml(body).replace(/\{\{\s*discount_value\s*\}\}/g, discount).replace(/\{\{\s*reward_type\s*\}\}/g, discount + '% discount')}</p><div style="margin:22px auto;padding:18px;border:2px dashed #111827;border-radius:14px;font-weight:900;font-size:26px;letter-spacing:.04em;max-width:260px;">${escapeHtml(discount)}% OFF</div><a href="https://${SHOP_DOMAIN}" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;border-radius:12px;padding:13px 18px;font-weight:800;">Shop now</a><p style="margin-top:18px;font-size:12px;color:#667085;">Sent by ${escapeHtml(SHOP_DOMAIN)}</p></div></div>`;
+  const pointName = document.getElementById('loyalty-points-label')?.value || 'Nectar Points';
+  const accent = document.getElementById('loyalty-email-accent')?.value || '#111827';
+  const buttonText = document.getElementById('loyalty-email-button')?.value || 'Shop now';
+  const renderedBody = escapeHtml(body).replace(/\{\{\s*discount_value\s*\}\}/g, discount).replace(/\{\{\s*reward_type\s*\}\}/g, discount + '% discount').replace(/\{\{\s*points_name\s*\}\}/g, escapeHtml(pointName));
+  return `<div style="background:#f3f4f6;padding:28px;font-family:Arial,Helvetica,sans-serif;color:#111827;"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:18px;padding:30px;border:1px solid #e5e7eb;text-align:center;"><div style="font-size:13px;font-weight:800;color:#008060;margin-bottom:12px;">Reward ready</div><h1 style="margin:0 0 12px;font-size:28px;line-height:1.15;">${escapeHtml(heading || subject)}</h1><p style="font-size:16px;line-height:1.6;color:#4b5563;">${renderedBody}</p><div style="margin:22px auto;padding:18px;border:2px dashed ${escapeHtml(accent)};border-radius:14px;font-weight:900;font-size:26px;letter-spacing:.04em;max-width:260px;color:${escapeHtml(accent)};">${escapeHtml(discount)}% OFF</div><a href="https://${SHOP_DOMAIN}" style="display:inline-block;background:${escapeHtml(accent)};color:#fff;text-decoration:none;border-radius:12px;padding:13px 18px;font-weight:800;">${escapeHtml(buttonText)}</a><p style="margin-top:18px;font-size:12px;color:#667085;">Sent by ${escapeHtml(SHOP_DOMAIN)}</p></div></div>`;
 }
 
 window.updateLoyaltyPreview = function() {
@@ -1282,25 +1335,42 @@ window.sendLoyaltyTestEmail = async function() {
   }
 };
 
+function renderLoyaltyLedger(rows = []) {
+  const list = document.getElementById('loyalty-ledger-list');
+  if (!list) return;
+  list.innerHTML = rows.length ? rows.map((row) => `
+    <div class="loyalty-ledger-row">
+      <div><strong>${escapeHtml(row.ruleName || row.eventType)}</strong><span>${escapeHtml(String(row.customerRefHash || '').slice(0, 14))}… · ${row.availableAt ? new Date(row.availableAt).toLocaleDateString() : '—'}</span></div>
+      <span class="loyalty-ledger-badge">${escapeHtml(row.status || 'pending')}</span>
+      <strong>${row.points ? `${Number(row.points)} pts` : `${Number(row.discountValue || 0)}${row.discountType === 'percentage' ? '%' : ''}`}</strong>
+    </div>`).join('') : '<p class="muted">No loyalty ledger rows yet. Rows will appear after matching review events or manual adjustments.</p>';
+}
+
 window.loadLoyaltyConfig = async function() {
   try {
     const config = await adminFetch('/admin/loyalty/config');
     hydrateLoyalty(config || {});
     const ledger = await adminFetch('/admin/loyalty/ledger?limit=25');
-    const list = document.getElementById('loyalty-ledger-list');
-    if (list) {
-      const rows = ledger.rows || [];
-      list.innerHTML = rows.length ? rows.map((row) => `
-        <div class="loyalty-ledger-row">
-          <div><strong>${escapeHtml(row.ruleName || row.eventType)}</strong><br><code>${escapeHtml(row.customerRefHash || '')}</code></div>
-          <div><span class="loyalty-ledger-pill">${escapeHtml(row.status || 'pending')}</span></div>
-          <div>${row.points ? `${Number(row.points)} points` : `${Number(row.discountValue || 0)}${row.discountType === 'percentage' ? '%' : ''} discount`}</div>
-          <div>${row.availableAt ? new Date(row.availableAt).toLocaleDateString() : '—'}</div>
-        </div>`).join('') : '<p class="muted">No loyalty ledger rows yet. Rows will appear after matching review events.</p>';
-    }
+    renderLoyaltyLedger(ledger.rows || []);
   } catch (error) {
     console.warn('Could not load loyalty config:', error);
     window.showToast(error.message || 'Could not load loyalty config');
+  }
+};
+
+window.manualLoyaltyAdjustment = async function() {
+  const customerRef = document.getElementById('loyalty-adjust-ref')?.value || '';
+  const points = Number(document.getElementById('loyalty-adjust-points')?.value || 0);
+  if (!customerRef || !points) { window.showToast('Enter a customer reference and points change.'); return; }
+  try {
+    await adminFetch('/admin/loyalty/ledger/manual-adjust', {
+      method: 'POST',
+      body: JSON.stringify({ customerRef, points, status: document.getElementById('loyalty-adjust-status')?.value || 'available', reason: document.getElementById('loyalty-adjust-reason')?.value || 'Manual adjustment' }),
+    });
+    window.showToast('Loyalty points adjusted.');
+    window.loadLoyaltyConfig?.();
+  } catch (error) {
+    window.showToast(error.message || 'Could not adjust points');
   }
 };
 
@@ -1317,3 +1387,17 @@ window.saveLoyaltyConfig = async function() {
     window.showToast(error.message || 'Could not save loyalty settings');
   }
 };
+
+window.initLoyaltyTabs = function() {
+  document.querySelectorAll('[data-loyalty-tab]').forEach((btn) => {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.loyaltyTab;
+      document.querySelectorAll('[data-loyalty-tab]').forEach((item) => item.classList.toggle('active', item === btn));
+      document.querySelectorAll('.loyalty-tab-panel').forEach((panel) => panel.classList.toggle('active', panel.id === `loyalty-tab-${target}`));
+    });
+  });
+};
+
+setTimeout(() => { window.initLoyaltyTabs?.(); window.updateLoyaltyPreview?.(); }, 400);
