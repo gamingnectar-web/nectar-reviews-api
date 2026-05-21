@@ -18,6 +18,12 @@ function shopDomainFromReq(req) {
   return req.shopDomain;
 }
 
+
+function looksLikeShopifyProductId(value) {
+  const v = String(value || '').trim();
+  return /^(gid:\/\/shopify\/Product\/\d+|\d{6,})$/.test(v);
+}
+
 async function ensureShop(shopDomain) {
   return Shop.findOneAndUpdate(
     { shopDomain },
@@ -275,26 +281,34 @@ router.post('/reviews/import', async (req, res, next) => {
     if (!reviews.length) return res.status(400).json({ error: 'No reviews supplied.' });
     if (reviews.length > 1000) return res.status(400).json({ error: 'Import limit is 1000 reviews at a time.' });
 
-    const docs = reviews.map((review) => {
+    const skipped = [];
+    const docs = reviews.map((review, index) => {
+      const itemId = cleanText(review.itemId, 160);
+      if (!looksLikeShopifyProductId(itemId)) {
+        skipped.push({ index, reason: 'Missing valid Shopify product ID', productTitle: review.productTitle || '', rawProductRef: review.rawProductRef || '' });
+        return null;
+      }
       const rating = clampNumber(review.rating, 1, 5, 5);
       return {
         shopDomain,
-        itemId: cleanText(review.itemId, 120),
+        itemId,
+        productTitle: cleanText(review.productTitle || review.matchedProductTitle, 200),
         rating,
         userId: cleanText(review.userId || review.name || 'Imported Customer', 120) || 'Imported Customer',
         email: cleanEmail(review.email),
-        headline: cleanText(review.headline || review.title, 160),
+        headline: cleanText(review.headline || review.title || '', 160),
         comment: cleanText(review.comment || review.body, 2500),
         source: 'import',
         status: 'accepted',
-        verifiedPurchase: Boolean(review.verifiedPurchase),
-        verificationNote: Boolean(review.verifiedPurchase) ? 'Imported by merchant' : '',
+        verifiedPurchase: review.verifiedPurchase !== false,
+        verificationNote: review.verifiedPurchase === false ? '' : 'Imported by merchant from previous verified review platform',
         createdAt: review.createdAt ? new Date(review.createdAt) : new Date(),
       };
-    }).filter((review) => review.itemId && review.rating);
+    }).filter((review) => review && review.itemId && review.rating && (review.comment || review.headline));
 
+    if (!docs.length) return res.status(400).json({ error: 'No valid import rows after mapping.', skipped });
     const inserted = await Review.insertMany(docs, { ordered: false });
-    return res.status(201).json({ ok: true, imported: inserted.length });
+    return res.status(201).json({ ok: true, imported: inserted.length, skipped });
   } catch (error) {
     next(error);
   }

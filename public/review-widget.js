@@ -173,7 +173,7 @@
           <span class="nr-date">${new Date(review.createdAt || Date.now()).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}</span>
         </div>
         <div class="nr-stars">${stars(review.rating)}</div>
-        <h4 class="nr-headline">${escapeHtml(review.headline || 'Review')}</h4>
+        ${review.headline ? `<h4 class="nr-headline">${escapeHtml(review.headline)}</h4>` : ''}
         <p class="nr-comment">${escapeHtml(review.comment || '')}</p>${review.reply ? `<div class="nr-public-reply"><strong>Store reply</strong><p>${escapeHtml(review.reply)}</p></div>` : ''}
         ${attrs.length ? `<div class="nr-attrs">${attrs.map(([key, raw]) => {
           const val = Math.max(0, Math.min(10, Number(raw || 0)));

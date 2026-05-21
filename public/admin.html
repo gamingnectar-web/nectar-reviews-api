@@ -340,6 +340,8 @@
     .import-product-result img { width:56px; height:56px; object-fit:cover; border-radius:10px; background:#eef2f7; }
     .import-product-result strong { display:block; }
     .import-product-result small { color:#667085; }
+    .import-verified-toggle{display:inline-flex;align-items:center;gap:10px;margin-top:14px;border:1px solid #abefc6;background:#ecfdf3;color:#027a48;border-radius:999px;padding:10px 14px;font-weight:900;}
+    .import-verified-toggle input{accent-color:#008060;}
     .valid-green { border-color: var(--green) !important; background: #f0fdf4 !important; }
     .invalid-red { border-color: var(--red) !important; background: #fff1f2 !important; }
     .muted { color: var(--text-light); }
@@ -496,6 +498,8 @@
     .loyalty-pill-check:has(input:checked){background:#ecfdf3;border-color:#abefc6;color:#027a48;}
     .loyalty-email-card{margin-top:18px;}
     .loyalty-email-card textarea{resize:none;min-height:110px;}
+    .loyalty-preview-shell{margin-top:16px;border:1px solid var(--border);border-radius:16px;overflow:hidden;background:#fff;}
+    .loyalty-test-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;margin-top:14px;}
     .loyalty-full-label{margin-top:14px;}
     .loyalty-ledger-list{display:grid;gap:10px;}
     .loyalty-ledger-row{display:grid;grid-template-columns:1.2fr 1fr .8fr .8fr;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:#f9fafb;}
@@ -709,6 +713,8 @@
             <div id="mapping-ui" style="display:none; margin-top:24px;">
               <h4 style="margin:0 0 14px;">Map your columns</h4>
               <div id="column-mappers" class="mapper-grid"></div>
+              <label class="import-verified-toggle"><input id="import-verified-default" type="checkbox" checked> Treat imported reviews as verified purchases from the previous platform</label>
+              <p class="muted" style="margin:8px 0 0;">Only rows with a valid Shopify Product ID or a manually selected Shopify product will go live. Rows that still need mapping are saved into a completion CSV.</p>
               <p style="margin-top:18px;"><button id="import-submit-btn" class="primary-btn" onclick="window.generateStagingArea()">Preview &amp; Map Products</button></p>
             </div>
           </div>
@@ -837,9 +843,14 @@
           <div class="panel loyalty-panel loyalty-email-card">
             <div class="settings-card-header"><div><h3>Loyalty message template</h3><p>Uses the main email provider by default, but keeps loyalty wording separate from review requests.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
             <div class="settings-card-body">
-              <label class="loyalty-full-label">Subject<input id="loyalty-email-subject" class="premium-input" value="Your review reward is ready"></label>
-              <label class="loyalty-full-label">Email body<textarea id="loyalty-email-body" class="premium-input" rows="4">Thanks for leaving a review. Your {{ reward_type }} is now ready.</textarea></label>
-              <p class="muted">Future campaigns can use a dedicated loyalty sender, but this starts by reusing the existing email provider to avoid duplicate setup.</p>
+              <label class="loyalty-full-label">Subject<input id="loyalty-email-subject" class="premium-input" value="Your review reward is ready" oninput="window.updateLoyaltyPreview()"></label>
+              <label class="loyalty-full-label">Email body<textarea id="loyalty-email-body" class="premium-input" rows="4" oninput="window.updateLoyaltyPreview()">Thanks for leaving a review. Your {{ reward_type }} is now ready.</textarea></label>
+              <div class="loyalty-preview-shell" id="loyalty-email-preview"></div>
+              <div class="loyalty-test-row">
+                <label class="loyalty-full-label" style="margin:0;">Send test reward email<input id="loyalty-test-to" class="premium-input" placeholder="you@example.com"></label>
+                <button class="primary-btn" type="button" onclick="window.sendLoyaltyTestEmail()">Send Test</button>
+              </div>
+              <p class="muted">Uses the main email provider by default. A dedicated loyalty sender can be added later without duplicating customer data.</p>
             </div>
           </div>
           <div class="panel loyalty-panel">
