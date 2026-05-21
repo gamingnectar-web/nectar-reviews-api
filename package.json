@@ -1,7 +1,7 @@
 {
   "name": "nectar-reviews-api",
-  "version": "1.1.8-oauth-verification-docs-v13",
-  "description": "Nectar Reviews API - v12 polished review manager, messaging builder and storefront styling",
+  "version": "1.1.9-dashboard-messaging-v14",
+  "description": "Nectar Reviews API - v14 dashboard, messaging mount and visual customiser polish",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

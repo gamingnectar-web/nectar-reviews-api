@@ -425,6 +425,52 @@
 
     @media(max-width:900px){.style-control-grid{grid-template-columns:1fr!important}.style-control-grid>div{grid-template-columns:1fr}.reply-action-row{flex-direction:column;align-items:stretch}.reply-action-row .post-btn,.reply-vis-select{width:100%;}.admin-sub-tabs{overflow:auto;flex-wrap:nowrap}.admin-sub-tab{white-space:nowrap}}
 
+
+    /* v14 dashboard and UI polish */
+    .dash-header{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:20px;}
+    .dash-subtitle{margin:-14px 0 0;color:var(--text-light);line-height:1.5;max-width:760px;}
+    .dash-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+    .dash-stats-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:18px;}
+    .stat-help{margin:10px 0 0;color:var(--text-light);font-size:12px;line-height:1.4;}
+    .dash-grid-main{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start;}
+    .dash-card{background:#fff;border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);padding:20px;min-width:0;}
+    .dash-card.wide{grid-column:span 2;}
+    .dash-card-head{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:14px;}
+    .dash-card-head h3{margin:0;font-size:18px;letter-spacing:-.02em;}
+    .dash-chart-wrap{position:relative;height:260px;max-height:260px;}
+    .dash-chart-wrap.large{height:320px;max-height:320px;}
+    .dash-table{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid var(--border);border-radius:12px;background:#fff;}
+    .dash-table th,.dash-table td{padding:12px 14px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle;}
+    .dash-table th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#667085;background:#f8fafc;}
+    .dash-table tr:last-child td{border-bottom:0;}
+    .dash-table-empty{border:1px solid var(--border);border-radius:12px;background:#fbfdff;padding:16px;color:var(--text-light);}
+
+    .nr-color-input-wrap{display:grid;grid-template-columns:minmax(0,1fr) 44px;align-items:center;gap:10px;width:100%;}
+    .nr-color-input-wrap .premium-input{width:100%!important;}
+    .nr-color-swatch-btn{width:44px;height:44px;border:1px solid #d1d5db;border-radius:12px;background:var(--swatch,#111827)!important;box-shadow:inset 0 0 0 3px #fff,0 1px 2px rgba(15,23,42,.08);cursor:pointer;}
+    .nr-color-modal-backdrop{position:fixed;inset:0;display:none;place-items:center;background:rgba(15,23,42,.38);z-index:999999;padding:20px;}
+    .nr-color-modal-backdrop.open{display:grid;}
+    .nr-color-modal{width:min(420px,calc(100vw - 32px));background:#fff;border:1px solid var(--border);border-radius:20px;box-shadow:0 30px 80px rgba(15,23,42,.28);padding:22px;}
+    .nr-color-modal h3{margin:0 0 6px;font-size:22px;letter-spacing:-.04em;}
+    .nr-color-modal p{margin:0 0 16px;color:var(--text-light);}
+    .nr-color-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin-bottom:16px;}
+    .nr-color-chip{height:34px;border-radius:10px;border:1px solid #d1d5db;background:var(--chip);cursor:pointer;}
+    .nr-color-modal-actions{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;}
+    .nr-color-modal-actions input{min-height:44px;border:1px solid #d1d5db;border-radius:12px;padding:10px 12px;font:inherit;}
+
+    .preview-carousel-demo{display:grid!important;grid-template-columns:44px minmax(0,1fr) 44px;gap:12px;align-items:center;}
+    .carousel-track-demo{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+    .carousel-review{border:1px solid var(--border);border-radius:14px;background:#fbfdff;padding:16px;min-height:160px;}
+    .carousel-review p{margin:0 0 9px;}.carousel-review h4{margin:0 0 8px;}
+    .carousel-arrow{width:44px;height:44px;border:1px solid var(--border);border-radius:999px;background:#fff;font-size:28px;font-weight:900;line-height:1;cursor:pointer;box-shadow:var(--shadow);}
+
+    .style-control-grid{gap:14px 22px!important;}
+    .style-control-grid>div{grid-template-columns:140px minmax(0,1fr)!important;}
+    .style-control-grid .premium-input{max-width:220px;}
+
+    @media(max-width:1200px){.dash-stats-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.dash-grid-main{grid-template-columns:1fr}.dash-card.wide{grid-column:span 1}.carousel-track-demo{grid-template-columns:1fr}.preview-carousel-demo{grid-template-columns:40px minmax(0,1fr) 40px;}}
+    @media(max-width:760px){.dash-header{flex-direction:column}.dash-actions,.dash-actions .filter-select,.dash-actions .secondary-btn{width:100%;}.dash-stats-grid{grid-template-columns:1fr}.dash-chart-wrap,.dash-chart-wrap.large{height:240px}.style-control-grid>div{grid-template-columns:1fr!important}.nr-color-modal-actions{grid-template-columns:1fr}.carousel-arrow{display:none}.preview-carousel-demo{grid-template-columns:1fr}}
+
   </style>
 </head>
 <body>
@@ -464,16 +510,56 @@
 
     <main class="main">
       <section id="v-dash" class="view active">
-        <h2 class="page-title">Performance Dashboard</h2>
-        <div class="grid-3">
-          <div class="stat-card"><p class="stat-label">Total Reviews</p><h3 id="stat-total" class="stat-value">0</h3></div>
-          <div class="stat-card"><p class="stat-label">Live on Store</p><h3 id="stat-live" class="stat-value">0</h3></div>
+        <div class="dash-header">
+          <div>
+            <h2 class="page-title">Performance Dashboard</h2>
+            <p class="dash-subtitle">A clear snapshot of review volume, publishing status, sources, product performance and trends.</p>
+          </div>
+          <div class="dash-actions">
+            <select id="dash-period" class="filter-select" onchange="window.loadStats()">
+              <option value="day">Daily</option>
+              <option value="week">Weekly</option>
+              <option value="month" selected>Monthly</option>
+              <option value="year">Yearly</option>
+            </select>
+            <select id="dash-chart-type" class="filter-select" onchange="window.loadStats()">
+              <option value="bar" selected>Bar charts</option>
+              <option value="line">Line charts</option>
+            </select>
+            <button class="secondary-btn" type="button" onclick="window.loadStats()">Refresh</button>
+          </div>
+        </div>
+        <div class="dash-stats-grid">
+          <div class="stat-card"><p class="stat-label">Total Reviews</p><h3 id="stat-total" class="stat-value">0</h3><p class="stat-help">Non-test, non-deleted reviews.</p></div>
+          <div class="stat-card"><p class="stat-label">Live on Store</p><h3 id="stat-live" class="stat-value">0</h3><p class="stat-help">Accepted reviews visible publicly.</p></div>
+          <div class="stat-card"><p class="stat-label">Pending Review</p><h3 id="stat-pending" class="stat-value">0</h3><p class="stat-help">Waiting for approval.</p></div>
           <div id="v-dash-prod-card" class="stat-card"><p class="stat-label">Loading Top Product Snapshot...</p></div>
         </div>
-        <div id="nr-dashboard-analytics-mount"></div>
-        <div class="grid-2">
-          <div class="panel"><h3 style="margin-top:0;">Review Sources</h3><canvas id="chartSources" height="300"></canvas></div>
-          <div id="nr-dashboard-secondary-mount" class="panel"><h3 style="margin-top:0;">Security Status</h3><p id="security-status" class="muted">Checking admin session...</p></div>
+        <div class="dash-grid-main">
+          <div class="dash-card wide">
+            <div class="dash-card-head"><h3>Reviews over time</h3><span id="dash-period-label" class="muted">Monthly</span></div>
+            <div class="dash-chart-wrap large"><canvas id="chartTimeline"></canvas></div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-head"><h3>Review sources</h3></div>
+            <div class="dash-chart-wrap"><canvas id="chartSources"></canvas></div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-head"><h3>Rating split</h3></div>
+            <div class="dash-chart-wrap"><canvas id="chartRatings"></canvas></div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-head"><h3>Publishing status</h3></div>
+            <div class="dash-chart-wrap"><canvas id="chartStatuses"></canvas></div>
+          </div>
+          <div class="dash-card wide">
+            <div class="dash-card-head"><h3>Product leaderboard</h3><span class="muted">Most reviewed products</span></div>
+            <div id="dash-products" class="dash-table-empty">Loading product performance…</div>
+          </div>
+          <div id="nr-dashboard-secondary-mount" class="dash-card">
+            <div class="dash-card-head"><h3>Security Status</h3></div>
+            <p id="security-status" class="muted">Checking admin session...</p>
+          </div>
         </div>
       </section>
 
@@ -547,6 +633,10 @@
             </div>
           </div>
         </div>
+      </section>
+
+      <section id="v-msg" class="view">
+        <div id="nr-messaging-campaigns-mount" class="panel"><p>Loading Messaging &amp; Campaigns...</p></div>
       </section>
 
       <section id="v-import" class="view">
@@ -655,7 +745,15 @@
                 <h4>Amazing Quality</h4><p class="pre-color-text">This product is absolutely amazing! The quality is top notch and it arrived perfectly.</p><p>Jane Doe ✓ Verified</p>
               </div>
               <div id="preview-card" class="sub-preview preview-card"><span id="pre-card-badge" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;min-width:76px;padding:6px 12px;border-radius:999px;background:#111827;color:#fff;font-weight:800;"><span id="pre-card-icon" class="pre-color-star">★</span> <span id="pre-card-count">4.8 (12)</span></span><h4>Sample Product</h4><p>$29.99</p></div>
-              <div id="preview-carousel" class="sub-preview preview-card"><p class="pre-color-star">★★★★★</p><h4>Incredible!</h4><p>Best purchase I've made all year.</p><p>Sarah M.</p></div>
+              <div id="preview-carousel" class="sub-preview preview-card preview-carousel-demo">
+                <button type="button" class="carousel-arrow" aria-label="Previous review">‹</button>
+                <div class="carousel-track-demo">
+                  <article class="carousel-review"><p class="pre-color-star">★★★★★</p><h4>Incredible!</h4><p>Best purchase I've made all year.</p><p>Sarah M.</p></article>
+                  <article class="carousel-review"><p class="pre-color-star">★★★★★</p><h4>Brilliant quality</h4><p>The review carousel looks clean on the homepage.</p><p>Alex P.</p></article>
+                  <article class="carousel-review"><p class="pre-color-star">★★★★☆</p><h4>Would recommend</h4><p>Helpful feedback displayed clearly.</p><p>Danny R.</p></article>
+                </div>
+                <button type="button" class="carousel-arrow" aria-label="Next review">›</button>
+              </div>
             </div>
           </div>
         </div>

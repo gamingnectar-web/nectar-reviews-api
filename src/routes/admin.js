@@ -327,28 +327,77 @@ router.post('/trash/restore-all', async (req, res, next) => {
 router.get('/stats', async (req, res, next) => {
   try {
     const shopDomain = shopDomainFromReq(req);
-    const reviews = await Review.find({ shopDomain, isDeleted: false, isTestReview: { $ne: true } }).lean();
+    const reviews = await Review.find({ shopDomain, isDeleted: false, isTestReview: { $ne: true }, testMode: { $ne: true } }).lean();
     const config = await Settings.findOne({ shopDomain }).lean();
     const sources = { website: 0, email: 0, import: 0 };
+    const statuses = { accepted: 0, pending: 0, hold: 0, rejected: 0, spam: 0 };
+    const ratings = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
     const products = {};
+
+    const monthKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const dayKey = (date) => date.toISOString().slice(0, 10);
+    const weekKey = (date) => {
+      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+      return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+    };
+    const yearKey = (date) => String(date.getFullYear());
+    const buildSeries = (keys) => keys.map((key) => ({ label: key, count: 0 }));
+    const now = new Date();
+    const dailyKeys = Array.from({ length: 30 }, (_, i) => { const d = new Date(now); d.setDate(d.getDate() - (29 - i)); return dayKey(d); });
+    const weeklyKeys = Array.from({ length: 12 }, (_, i) => { const d = new Date(now); d.setDate(d.getDate() - ((11 - i) * 7)); return weekKey(d); });
+    const monthlyKeys = Array.from({ length: 12 }, (_, i) => { const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1); return monthKey(d); });
+    const yearlyKeys = Array.from({ length: 5 }, (_, i) => String(now.getFullYear() - (4 - i)));
+    const timeSeries = {
+      day: buildSeries(dailyKeys),
+      week: buildSeries(weeklyKeys),
+      month: buildSeries(monthlyKeys),
+      year: buildSeries(yearlyKeys),
+    };
+    const maps = {
+      day: Object.fromEntries(timeSeries.day.map((p) => [p.label, p])),
+      week: Object.fromEntries(timeSeries.week.map((p) => [p.label, p])),
+      month: Object.fromEntries(timeSeries.month.map((p) => [p.label, p])),
+      year: Object.fromEntries(timeSeries.year.map((p) => [p.label, p])),
+    };
 
     reviews.forEach((review) => {
       if (sources[review.source] !== undefined) sources[review.source] += 1;
-      if (!products[review.itemId]) products[review.itemId] = { count: 0, sum: 0 };
-      products[review.itemId].count += 1;
-      products[review.itemId].sum += Number(review.rating || 0);
+      if (statuses[review.status] !== undefined) statuses[review.status] += 1;
+      const rating = Math.max(1, Math.min(5, Math.round(Number(review.rating || 0))));
+      if (ratings[rating] !== undefined) ratings[rating] += 1;
+
+      const id = String(review.itemId || 'Unknown');
+      if (!products[id]) products[id] = { id, count: 0, liveCount: 0, sum: 0, title: null };
+      products[id].count += 1;
+      products[id].sum += Number(review.rating || 0);
+      if (review.status === 'accepted') products[id].liveCount += 1;
+
+      const created = new Date(review.createdAt || review.updatedAt || Date.now());
+      if (!Number.isNaN(created.getTime())) {
+        const dk = dayKey(created); if (maps.day[dk]) maps.day[dk].count += 1;
+        const wk = weekKey(created); if (maps.week[wk]) maps.week[wk].count += 1;
+        const mk = monthKey(created); if (maps.month[mk]) maps.month[mk].count += 1;
+        const yk = yearKey(created); if (maps.year[yk]) maps.year[yk].count += 1;
+      }
     });
 
-    let topProduct = { id: 'N/A', count: 0, averageRating: '0.0', title: null, image: null };
-    const sorted = Object.entries(products).sort((a, b) => b[1].count - a[1].count);
-    if (sorted.length) {
-      const [id, item] = sorted[0];
-      topProduct = { id, count: item.count, averageRating: (item.sum / item.count).toFixed(1), title: null, image: null };
+    let topProduct = { id: 'N/A', count: 0, liveCount: 0, averageRating: '0.0', title: null, image: null };
+    const productRows = Object.values(products)
+      .map((item) => ({ ...item, averageRating: item.count ? Number((item.sum / item.count).toFixed(1)) : 0 }))
+      .sort((a, b) => b.count - a.count);
+    if (productRows.length) {
+      const item = productRows[0];
+      topProduct = { id: item.id, count: item.count, liveCount: item.liveCount, averageRating: item.averageRating.toFixed(1), title: null, image: null };
       try {
-        const productData = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products/${id}.json?fields=id,title,image`, { shopDomain });
+        const productData = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products/${item.id}.json?fields=id,title,image`, { shopDomain });
         if (productData?.product) {
           topProduct.title = productData.product.title;
           topProduct.image = productData.product.image?.src || null;
+          productRows[0].title = productData.product.title;
         }
       } catch (error) {
         console.warn('Could not fetch top product details:', error.message);
@@ -357,7 +406,14 @@ router.get('/stats', async (req, res, next) => {
 
     const sent = config?.emailsSentTotal || 0;
     return res.json({
+      totalReviews: reviews.length,
+      liveReviews: statuses.accepted,
+      pendingReviews: statuses.pending + statuses.hold,
       sources,
+      statuses,
+      ratings,
+      timeSeries,
+      products: productRows.slice(0, 12),
       topProduct,
       emailStats: {
         sent,

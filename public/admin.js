@@ -3,7 +3,7 @@ const urlParams = new URLSearchParams(window.location.search);
 const SHOP_DOMAIN = (urlParams.get('shop') || urlParams.get('shopDomain') || 'your-dev-store.myshopify.com').toLowerCase();
 
 let data = [];
-let chartInstance = null;
+let dashboardCharts = {};
 let currentAttributes = [];
 let parsedCSVData = [];
 let csvHeaders = [];
@@ -256,37 +256,84 @@ function hydrateSettings(config) {
   window.renderAttributes();
 }
 
+function renderDashboardChart(id, type, labels, values, options = {}) {
+  const el = document.getElementById(id);
+  if (!el || !window.Chart) return;
+  const ctx = el.getContext('2d');
+  if (dashboardCharts[id]) dashboardCharts[id].destroy();
+  const baseType = type === 'line' ? 'line' : type;
+  dashboardCharts[id] = new Chart(ctx, {
+    type: baseType,
+    data: {
+      labels,
+      datasets: [{
+        label: options.label || 'Reviews',
+        data: values,
+        backgroundColor: options.backgroundColor || 'rgba(17,24,39,.82)',
+        borderColor: options.borderColor || '#111827',
+        borderWidth: 2,
+        borderRadius: type === 'bar' ? 8 : 0,
+        tension: .35,
+        fill: type === 'line' ? false : true,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: options.legend !== false }, tooltip: { enabled: true } },
+      scales: options.scales === false ? undefined : {
+        y: { beginAtZero: true, ticks: { precision: 0 } },
+        x: { grid: { display: false } },
+      },
+      cutout: options.cutout,
+    },
+  });
+}
+
 window.loadStats = async function() {
   try {
     const stats = await adminFetch(`/admin/stats?t=${Date.now()}`);
-    document.getElementById('stat-total').innerText = (stats.sources.website + stats.sources.email + stats.sources.import) || 0;
-    document.getElementById('stat-live').innerText = data.filter((r) => r.status === 'accepted' && !r.isDeleted).length;
+    const total = Number(stats.totalReviews ?? 0);
+    const live = Number(stats.liveReviews ?? 0);
+    const pending = Number(stats.statuses?.pending ?? 0) + Number(stats.statuses?.hold ?? 0);
+    document.getElementById('stat-total').innerText = total;
+    document.getElementById('stat-live').innerText = Math.min(live, total);
+    const pendingEl = document.getElementById('stat-pending');
+    if (pendingEl) pendingEl.innerText = pending;
 
     const prodCardEl = document.getElementById('v-dash-prod-card');
     if (prodCardEl && stats.topProduct && stats.topProduct.id !== 'N/A') {
-      const count = stats.topProduct.count;
-      const avgNum = parseFloat(stats.topProduct.averageRating);
+      const count = Number(stats.topProduct.count || 0);
+      const avgNum = parseFloat(stats.topProduct.averageRating || 0);
       const fullStars = Number.isNaN(avgNum) ? 0 : Math.round(avgNum);
       prodCardEl.innerHTML = `
         <p class="stat-label">Most Reviewed Product</p>
         <h3 style="margin:0 0 10px; font-size:18px;">${escapeHtml(stats.topProduct.title || `ID: ${stats.topProduct.id}`)}</h3>
-        <p style="margin:0; color:var(--star);">${'★'.repeat(fullStars)}${'☆'.repeat(5 - fullStars)} <span style="color:var(--text-light);">${avgNum.toFixed(1)} (${count} reviews)</span></p>`;
+        <p style="margin:0; color:var(--star);">${'★'.repeat(fullStars)}${'☆'.repeat(Math.max(0, 5 - fullStars))} <span style="color:var(--text-light);">${(Number.isFinite(avgNum) ? avgNum : 0).toFixed(1)} (${count} reviews)</span></p>`;
     } else if (prodCardEl) {
-      prodCardEl.innerHTML = '<p class="stat-label">Top Product</p><h3 class="stat-value" style="font-size:24px;">No reviews yet</h3>';
+      prodCardEl.innerHTML = '<p class="stat-label">Top Product</p><h3 class="stat-value" style="font-size:24px;">No reviews yet</h3><p class="stat-help">Product leaderboard will appear once reviews are collected.</p>';
     }
 
-    const chartEl = document.getElementById('chartSources');
-    if (chartEl && window.Chart) {
-      const ctx = chartEl.getContext('2d');
-      if (chartInstance) chartInstance.destroy();
-      chartInstance = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-          labels: ['Website Widget', 'Email Link', 'Imported CSV'],
-          datasets: [{ data: [stats.sources.website, stats.sources.email, stats.sources.import], backgroundColor: ['#008060', '#005bd3', '#ffc700'] }],
-        },
-        options: { cutout: '75%', plugins: { legend: { position: 'bottom' } } },
-      });
+    const period = document.getElementById('dash-period')?.value || 'month';
+    const chartType = document.getElementById('dash-chart-type')?.value || 'bar';
+    const periodLabel = document.getElementById('dash-period-label');
+    if (periodLabel) periodLabel.textContent = ({ day: 'Daily', week: 'Weekly', month: 'Monthly', year: 'Yearly' }[period] || 'Monthly');
+    const series = stats.timeSeries?.[period] || [];
+    renderDashboardChart('chartTimeline', chartType, series.map((p) => p.label), series.map((p) => p.count), { label: 'Reviews', legend: false });
+
+    const sources = stats.sources || { website: 0, email: 0, import: 0 };
+    renderDashboardChart('chartSources', 'doughnut', ['Website', 'Email', 'CSV Import'], [sources.website || 0, sources.email || 0, sources.import || 0], { backgroundColor: ['#111827', '#005bd3', '#ffc700'], cutout: '70%' , scales: false });
+
+    const ratings = stats.ratings || { 1:0,2:0,3:0,4:0,5:0 };
+    renderDashboardChart('chartRatings', 'bar', ['5★','4★','3★','2★','1★'], [ratings[5]||0, ratings[4]||0, ratings[3]||0, ratings[2]||0, ratings[1]||0], { label: 'Reviews', legend: false, backgroundColor: '#ffc700', borderColor: '#ffc700' });
+
+    const statuses = stats.statuses || {};
+    renderDashboardChart('chartStatuses', 'doughnut', ['Accepted','Pending','Hold','Rejected','Spam'], [statuses.accepted||0,statuses.pending||0,statuses.hold||0,statuses.rejected||0,statuses.spam||0], { backgroundColor: ['#008060','#005bd3','#b98900','#d72c0d','#6b7280'], cutout: '70%', scales: false });
+
+    const productsBox = document.getElementById('dash-products');
+    if (productsBox) {
+      const products = Array.isArray(stats.products) ? stats.products.slice(0, 8) : [];
+      productsBox.innerHTML = products.length ? `<table class="dash-table"><thead><tr><th>Product</th><th>Total</th><th>Live</th><th>Average</th></tr></thead><tbody>${products.map((p) => `<tr><td><strong>${escapeHtml(p.title || p.id)}</strong><br><small class="muted">${escapeHtml(p.id)}</small></td><td>${Number(p.count || 0)}</td><td>${Number(p.liveCount || 0)}</td><td>${Number(p.averageRating || 0).toFixed(1)} ★</td></tr>`).join('')}</tbody></table>` : '<div class="dash-table-empty">No product review data yet.</div>';
     }
   } catch (error) {
     console.warn(error);
