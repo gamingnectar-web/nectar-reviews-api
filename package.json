@@ -1,7 +1,7 @@
 {
   "name": "reviews-platform-api",
-  "version": "1.2.3-loyalty-rewards-builder",
-  "description": "White-label reviews and loyalty platform with loyalty rewards, tiers and checkout beta foundation",
+  "version": "1.2.4-loyalty-modules-foundation",
+  "description": "Reviews Platform API - loyalty module foundation with customer sync, modular emails, rewards and discount-code flow",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

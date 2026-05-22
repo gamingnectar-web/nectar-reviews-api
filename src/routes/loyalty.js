@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const { Shop, EmailProviderSettings, CampaignEvent } = require('../models');
 const { getLoyaltyModels } = require('../modules/loyalty/loyalty.models');
@@ -15,6 +16,7 @@ const {
   normaliseCustomerRef,
   customerHintFromHash,
   createLedgerEntry,
+  upsertCustomerStateFromShopifyCustomer,
   listCustomerStates,
   maturePendingPoints,
   recalculateCustomerState,
@@ -35,13 +37,55 @@ function maskEmail(email = '') {
 
 function safeCustomerResult(customer = {}) {
   const displayName = [customer.first_name, customer.last_name].filter(Boolean).join(' ').trim() || customer.email || `Customer ${customer.id}`;
+  const tags = String(customer.tags || '').split(',').map((tag) => tag.trim()).filter(Boolean);
   return {
     id: String(customer.id || ''),
     displayName,
     maskedEmail: maskEmail(customer.email || ''),
     ordersCount: Number(customer.orders_count || 0),
+    optOut: tags.map((tag) => tag.toUpperCase()).includes('NO_LOY'),
     createdAt: customer.created_at || null,
   };
+}
+
+
+function makeLoyaltyDiscountCode() {
+  return `LOYALTY-${crypto.randomBytes(3).toString('hex').toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+}
+
+async function createShopifyDiscountCode({ shopDomain, title, reward, code }) {
+  const valueType = reward.discountValueType === 'percentage' ? 'percentage' : 'fixed_amount';
+  const value = valueType === 'percentage'
+    ? `-${Math.min(100, Math.abs(Number(reward.discountValue || 0))).toFixed(2)}`
+    : `-${Math.abs(Number(reward.discountValue || 0)).toFixed(2)}`;
+  const priceRule = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/price_rules.json`, {
+    shopDomain,
+    method: 'POST',
+    body: JSON.stringify({
+      price_rule: {
+        title,
+        target_type: reward.type === 'free_shipping' ? 'shipping_line' : 'line_item',
+        target_selection: 'all',
+        allocation_method: reward.type === 'free_shipping' ? 'each' : 'across',
+        value_type: valueType,
+        value,
+        customer_selection: 'all',
+        once_per_customer: true,
+        usage_limit: 1,
+        starts_at: new Date().toISOString(),
+        prerequisite_subtotal_range: Number(reward.minimumCartValue || 0) > 0 ? { greater_than_or_equal_to: String(Number(reward.minimumCartValue || 0).toFixed(2)) } : undefined,
+      },
+    }),
+  });
+  const priceRuleId = priceRule?.price_rule?.id;
+  if (!priceRuleId) throw new Error('Shopify discount price rule was not created.');
+  const discount = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/price_rules/${priceRuleId}/discount_codes.json`, {
+    shopDomain,
+    method: 'POST',
+    body: JSON.stringify({ discount_code: { code } }),
+  });
+  if (!discount?.discount_code?.id) throw new Error('Shopify discount code was not created.');
+  return { code, priceRuleId, discountCodeId: discount.discount_code.id };
 }
 
 async function updateShopModule(shopDomain, enabled) {
@@ -150,6 +194,35 @@ router.delete('/points-rules/:id', async (req, res, next) => {
     await program.save();
     return res.json({ ok: true, program });
   } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/customers/sync', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const limit = clampNumber(req.body.limit || req.query.limit, 1, 250, 100);
+    const data = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/customers.json?limit=${limit}&fields=id,tags,orders_count,created_at,updated_at,last_order_created_at`, { shopDomain });
+    if (!data?.customers) {
+      return res.status(409).json({
+        error: 'Shopify customer sync is not connected. Reinstall with read_customers scope if needed.',
+        installUrl: buildInstallUrl(shopDomain),
+      });
+    }
+    let createdOrUpdated = 0;
+    let optedOut = 0;
+    let withPurchases = 0;
+    for (const customer of data.customers) {
+      const row = await upsertCustomerStateFromShopifyCustomer(shopDomain, customer);
+      if (row) createdOrUpdated += 1;
+      if (row?.optOut) optedOut += 1;
+      if (Number(row?.purchaseCount || 0) > 0) withPurchases += 1;
+    }
+    return res.json({ ok: true, createdOrUpdated, optedOut, withPurchases, note: 'No customer name, email or phone was stored in the loyalty database.' });
+  } catch (error) {
+    if (error.code === 'SHOPIFY_REINSTALL_REQUIRED' || error.status === 403) {
+      return res.status(409).json({ error: 'Customer sync needs Shopify read_customers permission. Reinstall the app to grant the scope.', installUrl: buildInstallUrl(shopDomainFromReq(req)) });
+    }
     next(error);
   }
 });
@@ -299,6 +372,17 @@ router.post('/redemptions', async (req, res, next) => {
     const program = await getOrCreateLoyaltyProgram(shopDomain);
     const reward = (program.redemptionRewards || []).find((item) => item.id === rewardId && item.enabled !== false);
     if (!reward) return res.status(404).json({ error: 'Reward not found.' });
+    const currentState = await recalculateCustomerState(shopDomain, customerRefHash);
+    if (Number(currentState.availablePoints || 0) < Number(reward.pointsCost || 0)) {
+      return res.status(400).json({ error: `Not enough ${program.pointName || 'Points'} for this reward.` });
+    }
+    let discountCode = '';
+    let privateNote = 'Reward redeemed from admin. No Shopify discount code was issued.';
+    if (reward.type === 'discount' && reward.discountMode === 'native_discount_code') {
+      discountCode = makeLoyaltyDiscountCode();
+      await createShopifyDiscountCode({ shopDomain, title: `Loyalty reward ${discountCode}`, reward, code: discountCode });
+      privateNote = 'Native Shopify discount code issued for loyalty redemption.';
+    }
     const row = await createLedgerEntry({
       shopDomain,
       customerRefHash,
@@ -306,12 +390,13 @@ router.post('/redemptions', async (req, res, next) => {
       eventType: 'redemption',
       source: 'admin',
       points: -Math.abs(Number(reward.pointsCost || 0)),
-      status: 'available',
+      status: discountCode ? 'issued' : 'redeemed',
       availableAt: new Date(),
       awardedAt: new Date(),
+      redeemedAt: new Date(),
       ruleId: reward.id,
       ruleName: `Redeemed: ${reward.name}`,
-      privateNote: 'Redemption placeholder. Shopify discount/code issuing is the next integration step.',
+      privateNote,
     });
     const redemption = await LoyaltyRedemption.create({
       shopDomain,
@@ -319,10 +404,12 @@ router.post('/redemptions', async (req, res, next) => {
       rewardId: reward.id,
       rewardName: reward.name,
       pointsCost: reward.pointsCost,
-      status: 'draft',
-      privateNote: 'Draft redemption; no Shopify discount code has been issued yet.',
+      status: discountCode ? 'issued' : 'draft',
+      shopifyDiscountCode: discountCode,
+      issuedAt: discountCode ? new Date() : null,
+      privateNote,
     });
-    return res.status(201).json({ ok: true, row, redemption });
+    return res.status(201).json({ ok: true, row, redemption, discountCode });
   } catch (error) {
     next(error);
   }

@@ -19,8 +19,12 @@ function makeDiscountCode() {
   return `LOYALTY-${crypto.randomBytes(3).toString('hex').toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
 }
 
-async function createShopifyFixedAmountCode({ shopDomain, title, amount, code }) {
+async function createShopifyDiscountCode({ shopDomain, title, amount, valueType = 'fixed_amount', code }) {
   const startsAt = new Date().toISOString();
+  const cleanValueType = valueType === 'percentage' ? 'percentage' : 'fixed_amount';
+  const value = cleanValueType === 'percentage'
+    ? `-${Math.min(100, Math.abs(Number(amount || 0))).toFixed(2)}`
+    : `-${Math.abs(Number(amount || 0)).toFixed(2)}`;
   const priceRule = await shopifyFetch(`/admin/api/${env.shopifyApiVersion}/price_rules.json`, {
     shopDomain,
     method: 'POST',
@@ -30,8 +34,8 @@ async function createShopifyFixedAmountCode({ shopDomain, title, amount, code })
         target_type: 'line_item',
         target_selection: 'all',
         allocation_method: 'across',
-        value_type: 'fixed_amount',
-        value: `-${Math.abs(Number(amount || 0)).toFixed(2)}`,
+        value_type: cleanValueType,
+        value,
         customer_selection: 'all',
         once_per_customer: true,
         usage_limit: 1,
@@ -100,10 +104,11 @@ router.post('/redeem', async (req, res, next) => {
     if (shouldIssueNativeCode) {
       try {
         discountCode = makeDiscountCode();
-        await createShopifyFixedAmountCode({
+        await createShopifyDiscountCode({
           shopDomain,
           title: `Loyalty redemption ${discountCode}`,
           amount: pointsToRedeem > 0 ? Number(pointsToRedeem * Number(checkoutBeta.pointValueMinorUnits || 1) / 100) : Number(reward.discountValue || 0),
+          valueType: reward.discountValueType || 'fixed_amount',
           code: discountCode,
         });
       } catch (error) {

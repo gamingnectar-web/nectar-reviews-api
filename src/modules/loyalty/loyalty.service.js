@@ -30,7 +30,12 @@ function defaultLoyaltyConfig(shopDomain) {
     enabled: false,
     privacyMode: 'hashed_customer_ref',
     pointName: 'Points',
-    emailTemplates: [{ id: 'loyalty_email_primary', name: 'Reward ready', primary: true, status: 'primary', subject: 'Your reward is ready', heading: 'Your reward is ready', subtitle: 'Your loyalty reward is ready to use.', body: 'Thanks for being part of our rewards programme. Your {{ reward_type }} is now ready.', modules: [{ id: 'module_reward_box', type: 'reward_box', title: 'Reward unlocked', body: 'Use your reward on your next order.', backgroundColor: '#f8fafc', borderColor: '#e5e7eb', radius: 16, padding: 16, position: 'after_body' }], accentColor: '#111827', buttonText: 'Shop now' }],
+    emailModuleLibrary: [
+      { id: 'module_reward_box', name: 'Reward box', type: 'reward_box', title: 'Reward unlocked', body: 'Your reward is ready to use on your next order.', backgroundColor: '#f8fafc', borderColor: '#e5e7eb', borderWidth: 1, radius: 16, padding: 16, position: 'after_body', alignment: 'left' },
+      { id: 'module_offer', name: 'Offer', type: 'offer', title: 'A little extra', body: 'Add an optional offer, perk, or message here.', backgroundColor: '#fff7ed', borderColor: '#fed7aa', borderWidth: 1, radius: 16, padding: 16, position: 'after_reward', alignment: 'left' },
+      { id: 'module_support', name: 'Support note', type: 'support', title: 'Need help?', body: 'Reply to this email if you need anything.', backgroundColor: '#f8fafc', borderColor: '#e5e7eb', borderWidth: 1, radius: 16, padding: 16, position: 'after_body', alignment: 'left' },
+    ],
+    emailTemplates: [{ id: 'loyalty_email_primary', name: 'Reward ready', primary: true, status: 'primary', subject: 'Your reward is ready', heading: 'Your reward is ready', subtitle: 'Your loyalty reward is ready to use.', body: 'Thanks for being part of our rewards programme. Your {{ reward_type }} is now ready.', modules: [{ id: 'module_reward_box', name: 'Reward box', type: 'reward_box', title: 'Reward unlocked', body: 'Use your reward on your next order.', backgroundColor: '#f8fafc', borderColor: '#e5e7eb', borderWidth: 1, radius: 16, padding: 16, position: 'after_body', alignment: 'left' }], accentColor: '#111827', buttonText: 'Shop now' }],
     tiers: [{ id: 'bronze', name: 'Bronze', threshold: 0, multiplier: 1, perks: 'Entry tier' }, { id: 'silver', name: 'Silver', threshold: 500, multiplier: 1.2, perks: 'Earn 1.2x points' }, { id: 'gold', name: 'Gold', threshold: 1500, multiplier: 1.5, perks: 'Earn 1.5x points' }],
     redemptionRewards: [{ id: 'reward_checkout_discount', name: '£5 off coupon', type: 'discount', pointsCost: 500, discountValue: 5, enabled: true, betaCheckoutEnabled: true, discountMode: 'draft_only' }],
     rewardTemplates: [
@@ -133,6 +138,26 @@ function cleanCondition(input = {}) {
   };
 }
 
+function cleanEmailModule(input = {}) {
+  return {
+    id: cleanText(input.id, 80) || makeId('email_module'),
+    name: cleanText(input.name || input.title || 'Content module', 120),
+    type: ['notice', 'reward_box', 'offer', 'support', 'text', 'image_text', 'button'].includes(input.type) ? input.type : 'notice',
+    title: cleanText(input.title || 'Extra section', 120),
+    body: cleanText(input.body || '', 1200),
+    imageUrl: cleanText(input.imageUrl || '', 700),
+    buttonText: cleanText(input.buttonText || '', 80),
+    buttonUrl: cleanText(input.buttonUrl || '', 700),
+    backgroundColor: cleanText(input.backgroundColor || '#f8fafc', 20),
+    borderColor: cleanText(input.borderColor || '#e5e7eb', 20),
+    borderWidth: clampNumber(input.borderWidth, 0, 12, 1),
+    radius: clampNumber(input.radius, 0, 48, 16),
+    padding: clampNumber(input.padding, 6, 60, 16),
+    alignment: ['left', 'center'].includes(input.alignment) ? input.alignment : 'left',
+    position: ['before_body', 'after_body', 'after_reward'].includes(input.position) ? input.position : 'after_body',
+  };
+}
+
 function cleanEmailTemplate(input = {}) {
   return {
     id: cleanText(input.id, 80) || makeId('loyalty_email'),
@@ -143,17 +168,7 @@ function cleanEmailTemplate(input = {}) {
     heading: cleanText(input.heading || 'Your reward is ready', 160),
     subtitle: cleanText(input.subtitle || 'A little thank-you from us.', 180),
     body: cleanText(input.body || 'Thanks for being part of our rewards programme. Your {{ reward_type }} is now ready.', 1200),
-    modules: Array.isArray(input.modules) ? input.modules.slice(0, 12).map((module) => ({
-      id: cleanText(module.id, 80) || makeId('email_module'),
-      type: ['notice', 'reward_box', 'offer', 'support', 'text'].includes(module.type) ? module.type : 'notice',
-      title: cleanText(module.title || 'Extra section', 120),
-      body: cleanText(module.body || '', 600),
-      backgroundColor: cleanText(module.backgroundColor || '#f8fafc', 20),
-      borderColor: cleanText(module.borderColor || '#e5e7eb', 20),
-      radius: clampNumber(module.radius, 0, 40, 16),
-      padding: clampNumber(module.padding, 8, 40, 16),
-      position: ['before_body', 'after_body', 'after_reward'].includes(module.position) ? module.position : 'after_body',
-    })) : [],
+    modules: Array.isArray(input.modules) ? input.modules.slice(0, 20).map(cleanEmailModule) : [],
     accentColor: cleanText(input.accentColor || '#111827', 20),
     buttonText: cleanText(input.buttonText || 'Shop now', 80),
   };
@@ -179,6 +194,7 @@ function cleanRedemptionReward(input = {}) {
     type: ['discount', 'catalogue_item', 'free_shipping'].includes(input.type) ? input.type : 'discount',
     pointsCost: clampNumber(input.pointsCost, 0, 100000000, 500),
     discountValue: clampNumber(input.discountValue, 0, 1000000, 5),
+    discountValueType: ['fixed_amount', 'percentage'].includes(input.discountValueType) ? input.discountValueType : (input.discountType === 'percentage' ? 'percentage' : 'fixed_amount'),
     enabled: input.enabled !== false,
     shopifyProductId: cleanText(input.shopifyProductId || '', 120),
     shopifyVariantId: cleanText(input.shopifyVariantId || '', 120),
@@ -236,6 +252,9 @@ function cleanLoyaltyConfig(shopDomain, body = {}) {
     enabled: Boolean(body.enabled),
     privacyMode: 'hashed_customer_ref',
     pointName: cleanText(body.pointName || defaults.pointName, 80),
+    emailModuleLibrary: Array.isArray(body.emailModuleLibrary)
+      ? body.emailModuleLibrary.slice(0, 50).map(cleanEmailModule)
+      : defaults.emailModuleLibrary,
     emailTemplates: Array.isArray(body.emailTemplates)
       ? body.emailTemplates.slice(0, 20).map(cleanEmailTemplate)
       : defaults.emailTemplates,
@@ -301,13 +320,19 @@ async function recalculateCustomerState(shopDomain, customerRefHash) {
   availablePoints = Math.max(0, Math.round(availablePoints));
   pendingPoints = Math.max(0, Math.round(pendingPoints));
   const tier = getTierForPoints(program || {}, totalEarned);
+  const existingState = await LoyaltyCustomerState.findOne({ shopDomain, customerRefHash }).lean();
   return LoyaltyCustomerState.findOneAndUpdate(
     { shopDomain, customerRefHash },
     {
       $set: {
         shopDomain,
         customerRefHash,
-        customerRefHint: customerHintFromHash(customerRefHash),
+        customerRefHint: existingState?.customerRefHint || customerHintFromHash(customerRefHash),
+        source: existingState?.source || 'manual',
+        optOut: Boolean(existingState?.optOut),
+        optOutReason: existingState?.optOutReason || '',
+        purchaseCount: Number(existingState?.purchaseCount || 0),
+        lastOrderAt: existingState?.lastOrderAt || null,
         availablePoints,
         pendingPoints,
         totalEarned,
@@ -315,6 +340,45 @@ async function recalculateCustomerState(shopDomain, customerRefHash) {
         currentTierId: tier?.id || 'bronze',
         currentTierName: tier?.name || 'Bronze',
         lastActivityAt: lastActivityAt || new Date(),
+      },
+    },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  );
+}
+
+async function upsertCustomerStateFromShopifyCustomer(shopDomain, customer = {}) {
+  const { LoyaltyCustomerState } = getLoyaltyModels();
+  const rawId = cleanText(customer.id || customer.admin_graphql_api_id || customer.customerId || '', 180);
+  if (!shopDomain || !rawId) return null;
+  const customerRefHash = normaliseCustomerRef({ shopDomain, customerId: rawId });
+  const tags = String(customer.tags || '').split(',').map((tag) => tag.trim().toUpperCase()).filter(Boolean);
+  const optOut = tags.includes('NO_LOY');
+  const hintSuffix = rawId.slice(-4) || customerRefHash.slice(-4);
+  const purchaseCount = clampNumber(customer.orders_count ?? customer.purchaseCount, 0, 1000000, 0);
+  const lastOrderAt = customer.last_order_created_at || customer.lastOrderAt || customer.updated_at || null;
+  return LoyaltyCustomerState.findOneAndUpdate(
+    { shopDomain, customerRefHash },
+    {
+      $setOnInsert: {
+        shopDomain,
+        customerRefHash,
+        customerRefHint: `Shopify customer …${hintSuffix}`,
+        source: 'shopify_customer',
+        availablePoints: 0,
+        pendingPoints: 0,
+        totalEarned: 0,
+        totalRedeemed: 0,
+        currentTierId: 'bronze',
+        currentTierName: 'Bronze',
+      },
+      $set: {
+        customerRefHint: `Shopify customer …${hintSuffix}`,
+        source: purchaseCount > 0 ? 'purchase' : 'shopify_customer',
+        optOut,
+        optOutReason: optOut ? 'Shopify customer tag NO_LOY' : '',
+        purchaseCount,
+        lastOrderAt: lastOrderAt ? new Date(lastOrderAt) : null,
+        lastActivityAt: new Date(),
       },
     },
     { new: true, upsert: true, setDefaultsOnInsert: true }
@@ -363,6 +427,8 @@ async function awardForReview({ shopDomain, review, trigger }) {
 
   const customerRefHash = normaliseCustomerRef({ shopDomain, customerId: review.customerId, email: review.email });
   if (!customerRefHash) return { created: 0, skipped: 'no_customer_ref' };
+  const state = await getLoyaltyModels().LoyaltyCustomerState.findOne({ shopDomain, customerRefHash }).lean();
+  if (state?.optOut) return { created: 0, skipped: 'customer_opted_out' };
 
   const availableEvents = [];
   const now = Date.now();
@@ -559,12 +625,14 @@ module.exports = {
   defaultLoyaltyConfig,
   getOrCreateLoyaltyProgram,
   cleanLoyaltyConfig,
+  cleanEmailModule,
   cleanRewardTemplate,
   cleanPointsRule,
   cleanEmailTemplate,
   cleanTier,
   cleanRedemptionReward,
   recalculateCustomerState,
+  upsertCustomerStateFromShopifyCustomer,
   listCustomerStates,
   createLedgerEntry,
   maturePendingPoints,

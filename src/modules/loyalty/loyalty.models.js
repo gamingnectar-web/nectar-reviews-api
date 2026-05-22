@@ -38,6 +38,24 @@ const loyaltyPointsRuleSchema = new mongoose.Schema({
   conditions: { type: [loyaltyConditionSchema], default: [] },
 }, { _id: false });
 
+const loyaltyEmailModuleSchema = new mongoose.Schema({
+  id: { type: String, required: true },
+  name: { type: String, default: 'Content module' },
+  type: { type: String, enum: ['reward_box', 'notice', 'offer', 'support', 'text', 'image_text', 'button'], default: 'notice' },
+  title: { type: String, default: 'Extra section' },
+  body: { type: String, default: '' },
+  imageUrl: { type: String, default: '' },
+  buttonText: { type: String, default: '' },
+  buttonUrl: { type: String, default: '' },
+  backgroundColor: { type: String, default: '#f8fafc' },
+  borderColor: { type: String, default: '#e5e7eb' },
+  borderWidth: { type: Number, default: 1, min: 0, max: 12 },
+  radius: { type: Number, default: 16, min: 0, max: 48 },
+  padding: { type: Number, default: 16, min: 6, max: 60 },
+  alignment: { type: String, enum: ['left', 'center'], default: 'left' },
+  position: { type: String, enum: ['before_body', 'after_body', 'after_reward'], default: 'after_body' },
+}, { _id: false });
+
 const loyaltyEmailTemplateSchema = new mongoose.Schema({
   id: { type: String, required: true },
   name: { type: String, default: 'Reward ready' },
@@ -47,7 +65,7 @@ const loyaltyEmailTemplateSchema = new mongoose.Schema({
   heading: { type: String, default: 'Your reward is ready' },
   subtitle: { type: String, default: 'A little thank-you from us.' },
   body: { type: String, default: 'Thanks for leaving a review. Your {{ reward_type }} is now ready.' },
-  modules: { type: [new mongoose.Schema({ id: String, type: String, title: String, body: String, backgroundColor: String, borderColor: String, radius: Number, padding: Number, position: String }, { _id: false })], default: [] },
+  modules: { type: [loyaltyEmailModuleSchema], default: [] },
   accentColor: { type: String, default: '#111827' },
   buttonText: { type: String, default: 'Shop now' },
 }, { _id: false });
@@ -69,6 +87,7 @@ const loyaltyRedemptionRewardSchema = new mongoose.Schema({
   type: { type: String, enum: ['discount', 'catalogue_item', 'free_shipping'], default: 'discount' },
   pointsCost: { type: Number, default: 500, min: 0 },
   discountValue: { type: Number, default: 5, min: 0 },
+  discountValueType: { type: String, enum: ['fixed_amount', 'percentage'], default: 'fixed_amount' },
   enabled: { type: Boolean, default: true },
   shopifyProductId: { type: String, default: '' },
   shopifyVariantId: { type: String, default: '' },
@@ -89,6 +108,7 @@ const loyaltyProgramSchema = new mongoose.Schema({
   privacyMode: { type: String, default: 'hashed_customer_ref' },
   pointName: { type: String, default: 'Points' },
   emailTemplates: { type: [loyaltyEmailTemplateSchema], default: [] },
+  emailModuleLibrary: { type: [loyaltyEmailModuleSchema], default: [] },
   tiers: { type: [loyaltyTierSchema], default: [] },
   redemptionRewards: { type: [loyaltyRedemptionRewardSchema], default: [] },
   rewardTemplates: { type: [loyaltyRewardTemplateSchema], default: [] },
@@ -139,6 +159,11 @@ const loyaltyCustomerStateSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, index: true },
   customerRefHash: { type: String, required: true, index: true },
   customerRefHint: { type: String, default: '' },
+  source: { type: String, enum: ['review', 'purchase', 'shopify_customer', 'manual', 'import'], default: 'manual' },
+  optOut: { type: Boolean, default: false, index: true },
+  optOutReason: { type: String, default: '' },
+  purchaseCount: { type: Number, default: 0 },
+  lastOrderAt: { type: Date, default: null },
   availablePoints: { type: Number, default: 0 },
   pendingPoints: { type: Number, default: 0 },
   totalEarned: { type: Number, default: 0 },
