@@ -1,4 +1,4 @@
-# Nectar Reviews API - secure preserve-UI OAuth v6
+# Reviews Platform API - secure preserve-UI OAuth v6
 
 This build keeps the existing review/widget/admin behaviour, keeps the secure multi-shop Shopify OAuth foundation, and adds backwards-compatible storefront endpoints for the Shopify Liquid assets.
 
@@ -10,7 +10,7 @@ Do not use a global `SHOPIFY_ACCESS_TOKEN` for production. Product lookup uses t
 
 ```bash
 APP_URL=https://nectar-reviews-api.onrender.com
-MONGODB_URI=your_mongodb_uri
+CORE_DB_URI=your_core_reviews_mongodb_uri
 SHOPIFY_API_KEY=your_shopify_client_id
 SHOPIFY_API_SECRET=your_shopify_client_secret
 SHOPIFY_API_VERSION=2026-07
@@ -138,3 +138,74 @@ loyalty_ledger
 
 No manual MongoDB commands are required. Mongoose creates the collections/indexes when the app first reads or writes loyalty data.
 
+
+## v20 loyalty foundation
+
+This build includes the v18 review fixes, the v19 neutral database wiring, and a stronger loyalty foundation.
+
+### Neutral database variables
+
+Use neutral database names/variables for white-label readiness:
+
+```bash
+CORE_DB_URI=mongodb+srv://USER:PASSWORD@cluster.mongodb.net/platform_core?retryWrites=true&w=majority
+LOYALTY_DB_URI=mongodb+srv://USER:PASSWORD@loyalty-platform-cluster.mongodb.net/platform_loyalty?retryWrites=true&w=majority
+```
+
+Legacy variables still work:
+
+```bash
+MONGODB_URI
+LOYALTY_MONGODB_URI
+```
+
+### Shopify scopes
+
+Customer search in Loyalty needs Shopify customer read access. Use:
+
+```bash
+SHOPIFY_SCOPES=read_products,write_products,read_customers,read_orders,read_discounts,write_discounts,read_price_rules,write_price_rules,write_metaobject_definitions,write_metaobjects
+```
+
+If a shop installed before this scope was added, reinstall OAuth for that shop:
+
+```text
+/auth/shopify?shop=your-store.myshopify.com
+```
+
+### Loyalty collections
+
+The loyalty database uses these private collections:
+
+```txt
+loyalty_programs
+loyalty_ledger
+loyalty_customer_state
+loyalty_redemptions
+```
+
+### Privacy model
+
+The loyalty DB does not store customer name, email, phone, address, or raw Shopify customer ID. Customer selection/search uses Shopify live results in the admin only; once selected, the app writes a shop-scoped hash to the loyalty database.
+
+### Loyalty features included now
+
+- Separate loyalty DB connection through `LOYALTY_DB_URI`.
+- Customer state/balance aggregation.
+- Shopify customer search for selecting a customer in admin.
+- Manual add/remove points.
+- Pending-to-available points processing.
+- Review-approved point/reward rules.
+- Tier definitions and current tier calculation.
+- Draft redemption ledger foundation.
+- Loyalty reward email preview/test send using the main email provider.
+
+### Still intentionally deferred
+
+- Automatic Shopify purchase webhook point awards.
+- Birthday automation.
+- Live checkout redemption UI.
+- Shopify discount code issuing.
+- Customer-facing loyalty wallet widget.
+
+Those can be layered on without moving data out of `platform_loyalty`.

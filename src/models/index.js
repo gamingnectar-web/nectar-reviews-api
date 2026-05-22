@@ -195,6 +195,7 @@ module.exports = {
   CampaignEvent: mongoose.models.CampaignEvent || mongoose.model('CampaignEvent', campaignEventSchema, 'campaign_events'),
   EmailProviderSettings: mongoose.models.EmailProviderSettings || mongoose.model('EmailProviderSettings', emailProviderSettingsSchema, 'email_provider_settings'),
   Shop: mongoose.models.Shop || mongoose.model('Shop', shopSchema, 'shops'),
-  LoyaltyProgram: mongoose.models.LoyaltyProgram || mongoose.model('LoyaltyProgram', loyaltyProgramSchema, 'loyalty_programs'),
-  LoyaltyLedger: mongoose.models.LoyaltyLedger || mongoose.model('LoyaltyLedger', loyaltyLedgerSchema, 'loyalty_ledger'),
+  // Loyalty models intentionally live in src/modules/loyalty/loyalty.models.js
+  // so they can bind to LOYALTY_DB_URI instead of the core reviews database.
+
 };

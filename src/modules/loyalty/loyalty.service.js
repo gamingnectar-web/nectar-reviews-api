@@ -8,9 +8,20 @@ function makeId(prefix = 'rule') {
 }
 
 function normaliseCustomerRef({ shopDomain, customerId = '', email = '' }) {
-  const raw = cleanText(customerId, 160) || String(email || '').trim().toLowerCase();
+  const raw = cleanText(customerId, 180) || String(email || '').trim().toLowerCase();
   if (!shopDomain || !raw) return '';
   return hashValue(`${shopDomain}:${raw}`);
+}
+
+function customerHintFromHash(hash = '') {
+  const value = String(hash || '');
+  if (!value) return 'Customer';
+  return `Customer ${value.slice(0, 4)}…${value.slice(-4)}`;
+}
+
+function customerHintFromRef({ shopDomain, customerId = '', email = '' }) {
+  const hash = normaliseCustomerRef({ shopDomain, customerId, email });
+  return customerHintFromHash(hash);
 }
 
 function defaultLoyaltyConfig(shopDomain) {
@@ -18,9 +29,9 @@ function defaultLoyaltyConfig(shopDomain) {
     shopDomain,
     enabled: false,
     privacyMode: 'hashed_customer_ref',
-    pointName: 'Nectar Points',
-    emailTemplates: [{ id: 'loyalty_email_primary', name: 'Reward ready', primary: true, status: 'primary', subject: 'Your review reward is ready', heading: 'Your reward is ready', body: 'Thanks for leaving a review. Your {{ reward_type }} is now ready.', accentColor: '#111827', buttonText: 'Shop now' }],
-    tiers: [{ id: 'bronze', name: 'Bronze', threshold: 0, multiplier: 1 }, { id: 'silver', name: 'Silver', threshold: 500, multiplier: 1.2 }, { id: 'gold', name: 'Gold', threshold: 1500, multiplier: 1.5 }],
+    pointName: 'Points',
+    emailTemplates: [{ id: 'loyalty_email_primary', name: 'Reward ready', primary: true, status: 'primary', subject: 'Your reward is ready', heading: 'Your reward is ready', body: 'Thanks for being part of our rewards programme. Your {{ reward_type }} is now ready.', accentColor: '#111827', buttonText: 'Shop now' }],
+    tiers: [{ id: 'bronze', name: 'Bronze', threshold: 0, multiplier: 1, perks: 'Entry tier' }, { id: 'silver', name: 'Silver', threshold: 500, multiplier: 1.2, perks: 'Earn 1.2x points' }, { id: 'gold', name: 'Gold', threshold: 1500, multiplier: 1.5, perks: 'Earn 1.5x points' }],
     redemptionRewards: [{ id: 'reward_checkout_discount', name: '£5 off coupon', type: 'discount', pointsCost: 500, discountValue: 5, enabled: true }],
     rewardTemplates: [
       {
@@ -37,6 +48,7 @@ function defaultLoyaltyConfig(shopDomain) {
         messageTemplate: 'Thanks for your review — here is {{ discount_value }}% off your next order.',
         emailSubject: 'Your review reward is ready',
         emailBody: 'Thanks for leaving a review. Your {{ reward_type }} is now ready.',
+        conditions: [],
       },
     ],
     pointsRules: [
@@ -50,8 +62,42 @@ function defaultLoyaltyConfig(shopDomain) {
         verifiedOnly: true,
         minStars: 1,
         maxAwardsPerOrder: 1,
+        purchaseMultiplierEligible: true,
+        conditions: [],
+      },
+      {
+        id: makeId('points'),
+        name: 'Purchase points placeholder',
+        enabled: false,
+        trigger: 'purchase_completed',
+        points: 1,
+        delayDays: 0,
+        verifiedOnly: false,
+        minStars: 1,
+        maxAwardsPerOrder: 0,
+        purchaseMultiplierEligible: true,
+        conditions: [],
+      },
+      {
+        id: makeId('points'),
+        name: 'Birthday points placeholder',
+        enabled: false,
+        trigger: 'birthday',
+        points: 250,
+        delayDays: 0,
+        verifiedOnly: false,
+        minStars: 1,
+        maxAwardsPerOrder: 1,
+        purchaseMultiplierEligible: false,
+        conditions: [],
       },
     ],
+    settings: {
+      reuseCoreEmailProvider: true,
+      pointsExpireAfterDays: 365,
+      pendingMaturationEnabled: true,
+      allowManualAdjustments: true,
+    },
   };
 }
 
@@ -68,6 +114,13 @@ async function getOrCreateLoyaltyProgram(shopDomain) {
   return program;
 }
 
+function cleanCondition(input = {}) {
+  return {
+    type: ['always', 'verified_review', 'min_stars', 'tier', 'purchase_count', 'birthday', 'manual'].includes(input.type) ? input.type : 'always',
+    operator: cleanText(input.operator || 'is', 40),
+    value: cleanText(input.value || '', 160),
+  };
+}
 
 function cleanEmailTemplate(input = {}) {
   return {
@@ -75,9 +128,9 @@ function cleanEmailTemplate(input = {}) {
     name: cleanText(input.name || 'Reward ready', 120),
     primary: input.primary !== false,
     status: ['primary', 'draft', 'archived'].includes(input.status) ? input.status : (input.primary === false ? 'draft' : 'primary'),
-    subject: cleanText(input.subject || 'Your review reward is ready', 160),
+    subject: cleanText(input.subject || 'Your reward is ready', 160),
     heading: cleanText(input.heading || 'Your reward is ready', 160),
-    body: cleanText(input.body || 'Thanks for leaving a review. Your {{ reward_type }} is now ready.', 1200),
+    body: cleanText(input.body || 'Thanks for being part of our rewards programme. Your {{ reward_type }} is now ready.', 1200),
     accentColor: cleanText(input.accentColor || '#111827', 20),
     buttonText: cleanText(input.buttonText || 'Shop now', 80),
   };
@@ -89,6 +142,7 @@ function cleanTier(input = {}) {
     name: cleanText(input.name || 'Tier', 80),
     threshold: clampNumber(input.threshold, 0, 100000000, 0),
     multiplier: clampNumber(input.multiplier, 0, 100, 1),
+    perks: cleanText(input.perks || '', 400),
   };
 }
 
@@ -96,10 +150,11 @@ function cleanRedemptionReward(input = {}) {
   return {
     id: cleanText(input.id, 80) || makeId('redeem'),
     name: cleanText(input.name || 'Checkout discount', 120),
-    type: input.type === 'catalogue_item' ? 'catalogue_item' : 'discount',
+    type: ['discount', 'catalogue_item', 'free_shipping'].includes(input.type) ? input.type : 'discount',
     pointsCost: clampNumber(input.pointsCost, 0, 100000000, 500),
     discountValue: clampNumber(input.discountValue, 0, 1000000, 5),
     enabled: input.enabled !== false,
+    shopifyProductId: cleanText(input.shopifyProductId || '', 120),
   };
 }
 
@@ -110,7 +165,7 @@ function cleanRewardTemplate(input = {}) {
     enabled: Boolean(input.enabled),
     trigger: ['review_submitted', 'review_approved', 'purchase_completed', 'birthday', 'manual_adjustment'].includes(input.trigger) ? input.trigger : 'review_approved',
     discountType: input.discountType === 'fixed_amount' ? 'fixed_amount' : 'percentage',
-    discountValue: clampNumber(input.discountValue, 1, 100, 10),
+    discountValue: clampNumber(input.discountValue, 1, 100000, 10),
     delayDays: clampNumber(input.delayDays, 0, 365, 0),
     verifiedOnly: input.verifiedOnly !== false,
     minStars: clampNumber(input.minStars, 1, 5, 1),
@@ -118,6 +173,7 @@ function cleanRewardTemplate(input = {}) {
     messageTemplate: cleanText(input.messageTemplate || 'Thanks for your review — here is {{ discount_value }}% off your next order.', 500),
     emailSubject: cleanText(input.emailSubject || 'Your review reward is ready', 160),
     emailBody: cleanText(input.emailBody || 'Thanks for leaving a review. Your {{ reward_type }} is now ready.', 1000),
+    conditions: Array.isArray(input.conditions) ? input.conditions.slice(0, 10).map(cleanCondition) : [],
   };
 }
 
@@ -132,6 +188,8 @@ function cleanPointsRule(input = {}) {
     verifiedOnly: input.verifiedOnly !== false,
     minStars: clampNumber(input.minStars, 1, 5, 1),
     maxAwardsPerOrder: clampNumber(input.maxAwardsPerOrder, 0, 50, 1),
+    purchaseMultiplierEligible: input.purchaseMultiplierEligible !== false,
+    conditions: Array.isArray(input.conditions) ? input.conditions.slice(0, 10).map(cleanCondition) : [],
   };
 }
 
@@ -155,9 +213,93 @@ function cleanLoyaltyConfig(shopDomain, body = {}) {
       ? body.rewardTemplates.slice(0, 20).map(cleanRewardTemplate)
       : defaults.rewardTemplates,
     pointsRules: Array.isArray(body.pointsRules)
-      ? body.pointsRules.slice(0, 20).map(cleanPointsRule)
+      ? body.pointsRules.slice(0, 30).map(cleanPointsRule)
       : defaults.pointsRules,
+    settings: {
+      reuseCoreEmailProvider: body.settings?.reuseCoreEmailProvider !== false,
+      pointsExpireAfterDays: clampNumber(body.settings?.pointsExpireAfterDays, 0, 3650, 365),
+      pendingMaturationEnabled: body.settings?.pendingMaturationEnabled !== false,
+      allowManualAdjustments: body.settings?.allowManualAdjustments !== false,
+    },
   };
+}
+
+function getTierForPoints(program, totalEarned) {
+  const tiers = Array.isArray(program?.tiers) && program.tiers.length ? program.tiers : defaultLoyaltyConfig(program?.shopDomain || '').tiers;
+  return [...tiers]
+    .sort((a, b) => Number(b.threshold || 0) - Number(a.threshold || 0))
+    .find((tier) => Number(totalEarned || 0) >= Number(tier.threshold || 0)) || tiers[0];
+}
+
+async function recalculateCustomerState(shopDomain, customerRefHash) {
+  const { LoyaltyProgram, LoyaltyLedger, LoyaltyCustomerState } = getLoyaltyModels();
+  const [program, rows] = await Promise.all([
+    LoyaltyProgram.findOne({ shopDomain }).lean(),
+    LoyaltyLedger.find({ shopDomain, customerRefHash }).lean(),
+  ]);
+  let availablePoints = 0;
+  let pendingPoints = 0;
+  let totalEarned = 0;
+  let totalRedeemed = 0;
+  let lastActivityAt = null;
+  rows.forEach((row) => {
+    const points = Number(row.points || 0);
+    if (row.status === 'available') availablePoints += points;
+    if (row.status === 'pending') pendingPoints += points;
+    if (points > 0 && !['cancelled', 'expired'].includes(row.status)) totalEarned += points;
+    if (points < 0 || row.eventType === 'redemption' || row.status === 'redeemed') totalRedeemed += Math.abs(Math.min(0, points));
+    const date = row.updatedAt || row.createdAt || row.availableAt;
+    if (date && (!lastActivityAt || new Date(date) > new Date(lastActivityAt))) lastActivityAt = date;
+  });
+  availablePoints = Math.max(0, Math.round(availablePoints));
+  pendingPoints = Math.max(0, Math.round(pendingPoints));
+  const tier = getTierForPoints(program || {}, totalEarned);
+  return LoyaltyCustomerState.findOneAndUpdate(
+    { shopDomain, customerRefHash },
+    {
+      $set: {
+        shopDomain,
+        customerRefHash,
+        customerRefHint: customerHintFromHash(customerRefHash),
+        availablePoints,
+        pendingPoints,
+        totalEarned,
+        totalRedeemed,
+        currentTierId: tier?.id || 'bronze',
+        currentTierName: tier?.name || 'Bronze',
+        lastActivityAt: lastActivityAt || new Date(),
+      },
+    },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  );
+}
+
+async function listCustomerStates(shopDomain, { limit = 50, search = '' } = {}) {
+  const { LoyaltyCustomerState } = getLoyaltyModels();
+  const query = { shopDomain };
+  if (search) query.customerRefHint = { $regex: cleanText(search, 80), $options: 'i' };
+  return LoyaltyCustomerState.find(query).sort({ lastActivityAt: -1 }).limit(clampNumber(limit, 1, 200, 50)).lean();
+}
+
+async function createLedgerEntry(event) {
+  const { LoyaltyLedger } = getLoyaltyModels();
+  const row = await LoyaltyLedger.create({
+    ...event,
+    customerRefHint: event.customerRefHint || customerHintFromHash(event.customerRefHash),
+  });
+  await recalculateCustomerState(event.shopDomain, event.customerRefHash);
+  return row;
+}
+
+async function maturePendingPoints(shopDomain) {
+  const { LoyaltyLedger } = getLoyaltyModels();
+  const rows = await LoyaltyLedger.find({ shopDomain, status: 'pending', availableAt: { $lte: new Date() } }).lean();
+  if (!rows.length) return { matured: 0 };
+  const ids = rows.map((row) => row._id);
+  await LoyaltyLedger.updateMany({ _id: { $in: ids } }, { $set: { status: 'available', awardedAt: new Date() } });
+  const customerHashes = [...new Set(rows.map((row) => row.customerRefHash))];
+  for (const customerRefHash of customerHashes) await recalculateCustomerState(shopDomain, customerRefHash);
+  return { matured: rows.length };
 }
 
 function reviewMatchesRule(review, rule) {
@@ -177,20 +319,23 @@ async function awardForReview({ shopDomain, review, trigger }) {
 
   const availableEvents = [];
   const now = Date.now();
+  const sourceReviewHash = hashValue(`${shopDomain}:review:${String(review._id)}`);
 
   (program.pointsRules || []).forEach((rule) => {
     if (rule.trigger !== trigger || !reviewMatchesRule(review, rule)) return;
     availableEvents.push({
       shopDomain,
       customerRefHash,
+      customerRefHint: customerHintFromHash(customerRefHash),
       eventType: 'points_award',
       source: 'review',
-      sourceReviewHash: hashValue(`${shopDomain}:review:${String(review._id)}`),
+      sourceReviewHash,
       orderIdHash: review.orderId ? hashValue(`${shopDomain}:${review.orderId}`) : '',
       itemId: String(review.itemId || ''),
       points: Number(rule.points || 0),
       status: Number(rule.delayDays || 0) > 0 ? 'pending' : 'available',
       availableAt: new Date(now + Number(rule.delayDays || 0) * 24 * 60 * 60 * 1000),
+      awardedAt: Number(rule.delayDays || 0) > 0 ? null : new Date(),
       ruleId: rule.id,
       ruleName: rule.name,
       privateNote: `Generated by ${rule.name}. No customer email/name stored in loyalty ledger.`,
@@ -202,18 +347,20 @@ async function awardForReview({ shopDomain, review, trigger }) {
     availableEvents.push({
       shopDomain,
       customerRefHash,
+      customerRefHint: customerHintFromHash(customerRefHash),
       eventType: 'discount_reward',
       source: 'review',
-      sourceReviewHash: hashValue(`${shopDomain}:review:${String(review._id)}`),
+      sourceReviewHash,
       orderIdHash: review.orderId ? hashValue(`${shopDomain}:${review.orderId}`) : '',
       itemId: String(review.itemId || ''),
       discountType: template.discountType,
       discountValue: Number(template.discountValue || 0),
       status: Number(template.delayDays || 0) > 0 ? 'pending' : 'available',
       availableAt: new Date(now + Number(template.delayDays || 0) * 24 * 60 * 60 * 1000),
+      awardedAt: Number(template.delayDays || 0) > 0 ? null : new Date(),
       ruleId: template.id,
       ruleName: template.name,
-      privateNote: `Generated by ${template.name}. Discount code creation is intentionally deferred to Shopify discount integration.`,
+      privateNote: `Generated by ${template.name}. Discount code creation is deferred to Shopify discount integration.`,
     });
   });
 
@@ -227,7 +374,7 @@ async function awardForReview({ shopDomain, review, trigger }) {
       eventType: event.eventType,
     }).lean();
     if (existing) continue;
-    await LoyaltyLedger.create(event);
+    await createLedgerEntry(event);
     created += 1;
   }
   return { created };
@@ -236,6 +383,8 @@ async function awardForReview({ shopDomain, review, trigger }) {
 module.exports = {
   makeId,
   normaliseCustomerRef,
+  customerHintFromHash,
+  customerHintFromRef,
   defaultLoyaltyConfig,
   getOrCreateLoyaltyProgram,
   cleanLoyaltyConfig,
@@ -244,5 +393,9 @@ module.exports = {
   cleanEmailTemplate,
   cleanTier,
   cleanRedemptionReward,
+  recalculateCustomerState,
+  listCustomerStates,
+  createLedgerEntry,
+  maturePendingPoints,
   awardForReview,
 };

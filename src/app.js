@@ -2,7 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const mongoose = require('mongoose');
 const { env } = require('./config/env');
+const { getLoyaltyConnection } = require('./config/db');
 const { Shop, Review, Settings } = require('./models');
 const { cleanShopDomain, isValidShopDomain } = require('./utils/validation');
 const publicRoutes = require('./routes/public');
@@ -53,7 +55,7 @@ app.use('/api/campaign', makeRateLimiter({ windowMs: 60 * 1000, max: 300, keyPre
 app.get('/', (req, res) => {
   return res.json({
     ok: true,
-    service: 'Nectar Reviews API',
+    service: 'Reviews Platform API',
     status: 'running',
     admin: '/admin',
     health: '/health',
@@ -62,6 +64,29 @@ app.get('/', (req, res) => {
 
 app.get('/health', (req, res) => {
   return res.json({ ok: true, status: 'healthy', timestamp: new Date().toISOString() });
+});
+
+app.get('/health/db', (req, res) => {
+  const loyaltyConn = getLoyaltyConnection();
+  return res.json({
+    ok: true,
+    coreDb: {
+      configured: Boolean(env.mongoUri),
+      readyState: mongoose.connection.readyState,
+      database: mongoose.connection.name || null,
+    },
+    loyaltyDb: {
+      configured: Boolean(env.loyaltyMongoUri),
+      usingSeparateConnection: Boolean(env.loyaltyMongoUri),
+      readyState: loyaltyConn?.readyState ?? null,
+      database: loyaltyConn?.name || null,
+    },
+    envNames: {
+      core: env.mongoUri ? 'CORE_DB_URI/MONGODB_URI' : null,
+      loyalty: env.loyaltyMongoUri ? 'LOYALTY_DB_URI/LOYALTY_MONGODB_URI' : 'fallback-to-core',
+    },
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.get('/admin', async (req, res, next) => {

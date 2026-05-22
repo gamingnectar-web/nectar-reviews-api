@@ -1198,7 +1198,7 @@ window.autoResizeReplyBoxes = window.enableAutoGrowTextareas;
 function getLoyaltyPayload() {
   const discountValue = Number(document.getElementById('loyalty-discount-value')?.value || 10);
   const points = Number(document.getElementById('loyalty-points-value')?.value || 100);
-  const pointName = document.getElementById('loyalty-points-label')?.value || document.getElementById('loyalty-points-label-overview')?.value || 'Nectar Points';
+  const pointName = document.getElementById('loyalty-points-label')?.value || document.getElementById('loyalty-points-label-overview')?.value || 'Points';
   return {
     enabled: Boolean(document.getElementById('loyalty-enabled')?.checked),
     pointName,
@@ -1265,8 +1265,8 @@ function hydrateLoyalty(config = {}) {
   if (document.getElementById('loyalty-enabled')) document.getElementById('loyalty-enabled').checked = Boolean(config.enabled);
   if (document.getElementById('loyalty-status-text')) document.getElementById('loyalty-status-text').textContent = config.enabled ? 'Enabled' : 'Configured but inactive';
   if (document.getElementById('loyalty-status-help')) document.getElementById('loyalty-status-help').textContent = config.enabled ? 'Review rewards can be created when rules match.' : 'Turn on the module when you are ready to award points/discounts.';
-  if (document.getElementById('loyalty-points-label')) document.getElementById('loyalty-points-label').value = config.pointName || 'Nectar Points';
-  if (document.getElementById('loyalty-points-label-overview')) document.getElementById('loyalty-points-label-overview').value = config.pointName || 'Nectar Points';
+  if (document.getElementById('loyalty-points-label')) document.getElementById('loyalty-points-label').value = config.pointName || 'Points';
+  if (document.getElementById('loyalty-points-label-overview')) document.getElementById('loyalty-points-label-overview').value = config.pointName || 'Points';
 
   if (document.getElementById('loyalty-discount-name')) document.getElementById('loyalty-discount-name').value = reward.name || 'Review thank-you discount';
   if (document.getElementById('loyalty-discount-value')) document.getElementById('loyalty-discount-value').value = reward.discountValue ?? 10;
@@ -1309,7 +1309,7 @@ function buildLoyaltyPreviewHtml() {
   const heading = document.getElementById('loyalty-email-heading')?.value || 'Your reward is ready';
   const body = document.getElementById('loyalty-email-body')?.value || 'Thanks for leaving a review. Your reward is now ready.';
   const discount = document.getElementById('loyalty-discount-value')?.value || '10';
-  const pointName = document.getElementById('loyalty-points-label')?.value || 'Nectar Points';
+  const pointName = document.getElementById('loyalty-points-label')?.value || 'Points';
   const accent = document.getElementById('loyalty-email-accent')?.value || '#111827';
   const buttonText = document.getElementById('loyalty-email-button')?.value || 'Shop now';
   const renderedBody = escapeHtml(body).replace(/\{\{\s*discount_value\s*\}\}/g, discount).replace(/\{\{\s*reward_type\s*\}\}/g, discount + '% discount').replace(/\{\{\s*points_name\s*\}\}/g, escapeHtml(pointName));

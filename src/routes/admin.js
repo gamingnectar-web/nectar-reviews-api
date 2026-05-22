@@ -612,7 +612,7 @@ router.post('/test-email', async (req, res, next) => {
       socketTimeout: 20000,
     });
 
-    const fromName = settings.fromName || 'Nectar Reviews';
+    const fromName = settings.fromName || 'Store Reviews';
     const fromEmail = settings.fromEmail || settings.smtpUser;
     const orderId = cleanText(req.body.orderId || 'test-1001', 120);
     const itemId = cleanText(req.body.itemId || '', 120);

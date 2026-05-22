@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nectar Reviews Admin</title>
+  <title>Reviews Platform Admin</title>
   <meta name="shopify-api-key" content="__SHOPIFY_API_KEY__" />
   <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -548,6 +548,25 @@
     .loyalty-ledger-badge { display:inline-flex; align-items:center; justify-content:center; border-radius:999px; padding:6px 10px; background:#eef2ff; color:#3730a3; font-weight:900; font-size:12px; }
     @media (max-width: 900px){ .loyalty-form-grid, .loyalty-tier-grid, .input-action-row { grid-template-columns:1fr; } }
 
+
+    /* v20 loyalty userboard foundation */
+    .loyalty-member-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(340px,.75fr);gap:18px;align-items:start;}
+    .loyalty-metric-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0;}
+    .loyalty-mini-stat{border:1px solid var(--border);border-radius:14px;background:#fbfdff;padding:13px 14px;}
+    .loyalty-mini-stat span{display:block;color:#667085;font-size:11px;text-transform:uppercase;font-weight:900;letter-spacing:.06em;}
+    .loyalty-mini-stat strong{display:block;margin-top:6px;font-size:24px;color:#111827;}
+    .loyalty-search-row{margin:12px 0 10px;}
+    .loyalty-customer-results{display:grid;gap:8px;margin-bottom:16px;}
+    .loyalty-customer-result{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;border:1px solid var(--border);border-radius:12px;background:#fff;padding:12px;}
+    .loyalty-customer-result strong{display:block;color:#111827;}
+    .loyalty-customer-result span{display:block;color:#667085;font-size:12px;margin-top:2px;}
+    .loyalty-section-title{font-size:14px;margin:18px 0 10px;color:#111827;}
+    .loyalty-selected-customer{border:1px dashed var(--border);background:#fbfdff;border-radius:12px;padding:10px 12px;margin:8px 0 12px;}
+    .loyalty-divider-top{border-top:1px solid var(--border);margin-top:16px;padding-top:16px;}
+    .settings-card-header.compact{margin-bottom:10px;}
+    .settings-card-header.compact h3{font-size:16px;}
+    @media(max-width:1050px){.loyalty-member-grid{grid-template-columns:1fr}.loyalty-metric-row{grid-template-columns:1fr;}}
+
   </style>
 </head>
 <body>
@@ -555,7 +574,7 @@
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
-        <h1>Nectar Reviews</h1>
+        <h1>Reviews Platform</h1>
         <p>Admin Console</p>
       </div>
       <nav>
@@ -866,7 +885,7 @@
           </div>
           <div class="grid-2">
             <div class="panel loyalty-panel"><div class="settings-card-header"><div><h3>How rewards are created</h3><p>Reviews, purchases, birthdays and admin adjustments can award points once the matching rule is active.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div><div class="settings-card-body"><ul class="loyalty-clean-list"><li>Verified review rewards can wait until approval.</li><li>Delayed rewards can become available after 28 days or any period you choose.</li><li>Discount issuing is separated from review storage and can later feed Shopify Discounts/Functions.</li></ul></div></div>
-            <div class="panel loyalty-panel"><div class="settings-card-header"><div><h3>Current programme language</h3><p>Customers will see your custom points name in loyalty emails and widgets.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div><div class="settings-card-body"><label>Points name<input id="loyalty-points-label-overview" class="premium-input" value="Nectar Points" oninput="document.getElementById('loyalty-points-label').value=this.value"></label><p class="muted">Example: Nectar Points, Coins, Stars, Credits.</p></div></div>
+            <div class="panel loyalty-panel"><div class="settings-card-header"><div><h3>Current programme language</h3><p>Customers will see your custom points name in loyalty emails and widgets.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div><div class="settings-card-body"><label>Points name<input id="loyalty-points-label-overview" class="premium-input" value="Points" oninput="document.getElementById('loyalty-points-label').value=this.value"></label><p class="muted">Example: Nectar Points, Coins, Stars, Credits.</p></div></div>
           </div>
         </div>
 
@@ -898,18 +917,34 @@
         </div>
 
         <div class="loyalty-tab-panel" id="loyalty-tab-members">
-          <div class="grid-2">
+          <div class="loyalty-member-grid">
             <div class="panel loyalty-panel">
-              <div class="settings-card-header"><div><h3>Userboard</h3><p>Track rewards by private store-scoped customer reference. No email or name is stored here.</p></div><button class="secondary-btn" type="button" onclick="window.loadLoyaltyConfig()">Refresh</button></div>
-              <div id="loyalty-ledger-list" class="loyalty-ledger-list"><p class="muted">No loyalty ledger rows yet.</p></div>
+              <div class="settings-card-header"><div><h3>Userboard</h3><p>Balances are stored against private hashed customer references. Search Shopify live when you need to pick a customer.</p></div><button class="secondary-btn" type="button" onclick="window.loadLoyaltyConfig()">Refresh</button></div>
+              <div class="loyalty-metric-row">
+                <div class="loyalty-mini-stat"><span>Customers</span><strong id="loyalty-stat-customers">0</strong></div>
+                <div class="loyalty-mini-stat"><span>Available</span><strong id="loyalty-stat-available">0</strong></div>
+                <div class="loyalty-mini-stat"><span>Pending</span><strong id="loyalty-stat-pending">0</strong></div>
+              </div>
+              <div class="input-action-row loyalty-search-row">
+                <input id="loyalty-customer-search" class="premium-input" placeholder="Search Shopify customers by name, email or ID">
+                <button class="primary-btn" type="button" onclick="window.searchLoyaltyCustomers()">Search Shopify</button>
+              </div>
+              <div id="loyalty-customer-results" class="loyalty-customer-results"><p class="muted">Search results are not saved to the loyalty database. Only the selected customer reference is hashed.</p></div>
+              <h4 class="loyalty-section-title">Private customer balances</h4>
+              <div id="loyalty-customer-state-list" class="loyalty-ledger-list"><p class="muted">No customer balances yet.</p></div>
             </div>
             <div class="panel loyalty-panel">
-              <div class="settings-card-header"><div><h3>Manual points adjustment</h3><p>Add or remove points using the shop-only customer reference/code available to the merchant.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
+              <div class="settings-card-header"><div><h3>Manual points adjustment</h3><p>Add or remove points from the selected private customer reference.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
               <div class="settings-card-body">
-                <label>Customer reference/code<input id="loyalty-adjust-ref" class="premium-input" placeholder="Shop customer code or Shopify customer ID"></label>
+                <label>Selected customer reference<input id="loyalty-adjust-ref" class="premium-input" placeholder="Select a Shopify customer or enter a store-only code"></label>
+                <div id="loyalty-selected-customer" class="loyalty-selected-customer muted">No customer selected.</div>
                 <div class="loyalty-form-grid"><label>Points change<input id="loyalty-adjust-points" class="premium-input" type="number" value="100"></label><label>Status<select id="loyalty-adjust-status" class="filter-select"><option value="available">Available now</option><option value="pending">Pending</option></select></label></div>
                 <label>Reason<input id="loyalty-adjust-reason" class="premium-input" placeholder="Manual support adjustment"></label>
-                <button class="primary-btn" type="button" onclick="window.manualLoyaltyAdjustment()">Save adjustment</button>
+                <div class="loyalty-footer"><button class="primary-btn" type="button" onclick="window.manualLoyaltyAdjustment()">Save adjustment</button></div>
+              </div>
+              <div class="settings-card-body loyalty-divider-top">
+                <div class="settings-card-header compact"><div><h3>Recent ledger</h3><p>Latest loyalty events, still using hashed references only.</p></div><button class="secondary-btn" type="button" onclick="window.processLoyaltyPending()">Process pending</button></div>
+                <div id="loyalty-ledger-list" class="loyalty-ledger-list"><p class="muted">No loyalty ledger rows yet.</p></div>
               </div>
             </div>
           </div>
@@ -956,7 +991,7 @@
         </div>
 
         <div class="loyalty-tab-panel" id="loyalty-tab-settings">
-          <div class="grid-2"><div class="panel loyalty-panel"><div class="settings-card-header"><div><h3>Programme settings</h3><p>Control naming and privacy defaults.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div><div class="settings-card-body"><label>Points name<input id="loyalty-points-label" class="premium-input" value="Nectar Points"></label><label class="loyalty-pill-check loyalty-check"><input id="loyalty-reuse-email-provider" type="checkbox" checked> Reuse Reviews email provider</label><p class="muted">Loyalty has its own database connection when LOYALTY_MONGODB_URI is set, and no ledger row stores customer PII.</p><div class="loyalty-footer"><button class="primary-btn loyalty-save-btn" type="button" onclick="window.saveLoyaltyConfig()">Save settings</button></div></div></div><div class="panel loyalty-panel"><h3>Privacy boundaries</h3><p class="muted">Use a shop-only customer reference/code for manual adjustments. The system hashes it with the shop domain before writing to the loyalty database.</p></div></div>
+          <div class="grid-2"><div class="panel loyalty-panel"><div class="settings-card-header"><div><h3>Programme settings</h3><p>Control naming and privacy defaults.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div><div class="settings-card-body"><label>Points name<input id="loyalty-points-label" class="premium-input" value="Points"></label><label class="loyalty-pill-check loyalty-check"><input id="loyalty-reuse-email-provider" type="checkbox" checked> Reuse Reviews email provider</label><p class="muted">Loyalty has its own database connection when LOYALTY_DB_URI is set, and no ledger row stores customer PII.</p><div class="loyalty-footer"><button class="primary-btn loyalty-save-btn" type="button" onclick="window.saveLoyaltyConfig()">Save settings</button></div></div></div><div class="panel loyalty-panel"><h3>Privacy boundaries</h3><p class="muted">Use a shop-only customer reference/code for manual adjustments. The system hashes it with the shop domain before writing to the loyalty database.</p></div></div>
         </div>
       </section>
       <section id="v-referrals" class="view"><h2 class="page-title">Referrals</h2><div class="panel lock-box"><h3>Referrals module placeholder</h3><p class="muted">Reserved for referral tracking, advocate links, friend offers, and attribution. The module is intentionally inactive while the foundation is secured.</p></div></section>
@@ -1030,5 +1065,6 @@
   <script src="/admin-email-tracking-enhancer.js?v=secure-6"></script>
   <script src="/admin-messaging-campaigns.js?v=secure-6"></script>
   <script src="/admin-help-drawer.js" defer></script>
+  <script src="/admin-loyalty-foundation.js?v=secure-20"></script>
 </body>
 </html>

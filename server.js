@@ -7,11 +7,11 @@ const { env } = require('./src/config/env');
 async function start() {
   await connectDb();
   app.listen(env.port, () => {
-    console.log(`✅ Nectar Reviews API running on port ${env.port}`);
+    console.log(`✅ Reviews Platform API running on port ${env.port}`);
   });
 }
 
 start().catch((error) => {
-  console.error('❌ Failed to start Nectar Reviews API:', error);
+  console.error('❌ Failed to start Reviews Platform API:', error);
   process.exit(1);
 });
