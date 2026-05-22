@@ -160,17 +160,25 @@ function parseCookies(cookieHeader) {
   }, {});
 }
 
-function setAdminSessionCookie(res, shopDomain) {
+function setAdminSessionCookie(res, shopDomain, { exposeHeader = false } = {}) {
   const token = createAdminAuthToken(shopDomain);
   if (!token) return '';
-  res.cookie('nectar_admin_session', token, {
+  const cookieOptions = {
     httpOnly: true,
     secure: env.nodeEnv === 'production',
     sameSite: env.nodeEnv === 'production' ? 'none' : 'lax',
     maxAge: 8 * 60 * 60 * 1000,
     path: '/',
-  });
+  };
+  // Keep the original cookie for backwards compatibility, and add a neutral name for white-label builds.
+  res.cookie('nectar_admin_session', token, cookieOptions);
+  res.cookie('platform_admin_session', token, cookieOptions);
+  if (exposeHeader) res.setHeader('X-Admin-Session-Token', token);
   return token;
+}
+
+function isExpectedAuthExpiry(error) {
+  return /expired/i.test(String(error || ''));
 }
 
 function extractRequestedShop(req) {
@@ -197,12 +205,16 @@ function requireAdminSession(req, res, next) {
       }
       req.shopDomain = verified.shopDomain;
       req.adminAuthMode = 'shopify-session-token';
+      // Shopify session tokens only live for about a minute. When a fresh one is valid,
+      // refresh our longer-lived signed admin session silently for fallback/admin helpers.
+      setAdminSessionCookie(res, verified.shopDomain, { exposeHeader: true });
       return next();
     }
-    console.warn('Admin token rejected:', verified.error);
+    if (!isExpectedAuthExpiry(verified.error)) console.warn('Admin token rejected:', verified.error);
   }
 
-  const signedToken = String(req.headers['x-nectar-admin-token'] || req.query.admin_token || parseCookies(req.headers.cookie).nectar_admin_session || '');
+  const cookies = parseCookies(req.headers.cookie);
+  const signedToken = String(req.headers['x-nectar-admin-token'] || req.query.admin_token || cookies.platform_admin_session || cookies.nectar_admin_session || '');
   if (signedToken) {
     const verified = verifyAdminAuthToken(signedToken, requestedShop);
     if (verified.ok) {
@@ -210,7 +222,7 @@ function requireAdminSession(req, res, next) {
       req.adminAuthMode = 'signed-admin-session';
       return next();
     }
-    console.warn('Signed admin session rejected:', verified.error);
+    if (!isExpectedAuthExpiry(verified.error)) console.warn('Signed admin session rejected:', verified.error);
   }
 
   const sharedSecret = String(req.headers['x-nectar-admin-secret'] || req.query.admin_secret || '');
@@ -233,6 +245,7 @@ function requireAdminSession(req, res, next) {
     return next();
   }
 
+  res.setHeader('X-Admin-Auth-Required', '1');
   return res.status(401).json({
     error: 'Admin authentication required.',
     detail: 'Open the app through Shopify OAuth, use Shopify App Bridge session tokens, or use ADMIN_SHARED_SECRET for temporary development access.',

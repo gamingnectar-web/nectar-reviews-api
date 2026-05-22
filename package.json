@@ -1,7 +1,7 @@
 {
   "name": "reviews-platform-api",
-  "version": "1.3.0-loyalty-checkout-beta",
-  "description": "Reviews and loyalty platform API with separate loyalty DB and checkout redemption beta foundation",
+  "version": "1.2.2-admin-token-refresh",
+  "description": "White-label reviews and loyalty platform with refreshed embedded admin authentication",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

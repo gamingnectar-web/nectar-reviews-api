@@ -45,24 +45,47 @@ function withShop(path) {
   return `${path}${separator}shopDomain=${encodeURIComponent(SHOP_DOMAIN)}`;
 }
 
-async function getAdminToken() {
-  if (!adminTokenPromise) {
-    adminTokenPromise = (async () => {
-      try {
-        if (window.shopify && typeof window.shopify.idToken === 'function') {
-          return await window.shopify.idToken();
-        }
-      } catch (error) {
-        console.warn('Could not get Shopify ID token:', error);
-      }
-      return '';
-    })();
+function decodeJwtPayload(token) {
+  try {
+    const part = String(token || '').split('.')[1];
+    if (!part) return null;
+    const normalised = part.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalised + '='.repeat((4 - normalised.length % 4) % 4);
+    return JSON.parse(atob(padded));
+  } catch (_) {
+    return null;
   }
-  return adminTokenPromise;
+}
+
+function isTokenFresh(token, bufferSeconds = 15) {
+  const payload = decodeJwtPayload(token);
+  if (!payload || !payload.exp) return false;
+  return Number(payload.exp) - Math.floor(Date.now() / 1000) > bufferSeconds;
+}
+
+async function getAdminToken({ force = false } = {}) {
+  // Shopify session tokens expire after about one minute, so do not keep one for the
+  // lifetime of the admin page. Fetch a fresh token before admin API calls.
+  try {
+    if (window.shopify && typeof window.shopify.idToken === 'function') {
+      if (!force && adminTokenPromise) {
+        const pending = await adminTokenPromise.catch(() => '');
+        if (isTokenFresh(pending)) return pending;
+      }
+      adminTokenPromise = window.shopify.idToken();
+      const token = await adminTokenPromise;
+      adminTokenPromise = null;
+      return token || '';
+    }
+  } catch (error) {
+    adminTokenPromise = null;
+    console.warn('Could not get Shopify ID token:', error);
+  }
+  return '';
 }
 
 async function adminFetch(path, options = {}) {
-  const token = await getAdminToken();
+  let token = await getAdminToken();
   const secret = sessionStorage.getItem('nectar_admin_secret') || '';
   const signedToken = sessionStorage.getItem('nectar_admin_token') || '';
   const headers = {
@@ -70,19 +93,34 @@ async function adminFetch(path, options = {}) {
     'X-Shop-Domain': SHOP_DOMAIN,
     ...(options.headers || {}),
   };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  if (signedToken) headers['X-Nectar-Admin-Token'] = signedToken;
-  if (secret) headers['X-Nectar-Admin-Secret'] = secret;
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  } else {
+    // Only use the signed/dev fallbacks when App Bridge could not provide a session token.
+    // Sending stale fallback tokens alongside a fresh Shopify token creates noisy expiry logs.
+    if (signedToken) headers['X-Nectar-Admin-Token'] = signedToken;
+    if (secret) headers['X-Nectar-Admin-Secret'] = secret;
+  }
 
   let res = await fetch(`${API}${withShop(path)}`, { ...options, headers, credentials: 'same-origin' });
+  const refreshedSignedToken = res.headers.get('X-Admin-Session-Token');
+  if (refreshedSignedToken) sessionStorage.setItem('nectar_admin_token', refreshedSignedToken);
+
   if (res.status === 401 && options.retryAuth !== false) {
     adminTokenPromise = null;
-    const freshToken = await getAdminToken();
+    const freshToken = await getAdminToken({ force: true });
     if (freshToken && freshToken !== token) {
+      token = freshToken;
+      delete headers['X-Nectar-Admin-Token'];
+      delete headers['X-Nectar-Admin-Secret'];
       headers.Authorization = `Bearer ${freshToken}`;
       res = await fetch(`${API}${withShop(path)}`, { ...options, headers, credentials: 'same-origin' });
+      const retriedSignedToken = res.headers.get('X-Admin-Session-Token');
+      if (retriedSignedToken) sessionStorage.setItem('nectar_admin_token', retriedSignedToken);
     }
   }
+
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {
@@ -104,6 +142,7 @@ window.openSecureAdminSession = function() {
 };
 
 window.adminFetch = adminFetch;
+window.getFreshShopifyAdminToken = getAdminToken;
 window.SHOP_DOMAIN = SHOP_DOMAIN;
 
 window.showToast = function(msg) {
