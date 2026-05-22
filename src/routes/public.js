@@ -57,6 +57,41 @@ function publicSettings(config) {
 
 
 
+function splitPublicList(value) {
+  if (Array.isArray(value)) return value.map((item) => cleanText(item, 100)).filter(Boolean);
+  return String(value || '').split(',').map((item) => cleanText(item, 100)).filter(Boolean);
+}
+
+function filterAttributeProfilesForProduct(config, query = {}) {
+  const settings = publicSettings(config);
+  const tags = splitPublicList(query.productTags || query.tags).map((tag) => tag.toLowerCase());
+  const meta = {
+    id: cleanText(query.productId || query.itemId, 160).toLowerCase(),
+    title: cleanText(query.productTitle || query.title, 240).toLowerCase(),
+    handle: cleanText(query.productHandle || query.handle, 160).toLowerCase(),
+    vendor: cleanText(query.productVendor || query.vendor, 160).toLowerCase(),
+    type: cleanText(query.productType || query.type, 160).toLowerCase(),
+  };
+  const exacts = [meta.id, meta.handle, meta.vendor, meta.type].filter(Boolean);
+  const text = [meta.title, meta.handle, meta.vendor, meta.type, tags.join(' ')].filter(Boolean).join(' ');
+  const profiles = Array.isArray(settings.attributeProfiles) ? settings.attributeProfiles : [];
+  const matched = profiles.filter((profile) => {
+    const label = cleanText(profile.label, 80);
+    if (!label) return false;
+    const ruleType = String(profile.type || profile.ruleType || '').toLowerCase().replace(/[^a-z]/g, '');
+    const condition = cleanText(profile.condition || profile.value, 160).toLowerCase();
+    if (ruleType === 'all' || ruleType === 'global') return true;
+    if (!condition) return false;
+    if (ruleType === 'tag' || ruleType === 'producttag') return tags.includes(condition);
+    if (ruleType === 'product' || ruleType === 'productid') return exacts.includes(condition) || itemIdCandidates(meta.id).map((item) => item.toLowerCase()).includes(condition);
+    if (ruleType === 'vendor') return meta.vendor === condition;
+    if (ruleType === 'type' || ruleType === 'producttype') return meta.type === condition;
+    if (ruleType === 'metafield' || ruleType === 'metafieldkey') return text.includes(condition);
+    return false;
+  });
+  return { ...settings, attributeProfiles: matched, profiles: matched };
+}
+
 function isTestSubmission(body = {}, query = {}) {
   return Boolean(body.isTestReview || body.testMode || body.isPreview || query.preview === '1' || query.test === '1' || query.testMode === '1');
 }
@@ -291,12 +326,12 @@ router.get('/reviews', async (req, res, next) => {
 
     const config = await getSettings(shopDomain);
     return res.json({
-      reviews,
+      reviews: reviews.map(normaliseReviewForPublic),
       count,
       average,
       distribution,
       attributeAverages,
-      settings: publicSettings(config),
+      settings: filterAttributeProfilesForProduct(config, { ...req.query, itemId }),
     });
   } catch (error) {
     next(error);

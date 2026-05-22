@@ -81,10 +81,12 @@
       if (!label) return false;
       if (type === 'all' || type === 'global') return true;
       if (!condition) return false;
-      if (type === 'tag' || type === 'producttag') return tags.includes(condition) || haystack.some((part) => part === condition);
-      if (type === 'product' || type === 'productid') return haystack.some((part) => part.includes(condition));
+      if (type === 'tag' || type === 'producttag') return tags.includes(condition);
+      if (type === 'product' || type === 'productid') return String(product?.productId || product?.id || '').toLowerCase() === condition;
+      if (type === 'vendor') return String(product?.vendor || '').toLowerCase() === condition;
+      if (type === 'type' || type === 'producttype') return String(product?.type || product?.productType || '').toLowerCase() === condition;
       if (type === 'metafield' || type === 'metafieldkey') return haystack.some((part) => part.includes(condition));
-      return haystack.some((part) => part === condition);
+      return false;
     });
   }
 

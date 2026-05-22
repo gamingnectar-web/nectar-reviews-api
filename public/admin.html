@@ -505,6 +505,12 @@
     .loyalty-ledger-row{display:grid;grid-template-columns:1.2fr 1fr .8fr .8fr;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:#f9fafb;}
     .loyalty-ledger-row code{font-size:11px;color:#475569;word-break:break-all;}
     .loyalty-ledger-pill{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:5px 9px;background:#eef2ff;color:#3730a3;font-size:11px;font-weight:900;text-transform:uppercase;}
+
+    .loyalty-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);}
+    .loyalty-save-btn{min-width:150px;}
+    .loyalty-tab-panel .primary-btn,.loyalty-tab-panel .secondary-btn{border-radius:12px;min-height:42px;}
+    .loyalty-pill-check{user-select:none;}
+    .loyalty-pill-check input:checked + span,.loyalty-pill-check input:checked + strong{color:#027a48;}
     @media(max-width:900px){.loyalty-status-grid,.loyalty-form-grid,.loyalty-ledger-row{grid-template-columns:1fr;}}
 
     .preview-carousel-demo{display:grid!important;grid-template-columns:44px minmax(0,1fr) 44px;gap:12px;align-items:center;}
@@ -884,7 +890,7 @@
                   <input id="loyalty-test-to" class="premium-input" placeholder="you@example.com">
                   <button class="primary-btn" type="button" onclick="window.sendLoyaltyTestEmail()">Send Test</button>
                 </div>
-                <p class="muted">Uses the main email provider by default. A dedicated loyalty sender can be added later without duplicating customer data.</p>
+                <p class="muted">Uses the main email provider by default. A dedicated loyalty sender can be added later without duplicating customer data.</p><div class="loyalty-footer"><button class="primary-btn loyalty-save-btn" type="button" onclick="window.saveLoyaltyConfig()">Save template</button></div>
               </div>
             </div>
             <div class="panel loyalty-panel loyalty-preview-panel"><h3>Live preview</h3><div class="loyalty-preview-shell" id="loyalty-email-preview"></div></div>
@@ -922,7 +928,7 @@
                   <label>Minimum stars<select id="loyalty-discount-stars" class="filter-select"><option value="1">Any rating</option><option value="4">4 stars & up</option><option value="5">5 stars only</option></select></label>
                   <label class="loyalty-pill-check loyalty-check"><input id="loyalty-discount-verified" type="checkbox" checked> Verified only</label>
                 </div>
-                <label class="loyalty-full-label">Reward message<textarea id="loyalty-discount-message" class="premium-input" rows="3">Thanks for your review — here is {{ discount_value }}% off your next order.</textarea></label>
+                <label class="loyalty-full-label">Reward message<textarea id="loyalty-discount-message" class="premium-input" rows="3">Thanks for your review — here is {{ discount_value }}% off your next order.</textarea></label><div class="loyalty-footer"><button class="primary-btn loyalty-save-btn" type="button" onclick="window.saveLoyaltyConfig()">Save discount rule</button></div>
               </div>
             </div>
             <div class="panel loyalty-panel">
@@ -935,22 +941,22 @@
                   <label>Available after days<input id="loyalty-points-delay" class="premium-input" type="number" min="0" max="365" value="28"></label>
                   <label>Minimum stars<select id="loyalty-points-stars" class="filter-select"><option value="1">Any rating</option><option value="4">4 stars & up</option><option value="5">5 stars only</option></select></label>
                   <label class="loyalty-pill-check loyalty-check"><input id="loyalty-points-verified" type="checkbox" checked> Verified only</label>
-                </div>
+                </div><div class="loyalty-footer"><button class="primary-btn loyalty-save-btn" type="button" onclick="window.saveLoyaltyConfig()">Save points rule</button></div>
               </div>
             </div>
           </div>
         </div>
 
         <div class="loyalty-tab-panel" id="loyalty-tab-tiers">
-          <div class="panel loyalty-panel"><div class="settings-card-header"><div><h3>Tiers</h3><p>Give power users better earn rates as their points grow.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div><div class="settings-card-body"><div class="loyalty-tier-grid"><label>Bronze from<input id="loyalty-tier-bronze" class="premium-input" type="number" value="0"></label><label>Silver from<input id="loyalty-tier-silver" class="premium-input" type="number" value="500"></label><label>Gold from<input id="loyalty-tier-gold" class="premium-input" type="number" value="1500"></label><label>Gold earn multiplier<input id="loyalty-tier-gold-multiplier" class="premium-input" type="number" step="0.1" value="1.5"></label></div></div></div>
+          <div class="panel loyalty-panel"><div class="settings-card-header"><div><h3>Tiers</h3><p>Give power users better earn rates as their points grow.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div><div class="settings-card-body"><div class="loyalty-tier-grid"><label>Bronze from<input id="loyalty-tier-bronze" class="premium-input" type="number" value="0"></label><label>Silver from<input id="loyalty-tier-silver" class="premium-input" type="number" value="500"></label><label>Gold from<input id="loyalty-tier-gold" class="premium-input" type="number" value="1500"></label><label>Gold earn multiplier<input id="loyalty-tier-gold-multiplier" class="premium-input" type="number" step="0.1" value="1.5"></label></div><div class="loyalty-footer"><button class="primary-btn loyalty-save-btn" type="button" onclick="window.saveLoyaltyConfig()">Save tiers</button></div></div></div>
         </div>
 
         <div class="loyalty-tab-panel" id="loyalty-tab-rewards">
-          <div class="panel loyalty-panel"><div class="settings-card-header"><div><h3>Redeemable rewards</h3><p>Plan how customers trade points for discounts or catalogue rewards.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div><div class="settings-card-body"><div class="loyalty-form-grid"><label>Reward name<input id="loyalty-reward-name" class="premium-input" value="£5 off coupon"></label><label>Cost in points<input id="loyalty-reward-cost" class="premium-input" type="number" value="500"></label><label>Reward type<select id="loyalty-reward-type" class="filter-select"><option value="discount">Checkout discount</option><option value="catalogue_item">Catalogue item</option></select></label><label>Discount value<input id="loyalty-reward-value" class="premium-input" type="number" value="5"></label></div><p class="muted">Checkout redemption will later connect to Shopify discount creation/checkout extensions.</p></div></div>
+          <div class="panel loyalty-panel"><div class="settings-card-header"><div><h3>Redeemable rewards</h3><p>Plan how customers trade points for discounts or catalogue rewards.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div><div class="settings-card-body"><div class="loyalty-form-grid"><label>Reward name<input id="loyalty-reward-name" class="premium-input" value="£5 off coupon"></label><label>Cost in points<input id="loyalty-reward-cost" class="premium-input" type="number" value="500"></label><label>Reward type<select id="loyalty-reward-type" class="filter-select"><option value="discount">Checkout discount</option><option value="catalogue_item">Catalogue item</option></select></label><label>Discount value<input id="loyalty-reward-value" class="premium-input" type="number" value="5"></label></div><p class="muted">Checkout redemption will later connect to Shopify discount creation/checkout extensions.</p><div class="loyalty-footer"><button class="primary-btn loyalty-save-btn" type="button" onclick="window.saveLoyaltyConfig()">Save reward</button></div></div></div>
         </div>
 
         <div class="loyalty-tab-panel" id="loyalty-tab-settings">
-          <div class="grid-2"><div class="panel loyalty-panel"><div class="settings-card-header"><div><h3>Programme settings</h3><p>Control naming and privacy defaults.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div><div class="settings-card-body"><label>Points name<input id="loyalty-points-label" class="premium-input" value="Nectar Points"></label><label class="loyalty-pill-check loyalty-check"><input id="loyalty-reuse-email-provider" type="checkbox" checked> Reuse Reviews email provider</label><p class="muted">Loyalty has its own database connection when LOYALTY_MONGODB_URI is set, and no ledger row stores customer PII.</p></div></div><div class="panel loyalty-panel"><h3>Privacy boundaries</h3><p class="muted">Use a shop-only customer reference/code for manual adjustments. The system hashes it with the shop domain before writing to the loyalty database.</p></div></div>
+          <div class="grid-2"><div class="panel loyalty-panel"><div class="settings-card-header"><div><h3>Programme settings</h3><p>Control naming and privacy defaults.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div><div class="settings-card-body"><label>Points name<input id="loyalty-points-label" class="premium-input" value="Nectar Points"></label><label class="loyalty-pill-check loyalty-check"><input id="loyalty-reuse-email-provider" type="checkbox" checked> Reuse Reviews email provider</label><p class="muted">Loyalty has its own database connection when LOYALTY_MONGODB_URI is set, and no ledger row stores customer PII.</p><div class="loyalty-footer"><button class="primary-btn loyalty-save-btn" type="button" onclick="window.saveLoyaltyConfig()">Save settings</button></div></div></div><div class="panel loyalty-panel"><h3>Privacy boundaries</h3><p class="muted">Use a shop-only customer reference/code for manual adjustments. The system hashes it with the shop domain before writing to the loyalty database.</p></div></div>
         </div>
       </section>
       <section id="v-referrals" class="view"><h2 class="page-title">Referrals</h2><div class="panel lock-box"><h3>Referrals module placeholder</h3><p class="muted">Reserved for referral tracking, advocate links, friend offers, and attribution. The module is intentionally inactive while the foundation is secured.</p></div></section>

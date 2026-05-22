@@ -1,6 +1,6 @@
 {
   "name": "nectar-reviews-api",
-  "version": "1.2.4-conditional-sliders-loyalty-v17",
+  "version": "1.2.5-conditional-consensus-loyalty-v18",
   "description": "Nectar Reviews API - v17 conditional slider fixes and expanded loyalty framework",
   "main": "server.js",
   "scripts": {

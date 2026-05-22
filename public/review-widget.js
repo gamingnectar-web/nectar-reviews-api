@@ -84,6 +84,9 @@
       .nr-write-btn, .nr-submit-btn { border:0; background:var(--nr-primary); color:#fff; min-height:46px; padding:12px 22px; font-weight:900; cursor:pointer; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; } .nr-submit-btn{background:#000;border-radius:5px;min-width:150px;} .nr-submit-btn:disabled{opacity:.65;cursor:wait;}
       .nr-cancel-btn { border:1px solid var(--nr-border); background:#fff; color:#111827; min-height:44px; padding:10px 18px; font-weight:800; cursor:pointer; border-radius:0; }
       .nr-summary { display:grid; grid-template-columns:140px minmax(260px, 1fr) minmax(260px, 1fr); gap:46px; padding:40px; border:1px solid var(--nr-border); background:#fbfdff; margin-bottom:34px; }
+      .nr-summary.no-consensus { grid-template-columns:140px minmax(420px, 1fr); }
+      .nr-summary.no-consensus .nr-rating-snapshot { min-width:0; }
+      .nr-summary.no-consensus .nr-rating-row { grid-template-columns:22px minmax(280px, 1fr) 44px; }
       .nr-average { font-size:64px; line-height:.9; font-weight:950; letter-spacing:-.07em; margin:0 0 18px; }
       .nr-stars { color:var(--nr-star); letter-spacing:2px; font-size:19px; white-space:nowrap; }
       .nr-count { color:var(--nr-muted); margin:14px 0 0; font-size:15px; }
@@ -115,6 +118,13 @@
       .nr-field { display:block; margin-top:14px; font-weight:800; font-size:13px; }
       .nr-field input, .nr-field textarea { width:100%; min-height:44px; margin-top:7px; border:1px solid #d0d5dd; border-radius:8px; padding:10px 12px; font:inherit; }
       .nr-field textarea { min-height:120px; resize:vertical; }
+      .nr-privacy-box { margin:9px 0 2px; padding:12px 14px; border:1px solid #e5eaf1; border-radius:12px; background:#fbfdff; display:flex; align-items:center; justify-content:space-between; gap:14px; }
+      .nr-privacy-label { display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:900; font-size:13px; }
+      .nr-privacy-label input { width:18px; height:18px; accent-color:var(--nr-primary); margin:0; }
+      .nr-privacy-copy { display:grid; gap:2px; }
+      .nr-privacy-copy small { color:var(--nr-muted); font-weight:700; }
+      .nr-name-preview { min-width:92px; text-align:center; border-radius:999px; padding:7px 10px; background:#fff; border:1px solid #d0d5dd; font-size:13px; font-weight:950; }
+      .nr-name-preview.is-hidden { color:#667085; background:#f3f4f6; }
       .nr-rating-picker { margin-top:16px; }
       .nr-rating-picker span { display:block; margin-bottom:8px; font-weight:900; }
       .nr-star-picker { display:flex; gap:clamp(8px,2vw,22px); align-items:center; justify-content:space-between; width:100%; padding:12px 2px 8px; }
@@ -129,7 +139,7 @@
       .nr-slider-field input[type=range] { appearance:none; -webkit-appearance:none; width:calc(100% - 28px); margin:0 14px; height:16px; padding:0; border:0; border-radius:999px; background:transparent; cursor:pointer; } .nr-slider-field input[type=range]::-webkit-slider-runnable-track{height:12px;border-radius:999px;background:var(--nr-slider-track,#e6ebf1);box-shadow:inset 0 1px 2px rgba(15,23,42,.06);} .nr-slider-field input[type=range]::-moz-range-track{height:12px;border-radius:999px;background:var(--nr-slider-track,#e6ebf1);box-shadow:inset 0 1px 2px rgba(15,23,42,.06);} .nr-slider-field input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:8px;border-radius:3px;background:var(--nr-slider-knob,#111827);border:0;margin-top:2px;box-shadow:0 1px 2px rgba(15,23,42,.22);} .nr-slider-field input[type=range]::-moz-range-thumb{width:24px;height:8px;border-radius:3px;background:var(--nr-slider-knob,#111827);border:0;box-shadow:0 1px 2px rgba(15,23,42,.22);} .nr-slider-field input[type=range].inactive{opacity:.7;}
       .nr-modal-actions { position:sticky; bottom:-26px; z-index:2; background:linear-gradient(180deg,rgba(255,255,255,.92),#fff 35%); display:flex; justify-content:flex-end; gap:10px; margin:22px -26px -26px; padding:18px 26px; border-top:1px solid #eef2f7; }
       .nr-note { color:var(--nr-muted); font-size:13px; margin:0; line-height:1.5; }
-      @media (max-width: 900px) { .nr-summary { grid-template-columns:1fr; gap:28px; padding:28px; } .nr-consensus-row { grid-template-columns:130px 1fr 50px; } }
+      @media (max-width: 900px) { .nr-summary, .nr-summary.no-consensus { grid-template-columns:1fr; gap:28px; padding:28px; } .nr-consensus-row { grid-template-columns:130px 1fr 50px; } }
       @media (max-width: 640px) { .nr-widget-header { align-items:flex-start; flex-direction:column; } .nr-attrs, .nr-form-grid, .nr-slider-grid { grid-template-columns:1fr; } .nr-review-top { flex-direction:column; gap:8px; } .nr-average { font-size:54px; } }
     `;
     document.head.appendChild(style);
@@ -157,14 +167,22 @@
     const distribution = json.distribution || {};
     const attrs = attributeEntries(json, reviews);
     const maxCount = Math.max(1, ...[1, 2, 3, 4, 5].map((star) => Number(distribution[star] || 0)));
+    const consensusHtml = attrs.length ? `
+        <div class="nr-consensus-panel">
+          <p class="nr-section-kicker">Customer Consensus</p>
+          ${attrs.map(([key, value]) => {
+            const val = Math.max(0, Math.min(10, Number(value || 0)));
+            return `<div class="nr-consensus-row"><span>${escapeHtml(key)}</span><div class="nr-consensus-bar"><span class="nr-consensus-fill" style="width:${Math.max(0, Math.min(100, val * 10))}%"></span></div><span>${val.toFixed(val % 1 ? 1 : 0)}/10</span></div>`;
+          }).join('')}
+        </div>` : '';
     return `
-      <div class="nr-summary">
+      <div class="nr-summary ${attrs.length ? '' : 'no-consensus'}">
         <div>
           <p class="nr-average">${average.toFixed(1)}</p>
           <div class="nr-stars">${stars(average)}</div>
           <p class="nr-count">Based on ${count} review${count === 1 ? '' : 's'}</p>
         </div>
-        <div>
+        <div class="nr-rating-snapshot">
           <p class="nr-section-kicker">Rating Snapshot</p>
           ${[5, 4, 3, 2, 1].map((star) => {
             const total = Number(distribution[star] || 0);
@@ -172,13 +190,7 @@
             return `<div class="nr-rating-row"><span>${star}</span><div class="nr-rating-bar"><span class="nr-rating-fill" style="width:${pct}%"></span></div><span>(${total})</span></div>`;
           }).join('')}
         </div>
-        <div>
-          <p class="nr-section-kicker">Customer Consensus</p>
-          ${attrs.length ? attrs.map(([key, value]) => {
-            const val = Math.max(0, Math.min(10, Number(value || 0)));
-            return `<div class="nr-consensus-row"><span>${escapeHtml(key)}</span><div class="nr-consensus-bar"><span class="nr-consensus-fill" style="width:${Math.max(0, Math.min(100, val * 10))}%"></span></div><span>${val.toFixed(val % 1 ? 1 : 0)}/10</span></div>`;
-          }).join('') : ''}
-        </div>
+        ${consensusHtml}
       </div>`;
   }
 
@@ -258,6 +270,25 @@
     });
   }
 
+
+  function bindPrivacyPreview(modal) {
+    const nameInput = modal.querySelector('input[name="userId"]');
+    const checkbox = modal.querySelector('input[name="isAnonymous"]');
+    const preview = modal.querySelector('[data-name-preview]');
+    const hint = modal.querySelector('[data-anon-hint]');
+    if (!nameInput || !checkbox || !preview) return;
+    const render = () => {
+      const raw = String(nameInput.value || 'Your name').trim() || 'Your name';
+      const masked = maskName(raw);
+      preview.textContent = checkbox.checked ? masked : raw;
+      preview.classList.toggle('is-hidden', checkbox.checked);
+      if (hint) hint.textContent = checkbox.checked ? `Your public name will show as ${masked}.` : 'Your public name will show as entered.';
+    };
+    nameInput.addEventListener('input', render);
+    checkbox.addEventListener('change', render);
+    render();
+  }
+
   function buildModal(itemId, shopDomain, settings, productMeta = {}) {
     const labels = sliderLabelsFromSettings(settings, productMeta);
     const modalId = `nr-modal-${Math.random().toString(36).slice(2)}`;
@@ -279,7 +310,7 @@
             <label class="nr-field">Name<input name="userId" required placeholder="Your name" autocomplete="name"></label>
             <label class="nr-field">Email<input name="email" type="email" required placeholder="you@example.com" autocomplete="email"></label>
           </div>
-          <label class="nr-anonymous-toggle"><input type="checkbox" name="isAnonymous"><span>Hide my public name</span><small>A***</small></label><div class="nr-rating-picker"><span>Rating</span>${renderStarPicker(5)}</div>
+          <div class="nr-privacy-box"><label class="nr-privacy-label"><input type="checkbox" name="isAnonymous"><span class="nr-privacy-copy"><span>Anonymise me</span><small data-anon-hint>Your public name will show as entered.</small></span></label><span class="nr-name-preview" data-name-preview>Your name</span></div><div class="nr-rating-picker"><span>Rating</span>${renderStarPicker(5)}</div>
           <label class="nr-field">Headline<input name="headline" required placeholder="Summarise your review"></label>
           <label class="nr-field">Review<textarea name="comment" required placeholder="What did you think?"></textarea></label>
           ${labels.length ? `<div class="nr-slider-grid">${labels.map((label) => {
@@ -294,6 +325,7 @@
     modal.addEventListener('click', (event) => { if (event.target === modal) modal.classList.remove('active'); });
     bindStarPicker(modal);
     bindModalSliders(modal);
+    bindPrivacyPreview(modal);
     modal.querySelector('form').addEventListener('submit', async (event) => {
       event.preventDefault();
       const formEl = event.currentTarget;
@@ -355,12 +387,22 @@
       return;
     }
     el.innerHTML = '<div class="nr-empty">Loading reviews...</div>';
-    const res = await fetch(`${API_BASE}/reviews?shopDomain=${encodeURIComponent(shopDomain)}&itemId=${encodeURIComponent(itemId)}&limit=20`);
+    const productMeta = getProductMeta(el, itemId);
+    const reviewQuery = new URLSearchParams({
+      shopDomain,
+      itemId,
+      limit: '20',
+      productTags: (productMeta.tags || []).join(','),
+      productType: productMeta.type || '',
+      productVendor: productMeta.vendor || '',
+      productHandle: productMeta.handle || '',
+      productTitle: productMeta.title || '',
+    });
+    const res = await fetch(`${API_BASE}/reviews?${reviewQuery.toString()}`);
     if (!res.ok) throw new Error('Could not load reviews');
     const json = await res.json();
     const reviews = json.reviews || [];
     const settings = json.settings || {};
-    const productMeta = getProductMeta(el, itemId);
     const title = settings.widgetStyles?.widgetTitle || 'Reviews';
     const styles = settings.widgetStyles || {};
     const modal = buildModal(itemId, shopDomain, settings, productMeta);
