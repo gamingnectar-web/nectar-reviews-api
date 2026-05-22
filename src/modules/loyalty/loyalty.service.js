@@ -30,9 +30,9 @@ function defaultLoyaltyConfig(shopDomain) {
     enabled: false,
     privacyMode: 'hashed_customer_ref',
     pointName: 'Points',
-    emailTemplates: [{ id: 'loyalty_email_primary', name: 'Reward ready', primary: true, status: 'primary', subject: 'Your reward is ready', heading: 'Your reward is ready', body: 'Thanks for being part of our rewards programme. Your {{ reward_type }} is now ready.', accentColor: '#111827', buttonText: 'Shop now' }],
+    emailTemplates: [{ id: 'loyalty_email_primary', name: 'Reward ready', primary: true, status: 'primary', subject: 'Your reward is ready', heading: 'Your reward is ready', subtitle: 'Your loyalty reward is ready to use.', body: 'Thanks for being part of our rewards programme. Your {{ reward_type }} is now ready.', modules: [{ id: 'module_reward_box', type: 'reward_box', title: 'Reward unlocked', body: 'Use your reward on your next order.', backgroundColor: '#f8fafc', borderColor: '#e5e7eb', radius: 16, padding: 16, position: 'after_body' }], accentColor: '#111827', buttonText: 'Shop now' }],
     tiers: [{ id: 'bronze', name: 'Bronze', threshold: 0, multiplier: 1, perks: 'Entry tier' }, { id: 'silver', name: 'Silver', threshold: 500, multiplier: 1.2, perks: 'Earn 1.2x points' }, { id: 'gold', name: 'Gold', threshold: 1500, multiplier: 1.5, perks: 'Earn 1.5x points' }],
-    redemptionRewards: [{ id: 'reward_checkout_discount', name: '£5 off coupon', type: 'discount', pointsCost: 500, discountValue: 5, enabled: true }],
+    redemptionRewards: [{ id: 'reward_checkout_discount', name: '£5 off coupon', type: 'discount', pointsCost: 500, discountValue: 5, enabled: true, betaCheckoutEnabled: true, discountMode: 'draft_only' }],
     rewardTemplates: [
       {
         id: makeId('reward'),
@@ -141,7 +141,19 @@ function cleanEmailTemplate(input = {}) {
     status: ['primary', 'draft', 'archived'].includes(input.status) ? input.status : (input.primary === false ? 'draft' : 'primary'),
     subject: cleanText(input.subject || 'Your reward is ready', 160),
     heading: cleanText(input.heading || 'Your reward is ready', 160),
+    subtitle: cleanText(input.subtitle || 'A little thank-you from us.', 180),
     body: cleanText(input.body || 'Thanks for being part of our rewards programme. Your {{ reward_type }} is now ready.', 1200),
+    modules: Array.isArray(input.modules) ? input.modules.slice(0, 12).map((module) => ({
+      id: cleanText(module.id, 80) || makeId('email_module'),
+      type: ['notice', 'reward_box', 'offer', 'support', 'text'].includes(module.type) ? module.type : 'notice',
+      title: cleanText(module.title || 'Extra section', 120),
+      body: cleanText(module.body || '', 600),
+      backgroundColor: cleanText(module.backgroundColor || '#f8fafc', 20),
+      borderColor: cleanText(module.borderColor || '#e5e7eb', 20),
+      radius: clampNumber(module.radius, 0, 40, 16),
+      padding: clampNumber(module.padding, 8, 40, 16),
+      position: ['before_body', 'after_body', 'after_reward'].includes(module.position) ? module.position : 'after_body',
+    })) : [],
     accentColor: cleanText(input.accentColor || '#111827', 20),
     buttonText: cleanText(input.buttonText || 'Shop now', 80),
   };
@@ -154,6 +166,9 @@ function cleanTier(input = {}) {
     threshold: clampNumber(input.threshold, 0, 100000000, 0),
     multiplier: clampNumber(input.multiplier, 0, 100, 1),
     perks: cleanText(input.perks || '', 400),
+    ruleIds: Array.isArray(input.ruleIds) ? input.ruleIds.slice(0, 30).map((id) => cleanText(id, 80)).filter(Boolean) : [],
+    rewardIds: Array.isArray(input.rewardIds) ? input.rewardIds.slice(0, 30).map((id) => cleanText(id, 80)).filter(Boolean) : [],
+    birthdayRewardEnabled: Boolean(input.birthdayRewardEnabled),
   };
 }
 
@@ -166,6 +181,13 @@ function cleanRedemptionReward(input = {}) {
     discountValue: clampNumber(input.discountValue, 0, 1000000, 5),
     enabled: input.enabled !== false,
     shopifyProductId: cleanText(input.shopifyProductId || '', 120),
+    shopifyVariantId: cleanText(input.shopifyVariantId || '', 120),
+    productTitle: cleanText(input.productTitle || '', 180),
+    productImage: cleanText(input.productImage || '', 500),
+    productHandle: cleanText(input.productHandle || '', 180),
+    productPrice: clampNumber(input.productPrice, 0, 100000000, 0),
+    redeemQuantity: clampNumber(input.redeemQuantity, 1, 1000000, 1),
+    stockLimit: clampNumber(input.stockLimit, 0, 1000000, 0),
     minimumCartValue: clampNumber(input.minimumCartValue, 0, 100000000, 0),
     betaCheckoutEnabled: Boolean(input.betaCheckoutEnabled),
     discountMode: ['draft_only', 'native_discount_code'].includes(input.discountMode) ? input.discountMode : 'draft_only',
@@ -432,8 +454,16 @@ async function getCheckoutWallet({ shopDomain, customerId = '', email = '' }) {
       pointsCost: Number(reward.pointsCost || 0),
       discountValue: Number(reward.discountValue || 0),
       minimumCartValue: Number(reward.minimumCartValue || 0),
+      shopifyProductId: reward.shopifyProductId || '',
+      shopifyVariantId: reward.shopifyVariantId || '',
+      productTitle: reward.productTitle || '',
+      productImage: reward.productImage || '',
+      productHandle: reward.productHandle || '',
+      productPrice: Number(reward.productPrice || 0),
+      redeemQuantity: Number(reward.redeemQuantity || 1),
+      stockLimit: Number(reward.stockLimit || 0),
       discountMode: reward.discountMode || 'draft_only',
-      canRedeem: Number(state.availablePoints || 0) >= Number(reward.pointsCost || 0),
+      canRedeem: checkoutBeta.allowPartialRedemption ? Number(state.availablePoints || 0) >= Number(checkoutBeta.minimumPointsToShow || 1) : Number(state.availablePoints || 0) >= Number(reward.pointsCost || 0),
     }));
   return {
     enabled: true,
@@ -448,7 +478,7 @@ async function getCheckoutWallet({ shopDomain, customerId = '', email = '' }) {
   };
 }
 
-async function reserveCheckoutRedemption({ shopDomain, customerId = '', email = '', rewardId = '', cartTotal = 0, currencyCode = '', checkoutToken = '', discountCode = '' }) {
+async function reserveCheckoutRedemption({ shopDomain, customerId = '', email = '', rewardId = '', pointsToRedeem = 0, cartTotal = 0, currencyCode = '', checkoutToken = '', discountCode = '' }) {
   const { LoyaltyRedemption } = getLoyaltyModels();
   const wallet = await getCheckoutWallet({ shopDomain, customerId, email });
   if (!wallet.enabled) {
@@ -469,7 +499,16 @@ async function reserveCheckoutRedemption({ shopDomain, customerId = '', email = 
     error.status = 400;
     throw error;
   }
-  const pointsCost = Math.min(Number(reward.pointsCost || 0), Number(checkoutBeta.maximumPointsPerCheckout || reward.pointsCost || 0));
+  const requestedPoints = clampNumber(pointsToRedeem, 0, 100000000, 0);
+  const baseCost = Number(reward.pointsCost || 0);
+  const pointsCost = checkoutBeta.allowPartialRedemption && requestedPoints > 0
+    ? Math.min(requestedPoints, Number(wallet.availablePoints || 0), Number(checkoutBeta.maximumPointsPerCheckout || requestedPoints))
+    : Math.min(baseCost, Number(checkoutBeta.maximumPointsPerCheckout || baseCost));
+  if (!pointsCost || pointsCost <= 0) {
+    const error = new Error('Enter how many points to redeem.');
+    error.status = 400;
+    throw error;
+  }
   if (Number(wallet.availablePoints || 0) < pointsCost) {
     const error = new Error(`Not enough ${program.pointName || 'Points'} for this reward.`);
     error.status = 400;
@@ -499,7 +538,7 @@ async function reserveCheckoutRedemption({ shopDomain, customerId = '', email = 
     rewardName: reward.name,
     pointsCost,
     pointsReserved: pointsCost,
-    discountAmount: Number(reward.discountValue || 0),
+    discountAmount: checkoutBeta.allowPartialRedemption ? Number(pointsCost * Number(checkoutBeta.pointValueMinorUnits || 1) / 100) : Number(reward.discountValue || 0),
     currencyCode: cleanText(currencyCode || '', 12),
     status: discountCode ? 'issued' : 'reserved',
     shopifyDiscountCode: cleanText(discountCode || '', 80),

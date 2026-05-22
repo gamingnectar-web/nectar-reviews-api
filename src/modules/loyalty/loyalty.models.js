@@ -45,7 +45,9 @@ const loyaltyEmailTemplateSchema = new mongoose.Schema({
   status: { type: String, enum: ['primary', 'draft', 'archived'], default: 'primary' },
   subject: { type: String, default: 'Your review reward is ready' },
   heading: { type: String, default: 'Your reward is ready' },
+  subtitle: { type: String, default: 'A little thank-you from us.' },
   body: { type: String, default: 'Thanks for leaving a review. Your {{ reward_type }} is now ready.' },
+  modules: { type: [new mongoose.Schema({ id: String, type: String, title: String, body: String, backgroundColor: String, borderColor: String, radius: Number, padding: Number, position: String }, { _id: false })], default: [] },
   accentColor: { type: String, default: '#111827' },
   buttonText: { type: String, default: 'Shop now' },
 }, { _id: false });
@@ -56,6 +58,9 @@ const loyaltyTierSchema = new mongoose.Schema({
   threshold: { type: Number, default: 0, min: 0 },
   multiplier: { type: Number, default: 1, min: 0 },
   perks: { type: String, default: '' },
+  ruleIds: { type: [String], default: [] },
+  rewardIds: { type: [String], default: [] },
+  birthdayRewardEnabled: { type: Boolean, default: false },
 }, { _id: false });
 
 const loyaltyRedemptionRewardSchema = new mongoose.Schema({
@@ -66,6 +71,13 @@ const loyaltyRedemptionRewardSchema = new mongoose.Schema({
   discountValue: { type: Number, default: 5, min: 0 },
   enabled: { type: Boolean, default: true },
   shopifyProductId: { type: String, default: '' },
+  shopifyVariantId: { type: String, default: '' },
+  productTitle: { type: String, default: '' },
+  productImage: { type: String, default: '' },
+  productHandle: { type: String, default: '' },
+  productPrice: { type: Number, default: 0 },
+  redeemQuantity: { type: Number, default: 1, min: 1 },
+  stockLimit: { type: Number, default: 0, min: 0 },
   minimumCartValue: { type: Number, default: 0, min: 0 },
   betaCheckoutEnabled: { type: Boolean, default: false },
   discountMode: { type: String, enum: ['draft_only', 'native_discount_code'], default: 'draft_only' },

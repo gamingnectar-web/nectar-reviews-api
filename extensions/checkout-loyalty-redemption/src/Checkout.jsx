@@ -1,4 +1,15 @@
-import {render, BlockStack, Button, Banner, Text, useApi, useSettings, useApplyDiscountCodeChange} from '@shopify/ui-extensions-react/checkout';
+import {
+  render,
+  BlockStack,
+  Button,
+  Banner,
+  Text,
+  TextField,
+  InlineLayout,
+  useApi,
+  useSettings,
+  useApplyDiscountCodeChange,
+} from '@shopify/ui-extensions-react/checkout';
 import {useEffect, useMemo, useState} from 'preact/hooks';
 
 render('purchase.checkout.block.render', () => <LoyaltyCheckoutRedemption />);
@@ -8,6 +19,7 @@ function LoyaltyCheckoutRedemption() {
   const settings = useSettings();
   const applyDiscountCodeChange = useApplyDiscountCodeChange();
   const [wallet, setWallet] = useState(null);
+  const [pointsToRedeem, setPointsToRedeem] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -32,7 +44,11 @@ function LoyaltyCheckoutRedemption() {
           body: JSON.stringify({shopDomain, customerId, email}),
         });
         const data = await res.json();
-        if (!cancelled) setWallet(data);
+        if (!cancelled) {
+          setWallet(data);
+          const max = Math.min(Number(data.availablePoints || 0), Number(data.checkoutBeta?.maximumPointsPerCheckout || data.availablePoints || 0));
+          setPointsToRedeem(max ? String(max) : '');
+        }
       } catch (error) {
         if (!cancelled) setWallet({enabled: false, reason: 'network_error'});
       }
@@ -47,25 +63,30 @@ function LoyaltyCheckoutRedemption() {
   if (!wallet.rewards?.length || Number(wallet.availablePoints || 0) < Number(wallet.checkoutBeta?.minimumPointsToShow || 1)) return null;
 
   const reward = wallet.rewards.find((item) => item.canRedeem) || wallet.rewards[0];
-  if (!reward?.canRedeem) {
-    return <Banner status="info"><Text>You have {wallet.availablePoints} {wallet.pointName}, but not enough for a checkout reward yet.</Text></Banner>;
-  }
+  const maxRedeem = Math.min(Number(wallet.availablePoints || 0), Number(wallet.checkoutBeta?.maximumPointsPerCheckout || wallet.availablePoints || 0));
+  const pointValueMinorUnits = Number(wallet.checkoutBeta?.pointValueMinorUnits || 1);
+  const selectedPoints = Math.max(0, Math.min(Number(pointsToRedeem || 0), maxRedeem));
+  const approxDiscount = selectedPoints * pointValueMinorUnits / 100;
 
   async function redeem() {
+    if (!selectedPoints) {
+      setMessage(`Enter how many ${wallet.pointName} to redeem.`);
+      return;
+    }
     setBusy(true);
     setMessage('');
     try {
       const res = await fetch(`${appUrl}/api/loyalty/checkout/redeem`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({shopDomain, customerId, email, rewardId: reward.id, cartTotal, currencyCode, checkoutToken}),
+        body: JSON.stringify({shopDomain, customerId, email, rewardId: reward.id, pointsToRedeem: selectedPoints, cartTotal, currencyCode, checkoutToken}),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not redeem points.');
       if (data.discountCode) {
         const result = await applyDiscountCodeChange({type: 'addDiscountCode', code: data.discountCode});
         if (result?.type === 'error') throw new Error(result.message || 'Discount code could not be applied.');
-        setMessage(`Applied ${reward.name}.`);
+        setMessage(`Applied ${selectedPoints} ${wallet.pointName}.`);
       } else {
         setMessage('Reward reserved. Native checkout discount code issuing is not enabled for this beta yet.');
       }
@@ -82,10 +103,18 @@ function LoyaltyCheckoutRedemption() {
       <Banner status="info">
         <BlockStack spacing="tight">
           <Text emphasis="bold">{wallet.checkoutBeta?.betaLabel || 'Use your points at checkout'}</Text>
-          <Text>You have {wallet.availablePoints} {wallet.pointName}. Redeem {reward.pointsCost} for {reward.name}.</Text>
+          <Text>You have {wallet.availablePoints} {wallet.pointName}. About {currencyCode} {approxDiscount.toFixed(2)} will be reserved when applied.</Text>
         </BlockStack>
       </Banner>
-      <Button disabled={busy} onPress={redeem}>{busy ? 'Redeeming…' : `Redeem ${reward.pointsCost} ${wallet.pointName}`}</Button>
+      <InlineLayout columns={['fill', 'auto']} spacing="base">
+        <TextField
+          label={`${wallet.pointName} to redeem`}
+          value={pointsToRedeem}
+          onChange={(value) => setPointsToRedeem(String(value).replace(/[^0-9]/g, ''))}
+          helpText={`Maximum ${maxRedeem} ${wallet.pointName}`}
+        />
+        <Button disabled={busy || !selectedPoints} onPress={redeem}>{busy ? 'Applying…' : 'Apply'}</Button>
+      </InlineLayout>
       {message ? <Text>{message}</Text> : null}
     </BlockStack>
   );

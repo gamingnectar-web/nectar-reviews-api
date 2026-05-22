@@ -89,6 +89,7 @@ router.post('/redeem', async (req, res, next) => {
     if (!shopDomain) return res.status(400).json({ error: 'Missing shopDomain.' });
     const program = await getOrCreateLoyaltyProgram(shopDomain);
     const rewardId = cleanText(req.body.rewardId, 80);
+    const pointsToRedeem = clampNumber(req.body.pointsToRedeem, 0, 100000000, 0);
     const reward = (program.redemptionRewards || []).find((item) => item.id === rewardId && item.enabled !== false && item.betaCheckoutEnabled);
     if (!reward) return res.status(404).json({ error: 'Reward is not enabled for checkout beta.' });
 
@@ -102,7 +103,7 @@ router.post('/redeem', async (req, res, next) => {
         await createShopifyFixedAmountCode({
           shopDomain,
           title: `Loyalty redemption ${discountCode}`,
-          amount: Number(reward.discountValue || 0),
+          amount: pointsToRedeem > 0 ? Number(pointsToRedeem * Number(checkoutBeta.pointValueMinorUnits || 1) / 100) : Number(reward.discountValue || 0),
           code: discountCode,
         });
       } catch (error) {
@@ -123,6 +124,7 @@ router.post('/redeem', async (req, res, next) => {
       customerId: cleanText(req.body.customerId, 180),
       email: cleanEmail(req.body.email),
       rewardId,
+      pointsToRedeem,
       cartTotal: clampNumber(req.body.cartTotal, 0, 100000000, 0),
       currencyCode: cleanText(req.body.currencyCode, 12),
       checkoutToken: cleanText(req.body.checkoutToken, 160),
