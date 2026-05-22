@@ -258,6 +258,36 @@ router.post('/ledger/process-pending', async (req, res, next) => {
   }
 });
 
+
+router.get('/redemptions', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const limit = clampNumber(req.query.limit, 1, 100, 30);
+    const { LoyaltyRedemption } = getLoyaltyModels();
+    const rows = await LoyaltyRedemption.find({ shopDomain }).sort({ createdAt: -1 }).limit(limit).lean();
+    return res.json({ rows });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/checkout/process-expired', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const { LoyaltyRedemption, LoyaltyLedger } = getLoyaltyModels();
+    const expired = await LoyaltyRedemption.find({ shopDomain, status: { $in: ['reserved', 'issued'] }, expiresAt: { $lte: new Date() } }).lean();
+    if (!expired.length) return res.json({ ok: true, expired: 0 });
+    await LoyaltyRedemption.updateMany({ _id: { $in: expired.map((row) => row._id) } }, { $set: { status: 'expired' } });
+    for (const row of expired) {
+      await LoyaltyLedger.updateMany({ shopDomain, customerRefHash: row.customerRefHash, ruleId: row.rewardId, eventType: 'checkout_redemption', status: { $in: ['reserved', 'issued'] } }, { $set: { status: 'expired' } });
+      await recalculateCustomerState(shopDomain, row.customerRefHash).catch(() => null);
+    }
+    return res.json({ ok: true, expired: expired.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post('/redemptions', async (req, res, next) => {
   try {
     const shopDomain = shopDomainFromReq(req);

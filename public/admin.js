@@ -1225,6 +1225,8 @@ function getLoyaltyPayload() {
       pointsCost: Number(document.getElementById('loyalty-reward-cost')?.value || 500),
       discountValue: Number(document.getElementById('loyalty-reward-value')?.value || 5),
       enabled: true,
+      betaCheckoutEnabled: Boolean(document.getElementById('loyalty-checkout-enabled')?.checked),
+      discountMode: document.getElementById('loyalty-checkout-native-codes')?.checked ? 'native_discount_code' : 'draft_only',
     }],
     rewardTemplates: [{
       id: window.currentLoyaltyConfig?.rewardTemplates?.[0]?.id || undefined,
@@ -1252,6 +1254,23 @@ function getLoyaltyPayload() {
       minStars: Number(document.getElementById('loyalty-points-stars')?.value || 1),
       maxAwardsPerOrder: 1,
     }],
+    settings: {
+      reuseCoreEmailProvider: Boolean(document.getElementById('loyalty-reuse-email-provider')?.checked ?? true),
+      pointsExpireAfterDays: Number(window.currentLoyaltyConfig?.settings?.pointsExpireAfterDays || 365),
+      pendingMaturationEnabled: window.currentLoyaltyConfig?.settings?.pendingMaturationEnabled !== false,
+      allowManualAdjustments: window.currentLoyaltyConfig?.settings?.allowManualAdjustments !== false,
+      checkoutBeta: {
+        enabled: Boolean(document.getElementById('loyalty-checkout-enabled')?.checked),
+        betaLabel: document.getElementById('loyalty-checkout-label')?.value || 'Use your points at checkout',
+        minimumPointsToShow: Number(document.getElementById('loyalty-checkout-min-points')?.value || 1),
+        maximumPointsPerCheckout: Number(document.getElementById('loyalty-checkout-max-points')?.value || 5000),
+        pointValueMinorUnits: Number(document.getElementById('loyalty-checkout-point-value')?.value || 1),
+        allowNativeDiscountCodes: Boolean(document.getElementById('loyalty-checkout-native-codes')?.checked),
+        requireLoggedInCustomer: true,
+        allowPartialRedemption: true,
+        betaNote: document.getElementById('loyalty-checkout-note')?.value || 'Customers must be logged in before checkout redemption appears.',
+      },
+    },
   };
 }
 
@@ -1301,7 +1320,16 @@ function hydrateLoyalty(config = {}) {
   if (document.getElementById('loyalty-reward-cost')) document.getElementById('loyalty-reward-cost').value = redemption.pointsCost ?? 500;
   if (document.getElementById('loyalty-reward-type')) document.getElementById('loyalty-reward-type').value = redemption.type || 'discount';
   if (document.getElementById('loyalty-reward-value')) document.getElementById('loyalty-reward-value').value = redemption.discountValue ?? 5;
+  const checkoutBeta = config.settings?.checkoutBeta || {};
+  if (document.getElementById('loyalty-checkout-enabled')) document.getElementById('loyalty-checkout-enabled').checked = Boolean(checkoutBeta.enabled);
+  if (document.getElementById('loyalty-checkout-native-codes')) document.getElementById('loyalty-checkout-native-codes').checked = Boolean(checkoutBeta.allowNativeDiscountCodes || redemption.discountMode === 'native_discount_code');
+  if (document.getElementById('loyalty-checkout-min-points')) document.getElementById('loyalty-checkout-min-points').value = checkoutBeta.minimumPointsToShow ?? 1;
+  if (document.getElementById('loyalty-checkout-max-points')) document.getElementById('loyalty-checkout-max-points').value = checkoutBeta.maximumPointsPerCheckout ?? 5000;
+  if (document.getElementById('loyalty-checkout-point-value')) document.getElementById('loyalty-checkout-point-value').value = checkoutBeta.pointValueMinorUnits ?? 1;
+  if (document.getElementById('loyalty-checkout-label')) document.getElementById('loyalty-checkout-label').value = checkoutBeta.betaLabel || 'Use your points at checkout';
+  if (document.getElementById('loyalty-checkout-note')) document.getElementById('loyalty-checkout-note').value = checkoutBeta.betaNote || 'Customers must be logged in before checkout redemption appears.';
   window.updateLoyaltyPreview?.();
+  window.updateLoyaltyCheckoutPreview?.();
 }
 
 function buildLoyaltyPreviewHtml() {
@@ -1320,6 +1348,21 @@ window.updateLoyaltyPreview = function() {
   const box = document.getElementById('loyalty-email-preview');
   if (box) box.innerHTML = buildLoyaltyPreviewHtml();
 };
+
+window.updateLoyaltyCheckoutPreview = function() {
+  const box = document.getElementById('loyalty-checkout-preview');
+  if (!box) return;
+  const enabled = Boolean(document.getElementById('loyalty-checkout-enabled')?.checked);
+  const nativeCodes = Boolean(document.getElementById('loyalty-checkout-native-codes')?.checked);
+  const pointName = document.getElementById('loyalty-points-label')?.value || 'Points';
+  const rewardName = document.getElementById('loyalty-reward-name')?.value || '£5 off coupon';
+  const rewardCost = Number(document.getElementById('loyalty-reward-cost')?.value || 500);
+  const rewardValue = Number(document.getElementById('loyalty-reward-value')?.value || 5);
+  const label = document.getElementById('loyalty-checkout-label')?.value || 'Use your points at checkout';
+  const note = document.getElementById('loyalty-checkout-note')?.value || 'Customers must be logged in before checkout redemption appears.';
+  box.innerHTML = `<div class="loyalty-wallet-card"><span>${enabled ? 'Beta enabled' : 'Beta disabled'}</span><strong>${escapeHtml(label)}</strong><p class="muted">A logged-in customer with enough ${escapeHtml(pointName)} will see this block in checkout.</p></div><div class="loyalty-redemption-row"><div><strong>${escapeHtml(rewardName)}</strong><span>${rewardCost} ${escapeHtml(pointName)} → ${rewardValue} off${nativeCodes ? ' · native discount code' : ' · reservation only'}</span></div><button class="secondary-btn" type="button" disabled>Redeem</button></div><p class="muted" style="margin-top:12px;">${escapeHtml(note)}</p>`;
+};
+
 
 window.sendLoyaltyTestEmail = async function() {
   const to = document.getElementById('loyalty-test-to')?.value || '';
@@ -1350,7 +1393,7 @@ window.loadLoyaltyConfig = async function() {
   try {
     const config = await adminFetch('/admin/loyalty/config');
     hydrateLoyalty(config || {});
-    const ledger = await adminFetch('/admin/loyalty/ledger?limit=25');
+    const [ledger] = await Promise.all([adminFetch('/admin/loyalty/ledger?limit=25'), window.loadLoyaltyRedemptions?.()]);
     renderLoyaltyLedger(ledger.rows || []);
   } catch (error) {
     console.warn('Could not load loyalty config:', error);
@@ -1374,6 +1417,19 @@ window.manualLoyaltyAdjustment = async function() {
   }
 };
 
+
+window.loadLoyaltyRedemptions = async function() {
+  const list = document.getElementById('loyalty-redemptions-list');
+  if (!list) return;
+  try {
+    const data = await adminFetch('/admin/loyalty/redemptions?limit=20');
+    const rows = data.rows || [];
+    list.innerHTML = rows.length ? rows.map((row) => `<div class="loyalty-ledger-row"><div><strong>${escapeHtml(row.rewardName || row.rewardId || 'Checkout redemption')}</strong><span>${escapeHtml(row.shopifyDiscountCode || 'No code issued')} · ${row.createdAt ? new Date(row.createdAt).toLocaleDateString() : '—'}</span></div><span class="loyalty-ledger-badge">${escapeHtml(row.status || 'draft')}</span><strong>${Number(row.pointsCost || row.pointsReserved || 0)} pts</strong></div>`).join('') : '<p class="muted">No checkout redemptions yet.</p>';
+  } catch (error) {
+    list.innerHTML = `<div class="notice-box error">${escapeHtml(error.message || 'Could not load redemptions')}</div>`;
+  }
+};
+
 window.saveLoyaltyConfig = async function() {
   try {
     const saved = await adminFetch('/admin/loyalty/config', {
@@ -1382,6 +1438,7 @@ window.saveLoyaltyConfig = async function() {
     });
     hydrateLoyalty(saved || {});
     window.updateLoyaltyPreview?.();
+    window.updateLoyaltyCheckoutPreview?.();
     window.showToast('Loyalty settings saved');
   } catch (error) {
     window.showToast(error.message || 'Could not save loyalty settings');
@@ -1400,4 +1457,4 @@ window.initLoyaltyTabs = function() {
   });
 };
 
-setTimeout(() => { window.initLoyaltyTabs?.(); window.updateLoyaltyPreview?.(); }, 400);
+setTimeout(() => { window.initLoyaltyTabs?.(); window.updateLoyaltyPreview?.(); window.updateLoyaltyCheckoutPreview?.(); }, 400);

@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const { getLoyaltyConnection } = require('../../config/db');
 
 const loyaltyConditionSchema = new mongoose.Schema({
-  type: { type: String, enum: ['always', 'verified_review', 'min_stars', 'tier', 'purchase_count', 'birthday', 'manual'], default: 'always' },
+  type: { type: String, enum: ['always', 'verified_review', 'min_stars', 'tier', 'purchase_count', 'birthday', 'manual', 'customer_tag', 'product_tag', 'minimum_balance', 'checkout_beta', 'reward'], default: 'always' },
   operator: { type: String, default: 'is' },
   value: { type: String, default: '' },
 }, { _id: false });
@@ -66,6 +66,9 @@ const loyaltyRedemptionRewardSchema = new mongoose.Schema({
   discountValue: { type: Number, default: 5, min: 0 },
   enabled: { type: Boolean, default: true },
   shopifyProductId: { type: String, default: '' },
+  minimumCartValue: { type: Number, default: 0, min: 0 },
+  betaCheckoutEnabled: { type: Boolean, default: false },
+  discountMode: { type: String, enum: ['draft_only', 'native_discount_code'], default: 'draft_only' },
 }, { _id: false });
 
 const loyaltyProgramSchema = new mongoose.Schema({
@@ -83,6 +86,17 @@ const loyaltyProgramSchema = new mongoose.Schema({
     pointsExpireAfterDays: { type: Number, default: 365, min: 0, max: 3650 },
     pendingMaturationEnabled: { type: Boolean, default: true },
     allowManualAdjustments: { type: Boolean, default: true },
+    checkoutBeta: {
+      enabled: { type: Boolean, default: false },
+      betaLabel: { type: String, default: 'Checkout points redemption beta' },
+      minimumPointsToShow: { type: Number, default: 1, min: 0 },
+      maximumPointsPerCheckout: { type: Number, default: 5000, min: 0 },
+      pointValueMinorUnits: { type: Number, default: 1, min: 0 },
+      allowNativeDiscountCodes: { type: Boolean, default: false },
+      requireLoggedInCustomer: { type: Boolean, default: true },
+      allowPartialRedemption: { type: Boolean, default: true },
+      betaNote: { type: String, default: 'Customers must be logged in before checkout redemption appears.' },
+    },
   },
 }, { timestamps: true });
 
@@ -90,7 +104,7 @@ const loyaltyLedgerSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, index: true },
   customerRefHash: { type: String, required: true, index: true },
   customerRefHint: { type: String, default: '' },
-  eventType: { type: String, enum: ['points_award', 'discount_reward', 'manual_adjustment', 'redemption', 'points_expiry'], required: true },
+  eventType: { type: String, enum: ['points_award', 'discount_reward', 'manual_adjustment', 'redemption', 'checkout_redemption', 'points_reservation', 'points_expiry'], required: true },
   source: { type: String, default: 'review' },
   sourceReviewHash: { type: String, default: '', index: true },
   orderIdHash: { type: String, default: '' },
@@ -98,7 +112,7 @@ const loyaltyLedgerSchema = new mongoose.Schema({
   points: { type: Number, default: 0 },
   discountType: { type: String, enum: ['percentage', 'fixed_amount', 'none'], default: 'none' },
   discountValue: { type: Number, default: 0 },
-  status: { type: String, enum: ['pending', 'available', 'cancelled', 'redeemed', 'expired'], default: 'pending', index: true },
+  status: { type: String, enum: ['pending', 'available', 'reserved', 'issued', 'used', 'cancelled', 'redeemed', 'expired'], default: 'pending', index: true },
   availableAt: { type: Date, default: Date.now, index: true },
   awardedAt: { type: Date, default: null },
   redeemedAt: { type: Date, default: null },
@@ -124,6 +138,7 @@ const loyaltyCustomerStateSchema = new mongoose.Schema({
 loyaltyCustomerStateSchema.index({ shopDomain: 1, customerRefHash: 1 }, { unique: true });
 loyaltyCustomerStateSchema.index({ shopDomain: 1, availablePoints: -1 });
 loyaltyCustomerStateSchema.index({ shopDomain: 1, lastActivityAt: -1 });
+loyaltyCustomerStateSchema.index({ shopDomain: 1, currentTierId: 1 });
 
 const loyaltyRedemptionSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, index: true },
@@ -131,14 +146,25 @@ const loyaltyRedemptionSchema = new mongoose.Schema({
   rewardId: { type: String, required: true },
   rewardName: { type: String, default: '' },
   pointsCost: { type: Number, default: 0 },
-  status: { type: String, enum: ['draft', 'issued', 'redeemed', 'cancelled'], default: 'draft', index: true },
+  status: { type: String, enum: ['draft', 'reserved', 'issued', 'applied', 'redeemed', 'expired', 'failed', 'cancelled'], default: 'draft', index: true },
   shopifyDiscountCode: { type: String, default: '' },
+  checkoutSessionId: { type: String, default: '', index: true },
+  checkoutTokenHash: { type: String, default: '', index: true },
+  pointsReserved: { type: Number, default: 0 },
+  discountAmount: { type: Number, default: 0 },
+  currencyCode: { type: String, default: '' },
+  expiresAt: { type: Date, default: null, index: true },
+  issuedAt: { type: Date, default: null },
+  appliedAt: { type: Date, default: null },
   privateNote: { type: String, default: '' },
 }, { timestamps: true });
 
 function modelFor(conn, name, schema, collection) {
   return conn.models[name] || conn.model(name, schema, collection);
 }
+
+loyaltyRedemptionSchema.index({ shopDomain: 1, customerRefHash: 1, createdAt: -1 });
+loyaltyRedemptionSchema.index({ shopDomain: 1, checkoutTokenHash: 1 });
 
 function getLoyaltyModels() {
   const conn = getLoyaltyConnection();

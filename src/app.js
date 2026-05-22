@@ -11,6 +11,7 @@ const publicRoutes = require('./routes/public');
 const adminRoutes = require('./routes/admin');
 const authRoutes = require('./routes/auth');
 const loyaltyRoutes = require('./routes/loyalty');
+const loyaltyCheckoutRoutes = require('./routes/loyaltyCheckout');
 const { securityHeaders, corsOptions, makeRateLimiter, errorHandler, requireAdminSession, setAdminSessionCookie } = require('./utils/security');
 
 const app = express();
@@ -135,6 +136,7 @@ app.use(express.static(publicDir, {
 
 app.use('/auth', authRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/loyalty/checkout', makeRateLimiter({ windowMs: 60 * 1000, max: 60, keyPrefix: 'loyalty-checkout' }), loyaltyCheckoutRoutes);
 app.use('/api', publicRoutes);
 app.use('/api/admin/loyalty', loyaltyRoutes);
 app.use('/api/admin', adminRoutes);

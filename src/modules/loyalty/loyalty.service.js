@@ -97,6 +97,17 @@ function defaultLoyaltyConfig(shopDomain) {
       pointsExpireAfterDays: 365,
       pendingMaturationEnabled: true,
       allowManualAdjustments: true,
+      checkoutBeta: {
+        enabled: false,
+        betaLabel: 'Checkout points redemption beta',
+        minimumPointsToShow: 1,
+        maximumPointsPerCheckout: 5000,
+        pointValueMinorUnits: 1,
+        allowNativeDiscountCodes: false,
+        requireLoggedInCustomer: true,
+        allowPartialRedemption: true,
+        betaNote: 'Customers must be logged in before checkout redemption appears.',
+      },
     },
   };
 }
@@ -155,6 +166,9 @@ function cleanRedemptionReward(input = {}) {
     discountValue: clampNumber(input.discountValue, 0, 1000000, 5),
     enabled: input.enabled !== false,
     shopifyProductId: cleanText(input.shopifyProductId || '', 120),
+    minimumCartValue: clampNumber(input.minimumCartValue, 0, 100000000, 0),
+    betaCheckoutEnabled: Boolean(input.betaCheckoutEnabled),
+    discountMode: ['draft_only', 'native_discount_code'].includes(input.discountMode) ? input.discountMode : 'draft_only',
   };
 }
 
@@ -220,6 +234,17 @@ function cleanLoyaltyConfig(shopDomain, body = {}) {
       pointsExpireAfterDays: clampNumber(body.settings?.pointsExpireAfterDays, 0, 3650, 365),
       pendingMaturationEnabled: body.settings?.pendingMaturationEnabled !== false,
       allowManualAdjustments: body.settings?.allowManualAdjustments !== false,
+      checkoutBeta: {
+        enabled: Boolean(body.settings?.checkoutBeta?.enabled),
+        betaLabel: cleanText(body.settings?.checkoutBeta?.betaLabel || defaults.settings.checkoutBeta.betaLabel, 120),
+        minimumPointsToShow: clampNumber(body.settings?.checkoutBeta?.minimumPointsToShow, 0, 100000000, 1),
+        maximumPointsPerCheckout: clampNumber(body.settings?.checkoutBeta?.maximumPointsPerCheckout, 0, 100000000, 5000),
+        pointValueMinorUnits: clampNumber(body.settings?.checkoutBeta?.pointValueMinorUnits, 0, 1000000, 1),
+        allowNativeDiscountCodes: Boolean(body.settings?.checkoutBeta?.allowNativeDiscountCodes),
+        requireLoggedInCustomer: body.settings?.checkoutBeta?.requireLoggedInCustomer !== false,
+        allowPartialRedemption: body.settings?.checkoutBeta?.allowPartialRedemption !== false,
+        betaNote: cleanText(body.settings?.checkoutBeta?.betaNote || defaults.settings.checkoutBeta.betaNote, 260),
+      },
     },
   };
 }
@@ -244,10 +269,10 @@ async function recalculateCustomerState(shopDomain, customerRefHash) {
   let lastActivityAt = null;
   rows.forEach((row) => {
     const points = Number(row.points || 0);
-    if (row.status === 'available') availablePoints += points;
+    if (row.status === 'available' || row.status === 'reserved' || row.status === 'issued') availablePoints += points;
     if (row.status === 'pending') pendingPoints += points;
     if (points > 0 && !['cancelled', 'expired'].includes(row.status)) totalEarned += points;
-    if (points < 0 || row.eventType === 'redemption' || row.status === 'redeemed') totalRedeemed += Math.abs(Math.min(0, points));
+    if (points < 0 || row.eventType === 'redemption' || row.eventType === 'checkout_redemption' || row.status === 'redeemed') totalRedeemed += Math.abs(Math.min(0, points));
     const date = row.updatedAt || row.createdAt || row.availableAt;
     if (date && (!lastActivityAt || new Date(date) > new Date(lastActivityAt))) lastActivityAt = date;
   });
@@ -380,6 +405,113 @@ async function awardForReview({ shopDomain, review, trigger }) {
   return { created };
 }
 
+
+function getCheckoutBetaSettings(program = {}) {
+  const defaults = defaultLoyaltyConfig(program.shopDomain || '').settings.checkoutBeta;
+  return { ...defaults, ...(program.settings?.checkoutBeta || {}) };
+}
+
+async function getCheckoutWallet({ shopDomain, customerId = '', email = '' }) {
+  const program = await getOrCreateLoyaltyProgram(shopDomain);
+  const checkoutBeta = getCheckoutBetaSettings(program);
+  if (!program.enabled || !checkoutBeta.enabled) {
+    return { enabled: false, reason: 'checkout_beta_disabled', pointName: program.pointName || 'Points', availablePoints: 0, pendingPoints: 0, rewards: [] };
+  }
+  const customerRefHash = normaliseCustomerRef({ shopDomain, customerId, email });
+  if (!customerRefHash) {
+    return { enabled: false, reason: 'customer_not_signed_in', pointName: program.pointName || 'Points', availablePoints: 0, pendingPoints: 0, rewards: [] };
+  }
+  await maturePendingPoints(shopDomain).catch(() => null);
+  const state = await recalculateCustomerState(shopDomain, customerRefHash);
+  const rewards = (program.redemptionRewards || [])
+    .filter((reward) => reward.enabled !== false && reward.betaCheckoutEnabled)
+    .map((reward) => ({
+      id: reward.id,
+      name: reward.name,
+      type: reward.type,
+      pointsCost: Number(reward.pointsCost || 0),
+      discountValue: Number(reward.discountValue || 0),
+      minimumCartValue: Number(reward.minimumCartValue || 0),
+      discountMode: reward.discountMode || 'draft_only',
+      canRedeem: Number(state.availablePoints || 0) >= Number(reward.pointsCost || 0),
+    }));
+  return {
+    enabled: true,
+    pointName: program.pointName || 'Points',
+    checkoutBeta,
+    customerRefHash,
+    customerRefHint: customerHintFromHash(customerRefHash),
+    availablePoints: Number(state.availablePoints || 0),
+    pendingPoints: Number(state.pendingPoints || 0),
+    currentTierName: state.currentTierName || 'Bronze',
+    rewards,
+  };
+}
+
+async function reserveCheckoutRedemption({ shopDomain, customerId = '', email = '', rewardId = '', cartTotal = 0, currencyCode = '', checkoutToken = '', discountCode = '' }) {
+  const { LoyaltyRedemption } = getLoyaltyModels();
+  const wallet = await getCheckoutWallet({ shopDomain, customerId, email });
+  if (!wallet.enabled) {
+    const error = new Error(wallet.reason === 'customer_not_signed_in' ? 'Customer must be signed in to redeem points.' : 'Checkout redemption beta is not enabled.');
+    error.status = 403;
+    throw error;
+  }
+  const program = await getOrCreateLoyaltyProgram(shopDomain);
+  const checkoutBeta = getCheckoutBetaSettings(program);
+  const reward = (program.redemptionRewards || []).find((item) => item.id === rewardId && item.enabled !== false && item.betaCheckoutEnabled);
+  if (!reward) {
+    const error = new Error('This reward is not enabled for checkout beta redemption.');
+    error.status = 404;
+    throw error;
+  }
+  if (Number(cartTotal || 0) < Number(reward.minimumCartValue || 0)) {
+    const error = new Error('Cart value is below this reward minimum.');
+    error.status = 400;
+    throw error;
+  }
+  const pointsCost = Math.min(Number(reward.pointsCost || 0), Number(checkoutBeta.maximumPointsPerCheckout || reward.pointsCost || 0));
+  if (Number(wallet.availablePoints || 0) < pointsCost) {
+    const error = new Error(`Not enough ${program.pointName || 'Points'} for this reward.`);
+    error.status = 400;
+    throw error;
+  }
+  const checkoutTokenHash = checkoutToken ? hashValue(`${shopDomain}:checkout:${checkoutToken}`) : '';
+  const now = new Date();
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+  const row = await createLedgerEntry({
+    shopDomain,
+    customerRefHash: wallet.customerRefHash,
+    customerRefHint: wallet.customerRefHint,
+    eventType: 'checkout_redemption',
+    source: 'checkout_beta',
+    points: -Math.abs(pointsCost),
+    status: 'reserved',
+    availableAt: now,
+    awardedAt: now,
+    ruleId: reward.id,
+    ruleName: `Checkout redemption: ${reward.name}`,
+    privateNote: 'Reserved by checkout beta. Confirmed redemption should be reconciled against Shopify order/discount usage.',
+  });
+  const redemption = await LoyaltyRedemption.create({
+    shopDomain,
+    customerRefHash: wallet.customerRefHash,
+    rewardId: reward.id,
+    rewardName: reward.name,
+    pointsCost,
+    pointsReserved: pointsCost,
+    discountAmount: Number(reward.discountValue || 0),
+    currencyCode: cleanText(currencyCode || '', 12),
+    status: discountCode ? 'issued' : 'reserved',
+    shopifyDiscountCode: cleanText(discountCode || '', 80),
+    checkoutSessionId: cleanText(checkoutToken || '', 120),
+    checkoutTokenHash,
+    expiresAt,
+    issuedAt: discountCode ? now : null,
+    privateNote: discountCode ? 'Native Shopify discount code issued by checkout beta.' : 'Reserved without issuing a native discount code.',
+  });
+  return { row, redemption, wallet: await getCheckoutWallet({ shopDomain, customerId, email }) };
+}
+
 module.exports = {
   makeId,
   normaliseCustomerRef,
@@ -398,4 +530,7 @@ module.exports = {
   createLedgerEntry,
   maturePendingPoints,
   awardForReview,
+  getCheckoutBetaSettings,
+  getCheckoutWallet,
+  reserveCheckoutRedemption,
 };

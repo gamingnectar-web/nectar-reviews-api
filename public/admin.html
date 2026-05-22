@@ -567,6 +567,22 @@
     .settings-card-header.compact h3{font-size:16px;}
     @media(max-width:1050px){.loyalty-member-grid{grid-template-columns:1fr}.loyalty-metric-row{grid-template-columns:1fr;}}
 
+    /* v21 loyalty checkout beta foundation */
+    .loyalty-beta-card{border:1px solid #dbeafe;background:linear-gradient(180deg,#eff6ff 0%,#fff 100%);border-radius:16px;padding:16px;margin-bottom:14px;}
+    .loyalty-beta-card h4{margin:0 0 6px;font-size:15px;color:#111827;}
+    .loyalty-beta-card p{margin:0;color:#475467;line-height:1.5;}
+    .loyalty-checkout-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start;}
+    .loyalty-checkout-preview{border:1px solid var(--border);border-radius:18px;background:#fff;padding:18px;box-shadow:0 12px 34px rgba(15,23,42,.07);}
+    .loyalty-wallet-card{border:1px solid #e5e7eb;border-radius:16px;background:#f9fafb;padding:16px;}
+    .loyalty-wallet-card strong{display:block;font-size:26px;color:#111827;}
+    .loyalty-wallet-card span{display:block;color:#667085;font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.06em;}
+    .loyalty-redemption-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;border:1px solid #edf2f7;border-radius:14px;background:#fff;padding:12px;margin-top:10px;}
+    .loyalty-redemption-row strong{display:block;color:#111827;}
+    .loyalty-redemption-row span{display:block;color:#667085;font-size:12px;margin-top:2px;}
+    .loyalty-beta-pill{display:inline-flex;align-items:center;border-radius:999px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;font-size:11px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;padding:5px 9px;}
+    @media(max-width:950px){.loyalty-checkout-grid{grid-template-columns:1fr;}}
+
+
   </style>
 </head>
 <body>
@@ -874,6 +890,7 @@
           <button type="button" data-loyalty-tab="rules">Points Rules</button>
           <button type="button" data-loyalty-tab="tiers">Tiers</button>
           <button type="button" data-loyalty-tab="rewards">Rewards</button>
+          <button type="button" data-loyalty-tab="checkout">Checkout Beta</button>
           <button type="button" data-loyalty-tab="settings">Settings</button>
         </div>
 
@@ -990,6 +1007,36 @@
           <div class="panel loyalty-panel"><div class="settings-card-header"><div><h3>Redeemable rewards</h3><p>Plan how customers trade points for discounts or catalogue rewards.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div><div class="settings-card-body"><div class="loyalty-form-grid"><label>Reward name<input id="loyalty-reward-name" class="premium-input" value="£5 off coupon"></label><label>Cost in points<input id="loyalty-reward-cost" class="premium-input" type="number" value="500"></label><label>Reward type<select id="loyalty-reward-type" class="filter-select"><option value="discount">Checkout discount</option><option value="catalogue_item">Catalogue item</option></select></label><label>Discount value<input id="loyalty-reward-value" class="premium-input" type="number" value="5"></label></div><p class="muted">Checkout redemption will later connect to Shopify discount creation/checkout extensions.</p><div class="loyalty-footer"><button class="primary-btn loyalty-save-btn" type="button" onclick="window.saveLoyaltyConfig()">Save reward</button></div></div></div>
         </div>
 
+
+        <div class="loyalty-tab-panel" id="loyalty-tab-checkout">
+          <div class="loyalty-beta-card"><span class="loyalty-beta-pill">Beta rule</span><h4>Checkout points redemption is separate from the main loyalty launch.</h4><p>Keep this disabled until the Shopify checkout extension and discount-code issuing flow have been tested. Logged-in customers only; loyalty still stores only hashed references.</p></div>
+          <div class="loyalty-checkout-grid">
+            <div class="panel loyalty-panel">
+              <div class="settings-card-header"><div><h3>Checkout redemption controls</h3><p>Control whether logged-in customers can use points at checkout.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div>
+              <div class="settings-card-body">
+                <label class="loyalty-pill-check loyalty-check"><input id="loyalty-checkout-enabled" type="checkbox"> Enable checkout beta</label>
+                <label class="loyalty-pill-check loyalty-check"><input id="loyalty-checkout-native-codes" type="checkbox"> Issue Shopify discount codes in beta</label>
+                <div class="loyalty-form-grid">
+                  <label>Minimum points to show<input id="loyalty-checkout-min-points" class="premium-input" type="number" min="0" value="1"></label>
+                  <label>Maximum points per checkout<input id="loyalty-checkout-max-points" class="premium-input" type="number" min="0" value="5000"></label>
+                  <label>Point value in minor units<input id="loyalty-checkout-point-value" class="premium-input" type="number" min="0" value="1"><small class="muted">Example: 1 = 1p / 1 cent per point.</small></label>
+                  <label>Checkout label<input id="loyalty-checkout-label" class="premium-input" value="Use your points at checkout"></label>
+                </div>
+                <label class="loyalty-full-label">Beta note<textarea id="loyalty-checkout-note" class="premium-input" rows="3">Customers must be logged in before checkout redemption appears.</textarea></label>
+                <div class="loyalty-footer"><button class="primary-btn loyalty-save-btn" type="button" onclick="window.saveLoyaltyConfig()">Save checkout beta</button></div>
+              </div>
+            </div>
+            <div class="panel loyalty-panel">
+              <div class="settings-card-header"><div><h3>Checkout preview</h3><p>This is the customer-facing concept that the checkout extension will render.</p></div><button class="secondary-btn" type="button" onclick="window.loadLoyaltyRedemptions?.()">Refresh redemptions</button></div>
+              <div class="settings-card-body">
+                <div class="loyalty-checkout-preview" id="loyalty-checkout-preview"></div>
+                <h4 class="loyalty-section-title">Recent checkout redemptions</h4>
+                <div id="loyalty-redemptions-list" class="loyalty-ledger-list"><p class="muted">No checkout redemptions yet.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="loyalty-tab-panel" id="loyalty-tab-settings">
           <div class="grid-2"><div class="panel loyalty-panel"><div class="settings-card-header"><div><h3>Programme settings</h3><p>Control naming and privacy defaults.</p></div><button class="collapse-toggle" type="button" onclick="window.toggleCard(this)">−</button></div><div class="settings-card-body"><label>Points name<input id="loyalty-points-label" class="premium-input" value="Points"></label><label class="loyalty-pill-check loyalty-check"><input id="loyalty-reuse-email-provider" type="checkbox" checked> Reuse Reviews email provider</label><p class="muted">Loyalty has its own database connection when LOYALTY_DB_URI is set, and no ledger row stores customer PII.</p><div class="loyalty-footer"><button class="primary-btn loyalty-save-btn" type="button" onclick="window.saveLoyaltyConfig()">Save settings</button></div></div></div><div class="panel loyalty-panel"><h3>Privacy boundaries</h3><p class="muted">Use a shop-only customer reference/code for manual adjustments. The system hashes it with the shop domain before writing to the loyalty database.</p></div></div>
         </div>
@@ -1065,6 +1112,6 @@
   <script src="/admin-email-tracking-enhancer.js?v=secure-6"></script>
   <script src="/admin-messaging-campaigns.js?v=secure-6"></script>
   <script src="/admin-help-drawer.js" defer></script>
-  <script src="/admin-loyalty-foundation.js?v=secure-20"></script>
+  <script src="/admin-loyalty-foundation.js?v=secure-21"></script>
 </body>
 </html>

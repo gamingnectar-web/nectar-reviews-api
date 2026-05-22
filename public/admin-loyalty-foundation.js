@@ -67,6 +67,8 @@
       ]);
       renderLedger(ledger.rows || []);
       window.updateLoyaltyPreview?.();
+      window.updateLoyaltyCheckoutPreview?.();
+      window.loadLoyaltyRedemptions?.();
     } catch (error) {
       console.warn('Could not load loyalty foundation:', error);
       if (originalLoad) return originalLoad();
@@ -136,6 +138,6 @@
   const prevSave = window.saveLoyaltyConfig;
   window.saveLoyaltyConfig = async function(){
     if (prevSave) await prevSave();
-    try { await loadCustomerRows(); } catch {}
+    try { await loadCustomerRows(); await window.loadLoyaltyRedemptions?.(); window.updateLoyaltyCheckoutPreview?.(); } catch {}
   };
 })();

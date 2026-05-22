@@ -209,3 +209,53 @@ The loyalty DB does not store customer name, email, phone, address, or raw Shopi
 - Customer-facing loyalty wallet widget.
 
 Those can be layered on without moving data out of `platform_loyalty`.
+
+## v21 loyalty foundation and checkout beta
+
+This build includes the v18 review/widget work, v19 neutral database wiring, v20 loyalty foundation, and a v21 checkout redemption beta scaffold.
+
+### Required databases
+
+Core/reviews:
+
+```bash
+CORE_DB_URI=mongodb+srv://.../platform_core?retryWrites=true&w=majority
+```
+
+Loyalty:
+
+```bash
+LOYALTY_DB_URI=mongodb+srv://.../platform_loyalty?retryWrites=true&w=majority
+```
+
+`MONGODB_URI` and `LOYALTY_MONGODB_URI` are still supported for backward compatibility, but new deployments should use `CORE_DB_URI` and `LOYALTY_DB_URI`.
+
+### Loyalty checkout beta
+
+The checkout redemption flow is deliberately gated separately from the main Loyalty module:
+
+- Loyalty module must be enabled.
+- Checkout beta must be enabled inside Loyalty → Checkout Beta.
+- The redeemable reward must be marked as checkout-beta-enabled.
+- Customers must be logged in so the extension can resolve a customer reference.
+- By default, the flow is reservation-only. Native Shopify discount code issuing is controlled by `allowNativeDiscountCodes` and should remain off until tested.
+
+Backend endpoints:
+
+```txt
+GET  /api/loyalty/checkout/config?shopDomain=example.myshopify.com
+POST /api/loyalty/checkout/wallet
+POST /api/loyalty/checkout/redeem
+```
+
+A draft Shopify checkout UI extension scaffold is included at:
+
+```txt
+extensions/checkout-loyalty-redemption
+```
+
+This extension is a beta foundation, not a merchant-live release. It requires deployment through Shopify CLI and checkout extension placement in the merchant's checkout editor.
+
+### Loyalty privacy
+
+The loyalty database stores hashed customer references only. It does not store customer names, emails, phone numbers, addresses, or raw Shopify customer IDs. Shopify customer search in admin uses live Shopify data, then stores only a shop-scoped hash in the loyalty database.

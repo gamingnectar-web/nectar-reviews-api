@@ -1,0 +1,11 @@
+{
+  "name": "checkout-loyalty-redemption-extension",
+  "version": "0.1.0-beta",
+  "private": true,
+  "dependencies": {
+    "@shopify/ui-extensions": "latest",
+    "@shopify/ui-extensions-react": "latest",
+    "preact": "latest"
+  },
+  "devDependencies": {}
+}
