@@ -351,6 +351,32 @@
     });
   }
 
+
+
+  function preserveOriginalReviewViews(cartView) {
+    qsa('.view').forEach((el) => {
+      if (el === cartView) return;
+      if (!el.dataset.ncrOriginalDisplaySaved) {
+        el.dataset.ncrOriginalDisplaySaved = 'true';
+        el.dataset.ncrOriginalDisplay = el.style.display || '';
+      }
+      if (el.classList.contains('active')) {
+        el.dataset.ncrWasActiveReviewView = 'true';
+      }
+    });
+  }
+
+  function restoreOriginalReviewViews(cartView) {
+    qsa('.view').forEach((el) => {
+      if (el === cartView) return;
+      if (el.dataset.ncrOriginalDisplaySaved) {
+        el.style.display = el.dataset.ncrOriginalDisplay || '';
+      } else {
+        el.style.display = '';
+      }
+    });
+  }
+
   function setProductMode(product) {
     state.product = product === PRODUCT_CART_REWARDS ? PRODUCT_CART_REWARDS : PRODUCT_REVIEW_WIDGET;
     setProductSwitcherLabel(state.product);
@@ -363,6 +389,7 @@
       document.body.classList.add(ACTIVE_CLASS);
       getSidebarChildrenToHide(sidebar).forEach((child) => child.classList.add('ncr-hidden-original-nav'));
       if (cartNav) cartNav.style.display = '';
+      preserveOriginalReviewViews(view);
       qsa('.view').forEach((el) => {
         el.classList.remove('active');
         if (el !== view) el.style.display = 'none';
@@ -379,7 +406,13 @@
     if (cartNav) cartNav.style.display = 'none';
     view.classList.remove('active');
     view.style.display = 'none';
+    restoreOriginalReviewViews(view);
     if (typeof window.tab === 'function') window.tab('v-dash');
+    const fallback = qs('#v-dash') || qs('.view');
+    if (fallback) {
+      fallback.style.display = '';
+      fallback.classList.add('active');
+    }
   }
 
   function showPanel(panel) {
