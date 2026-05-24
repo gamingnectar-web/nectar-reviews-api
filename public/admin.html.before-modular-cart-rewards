@@ -584,7 +584,6 @@
 
 
   </style>
-  <link rel="stylesheet" href="/module-shell.css">
 </head>
 <body>
   <div id="custom-toast"></div>
@@ -1114,7 +1113,5 @@
   <script src="/admin-messaging-campaigns.js?v=secure-6"></script>
   <script src="/admin-help-drawer.js" defer></script>
   <script src="/admin-loyalty-foundation.js?v=secure-24"></script>
-  <script src="/module-registry.js" defer></script>
-  <script src="/module-shell.js" defer></script>
 </body>
 </html>
