@@ -1,0 +1,52 @@
+{% comment %}
+  Nectar Cart Rewards Widget
+
+  Add this block to cart drawer/cart page templates.
+{% endcomment %}
+
+<div
+  id="NectarCartRewards-{{ block.id }}"
+  class="nectar-cart-rewards"
+  data-shop="{{ shop.permanent_domain }}"
+  data-app-url="{{ block.settings.app_url }}"
+  data-placement="{{ block.settings.placement }}"
+>
+  <div class="nectar-cart-rewards__loading">
+    {{ block.settings.loading_text }}
+  </div>
+</div>
+
+{{ 'nectar-cart-rewards.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'nectar-cart-rewards.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Nectar Cart Rewards",
+  "target": "section",
+  "settings": [
+    {
+      "type": "url",
+      "id": "app_url",
+      "label": "App URL",
+      "info": "Your Nectar app URL, e.g. https://nectar-reviews-api.onrender.com"
+    },
+    {
+      "type": "select",
+      "id": "placement",
+      "label": "Placement",
+      "default": "cart_drawer",
+      "options": [
+        { "value": "cart_drawer", "label": "Cart drawer" },
+        { "value": "cart_page", "label": "Cart page" },
+        { "value": "mini_progress", "label": "Mini progress" }
+      ]
+    },
+    {
+      "type": "text",
+      "id": "loading_text",
+      "label": "Loading text",
+      "default": "Checking your rewards..."
+    }
+  ]
+}
+{% endschema %}
