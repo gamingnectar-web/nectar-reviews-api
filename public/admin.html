@@ -622,6 +622,35 @@
     .msg-module-card p { margin:0 0 12px; color:#667085; line-height:1.45; }
     .msg-module-card label { margin-top:10px!important; }
     @media(max-width:900px){.style-control-grid.full,.nr-admin-preview[data-layout="cards"] .nr-admin-preview__list,.msg-module-grid{grid-template-columns:1fr}.nr-admin-preview__header,.nr-admin-preview__summary{grid-template-columns:1fr;flex-direction:column;align-items:flex-start}.nr-admin-preview__header[data-align="right"]{flex-direction:column;align-items:flex-end}}
+  
+    .settings-wide-card { margin-top:18px; }
+    .render-name-list { display:grid; gap:12px; }
+    .render-name-card { display:grid; grid-template-columns:180px 1fr; gap:14px; align-items:start; border:1px solid var(--border); border-radius:14px; background:#fbfdff; padding:14px; }
+    .render-name-card code { display:block; white-space:normal; word-break:break-word; background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:8px; margin-top:5px; font-size:12px; }
+    .config-tabs-mini { display:flex; flex-wrap:wrap; gap:10px; }
+    .discount-status-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:18px; }
+    .discount-mini span { display:block; color:#667085; text-transform:uppercase; letter-spacing:.08em; font-weight:900; font-size:11px; margin-bottom:6px; }
+    .discount-mini strong { display:block; font-size:20px; letter-spacing:-.02em; margin-bottom:6px; }
+    .discount-grid { display:grid; grid-template-columns:minmax(360px,620px) minmax(0,1fr); gap:18px; align-items:start; }
+    .discount-card { margin-bottom:18px; }
+    .discount-template-card { border:1px solid var(--border); border-radius:16px; background:#fff; padding:14px; margin-bottom:10px; }
+    .discount-template-head { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+    .discount-template-head h4 { margin:0 0 5px; }
+    .discount-template-head p { margin:0; color:#667085; font-size:13px; }
+    .discount-badges { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+    .discount-badge { display:inline-flex; border:1px solid #e5e7eb; background:#f8fafc; border-radius:999px; padding:5px 8px; font-size:12px; font-weight:900; color:#475467; }
+    .discount-issue-row { display:grid; grid-template-columns:1fr auto auto; gap:12px; align-items:center; border:1px solid var(--border); border-radius:14px; background:#fff; padding:12px; margin-bottom:8px; }
+    .nr-admin-preview-card-demo { position:relative; min-height:260px; padding:0!important; border:1px solid #e5e7eb; border-radius:18px; background:#fff; overflow:hidden; display:block!important; }
+    .nr-card-image-demo { height:155px; background:linear-gradient(135deg,#dbeafe,#f5d0fe); border-bottom:1px solid #e5e7eb; position:relative; }
+    .nr-card-copy-demo { padding:16px; }
+    .pre-card-badge[data-overlay="true"] { position:absolute; z-index:2; box-shadow:0 8px 22px rgba(15,23,42,.12); }
+    .pre-card-badge[data-position="image_top_left"] { top:12px; left:12px; }
+    .pre-card-badge[data-position="image_top_right"] { top:12px; right:12px; }
+    .pre-card-badge[data-position="image_bottom_left"] { bottom:12px; left:12px; }
+    .pre-card-badge[data-position="image_bottom_right"] { bottom:12px; right:12px; }
+    .nr-admin-preview-card-demo[data-position="under_title_right"] .pre-card-badge { margin-left:auto; display:flex!important; width:max-content; }
+    @media(max-width:1000px){.discount-status-grid,.discount-grid{grid-template-columns:1fr}.render-name-card{grid-template-columns:1fr}}
+
   </style>
   <link rel="stylesheet" href="/module-shell.css?v=cart-rewards-module-1">
 </head>
@@ -637,19 +666,20 @@
         <div class="nav-group">
           <p class="nav-title">Manage</p>
           <button class="tab-btn active" onclick="window.tab('v-dash')">Dashboard</button>
-          <button class="tab-btn" onclick="window.tab('v-mgr')">Review Manager</button>
+          <button class="tab-btn" onclick="window.tab('v-mgr')">Reviews</button>
           <button class="tab-btn" onclick="window.tab('v-msg')">Messaging &amp; Campaigns ✉️</button>
+          <button class="tab-btn" onclick="window.tab('v-style')">Reviews Visual Customiser</button>
+          <button class="tab-btn" onclick="window.tab('v-loyalty')">Loyalty <span class="pill">Beta</span></button>
           <button class="tab-btn" onclick="window.tab('v-import')">Import CSV</button>
         </div>
         <div class="nav-group">
           <p class="nav-title">Configuration</p>
-          <button class="tab-btn" onclick="window.tab('v-settings')">Rules &amp; Settings</button>
-          <button class="tab-btn" onclick="window.tab('v-style')">Visual Customiser</button>
+          <button class="tab-btn" onclick="window.tab('v-settings')">App Settings &amp; Render Names</button>
         </div>
         <div class="nav-group">
-          <p class="nav-title">Future Products</p>
-          <button class="tab-btn" onclick="window.tab('v-discounts')">Discounts <span class="pill">Soon</span></button>
-          <button class="tab-btn" onclick="window.tab('v-loyalty')">Loyalty <span class="pill">Beta</span></button>
+          <p class="nav-title">Products</p>
+          <button class="tab-btn" onclick="window.tab('v-mgr')">Reviews</button>
+          <button class="tab-btn" onclick="window.tab('v-discounts')">Discounts</button>
           <button class="tab-btn" onclick="window.tab('v-referrals')">Referrals <span class="pill">Soon</span></button>
         </div>
         <div class="nav-group">
@@ -844,6 +874,21 @@
             </div>
           </div>
         </div>
+                  <div class="panel settings-card settings-wide-card">
+            <div class="settings-card-header"><div><h3>Widget render names &amp; manual Liquid hooks</h3><p>Use these names/selectors when a merchant wants to paste custom Liquid into core theme files instead of using Shopify app blocks.</p></div><button class="secondary-btn" type="button" onclick="window.loadRenderNames?.()">Refresh</button></div>
+            <div class="settings-card-body">
+              <div id="widget-render-names" class="render-name-list"><p class="muted">Loading widget render names…</p></div>
+            </div>
+          </div>
+          <div class="panel settings-card settings-wide-card">
+            <div class="settings-card-header"><div><h3>Product configuration tabs</h3><p>Shared configuration belongs here. Reviews, loyalty, discounts and referrals can each have their own settings without crowding the product screens.</p></div></div>
+            <div class="settings-card-body config-tabs-mini">
+              <button type="button" class="secondary-btn" onclick="window.tab('v-settings')">Reviews config</button>
+              <button type="button" class="secondary-btn" onclick="window.tab('v-loyalty'); setTimeout(()=>document.querySelector('[data-loyalty-tab=settings]')?.click(),50)">Loyalty config</button>
+              <button type="button" class="secondary-btn" onclick="window.tab('v-discounts')">Discount config</button>
+              <button type="button" class="secondary-btn" onclick="window.tab('v-referrals')">Referral config</button>
+            </div>
+          </div>
       </section>
 
       <section id="v-style" class="view">
@@ -888,7 +933,7 @@
               <div class="style-control-grid full">
                 <div><label>Star Size (px)</label><input id="card-star" class="premium-input" type="number" value="14" min="10" max="32" oninput="window.updatePreviews()" /></div>
                 <div><label>Badge layout</label><select id="card-badge-layout" class="filter-select" onchange="window.updatePreviews()"><option value="pill">Pill badge</option><option value="button">Button badge</option><option value="compact">Compact stars</option><option value="stacked">Stacked under title</option><option value="plain">Plain text</option></select></div>
-                <div><label>Badge position</label><select id="card-badge-position" class="filter-select" onchange="window.updatePreviews()"><option value="above">Above product title</option><option value="below">Below product title</option><option value="inline">Inline with title</option></select></div>
+                <div><label>Badge position</label><select id="card-badge-position" class="filter-select" onchange="window.updatePreviews()"><option value="above">Above product title</option><option value="below">Below product title</option><option value="inline">Inline with title</option><option value="under_title_right">Under title / right aligned</option><option value="image_top_left">Overlap image top left</option><option value="image_top_right">Overlap image top right</option><option value="image_bottom_left">Overlap image bottom left</option><option value="image_bottom_right">Overlap image bottom right</option></select></div>
                 <div><label>Badge background</label><input id="card-badge-bg" class="premium-input color-text" type="text" value="#111827" placeholder="none or #111827" oninput="window.updatePreviews()" /></div>
                 <div><label>Badge text colour</label><input id="card-badge-text" class="premium-input color-text" type="text" value="#ffffff" placeholder="#ffffff" oninput="window.updatePreviews()" /></div>
                 <div><label>Badge star colour</label><input id="card-badge-star" class="premium-input color-text" type="text" value="#ffc700" placeholder="#ffc700" oninput="window.updatePreviews()" /></div>
@@ -923,12 +968,58 @@
         </div>
       </section>
 
-      <section id="v-discounts" class="view"><h2 class="page-title">Discounts</h2><div class="panel lock-box"><h3>Discounts module placeholder</h3><p class="muted">Reserved for review-linked incentives, discount rules, and Shopify Function-backed offers. The module is intentionally inactive while the foundation is secured.</p></div></section>
+      <section id="v-discounts" class="view">
+        <div class="dash-header">
+          <div>
+            <h2 class="page-title">Discounts</h2>
+            <p class="dash-subtitle">Shared discount engine for Reviews, Loyalty, Cart Rewards and future Referrals. Build templates once, then connect them to milestones, checkout redemption and reward emails.</p>
+          </div>
+          <button class="primary-btn" type="button" onclick="window.saveDiscountConfig?.()">Save Discount Settings</button>
+        </div>
+        <div class="discount-status-grid">
+          <div class="panel discount-mini"><span>Status</span><strong id="discount-status-text">Loading…</strong><p>Use draft mode first, then switch individual templates to native Shopify codes when scopes are confirmed.</p></div>
+          <div class="panel discount-mini"><span>Connected products</span><strong>Reviews · Loyalty · Cart Rewards</strong><p>Review milestones and loyalty checkout can both use this module.</p></div>
+          <div class="panel discount-mini"><label class="loyalty-pill"><input id="discount-enabled" type="checkbox"> Enable discounts module</label><p>Controls whether reward products can issue codes automatically.</p></div>
+        </div>
+        <div class="discount-grid">
+          <div class="panel discount-card">
+            <h3>Discount template builder</h3>
+            <p class="muted">Create reusable reward types. These appear in Loyalty rewards and Review milestone flows.</p>
+            <div class="loyalty-form-grid">
+              <label class="loyalty-field">Template name<input id="discount-name" class="premium-input" value="10th review reward"></label>
+              <label class="loyalty-field">Product area<select id="discount-area" class="filter-select"><option value="reviews">Reviews</option><option value="loyalty">Loyalty</option><option value="cart_rewards">Cart Rewards</option><option value="referrals">Referrals</option><option value="general">General</option></select></label>
+              <label class="loyalty-field">Trigger<select id="discount-trigger" class="filter-select"><option value="review_milestone">Review milestone</option><option value="review_approved">Review approved</option><option value="loyalty_redemption">Loyalty redemption</option><option value="checkout_redemption">Checkout redemption</option><option value="cart_reward_claimed">Cart reward claimed</option><option value="manual">Manual issue</option></select></label>
+              <label class="loyalty-field">Milestone count<input id="discount-milestone" class="premium-input" type="number" value="10"></label>
+              <label class="loyalty-field">Discount type<select id="discount-type" class="filter-select"><option value="percentage">Percentage</option><option value="fixed_amount">Fixed amount</option><option value="free_shipping">Free shipping</option></select></label>
+              <label class="loyalty-field">Value<input id="discount-value" class="premium-input" type="number" value="10"></label>
+              <label class="loyalty-field">Code prefix<input id="discount-prefix" class="premium-input" value="REVIEW10"></label>
+              <label class="loyalty-field">Issue method<select id="discount-method" class="filter-select"><option value="draft_only">Draft / reserve only</option><option value="native_shopify_code">Native Shopify discount code</option></select></label>
+              <label class="loyalty-field">Minimum cart subtotal<input id="discount-minimum" class="premium-input" type="number" value="0"></label>
+              <label class="loyalty-field">Usage limit<input id="discount-usage" class="premium-input" type="number" value="1"></label>
+            </div>
+            <div class="style-switch-row">
+              <label class="style-check-card"><input id="discount-once" type="checkbox" checked><span>Once per customer<small>Recommended for review and loyalty rewards.</small></span></label>
+              <label class="style-check-card"><input id="discount-template-enabled" type="checkbox" checked><span>Template active<small>Inactive templates can stay saved as drafts.</small></span></label>
+            </div>
+            <label class="loyalty-field">Email body<textarea id="discount-email-body" class="premium-input" rows="3">Thanks — your reward code is {{ code }}.</textarea></label>
+            <div class="loyalty-actions"><button class="secondary-btn" type="button" onclick="window.addDiscountTemplate?.()">Add template</button><button class="primary-btn" type="button" onclick="window.issueManualDiscount?.()">Issue test code</button></div>
+          </div>
+          <div class="panel discount-card">
+            <h3>Template list</h3>
+            <p class="muted">Saved templates can be used by Review milestones, Loyalty rewards and Cart Rewards.</p>
+            <div id="discount-template-list" class="loyalty-list"><p class="muted">Loading templates…</p></div>
+          </div>
+        </div>
+        <div class="panel discount-card">
+          <div class="settings-card-header"><div><h3>Issued / reserved codes</h3><p>Draft codes are recorded in-app. Native codes are created in Shopify when that template uses native mode and scopes are present.</p></div><button class="secondary-btn" type="button" onclick="window.loadDiscountConfig?.()">Refresh</button></div>
+          <div id="discount-issue-list" class="loyalty-list"><p class="muted">No codes issued yet.</p></div>
+        </div>
+      </section>
       <section id="v-loyalty" class="view">
         <div class="dash-header">
           <div>
             <h2 class="page-title">Loyalty</h2>
-            <p class="dash-subtitle">Private, store-scoped rewards. The ledger uses a hashed customer reference only, while each shop can name points, tiers and rewards.</p>
+            <p class="dash-subtitle">Manage loyalty points, reward emails, userboard balances and checkout redemption. Discounts are issued through the shared Discounts module.</p>
           </div>
           <button class="primary-btn" type="button" onclick="window.saveLoyaltyConfig()">Save Loyalty Settings</button>
         </div>
@@ -1102,7 +1193,7 @@
             <button type="button" class="docs-tab-btn" data-doc-tab="messaging" onclick="window.docsTab('messaging')">Messaging</button>
             <button type="button" class="docs-tab-btn" data-doc-tab="storefront" onclick="window.docsTab('storefront')">Storefront</button>
             <button type="button" class="docs-tab-btn" data-doc-tab="security" onclick="window.docsTab('security')">Security &amp; Verification</button>
-            <button type="button" class="docs-tab-btn" data-doc-tab="future" onclick="window.docsTab('future')">Future Products</button>
+            <button type="button" class="docs-tab-btn" data-doc-tab="future" onclick="window.docsTab('future')">Product Roadmap</button>
           </div>
 
           <div id="docs-reviews" class="docs-pane active">

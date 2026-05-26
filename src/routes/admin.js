@@ -494,6 +494,8 @@ router.patch('/settings', async (req, res, next) => {
         showVerifiedLabel: body.widgetStyles?.showVerifiedLabel !== false,
         sliderTrackColor: cleanText(body.widgetStyles?.sliderTrackColor || '#e6ebf1', 20),
         sliderKnobColor: cleanText(body.widgetStyles?.sliderKnobColor || '#111111', 20),
+        widgetBackground: cleanText(body.widgetStyles?.widgetBackground || 'none', 30),
+        reviewCardBackground: cleanText(body.widgetStyles?.reviewCardBackground || '#ffffff', 30),
       },
       cardStyles: {
         starSize: clampNumber(body.cardStyles?.starSize, 10, 40, 14),
@@ -502,6 +504,10 @@ router.patch('/settings', async (req, res, next) => {
         badgeTextColor: cleanText(body.cardStyles?.badgeTextColor || '#ffffff', 20),
         badgeStarColor: cleanText(body.cardStyles?.badgeStarColor || body.cardStyles?.starColor || '#ffc700', 20),
         badgeRadius: clampNumber(body.cardStyles?.badgeRadius, 0, 999, 999),
+        badgeLayout: ['pill','button','compact','stacked','plain'].includes(body.cardStyles?.badgeLayout) ? body.cardStyles.badgeLayout : 'pill',
+        badgePosition: ['above','below','inline','under_title_right','image_top_left','image_top_right','image_bottom_left','image_bottom_right'].includes(body.cardStyles?.badgePosition) ? body.cardStyles.badgePosition : 'below',
+        badgePadding: cleanText(body.cardStyles?.badgePadding || '6px 12px', 40),
+        badgeLabel: cleanText(body.cardStyles?.badgeLabel || '4.8 (12)', 80),
       },
       carouselStyles: {
         layout: ['grid', 'infinite', 'masonry'].includes(body.carouselStyles?.layout) ? body.carouselStyles.layout : 'infinite',

@@ -35,6 +35,9 @@ const loyaltyPointsRuleSchema = new mongoose.Schema({
   minStars: { type: Number, default: 1, min: 1, max: 5 },
   maxAwardsPerOrder: { type: Number, default: 1, min: 0, max: 50 },
   purchaseMultiplierEligible: { type: Boolean, default: true },
+  purchasePointsMode: { type: String, enum: ['fixed', 'per_currency'], default: 'fixed' },
+  purchasePointsPerCurrency: { type: Number, default: 1, min: 0 },
+  purchaseCurrencyUnit: { type: Number, default: 1, min: 0 },
   conditions: { type: [loyaltyConditionSchema], default: [] },
 }, { _id: false });
 
@@ -110,6 +113,10 @@ const loyaltyProgramSchema = new mongoose.Schema({
   enabled: { type: Boolean, default: false },
   privacyMode: { type: String, default: 'hashed_customer_ref' },
   pointName: { type: String, default: 'Points' },
+  pointNameSingular: { type: String, default: 'Point' },
+  pointNamePlural: { type: String, default: 'Points' },
+  pointIcon: { type: String, default: '' },
+  pointIconType: { type: String, enum: ['emoji', 'image', 'none'], default: 'none' },
   emailTemplates: { type: [loyaltyEmailTemplateSchema], default: [] },
   emailModuleLibrary: { type: [loyaltyEmailModuleSchema], default: [] },
   tiers: { type: [loyaltyTierSchema], default: [] },

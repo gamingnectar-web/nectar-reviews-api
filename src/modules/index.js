@@ -1,5 +1,6 @@
 const { listModules } = require('./moduleRegistry');
 const { mountCartRewardsModule, startCartRewardsJobs } = require('./cart-rewards');
+const { mountDiscountsModule, startDiscountJobs } = require('./discounts');
 
 let moduleJobsStarted = false;
 
@@ -11,13 +12,15 @@ function mountPlatformModules(app, deps = {}) {
   });
 
   // Reviews routes are still mounted by the existing app.js route order.
-  // Cart Rewards is fully folderised and mounted here.
+  // Discounts and Cart Rewards are folderised modules mounted here.
+  mountDiscountsModule(app, deps);
   mountCartRewardsModule(app, deps);
 }
 
 function startPlatformModuleJobs() {
   if (moduleJobsStarted) return;
   moduleJobsStarted = true;
+  startDiscountJobs();
   startCartRewardsJobs();
 }
 

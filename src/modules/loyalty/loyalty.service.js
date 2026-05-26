@@ -30,6 +30,10 @@ function defaultLoyaltyConfig(shopDomain) {
     enabled: false,
     privacyMode: 'hashed_customer_ref',
     pointName: 'Points',
+    pointNameSingular: 'Point',
+    pointNamePlural: 'Points',
+    pointIcon: '⚡',
+    pointIconType: 'emoji',
     emailModuleLibrary: [
       { id: 'module_reward_box', name: 'Reward box', type: 'reward_box', title: 'Reward unlocked', body: 'Your reward is ready to use on your next order.', backgroundEnabled: true, backgroundColor: '#f8fafc', backgroundOpacity: 100, borderEnabled: true, borderColor: '#e5e7eb', borderWidth: 1, radius: 16, padding: 16, position: 'after_body', alignment: 'left' },
       { id: 'module_offer', name: 'Offer', type: 'offer', title: 'A little extra', body: 'Add an optional offer, perk, or message here.', backgroundEnabled: true, backgroundColor: '#fff7ed', backgroundOpacity: 100, borderEnabled: true, borderColor: '#fed7aa', borderWidth: 1, radius: 16, padding: 16, position: 'after_reward', alignment: 'left' },
@@ -68,6 +72,9 @@ function defaultLoyaltyConfig(shopDomain) {
         minStars: 1,
         maxAwardsPerOrder: 1,
         purchaseMultiplierEligible: true,
+        purchasePointsMode: 'fixed',
+        purchasePointsPerCurrency: 1,
+        purchaseCurrencyUnit: 1,
         conditions: [],
       },
       {
@@ -81,6 +88,9 @@ function defaultLoyaltyConfig(shopDomain) {
         minStars: 1,
         maxAwardsPerOrder: 0,
         purchaseMultiplierEligible: true,
+        purchasePointsMode: 'fixed',
+        purchasePointsPerCurrency: 1,
+        purchaseCurrencyUnit: 1,
         conditions: [],
       },
       {
@@ -244,6 +254,9 @@ function cleanPointsRule(input = {}) {
     minStars: clampNumber(input.minStars, 1, 5, 1),
     maxAwardsPerOrder: clampNumber(input.maxAwardsPerOrder, 0, 50, 1),
     purchaseMultiplierEligible: input.purchaseMultiplierEligible !== false,
+    purchasePointsMode: input.purchasePointsMode === 'per_currency' ? 'per_currency' : 'fixed',
+    purchasePointsPerCurrency: clampNumber(input.purchasePointsPerCurrency, 0, 100000, 1),
+    purchaseCurrencyUnit: clampNumber(input.purchaseCurrencyUnit, 0.01, 100000, 1),
     conditions: Array.isArray(input.conditions) ? input.conditions.slice(0, 10).map(cleanCondition) : [],
   };
 }
@@ -254,7 +267,11 @@ function cleanLoyaltyConfig(shopDomain, body = {}) {
     shopDomain,
     enabled: Boolean(body.enabled),
     privacyMode: 'hashed_customer_ref',
-    pointName: cleanText(body.pointName || defaults.pointName, 80),
+    pointName: cleanText(body.pointName || body.pointNamePlural || defaults.pointName, 80),
+    pointNameSingular: cleanText(body.pointNameSingular || defaults.pointNameSingular || 'Point', 80),
+    pointNamePlural: cleanText(body.pointNamePlural || body.pointName || defaults.pointNamePlural || 'Points', 80),
+    pointIcon: cleanText(body.pointIcon || defaults.pointIcon || '', 400),
+    pointIconType: ['emoji', 'image', 'none'].includes(body.pointIconType) ? body.pointIconType : (body.pointIcon ? 'emoji' : 'none'),
     emailModuleLibrary: Array.isArray(body.emailModuleLibrary)
       ? body.emailModuleLibrary.slice(0, 50).map(cleanEmailModule)
       : defaults.emailModuleLibrary,

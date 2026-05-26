@@ -9,6 +9,16 @@ const modules = [
     adminFolder: 'public/modules/reviews',
     apiNamespace: '/api/admin'
   },
+
+  {
+    id: 'discounts',
+    productSlug: 'discounts',
+    label: 'Discounts',
+    description: 'Shared discount engine for reviews, loyalty, cart rewards and referrals.',
+    status: 'active',
+    adminFolder: 'public/modules/discounts',
+    apiNamespace: '/api/admin/discounts'
+  },
   {
     id: 'cart-rewards',
     productSlug: 'cart-rewards',

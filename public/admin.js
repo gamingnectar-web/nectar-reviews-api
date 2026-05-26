@@ -340,7 +340,7 @@ function hydrateSettings(config) {
     if (document.getElementById('card-badge-star')) document.getElementById('card-badge-star').value = config.cardStyles.badgeStarColor || config.cardStyles.starColor || '#ffc700';
     if (document.getElementById('card-badge-radius')) document.getElementById('card-badge-radius').value = config.cardStyles.badgeRadius ?? 999;
     setValueIfExists('card-badge-layout', config.cardStyles.badgeLayout || 'pill');
-    setValueIfExists('card-badge-position', config.cardStyles.badgePosition || 'above');
+    setValueIfExists('card-badge-position', config.cardStyles.badgePosition || 'below');
     setValueIfExists('card-badge-padding', config.cardStyles.badgePadding || '6px 12px');
     setValueIfExists('card-badge-label', config.cardStyles.badgeLabel || '4.8 (12)');
   }
@@ -733,7 +733,7 @@ window.updatePreviews = function() {
   const badgeStar = getValue('card-badge-star', star);
   const badgeRadius = `${getValue('card-badge-radius', '999')}px`;
   const badgeLayout = getValue('card-badge-layout', 'pill');
-  const badgePosition = getValue('card-badge-position', 'above');
+  const badgePosition = getValue('card-badge-position', 'below');
   const badgePadding = getValue('card-badge-padding', '6px 12px');
   const badgeLabel = getValue('card-badge-label', '4.8 (12)');
 
@@ -782,9 +782,20 @@ window.updatePreviews = function() {
 
   const card = document.getElementById('preview-card');
   if (card) {
-    const badgeMarkup = `<span id="pre-card-badge" class="pre-card-badge" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;min-width:76px;padding:${escapeHtml(badgePadding)};border-radius:${badgeRadius};background:${badgeBg};color:${badgeText};font-weight:800;"><span id="pre-card-icon" style="font-size:${cardStar};color:${badgeStar};">★</span> <span id="pre-card-count" style="display:${getChecked('card-count', true) ? 'inline' : 'none'}">${escapeHtml(badgeLabel)}</span></span>`;
+    const overlayPositions = ['image_top_left', 'image_top_right', 'image_bottom_left', 'image_bottom_right'];
+    const isOverlay = overlayPositions.includes(badgePosition);
+    const badgeMarkup = `<span id="pre-card-badge" class="pre-card-badge" data-overlay="${isOverlay ? 'true' : 'false'}" data-position="${escapeHtml(badgePosition)}" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;min-width:76px;padding:${escapeHtml(badgePadding)};border-radius:${badgeRadius};background:${badgeBg};color:${badgeText};font-weight:800;"><span id="pre-card-icon" style="font-size:${cardStar};color:${badgeStar};">★</span> <span id="pre-card-count" style="display:${getChecked('card-count', true) ? 'inline' : 'none'}">${escapeHtml(badgeLabel)}</span></span>`;
     const titleMarkup = `<h4 class="pre-card-title">Sample Product</h4><p>$29.99</p>`;
-    card.innerHTML = `<div class="nr-admin-preview-card-demo" data-layout="${escapeHtml(badgeLayout)}" data-position="${escapeHtml(badgePosition)}">${badgePosition === 'below' ? `${titleMarkup}${badgeMarkup}` : badgePosition === 'inline' ? `${titleMarkup}${badgeMarkup}` : `${badgeMarkup}${titleMarkup}`}</div>`;
+    const content = badgePosition === 'below'
+      ? `${titleMarkup}${badgeMarkup}`
+      : badgePosition === 'inline'
+        ? `<div style="display:flex;align-items:center;gap:10px;justify-content:space-between;">${titleMarkup}${badgeMarkup}</div>`
+        : badgePosition === 'under_title_right'
+          ? `${titleMarkup}${badgeMarkup}`
+          : isOverlay
+            ? `${titleMarkup}`
+            : `${badgeMarkup}${titleMarkup}`;
+    card.innerHTML = `<div class="nr-admin-preview-card-demo" data-layout="${escapeHtml(badgeLayout)}" data-position="${escapeHtml(badgePosition)}"><div class="nr-card-image-demo">${isOverlay ? badgeMarkup : ''}</div><div class="nr-card-copy-demo">${content}</div></div>`;
   }
 
   const carousel = document.getElementById('preview-carousel');
@@ -836,7 +847,7 @@ window.saveSettings = async function() {
       badgeStarColor: document.getElementById('card-badge-star')?.value || '#ffc700',
       badgeRadius: parseInt(document.getElementById('card-badge-radius')?.value || '999', 10),
       badgeLayout: getValue('card-badge-layout', 'pill'),
-      badgePosition: getValue('card-badge-position', 'above'),
+      badgePosition: getValue('card-badge-position', 'below'),
       badgePadding: getValue('card-badge-padding', '6px 12px'),
       badgeLabel: getValue('card-badge-label', '4.8 (12)'),
     },
@@ -1617,3 +1628,103 @@ window.initLoyaltyTabs = function() {
 };
 
 setTimeout(() => { window.initLoyaltyTabs?.(); window.updateLoyaltyPreview?.(); window.updateLoyaltyCheckoutPreview?.(); }, 400);
+
+
+(function(){
+  const esc = (value) => (typeof window.escapeHtml === 'function' ? window.escapeHtml(value) : String(value ?? '').replace(/[&<>"']/g, (m)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])));
+  const uid = (prefix) => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(16).slice(2,8)}`;
+  const discountState = { config: null, templates: [], issues: [] };
+  const api = (path, options={}) => window.adminFetch(path, options);
+  const toast = (message) => (window.showToast || console.log)(message);
+
+  function templateFromForm() {
+    return {
+      id: uid('discount_template'),
+      name: document.getElementById('discount-name')?.value || 'Reward discount',
+      enabled: Boolean(document.getElementById('discount-template-enabled')?.checked),
+      area: document.getElementById('discount-area')?.value || 'general',
+      trigger: document.getElementById('discount-trigger')?.value || 'manual',
+      milestoneCount: Number(document.getElementById('discount-milestone')?.value || 0),
+      codePrefix: document.getElementById('discount-prefix')?.value || 'NECTAR',
+      method: document.getElementById('discount-method')?.value || 'draft_only',
+      discountType: document.getElementById('discount-type')?.value || 'percentage',
+      discountValue: Number(document.getElementById('discount-value')?.value || 0),
+      minimumSubtotal: Number(document.getElementById('discount-minimum')?.value || 0),
+      usageLimit: Number(document.getElementById('discount-usage')?.value || 1),
+      oncePerCustomer: Boolean(document.getElementById('discount-once')?.checked),
+      appliesTo: document.getElementById('discount-type')?.value === 'free_shipping' ? 'shipping' : 'all_products',
+      emailBody: document.getElementById('discount-email-body')?.value || 'Thanks — your reward code is {{ code }}.',
+      conditions: [],
+    };
+  }
+
+  function renderDiscountTemplates() {
+    const status = document.getElementById('discount-status-text');
+    if (status) status.textContent = discountState.config?.enabled ? 'Enabled' : 'Configured / inactive';
+    const enabled = document.getElementById('discount-enabled');
+    if (enabled) enabled.checked = Boolean(discountState.config?.enabled);
+    const list = document.getElementById('discount-template-list');
+    if (list) {
+      list.innerHTML = (discountState.templates || []).map((t, i) => `
+        <div class="discount-template-card">
+          <div class="discount-template-head">
+            <div><h4>${esc(t.name || 'Discount template')}</h4><p>${esc(t.area)} · ${esc(t.trigger)}${Number(t.milestoneCount||0) ? ' · milestone '+Number(t.milestoneCount) : ''}</p></div>
+            <div class="loyalty-small-actions"><button class="secondary-btn" type="button" onclick="window.editDiscountTemplate(${i})">Edit</button><button class="loyalty-icon-btn loyalty-danger" type="button" onclick="window.removeDiscountTemplate(${i})">×</button></div>
+          </div>
+          <div class="discount-badges"><span class="discount-badge">${esc(t.discountType)} ${Number(t.discountValue||0)}</span><span class="discount-badge">${esc(t.method || 'draft_only')}</span><span class="discount-badge">${t.enabled===false?'Inactive':'Active'}</span><span class="discount-badge">${t.oncePerCustomer===false?'multi-use':'once/customer'}</span></div>
+        </div>`).join('') || '<p class="muted">No discount templates yet.</p>';
+    }
+  }
+
+  function renderDiscountIssues() {
+    const box = document.getElementById('discount-issue-list'); if (!box) return;
+    box.innerHTML = (discountState.issues || []).map((row) => `
+      <div class="discount-issue-row"><div><strong>${esc(row.code || 'Draft code')}</strong><span class="muted-small">${esc(row.templateName || row.area)} · ${esc(row.trigger)} · ${new Date(row.createdAt || Date.now()).toLocaleString()}</span>${row.errorMessage ? `<span class="muted-small" style="color:#b42318">${esc(row.errorMessage)}</span>` : ''}</div><span class="loyalty-pill ${row.status === 'issued' ? 'good' : row.status === 'failed' ? 'optout' : 'beta'}">${esc(row.status)}</span><strong>${esc(row.discountType)} ${Number(row.discountValue||0)}</strong></div>`).join('') || '<p class="muted">No codes issued yet.</p>';
+  }
+
+  window.loadDiscountConfig = async function(){
+    if (!document.getElementById('v-discounts')) return;
+    try {
+      const [config, issues] = await Promise.all([
+        api('/admin/discounts/config'),
+        api('/admin/discounts/issues?limit=50').catch(()=>({ rows: [] })),
+      ]);
+      discountState.config = config || {};
+      discountState.templates = Array.isArray(config?.templates) ? config.templates.map(x=>({...x})) : [];
+      discountState.issues = issues.rows || [];
+      renderDiscountTemplates(); renderDiscountIssues();
+    } catch (error) { console.warn('Discount config load failed', error); }
+  };
+  window.saveDiscountConfig = async function(){
+    try {
+      const payload = { ...(discountState.config || {}), enabled: Boolean(document.getElementById('discount-enabled')?.checked), templates: discountState.templates };
+      const saved = await api('/admin/discounts/config', { method:'PATCH', body: JSON.stringify(payload) });
+      discountState.config = saved || payload; discountState.templates = Array.isArray(saved?.templates) ? saved.templates.map(x=>({...x})) : discountState.templates;
+      renderDiscountTemplates(); toast('Discount settings saved.');
+    } catch (error) { toast(error.message || 'Could not save discount settings.'); }
+  };
+  window.addDiscountTemplate = function(){ discountState.templates.push(templateFromForm()); renderDiscountTemplates(); toast('Discount template added. Save settings to keep it.'); };
+  window.removeDiscountTemplate = function(i){ discountState.templates.splice(i,1); renderDiscountTemplates(); };
+  window.editDiscountTemplate = function(i){
+    const t = discountState.templates[i]; if (!t) return;
+    const set = (id,v) => { const el=document.getElementById(id); if (el) { if (el.type==='checkbox') el.checked=Boolean(v); else el.value=v ?? ''; } };
+    set('discount-name', t.name); set('discount-area', t.area); set('discount-trigger', t.trigger); set('discount-milestone', t.milestoneCount || 0); set('discount-type', t.discountType); set('discount-value', t.discountValue || 0); set('discount-prefix', t.codePrefix || 'NECTAR'); set('discount-method', t.method || 'draft_only'); set('discount-minimum', t.minimumSubtotal || 0); set('discount-usage', t.usageLimit || 1); set('discount-once', t.oncePerCustomer !== false); set('discount-template-enabled', t.enabled !== false); set('discount-email-body', t.emailBody || '');
+    toast('Template loaded into builder. Update values and add it as a new version, or remove the old one.');
+  };
+  window.issueManualDiscount = async function(){
+    try {
+      const override = templateFromForm();
+      const issue = await api('/admin/discounts/issue', { method:'POST', body: JSON.stringify({ area: override.area, trigger: override.trigger, override }) });
+      discountState.issues.unshift(issue.issue || issue); renderDiscountIssues(); toast('Discount code reserved/issued.');
+    } catch (error) { toast(error.message || 'Could not issue discount code.'); }
+  };
+  window.loadRenderNames = async function(){
+    const box = document.getElementById('widget-render-names'); if (!box) return;
+    try {
+      const data = await api('/admin/discounts/render-names');
+      box.innerHTML = (data.rows || []).map(row => `<div class="render-name-card"><div><strong>${esc(row.area)}</strong><p class="muted-small">${esc(row.name)}</p></div><div><code>Liquid block: ${esc(row.liquidBlock)}</code><code>Render selector: ${esc(row.renderSelector)}</code><code>API: ${esc(row.api)}</code>${row.script ? `<code>Script: ${esc(row.script)}</code>` : ''}</div></div>`).join('') || '<p class="muted">No render names available.</p>';
+    } catch (error) { box.innerHTML = `<p class="muted">Could not load render names: ${esc(error.message || '')}</p>`; }
+  };
+  document.addEventListener('change', (e)=>{ if (e.target?.id === 'discount-enabled') window.saveDiscountConfig?.(); });
+  setTimeout(()=>{ window.loadDiscountConfig?.(); window.loadRenderNames?.(); }, 800);
+})();

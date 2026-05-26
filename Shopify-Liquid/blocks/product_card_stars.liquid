@@ -34,9 +34,30 @@
         var config = results[1] || {};
         var card = config.cardStyles || {};
         var starColor = card.badgeStarColor || card.starColor || '{{ block.settings.star_color }}' || '#ffc700';
+        var bg = card.badgeBackground || 'transparent';
+        var text = card.badgeTextColor || 'inherit';
+        var radius = card.badgeRadius != null ? card.badgeRadius : 999;
+        var padding = card.badgePadding || '4px 8px';
+        var layout = card.badgeLayout || 'compact';
+        var position = card.badgePosition || 'below';
         if (card.starSize) el.style.setProperty('font-size', Number(card.starSize || 14) + 'px', 'important');
+        el.setAttribute('data-nectar-badge-layout', layout);
+        el.setAttribute('data-nectar-badge-position', position);
+        el.style.setProperty('border-radius', Number(radius) + 'px', 'important');
+        el.style.setProperty('padding', padding, 'important');
+        el.style.setProperty('background', String(bg).toLowerCase() === 'none' ? 'transparent' : bg, 'important');
+        el.style.setProperty('color', text, 'important');
+        el.style.setProperty('z-index', '4', 'important');
+        if (['image_top_left','image_top_right','image_bottom_left','image_bottom_right'].indexOf(position) >= 0) {
+          var host = el.closest('.card-wrapper,.card,.product-card,.grid__item,.product-grid-item') || el.parentElement;
+          if (host) host.style.position = host.style.position || 'relative';
+          el.style.setProperty('position', 'absolute', 'important');
+          el.style.setProperty(position.indexOf('top') >= 0 ? 'top' : 'bottom', '10px', 'important');
+          el.style.setProperty(position.indexOf('left') >= 0 ? 'left' : 'right', '10px', 'important');
+        }
         if (!json.count) return;
-        el.innerHTML = '<span aria-hidden="true" style="color:' + escapeHtml(starColor) + '!important;">★</span> <strong>' + Number(json.average || 0).toFixed(1) + '</strong> <span>(' + escapeHtml(json.count) + ')</span>';
+        var label = card.badgeLabel || (Number(json.average || 0).toFixed(1) + ' (' + json.count + ')');
+        el.innerHTML = '<span aria-hidden="true" style="color:' + escapeHtml(starColor) + '!important;">★</span> <strong>' + escapeHtml(label).replace('4.8', Number(json.average || 0).toFixed(1)).replace('(12)', '(' + escapeHtml(json.count) + ')') + '</strong>';
       }).catch(function(){});
     });
   });

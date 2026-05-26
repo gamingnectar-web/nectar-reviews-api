@@ -68,6 +68,8 @@ const settingsSchema = new mongoose.Schema({
     showVerifiedLabel: { type: Boolean, default: true },
     sliderTrackColor: { type: String, default: '#e6ebf1' },
     sliderKnobColor: { type: String, default: '#111111' },
+    widgetBackground: { type: String, default: 'none' },
+    reviewCardBackground: { type: String, default: '#ffffff' },
   },
   cardStyles: {
     starSize: { type: Number, default: 14 },
@@ -76,6 +78,10 @@ const settingsSchema = new mongoose.Schema({
     badgeTextColor: { type: String, default: '#ffffff' },
     badgeStarColor: { type: String, default: '#ffc700' },
     badgeRadius: { type: Number, default: 999 },
+    badgeLayout: { type: String, default: 'pill' },
+    badgePosition: { type: String, default: 'below' },
+    badgePadding: { type: String, default: '6px 12px' },
+    badgeLabel: { type: String, default: '4.8 (12)' },
   },
   carouselStyles: {
     layout: { type: String, enum: ['grid', 'infinite', 'masonry'], default: 'infinite' },

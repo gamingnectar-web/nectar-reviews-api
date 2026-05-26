@@ -1,6 +1,6 @@
 {
   "name": "reviews-platform-api",
-  "version": "1.2.10-v25-polish-analytics-visual",
+  "version": "1.2.11-v25-discounts-loyalty-polish",
   "description": "Reviews Platform API with v25 review/loyalty logic and advanced modular Cart Rewards suite",
   "main": "server.js",
   "scripts": {

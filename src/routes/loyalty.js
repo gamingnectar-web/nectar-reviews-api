@@ -21,6 +21,7 @@ const {
   maturePendingPoints,
   recalculateCustomerState,
 } = require('../modules/loyalty/loyalty.service');
+const { issueDiscountCode: issueSharedDiscountCode } = require('../modules/discounts/discounts.service');
 
 const router = express.Router();
 router.use(requireAdminSession);
@@ -428,9 +429,24 @@ router.post('/redemptions', async (req, res, next) => {
     let discountCode = '';
     let privateNote = 'Reward redeemed from admin. No Shopify discount code was issued.';
     if (reward.type === 'discount' && reward.discountMode === 'native_discount_code') {
-      discountCode = makeLoyaltyDiscountCode();
-      await createShopifyDiscountCode({ shopDomain, title: `Loyalty reward ${discountCode}`, reward, code: discountCode });
-      privateNote = 'Native Shopify discount code issued for loyalty redemption.';
+      const issued = await issueSharedDiscountCode({
+        shopDomain,
+        templateId: 'loyalty_checkout_default',
+        area: 'loyalty',
+        trigger: 'loyalty_redemption',
+        customerRefHash,
+        sourceId: reward.id,
+        override: {
+          code: makeLoyaltyDiscountCode(),
+          method: 'native_shopify_code',
+          discountType: reward.discountValueType || 'fixed_amount',
+          discountValue: Number(reward.discountValue || 0),
+          minimumSubtotal: Number(reward.minimumCartValue || 0),
+          privateNote: 'Issued by loyalty redemption via shared Discounts module.',
+        },
+      });
+      discountCode = issued.code;
+      privateNote = 'Native Shopify discount code issued through shared Discounts module.';
     }
     const row = await createLedgerEntry({
       shopDomain,
