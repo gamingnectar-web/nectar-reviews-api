@@ -1,36 +1,26 @@
-{% assign nectar_app_url = block.settings.app_url | default: 'https://nectar-reviews-api.onrender.com' %}
-{% assign nectar_shop_domain = shop.permanent_domain | default: shop.domain %}
-
+{% comment %}
+Nectar product review widget block.
+Place this on product templates to render review summary + approved review cards.
+{% endcomment %}
+{{ 'nectar-review-page.css' | asset_url | stylesheet_tag }}
 <div
-  class="rev-widget nectar-reviews-widget"
-  data-nectar-reviews
-  data-id="{{ product.id }}"
+  class="nectar-review-widget"
+  data-nectar-review-widget
+  data-shop-domain="{{ shop.permanent_domain }}"
   data-product-id="{{ product.id }}"
-  data-shop="{{ nectar_shop_domain }}"
-  data-shop-domain="{{ nectar_shop_domain }}"
-  data-product-tags="{{ product.tags | join: "," | escape }}"
-  data-product-type="{{ product.type | escape }}"
-  data-product-vendor="{{ product.vendor | escape }}"
-  data-product-handle="{{ product.handle | escape }}"
-></div>
-
-<script>
-  window.NECTAR_SHOP_DOMAIN = window.NECTAR_SHOP_DOMAIN || {{ nectar_shop_domain | json }};
-  window.NECTAR_API_BASE = window.NECTAR_API_BASE || {{ nectar_app_url | append: '/api' | json }};
-</script>
-<script src="{{ nectar_app_url }}/review-widget.js" defer data-api-base="{{ nectar_app_url }}/api" data-shop-domain="{{ nectar_shop_domain }}"></script>
-
+  data-app-url="{{ block.settings.app_url }}"
+  data-limit="{{ block.settings.review_limit }}"
+>
+  Loading reviews…
+</div>
+<script src="{{ 'widget.js' | asset_url }}" defer></script>
 {% schema %}
 {
-  "name": "Review Widget",
+  "name": "Nectar reviews",
   "target": "section",
   "settings": [
-    {
-      "type": "text",
-      "id": "app_url",
-      "label": "Nectar app URL",
-      "default": "https://nectar-reviews-api.onrender.com"
-    }
+    { "type": "url", "id": "app_url", "label": "Nectar app URL", "default": "https://nectar-reviews-api.onrender.com" },
+    { "type": "range", "id": "review_limit", "label": "Reviews to show", "min": 1, "max": 24, "step": 1, "default": 6 }
   ]
 }
 {% endschema %}

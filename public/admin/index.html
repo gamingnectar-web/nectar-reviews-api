@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nectar Admin</title>
+  <link rel="stylesheet" href="/admin/shell.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">N</div>
+        <div><strong>Nectar</strong><span>Modular admin</span></div>
+      </div>
+      <div class="shop-box">
+        <label>Shop domain</label>
+        <input data-shop-input placeholder="your-store.myshopify.com" />
+        <button data-save-shop>Use shop</button>
+      </div>
+      <nav data-nav></nav>
+      <button class="settings-link" data-open-settings>Module settings</button>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Nectar API</p>
+          <h1 data-page-title>Loading</h1>
+        </div>
+        <div class="status-pill" data-status>Connecting</div>
+      </header>
+      <section data-content class="content-card"></section>
+    </main>
+  </div>
+
+  <template data-settings-template>
+    <section class="module-page settings-page">
+      <div class="module-header">
+        <div>
+          <p class="eyebrow">Core</p>
+          <h1>Module settings</h1>
+          <p>Turn product areas on or off per merchant. Disabled modules disappear from navigation and their APIs are blocked.</p>
+        </div>
+      </div>
+      <section class="panel">
+        <h2>Enabled modules</h2>
+        <div data-module-toggles class="toggle-grid"></div>
+      </section>
+    </section>
+  </template>
+
+  <script src="/admin/shell.js"></script>
+</body>
+</html>

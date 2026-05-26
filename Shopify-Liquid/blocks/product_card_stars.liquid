@@ -1,56 +1,23 @@
-{% assign nectar_app_url = block.settings.app_url | default: 'https://nectar-reviews-api.onrender.com' %}
-{% assign nectar_shop_domain = shop.permanent_domain | default: shop.domain %}
-
+{% comment %}
+Nectar product-card stars block/snippet.
+Use on product cards where product is available in Liquid context.
+{% endcomment %}
 <span
-  class="nectar-product-card-stars"
-  data-nectar-card-stars
+  class="nectar-review-summary nectar-product-card-stars"
+  data-nectar-review-summary
+  data-shop-domain="{{ shop.permanent_domain }}"
   data-product-id="{{ product.id }}"
-  data-shop-domain="{{ nectar_shop_domain }}"
-  data-api-base="{{ nectar_app_url }}/api"
-  style="display:inline-flex;align-items:center;gap:4px;min-height:18px;font-size:{{ block.settings.font_size }}px;color:{{ block.settings.star_color }};"
+  data-app-url="{{ block.settings.app_url }}"
 >
-  {% if product.metafields.reviews.rating_count.value > 0 %}
-    ★ {{ product.metafields.reviews.rating.value | round: 1 }} ({{ product.metafields.reviews.rating_count.value }})
-  {% endif %}
+  ★★★★★ <span class="nectar-review-count">Loading…</span>
 </span>
-
-<script>
-(function(){
-  function ready(fn){ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn); else fn(); }
-  function escapeHtml(value){ return String(value || '').replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]; }); }
-  ready(function(){
-    document.querySelectorAll('.nectar-product-card-stars[data-nectar-card-stars]').forEach(function(el){
-      if (el.dataset.loaded === 'true') return;
-      el.dataset.loaded = 'true';
-      var api = (el.dataset.apiBase || 'https://nectar-reviews-api.onrender.com/api').replace(/\/$/, '');
-      var shopDomain = el.dataset.shopDomain || (window.Shopify && window.Shopify.shop) || window.location.hostname;
-      var productId = el.dataset.productId;
-      if (!shopDomain || !productId) return;
-      Promise.all([
-        fetch(api + '/reviews/summary?shopDomain=' + encodeURIComponent(shopDomain) + '&itemId=' + encodeURIComponent(productId) + '&t=' + Date.now(), { cache: 'no-store' }).then(function(res){ return res.ok ? res.json() : null; }).catch(function(){ return null; }),
-        fetch(api + '/widget/config?shopDomain=' + encodeURIComponent(shopDomain) + '&t=' + Date.now(), { cache: 'no-store' }).then(function(res){ return res.ok ? res.json() : null; }).catch(function(){ return null; })
-      ]).then(function(results){
-        var json = results[0] || {};
-        var config = results[1] || {};
-        var card = config.cardStyles || {};
-        var starColor = card.badgeStarColor || card.starColor || '{{ block.settings.star_color }}' || '#ffc700';
-        if (card.starSize) el.style.setProperty('font-size', Number(card.starSize || 14) + 'px', 'important');
-        if (!json.count) return;
-        el.innerHTML = '<span aria-hidden="true" style="color:' + escapeHtml(starColor) + '!important;">★</span> <strong>' + Number(json.average || 0).toFixed(1) + '</strong> <span>(' + escapeHtml(json.count) + ')</span>';
-      }).catch(function(){});
-    });
-  });
-})();
-</script>
-
+<script src="{{ 'widget.js' | asset_url }}" defer></script>
 {% schema %}
 {
-  "name": "Product Card Stars",
+  "name": "Nectar product-card stars",
   "target": "section",
   "settings": [
-    { "type": "text", "id": "app_url", "label": "Nectar app URL", "default": "https://nectar-reviews-api.onrender.com" },
-    { "type": "color", "id": "star_color", "label": "Star colour", "default": "#ffc700" },
-    { "type": "range", "id": "font_size", "min": 10, "max": 22, "step": 1, "unit": "px", "label": "Font size", "default": 14 }
+    { "type": "url", "id": "app_url", "label": "Nectar app URL", "default": "https://nectar-reviews-api.onrender.com" }
   ]
 }
 {% endschema %}

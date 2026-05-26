@@ -1,24 +1,19 @@
-name = "Loyalty checkout redemption"
+name = "Nectar loyalty redemption"
 type = "ui_extension"
-api_version = "2026-04"
+uid = "nectar-loyalty-redemption"
+api_version = "2026-07"
 
 [[extensions.targeting]]
-target = "purchase.checkout.block.render"
 module = "./src/Checkout.jsx"
-
-[extensions.capabilities]
-api_access = true
-network_access = true
+target = "purchase.checkout.block.render"
 
 [extensions.settings]
 [[extensions.settings.fields]]
 key = "app_url"
 type = "single_line_text_field"
-name = "App API URL"
-description = "Example: https://your-render-app.onrender.com"
+name = "App URL"
 
 [[extensions.settings.fields]]
 key = "shop_domain"
 type = "single_line_text_field"
-name = "Permanent shop domain"
-description = "Example: example.myshopify.com"
+name = "Shop domain"

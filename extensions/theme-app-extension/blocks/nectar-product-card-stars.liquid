@@ -1,0 +1,23 @@
+{% comment %}
+Nectar product-card stars block/snippet.
+Use on product cards where product is available in Liquid context.
+{% endcomment %}
+<span
+  class="nectar-review-summary nectar-product-card-stars"
+  data-nectar-review-summary
+  data-shop-domain="{{ shop.permanent_domain }}"
+  data-product-id="{{ product.id }}"
+  data-app-url="{{ block.settings.app_url }}"
+>
+  ★★★★★ <span class="nectar-review-count">Loading…</span>
+</span>
+<script src="{{ 'nectar-reviews-widget.js' | asset_url }}" defer></script>
+{% schema %}
+{
+  "name": "Nectar product-card stars",
+  "target": "section",
+  "settings": [
+    { "type": "url", "id": "app_url", "label": "Nectar app URL", "default": "https://nectar-reviews-api.onrender.com" }
+  ]
+}
+{% endschema %}

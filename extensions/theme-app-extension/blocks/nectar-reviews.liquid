@@ -1,0 +1,26 @@
+{% comment %}
+Nectar product review widget block.
+Place this on product templates to render review summary + approved review cards.
+{% endcomment %}
+{{ 'nectar-review-page.css' | asset_url | stylesheet_tag }}
+<div
+  class="nectar-review-widget"
+  data-nectar-review-widget
+  data-shop-domain="{{ shop.permanent_domain }}"
+  data-product-id="{{ product.id }}"
+  data-app-url="{{ block.settings.app_url }}"
+  data-limit="{{ block.settings.review_limit }}"
+>
+  Loading reviews…
+</div>
+<script src="{{ 'nectar-reviews-widget.js' | asset_url }}" defer></script>
+{% schema %}
+{
+  "name": "Nectar reviews",
+  "target": "section",
+  "settings": [
+    { "type": "url", "id": "app_url", "label": "Nectar app URL", "default": "https://nectar-reviews-api.onrender.com" },
+    { "type": "range", "id": "review_limit", "label": "Reviews to show", "min": 1, "max": 24, "step": 1, "default": 6 }
+  ]
+}
+{% endschema %}

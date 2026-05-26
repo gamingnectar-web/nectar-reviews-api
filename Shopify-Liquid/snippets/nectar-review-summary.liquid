@@ -1,0 +1,13 @@
+{% comment %}
+Nectar review summary mount snippet.
+Accepts product, shop and app_url from the parent block.
+{% endcomment %}
+<div
+  class="nectar-review-summary"
+  data-nectar-review-summary
+  data-shop-domain="{{ shop.permanent_domain }}"
+  data-product-id="{{ product.id }}"
+  data-app-url="{{ app_url | default: block.settings.app_url }}"
+>
+  <span class="nectar-summary-loading">Loading reviews…</span>
+</div>

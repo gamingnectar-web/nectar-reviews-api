@@ -1,73 +1,29 @@
-{% assign nectar_app_url = block.settings.app_url | default: 'https://nectar-reviews-api.onrender.com' %}
-{% assign nectar_shop_domain = shop.permanent_domain | default: shop.domain %}
-
-<section
-  class="nectar-global-carousel"
-  data-nectar-carousel
-  data-shop-domain="{{ nectar_shop_domain }}"
-  data-api-base="{{ nectar_app_url }}/api"
+{% comment %}
+Nectar approved review carousel. Can show global reviews or product-specific reviews.
+{% endcomment %}
+{{ 'nectar-review-page.css' | asset_url | stylesheet_tag }}
+<div
+  class="nectar-review-carousel"
+  data-nectar-review-carousel
+  data-shop-domain="{{ shop.permanent_domain }}"
+  data-product-id="{% if block.settings.scope == 'product' and product %}{{ product.id }}{% endif %}"
+  data-app-url="{{ block.settings.app_url }}"
   data-limit="{{ block.settings.review_limit }}"
-  style="--nr-card-width:{{ block.settings.card_width }}px;--nr-card-radius:{{ block.settings.card_radius }}px;--nr-star-color:{{ block.settings.star_color }};--nr-text-color:{{ block.settings.text_color }};--nr-muted-color:{{ block.settings.muted_color }};padding:{{ block.settings.section_padding_y }}px {{ block.settings.section_padding_x }}px;max-width:{% if block.settings.width_mode == 'full' %}none{% else %}{{ block.settings.max_width }}px{% endif %};margin:0 auto;"
 >
-  {% if block.settings.title != blank %}
-    <h2 style="margin:0 0 20px;color:{{ block.settings.heading_color }};">{{ block.settings.title }}</h2>
-  {% endif %}
-  <div class="nectar-carousel-track" data-nectar-carousel-track>
-    <div style="color:{{ block.settings.muted_color }};">Loading reviews…</div>
-  </div>
-</section>
-
-<script>
-(function(){
-  function ready(fn){ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn); else fn(); }
-  function esc(v){ return String(v || '').replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]; }); }
-  function stars(rating){ var n=Math.max(0,Math.min(5,Math.round(Number(rating||0)))); return '★'.repeat(n) + '☆'.repeat(5-n); }
-  ready(function(){
-    document.querySelectorAll('[data-nectar-carousel]').forEach(function(root){
-      var api = (root.dataset.apiBase || 'https://nectar-reviews-api.onrender.com/api').replace(/\/$/, '');
-      var shopDomain = root.dataset.shopDomain || (window.Shopify && window.Shopify.shop) || window.location.hostname;
-      var limit = root.dataset.limit || '10';
-      var track = root.querySelector('[data-nectar-carousel-track]');
-      if (!track || !shopDomain) return;
-      fetch(api + '/global-reviews?shopDomain=' + encodeURIComponent(shopDomain) + '&limit=' + encodeURIComponent(limit))
-        .then(function(res){ return res.ok ? res.json() : []; })
-        .then(function(reviews){
-          if (!reviews.length) { track.innerHTML = '<div>No reviews yet.</div>'; return; }
-          track.innerHTML = reviews.map(function(r){
-            return '<article class="nectar-carousel-card"><div class="nectar-carousel-stars">' + stars(r.rating) + '</div><h3>' + esc(r.headline || 'Review') + '</h3><p>' + esc(r.comment || '') + '</p><strong>' + esc(r.userId || 'Customer') + (r.verifiedPurchase ? ' ✓' : '') + '</strong></article>';
-          }).join('');
-        })
-        .catch(function(){ track.innerHTML = '<div>Reviews could not be loaded.</div>'; });
-    });
-  });
-})();
-</script>
-
-<style>
-  .nectar-carousel-track{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:8px;}
-  .nectar-carousel-card{flex:0 0 var(--nr-card-width,340px);scroll-snap-align:start;border:1px solid #e5e7eb;background:#fff;border-radius:var(--nr-card-radius,16px);padding:22px;color:var(--nr-text-color,#111827);min-height:210px;}
-  .nectar-carousel-stars{color:var(--nr-star-color,#ffc700);letter-spacing:1px;margin-bottom:10px;}
-  .nectar-carousel-card h3{margin:0 0 10px;font-size:18px;}.nectar-carousel-card p{color:var(--nr-muted-color,#4b5563);line-height:1.55;}.nectar-carousel-card strong{display:block;margin-top:14px;}
-</style>
-
+  Loading reviews…
+</div>
+<script src="{{ 'widget.js' | asset_url }}" defer></script>
 {% schema %}
 {
-  "name": "Global Review Carousel",
+  "name": "Nectar review carousel",
   "target": "section",
   "settings": [
-    { "type": "text", "id": "app_url", "label": "Nectar app URL", "default": "https://nectar-reviews-api.onrender.com" },
-    { "type": "text", "id": "title", "label": "Heading", "default": "Loved by our customers" },
-    { "type": "select", "id": "width_mode", "label": "Widget width", "default": "fixed", "options": [ { "value": "fixed", "label": "Fixed width" }, { "value": "full", "label": "Full width" } ] },
-    { "type": "range", "id": "max_width", "min": 900, "max": 1800, "step": 50, "unit": "px", "label": "Fixed max width", "default": 1400 },
-    { "type": "range", "id": "section_padding_x", "min": 0, "max": 80, "step": 4, "unit": "px", "label": "Side padding", "default": 24 },
-    { "type": "range", "id": "section_padding_y", "min": 0, "max": 100, "step": 4, "unit": "px", "label": "Top/bottom padding", "default": 40 },
-    { "type": "range", "id": "review_limit", "min": 3, "max": 20, "step": 1, "label": "Maximum reviews to show", "default": 10 },
-    { "type": "range", "id": "card_width", "min": 240, "max": 460, "step": 10, "unit": "px", "label": "Card width", "default": 340 },
-    { "type": "range", "id": "card_radius", "min": 0, "max": 36, "step": 2, "unit": "px", "label": "Card corner radius", "default": 16 },
-    { "type": "color", "id": "heading_color", "label": "Heading colour", "default": "#111827" },
-    { "type": "color", "id": "text_color", "label": "Text colour", "default": "#111827" },
-    { "type": "color", "id": "muted_color", "label": "Review text colour", "default": "#4b5563" },
-    { "type": "color", "id": "star_color", "label": "Star colour", "default": "#ffc700" }
+    { "type": "url", "id": "app_url", "label": "Nectar app URL", "default": "https://nectar-reviews-api.onrender.com" },
+    { "type": "select", "id": "scope", "label": "Review source", "default": "product", "options": [
+      { "value": "product", "label": "Current product" },
+      { "value": "global", "label": "All approved reviews" }
+    ]},
+    { "type": "range", "id": "review_limit", "label": "Reviews to show", "min": 3, "max": 24, "step": 1, "default": 12 }
   ]
 }
 {% endschema %}

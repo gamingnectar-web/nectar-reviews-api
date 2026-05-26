@@ -1,0 +1,22 @@
+{% comment %}
+Nectar Cart Rewards block for cart drawer/cart page surfaces.
+{% endcomment %}
+{{ 'nectar-reviews.css' | asset_url | stylesheet_tag }}
+<div
+  class="nectar-cart-rewards"
+  data-nectar-cart-rewards
+  data-shop-domain="{{ shop.permanent_domain }}"
+  data-app-url="{{ block.settings.app_url }}"
+>
+  Loading cart rewards…
+</div>
+<script src="{{ 'cart-rewards-widget.js' | asset_url }}" defer></script>
+{% schema %}
+{
+  "name": "Nectar cart rewards",
+  "target": "section",
+  "settings": [
+    { "type": "url", "id": "app_url", "label": "Nectar app URL", "default": "https://nectar-reviews-api.onrender.com" }
+  ]
+}
+{% endschema %}

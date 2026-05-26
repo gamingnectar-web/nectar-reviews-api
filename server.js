@@ -1,17 +1,20 @@
 require('dotenv').config();
 
-const app = require('./src/app');
-const { connectDb } = require('./src/config/db');
-const { env } = require('./src/config/env'); const { startPlatformModuleJobs } = require('./src/modules');
+const { createApp } = require('./src/app');
+const { connectDatabase } = require('./src/config/database');
+const { env } = require('./src/config/env');
 
 async function start() {
-  await connectDb(); startPlatformModuleJobs();
+  await connectDatabase();
+
+  const app = createApp();
+
   app.listen(env.port, () => {
-    console.log(`✅ Reviews Platform API running on port ${env.port}`);
+    console.log(`Nectar modular API running on port ${env.port}`);
   });
 }
 
 start().catch((error) => {
-  console.error('❌ Failed to start Reviews Platform API:', error);
+  console.error('Failed to start Nectar API:', error);
   process.exit(1);
 });

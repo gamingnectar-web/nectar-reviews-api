@@ -1,0 +1,22 @@
+{% comment %}
+Compact Nectar star badge for product headers or collection cards.
+{% endcomment %}
+<span
+  class="nectar-review-summary nectar-star-badge"
+  data-nectar-review-summary
+  data-shop-domain="{{ shop.permanent_domain }}"
+  data-product-id="{{ product.id }}"
+  data-app-url="{{ block.settings.app_url }}"
+>
+  ★★★★★ <span class="nectar-review-count">Loading…</span>
+</span>
+<script src="{{ 'nectar-reviews-widget.js' | asset_url }}" defer></script>
+{% schema %}
+{
+  "name": "Nectar star badge",
+  "target": "section",
+  "settings": [
+    { "type": "url", "id": "app_url", "label": "Nectar app URL", "default": "https://nectar-reviews-api.onrender.com" }
+  ]
+}
+{% endschema %}

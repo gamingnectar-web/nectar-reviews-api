@@ -1,23 +1,29 @@
 {
-  "name": "reviews-platform-api",
-  "version": "1.2.4-loyalty-modules-foundation",
-  "description": "Reviews Platform API - loyalty module foundation with customer sync, modular emails, rewards and discount-code flow",
+  "name": "nectar-reviews-api",
+  "version": "2.0.1-modular-liquid-complete",
+  "description": "Nectar modular Shopify reviews, loyalty, discounts, cart rewards and campaigns API.",
   "main": "server.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check src/app.js && find src public Shopify-Liquid/assets -name '*.js' -print0 | xargs -0 -n1 node --check",
-    "cart-rewards:smoke": "node scripts/cart-rewards-smoke-test.js"
-  },
-  "engines": {
-    "node": ">=18"
+    "dev": "nodemon server.js",
+    "check": "node -c server.js && node scripts/check-structure.js && node scripts/check-liquid-structure.js",
+    "structure": "node scripts/check-structure.js",
+    "liquid:check": "node scripts/check-liquid-structure.js"
   },
   "dependencies": {
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "mongoose": "^8.3.2",
-    "nodemailer": "^6.9.16",
-    "luxon": "^3.5.0",
-    "node-cron": "^3.0.3"
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "mongoose": "^8.9.5",
+    "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
   }
 }

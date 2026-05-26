@@ -3,32 +3,20 @@ query RunInput {
     lines {
       id
       quantity
-      attribute(key: "_nectar_reward") {
-        value
-      }
-      campaignId: attribute(key: "_nectar_campaign_id") {
-        value
-      }
-      tierId: attribute(key: "_nectar_tier_id") {
-        value
-      }
-      rewardId: attribute(key: "_nectar_reward_id") {
-        value
-      }
-      claimToken: attribute(key: "_nectar_claim_token") {
-        value
-      }
       merchandise {
         __typename
         ... on ProductVariant {
           id
+          product { id }
         }
       }
+      attribute(key: "_nectar_reward") { value }
+      claimToken: attribute(key: "_nectar_claim_token") { value }
+      campaignId: attribute(key: "_nectar_campaign_id") { value }
+      tierId: attribute(key: "_nectar_tier_id") { value }
     }
   }
-  discount {
-    metafield(namespace: "$app:nectar-cart-rewards", key: "function-config") {
-      value
-    }
+  discountNode {
+    metafield(namespace: "nectar", key: "cart_reward_config") { value }
   }
 }

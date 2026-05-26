@@ -1,0 +1,29 @@
+{% comment %}
+Nectar approved review carousel. Can show global reviews or product-specific reviews.
+{% endcomment %}
+{{ 'nectar-review-page.css' | asset_url | stylesheet_tag }}
+<div
+  class="nectar-review-carousel"
+  data-nectar-review-carousel
+  data-shop-domain="{{ shop.permanent_domain }}"
+  data-product-id="{% if block.settings.scope == 'product' and product %}{{ product.id }}{% endif %}"
+  data-app-url="{{ block.settings.app_url }}"
+  data-limit="{{ block.settings.review_limit }}"
+>
+  Loading reviews…
+</div>
+<script src="{{ 'nectar-reviews-widget.js' | asset_url }}" defer></script>
+{% schema %}
+{
+  "name": "Nectar review carousel",
+  "target": "section",
+  "settings": [
+    { "type": "url", "id": "app_url", "label": "Nectar app URL", "default": "https://nectar-reviews-api.onrender.com" },
+    { "type": "select", "id": "scope", "label": "Review source", "default": "product", "options": [
+      { "value": "product", "label": "Current product" },
+      { "value": "global", "label": "All approved reviews" }
+    ]},
+    { "type": "range", "id": "review_limit", "label": "Reviews to show", "min": 3, "max": 24, "step": 1, "default": 12 }
+  ]
+}
+{% endschema %}

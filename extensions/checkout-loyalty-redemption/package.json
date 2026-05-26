@@ -1,11 +1,14 @@
 {
-  "name": "checkout-loyalty-redemption-extension",
-  "version": "0.1.0-beta",
+  "name": "nectar-checkout-loyalty-redemption",
+  "version": "0.1.0",
   "private": true,
+  "scripts": {
+    "build": "shopify app build",
+    "dev": "shopify app dev"
+  },
   "dependencies": {
-    "@shopify/ui-extensions": "latest",
     "@shopify/ui-extensions-react": "latest",
-    "preact": "latest"
+    "react": "latest"
   },
   "devDependencies": {}
 }
