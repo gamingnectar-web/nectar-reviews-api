@@ -193,9 +193,11 @@ function cleanTier(input = {}) {
     name: cleanText(input.name || 'Tier', 80),
     threshold: clampNumber(input.threshold, 0, 100000000, 0),
     multiplier: clampNumber(input.multiplier, 0, 100, 1),
+    pointsPerCurrency: clampNumber(input.pointsPerCurrency, 0, 100000, Number(input.multiplier || 1)),
     perks: cleanText(input.perks || '', 400),
     ruleIds: Array.isArray(input.ruleIds) ? input.ruleIds.slice(0, 30).map((id) => cleanText(id, 80)).filter(Boolean) : [],
     rewardIds: Array.isArray(input.rewardIds) ? input.rewardIds.slice(0, 30).map((id) => cleanText(id, 80)).filter(Boolean) : [],
+    customBenefits: Array.isArray(input.customBenefits) ? input.customBenefits.slice(0, 20).map((item) => cleanText(item, 160)).filter(Boolean) : [],
     birthdayRewardEnabled: Boolean(input.birthdayRewardEnabled),
   };
 }

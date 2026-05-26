@@ -240,14 +240,14 @@ async function issueDiscountCode({ shopDomain, templateId = '', area = 'general'
 }
 
 function renderNames(shopDomain) {
-  const apiBase = `${env.appUrl || 'https://nectar-reviews-api.onrender.com'}/api`;
   return [
-    { area: 'Reviews', name: 'Customer Reviews Widget', liquidBlock: 'Customer Reviews / bulk_review_page', renderSelector: '[data-nectar-review-widget]', script: `${env.appUrl || ''}/review-widget.js`, api: `${apiBase}/reviews` },
-    { area: 'Reviews', name: 'Product Card Stars', liquidBlock: 'Product Card Stars', renderSelector: '[data-nectar-card-stars]', api: `${apiBase}/reviews/summary` },
-    { area: 'Reviews', name: 'Global Review Carousel', liquidBlock: 'Review Carousel', renderSelector: '[data-nectar-review-carousel]', api: `${apiBase}/global-reviews` },
-    { area: 'Cart Rewards', name: 'Cart Rewards Widget', liquidBlock: 'Cart Rewards Widget', renderSelector: '[data-nectar-cart-rewards]', api: `${apiBase}/cart-rewards/storefront` },
-    { area: 'Loyalty', name: 'Checkout Loyalty Redemption', liquidBlock: 'Checkout UI extension', renderSelector: 'checkout-loyalty-redemption', api: `${apiBase}/loyalty/checkout/wallet` },
-    { area: 'Discounts', name: 'Discount Engine', liquidBlock: 'No storefront block required', renderSelector: 'server-side-discount-module', api: `${apiBase}/admin/discounts` },
+    { area: 'Reviews', name: 'Customer Reviews Widget', appBlock: 'Customer Reviews / bulk_review_page', liquidRender: "{% render 'bulk_review_page' %}", selector: '[data-nectar-review-widget]', themeTarget: 'main-product.liquid or product template section' },
+    { area: 'Reviews', name: 'Product Card Stars', appBlock: 'Product Card Stars', liquidRender: "{% render 'product_card_stars', product: product %}", selector: '[data-nectar-card-stars]', themeTarget: 'card-product.liquid / product-card snippet' },
+    { area: 'Reviews', name: 'Star Badge', appBlock: 'Star Badge', liquidRender: "{% render 'star_badge', product: product %}", selector: '[data-nectar-star-badge]', themeTarget: 'collection cards, featured collection, product recommendations' },
+    { area: 'Reviews', name: 'Global Review Carousel', appBlock: 'Review Carousel', liquidRender: "{% render 'carousel' %}", selector: '[data-nectar-review-carousel]', themeTarget: 'homepage, landing page, footer social-proof section' },
+    { area: 'Cart Rewards', name: 'Cart Rewards Widget', appBlock: 'Cart Rewards Widget', liquidRender: "{% render 'cart-rewards-widget' %}", selector: '[data-nectar-cart-rewards]', themeTarget: 'cart drawer, cart page or mini-cart snippet' },
+    { area: 'Loyalty', name: 'Checkout Loyalty Redemption', appBlock: 'Checkout UI extension', liquidRender: 'Checkout UI extension: checkout-loyalty-redemption', selector: 'checkout extension target', themeTarget: 'Shopify checkout extension, not theme Liquid' },
+    { area: 'Discounts', name: 'Discount Engine', appBlock: 'No storefront block', liquidRender: 'Server-side module only: connect from Reviews/Loyalty/Cart Rewards', selector: 'no theme selector', themeTarget: 'Admin/API configuration only' },
   ].map((row) => ({ ...row, shopDomain }));
 }
 

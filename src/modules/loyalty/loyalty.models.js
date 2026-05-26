@@ -81,9 +81,11 @@ const loyaltyTierSchema = new mongoose.Schema({
   name: { type: String, required: true },
   threshold: { type: Number, default: 0, min: 0 },
   multiplier: { type: Number, default: 1, min: 0 },
+  pointsPerCurrency: { type: Number, default: 1, min: 0 },
   perks: { type: String, default: '' },
   ruleIds: { type: [String], default: [] },
   rewardIds: { type: [String], default: [] },
+  customBenefits: { type: [String], default: [] },
   birthdayRewardEnabled: { type: Boolean, default: false },
 }, { _id: false });
 

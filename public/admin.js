@@ -1673,13 +1673,20 @@ setTimeout(() => { window.initLoyaltyTabs?.(); window.updateLoyaltyPreview?.(); 
           </div>
           <div class="discount-badges"><span class="discount-badge">${esc(t.discountType)} ${Number(t.discountValue||0)}</span><span class="discount-badge">${esc(t.method || 'draft_only')}</span><span class="discount-badge">${t.enabled===false?'Inactive':'Active'}</span><span class="discount-badge">${t.oncePerCustomer===false?'multi-use':'once/customer'}</span></div>
         </div>`).join('') || '<p class="muted">No discount templates yet.</p>';
+      const ddl = document.getElementById('discount-test-template');
+      if (ddl) ddl.innerHTML = '<option value="">Use builder values</option>' + (discountState.templates || []).map((t) => `<option value="${esc(t.id)}">${esc(t.name || 'Discount template')} — ${esc(t.area)} / ${esc(t.trigger)}</option>`).join('');
     }
   }
 
   function renderDiscountIssues() {
     const box = document.getElementById('discount-issue-list'); if (!box) return;
-    box.innerHTML = (discountState.issues || []).map((row) => `
-      <div class="discount-issue-row"><div><strong>${esc(row.code || 'Draft code')}</strong><span class="muted-small">${esc(row.templateName || row.area)} · ${esc(row.trigger)} · ${new Date(row.createdAt || Date.now()).toLocaleString()}</span>${row.errorMessage ? `<span class="muted-small" style="color:#b42318">${esc(row.errorMessage)}</span>` : ''}</div><span class="loyalty-pill ${row.status === 'issued' ? 'good' : row.status === 'failed' ? 'optout' : 'beta'}">${esc(row.status)}</span><strong>${esc(row.discountType)} ${Number(row.discountValue||0)}</strong></div>`).join('') || '<p class="muted">No codes issued yet.</p>';
+    box.innerHTML = (discountState.issues || []).map((row) => {
+      const created = new Date(row.createdAt || row.issuedAt || Date.now()).toLocaleString();
+      const used = row.usedAt ? new Date(row.usedAt).toLocaleString() : 'Not used yet';
+      const recipient = row.email ? ` · ${esc(row.email)}` : '';
+      const source = row.sourceId ? ` · Source: ${esc(row.sourceId)}` : '';
+      return `<div class="discount-issue-row"><div><strong>${esc(row.templateName || row.area || 'Discount code')}</strong><span class="muted-small">${esc(row.trigger)}${recipient}${source}</span><br><code>${esc(row.code || 'Draft code')}</code>${row.privateNote ? `<span class="muted-small">${esc(row.privateNote)}</span>` : ''}${row.errorMessage ? `<span class="muted-small" style="color:#b42318">${esc(row.errorMessage)}</span>` : ''}</div><span class="loyalty-pill ${row.status === 'issued' ? 'good' : row.status === 'failed' ? 'optout' : row.status === 'used' ? 'good' : 'beta'}">${esc(row.status)}</span><div class="muted-small"><strong>Created</strong><br>${created}<br><strong>Used</strong><br>${used}</div><strong>${esc(row.discountType)} ${Number(row.discountValue||0)}</strong></div>`;
+    }).join('') || '<p class="muted">No codes issued yet.</p>';
   }
 
   window.loadDiscountConfig = async function(){
@@ -1714,15 +1721,23 @@ setTimeout(() => { window.initLoyaltyTabs?.(); window.updateLoyaltyPreview?.(); 
   window.issueManualDiscount = async function(){
     try {
       const override = templateFromForm();
-      const issue = await api('/admin/discounts/issue', { method:'POST', body: JSON.stringify({ area: override.area, trigger: override.trigger, override }) });
-      discountState.issues.unshift(issue.issue || issue); renderDiscountIssues(); toast('Discount code reserved/issued.');
+      const selectedTemplateId = document.getElementById('discount-test-template')?.value || '';
+      const issue = await api('/admin/discounts/issue', { method:'POST', body: JSON.stringify({
+        templateId: selectedTemplateId,
+        area: override.area,
+        trigger: override.trigger,
+        sourceId: document.getElementById('discount-test-source')?.value || 'manual_test',
+        email: document.getElementById('discount-test-email')?.value || '',
+        override: { ...override, privateNote: document.getElementById('discount-test-note')?.value || 'Manual tracked test issue' }
+      }) });
+      discountState.issues.unshift(issue.issue || issue); renderDiscountIssues(); toast('Discount code reserved/issued and added to tracking.');
     } catch (error) { toast(error.message || 'Could not issue discount code.'); }
   };
   window.loadRenderNames = async function(){
     const box = document.getElementById('widget-render-names'); if (!box) return;
     try {
       const data = await api('/admin/discounts/render-names');
-      box.innerHTML = (data.rows || []).map(row => `<div class="render-name-card"><div><strong>${esc(row.area)}</strong><p class="muted-small">${esc(row.name)}</p></div><div><code>Liquid block: ${esc(row.liquidBlock)}</code><code>Render selector: ${esc(row.renderSelector)}</code><code>API: ${esc(row.api)}</code>${row.script ? `<code>Script: ${esc(row.script)}</code>` : ''}</div></div>`).join('') || '<p class="muted">No render names available.</p>';
+      box.innerHTML = (data.rows || []).map(row => `<div class="render-name-card"><div><strong>${esc(row.area)}</strong><p class="muted-small">${esc(row.name)}</p><span class="render-hook-label">${esc(row.themeTarget || 'Theme placement')}</span></div><div><code>Shopify app block: ${esc(row.appBlock || row.liquidBlock || '')}</code><code>Liquid render: ${esc(row.liquidRender || '')}</code><code>Theme selector: ${esc(row.selector || row.renderSelector || '')}</code></div></div>`).join('') || '<p class="muted">No render names available.</p>';
     } catch (error) { box.innerHTML = `<p class="muted">Could not load render names: ${esc(error.message || '')}</p>`; }
   };
   document.addEventListener('change', (e)=>{ if (e.target?.id === 'discount-enabled') window.saveDiscountConfig?.(); });
