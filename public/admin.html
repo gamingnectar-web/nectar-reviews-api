@@ -592,7 +592,7 @@
     .style-switch-row { display:flex; flex-wrap:wrap; gap:10px; margin:12px 0; }
     .style-check-card { display:flex; align-items:flex-start; gap:10px; padding:12px 14px; border:1px solid var(--border); border-radius:12px; background:#fbfdff; font-weight:850; }
     .style-check-card small { display:block; margin-top:3px; color:var(--text-light); font-weight:700; }
-    .nr-admin-preview { width:100%; background:#fff; border:1px solid var(--border); border-radius:16px; padding:24px; color:#111827; }
+    .nr-admin-preview { width:100%; background:var(--nr-widget-bg,#fff); border:1px solid var(--border); border-radius:16px; padding:24px; color:#111827; }
     .nr-admin-preview__header { display:flex; justify-content:space-between; align-items:center; gap:18px; margin-bottom:20px; }
     .nr-admin-preview__header[data-align="center"] { flex-direction:column; text-align:center; align-items:center; }
     .nr-admin-preview__header[data-align="right"] { flex-direction:row-reverse; text-align:right; }
@@ -609,7 +609,7 @@
     .nr-admin-preview[data-layout="compact"] .nr-admin-preview__comment { display:none; }
     .nr-admin-preview[data-layout="carousel"] .nr-admin-preview__list { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; padding-bottom:8px; }
     .nr-admin-preview[data-layout="carousel"] .nr-admin-preview__card { min-width:min(340px,80%); scroll-snap-align:start; }
-    .nr-admin-preview__card { border:1px solid var(--border); border-radius:14px; padding:20px; background:#fff; }
+    .nr-admin-preview__card { border:1px solid var(--border); border-radius:14px; padding:20px; background:var(--nr-card-bg,#fff); }.nr-admin-preview-card-demo{display:grid;gap:10px;align-items:start}.nr-admin-preview-card-demo[data-position="inline"]{grid-template-columns:minmax(0,1fr) auto;align-items:center}.nr-admin-preview-card-demo[data-position="inline"] .pre-card-title{margin:0}.nr-admin-preview-card-demo[data-layout="plain"] .pre-card-badge{background:transparent!important;padding:0!important;border:0!important}.nr-admin-preview-card-demo[data-layout="compact"] .pre-card-badge{background:transparent!important;padding:0!important}.nr-admin-preview-card-demo[data-layout="button"] .pre-card-badge{box-shadow:0 1px 3px rgba(15,23,42,.18)}.nr-admin-preview-carousel-controls{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-bottom:8px}.nr-admin-preview-carousel-controls button{width:36px;height:36px;border-radius:999px;border:1px solid var(--border);background:#fff;font-weight:950}
     .nr-admin-preview__stars { letter-spacing:2px; font-size:18px; }
     .nr-admin-preview__headline { margin:10px 0 8px; font-size:17px; font-weight:950; }
     .nr-admin-preview__comment { margin:0 0 12px; color:#475467; line-height:1.55; }
@@ -865,7 +865,7 @@
                 <div><label>Header alignment</label><select id="style-header-align" class="filter-select" onchange="window.updatePreviews()"><option value="left">Left / button right</option><option value="center">Centred</option><option value="right">Right aligned</option></select></div>
                 <div><label>Button style</label><select id="style-button-style" class="filter-select" onchange="window.updatePreviews()"><option value="solid">Solid</option><option value="pill">Pill</option><option value="outline">Outline</option></select></div>
                 <div><label>Button radius (px)</label><input id="style-button-radius" class="premium-input" type="number" min="0" max="999" value="8" oninput="window.updatePreviews()" /></div>
-                <div><label>Brand colour</label><input id="style-primary" class="premium-input color-text" type="text" value="#000000" oninput="window.updatePreviews()" /></div>
+                <div><label>Brand colour</label><input id="style-primary" class="premium-input color-text" type="text" value="#000000" placeholder="#000000" oninput="window.updatePreviews()" /></div>
                 <div><label>Star colour</label><input id="style-star" class="premium-input color-text" type="text" value="#ffc700" oninput="window.updatePreviews()" /></div>
                 <div><label>Text size (px)</label><input id="style-text" class="premium-input" type="number" value="15" oninput="window.updatePreviews()" /></div>
                 <div><label>Widget max width (px)</label><input id="style-width" class="premium-input" type="number" min="720" max="1800" value="1160" oninput="window.updatePreviews()" /></div>
@@ -873,8 +873,8 @@
                 <div><label>Review card radius (px)</label><input id="style-card-radius" class="premium-input" type="number" min="0" max="40" value="14" oninput="window.updatePreviews()" /></div>
                 <div><label>Empty state style</label><select id="style-empty-mode" class="filter-select" onchange="window.updatePreviews()"><option value="simple">Simple line</option><option value="boxed">Boxed prompt</option><option value="hidden">Hide until first review</option></select></div>
                 <div class="wide"><label>Empty state text</label><input id="style-empty-text" class="premium-input" value="No reviews yet. Be the first to write one." oninput="window.updatePreviews()" /></div>
-                <div><label>Slider track colour</label><input id="style-slider-track" class="premium-input color-text" type="text" value="#e6ebf1" oninput="window.updatePreviews()" /></div>
-                <div><label>Slider notch colour</label><input id="style-slider-knob" class="premium-input color-text" type="text" value="#111111" oninput="window.updatePreviews()" /></div>
+                <div><label>Slider track colour</label><input id="style-slider-track" class="premium-input color-text" type="text" value="#e6ebf1" placeholder="none or #e6ebf1" oninput="window.updatePreviews()" /></div>
+                <div><label>Slider notch colour</label><input id="style-slider-knob" class="premium-input color-text" type="text" value="#111111" placeholder="none or #111111" oninput="window.updatePreviews()" /></div><div><label>Widget background</label><input id="style-widget-bg" class="premium-input color-text" type="text" value="none" placeholder="none or #ffffff" oninput="window.updatePreviews()" /></div><div><label>Review card background</label><input id="style-review-card-bg" class="premium-input color-text" type="text" value="#ffffff" placeholder="none or #ffffff" oninput="window.updatePreviews()" /></div>
               </div>
               <div class="style-switch-row">
                 <label class="style-check-card"><input id="style-show-summary" type="checkbox" checked onchange="window.updatePreviews()" /><span>Show rating summary<small>Average score and rating distribution above review cards.</small></span></label>
@@ -887,10 +887,14 @@
             <div id="style-card" class="sub-view">
               <div class="style-control-grid full">
                 <div><label>Star Size (px)</label><input id="card-star" class="premium-input" type="number" value="14" min="10" max="32" oninput="window.updatePreviews()" /></div>
-                <div><label>Badge background</label><input id="card-badge-bg" class="premium-input color-text" type="text" value="#111827" oninput="window.updatePreviews()" /></div>
-                <div><label>Badge text colour</label><input id="card-badge-text" class="premium-input color-text" type="text" value="#ffffff" oninput="window.updatePreviews()" /></div>
-                <div><label>Badge star colour</label><input id="card-badge-star" class="premium-input color-text" type="text" value="#ffc700" oninput="window.updatePreviews()" /></div>
+                <div><label>Badge layout</label><select id="card-badge-layout" class="filter-select" onchange="window.updatePreviews()"><option value="pill">Pill badge</option><option value="button">Button badge</option><option value="compact">Compact stars</option><option value="stacked">Stacked under title</option><option value="plain">Plain text</option></select></div>
+                <div><label>Badge position</label><select id="card-badge-position" class="filter-select" onchange="window.updatePreviews()"><option value="above">Above product title</option><option value="below">Below product title</option><option value="inline">Inline with title</option></select></div>
+                <div><label>Badge background</label><input id="card-badge-bg" class="premium-input color-text" type="text" value="#111827" placeholder="none or #111827" oninput="window.updatePreviews()" /></div>
+                <div><label>Badge text colour</label><input id="card-badge-text" class="premium-input color-text" type="text" value="#ffffff" placeholder="#ffffff" oninput="window.updatePreviews()" /></div>
+                <div><label>Badge star colour</label><input id="card-badge-star" class="premium-input color-text" type="text" value="#ffc700" placeholder="#ffc700" oninput="window.updatePreviews()" /></div>
                 <div><label>Badge radius (px)</label><input id="card-badge-radius" class="premium-input" type="number" value="999" min="0" max="999" oninput="window.updatePreviews()" /></div>
+                <div><label>Badge padding</label><input id="card-badge-padding" class="premium-input" type="text" value="6px 12px" placeholder="e.g. 6px 12px" oninput="window.updatePreviews()" /></div>
+                <div><label>Badge label</label><input id="card-badge-label" class="premium-input" type="text" value="4.8 (12)" placeholder="e.g. 4.8 (12)" oninput="window.updatePreviews()" /></div>
               </div>
               <p><label><input id="card-count" type="checkbox" checked onchange="window.updatePreviews()" /> Show Count</label></p>
               <div class="style-actions"><button class="primary-btn" onclick="window.saveSettings()">Publish Styles</button></div>
@@ -898,11 +902,11 @@
 
             <div id="style-carousel" class="sub-view">
               <div class="style-control-grid full">
-                <div><label>Carousel layout</label><select id="car-layout" class="filter-select" onchange="window.updatePreviews()"><option value="infinite">Infinite Auto-Scroll</option><option value="grid">Standard Grid</option><option value="masonry">Pinterest Masonry</option></select></div>
+                <div><label>Global display layout</label><select id="car-layout" class="filter-select" onchange="window.updatePreviews()"><option value="infinite">Horizontal auto-scroll</option><option value="grid">Static grid</option><option value="masonry">Masonry cards</option></select></div>
                 <div><label>Slide delay (ms)</label><input id="car-delay" class="premium-input" type="number" value="4000" placeholder="Slide Delay (ms)" oninput="window.updatePreviews()" /></div>
                 <div><label>Max reviews</label><input id="car-limit" class="premium-input" type="number" value="10" placeholder="Max Reviews" oninput="window.updatePreviews()" /></div>
               </div>
-              <div class="style-switch-row"><label class="style-check-card"><input id="car-autoplay" type="checkbox" checked onchange="window.updatePreviews()" /><span>Auto-play carousel<small>For homepage/global review blocks.</small></span></label><label class="style-check-card"><input id="car-arrows" type="checkbox" onchange="window.updatePreviews()" /><span>Show arrows<small>Useful when the carousel is not auto-scrolling.</small></span></label></div>
+              <div class="style-switch-row"><label class="style-check-card"><input id="car-autoplay" type="checkbox" checked onchange="window.updatePreviews()" /><span>Auto-play carousel<small>For homepage/global review blocks.</small></span></label><label class="style-check-card"><input id="car-arrows" type="checkbox" onchange="window.updatePreviews()" /><span>Show navigation arrows<small>Shows left/right controls instead of relying on a scrollbar.</small></span></label></div>
               <div class="style-actions"><button class="primary-btn" onclick="window.saveSettings()">Publish Styles</button></div>
             </div>
           </div>

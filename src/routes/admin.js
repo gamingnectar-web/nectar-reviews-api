@@ -1,6 +1,7 @@
 const express = require('express');
 const { env } = require('../config/env');
 const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 const { Review, Settings, CampaignEvent, EmailProviderSettings, EmailProviderProfile, Shop } = require('../models');
 const { requireAdminSession } = require('../utils/security');
 const { cleanText, cleanEmail, clampNumber, cleanReviewStatus } = require('../utils/validation');
@@ -146,6 +147,11 @@ async function buildCampaignAnalytics(shopDomain) {
     orderId: event.orderId || '',
     itemId: event.itemId || '',
     token: event.token || '',
+    subject: event.subject || '',
+    templateName: event.templateName || '',
+    layoutName: event.layoutName || '',
+    moduleNames: Array.isArray(event.moduleNames) ? event.moduleNames : [],
+    htmlHash: event.htmlHash || '',
     createdAt: event.createdAt,
     isTest: String(event.campaign || '').toLowerCase().includes('test') || String(event.token || '').toLowerCase().startsWith('test'),
   });
@@ -243,9 +249,19 @@ async function buildCampaignAnalytics(shopDomain) {
         openedAt: null,
         clickedAt: null,
         reviewedAt: null,
+        subject: '',
+        templateName: '',
+        layoutName: '',
+        moduleNames: [],
+        htmlHash: '',
       });
     }
     const row = recipientMap.get(key);
+    if (event.subject && !row.subject) row.subject = event.subject;
+    if (event.templateName && !row.templateName) row.templateName = event.templateName;
+    if (event.layoutName && !row.layoutName) row.layoutName = event.layoutName;
+    if (Array.isArray(event.moduleNames) && event.moduleNames.length && !row.moduleNames.length) row.moduleNames = event.moduleNames;
+    if (event.htmlHash && !row.htmlHash) row.htmlHash = event.htmlHash;
     const eventDate = event.createdAt;
     if (event.eventType === 'sent' && (!row.sentAt || new Date(eventDate) < new Date(row.sentAt))) row.sentAt = eventDate;
     if (event.eventType === 'open' && (!row.openedAt || new Date(eventDate) < new Date(row.openedAt))) row.openedAt = eventDate;
@@ -731,6 +747,22 @@ router.post('/email-provider-profiles/:id/use', async (req, res, next) => {
   }
 });
 
+router.post('/email-provider-profiles/:id/unassign', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const purpose = cleanText(req.body?.purpose || 'reviews', 40);
+    const provider = await EmailProviderProfile.findOneAndUpdate(
+      { _id: req.params.id, shopDomain },
+      { $pull: { primaryFor: purpose } },
+      { new: true }
+    );
+    if (!provider) return res.status(404).json({ error: 'Provider profile not found.' });
+    return res.json({ provider: publicProviderProfile(provider) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.delete('/email-provider-profiles/:id', async (req, res, next) => {
   try {
     await EmailProviderProfile.deleteOne({ _id: req.params.id, shopDomain: shopDomainFromReq(req) });
@@ -822,6 +854,11 @@ router.post('/campaign-reminder', async (req, res, next) => {
       orderId,
       email,
       token,
+      subject,
+      templateName,
+      layoutName,
+      moduleNames,
+      htmlHash,
       userAgent: cleanText(req.headers['user-agent'], 500),
     });
     await Settings.findOneAndUpdate({ shopDomain }, { $inc: { emailsSentTotal: 1 }, $setOnInsert: { shopDomain } }, { upsert: true });
@@ -859,8 +896,13 @@ router.post('/test-email', async (req, res, next) => {
     const orderId = cleanText(req.body.orderId || 'test-1001', 120);
     const itemId = cleanText(req.body.itemId || '', 120);
     const token = cleanText(req.body.token || `test-${Date.now()}`, 200);
+    const subject = cleanText(req.body.subject || 'Review request test email', 160);
+    const templateName = cleanText(req.body.templateName || '', 160);
+    const layoutName = cleanText(req.body.layoutName || '', 80);
+    const moduleNames = Array.isArray(req.body.moduleNames) ? req.body.moduleNames.map((item) => cleanText(item, 120)).filter(Boolean).slice(0, 20) : [];
     const trackingPixel = `${env.appUrl || ''}/api/campaign/open?shopDomain=${encodeURIComponent(shopDomain)}&campaign=test_review_request&orderId=${encodeURIComponent(orderId)}&email=${encodeURIComponent(to)}&itemId=${encodeURIComponent(itemId)}&token=${encodeURIComponent(token)}&t=${Date.now()}`;
     let html = String(req.body.html || '').slice(0, 200000);
+    const htmlHash = crypto.createHash('sha256').update(html).digest('hex').slice(0, 16);
     if (!html.includes('/api/campaign/open')) {
       html += `<img src="${trackingPixel}" width="1" height="1" alt="" style="display:none;opacity:0;width:1px;height:1px;">`;
     }
@@ -869,7 +911,7 @@ router.post('/test-email', async (req, res, next) => {
       from: `${fromName.replace(/"/g, '')} <${fromEmail}>`,
       to,
       replyTo: settings.replyToEmail || fromEmail,
-      subject: cleanText(req.body.subject || 'Review request test email', 160),
+      subject,
       html,
     });
 

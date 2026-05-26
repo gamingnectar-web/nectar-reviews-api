@@ -62,6 +62,12 @@ function getChecked(id, fallback = false) {
   return node ? Boolean(node.checked) : fallback;
 }
 
+function cssValueOrNone(value, fallback = 'transparent') {
+  const raw = String(value || '').trim();
+  if (!raw || /^none$/i.test(raw) || /^transparent$/i.test(raw)) return 'transparent';
+  return raw || fallback;
+}
+
 function withShop(path) {
   const separator = path.includes('?') ? '&' : '?';
   return `${path}${separator}shopDomain=${encodeURIComponent(SHOP_DOMAIN)}`;
@@ -312,6 +318,8 @@ function hydrateSettings(config) {
     if (document.getElementById('style-review-star-size')) document.getElementById('style-review-star-size').value = config.widgetStyles.reviewStarSize || 52;
     if (document.getElementById('style-slider-track')) document.getElementById('style-slider-track').value = (config.widgetStyles.sliderTrackColor && config.widgetStyles.sliderTrackColor !== '#ffffff') ? config.widgetStyles.sliderTrackColor : '#e6ebf1';
     if (document.getElementById('style-slider-knob')) document.getElementById('style-slider-knob').value = config.widgetStyles.sliderKnobColor || '#111111';
+    setValueIfExists('style-widget-bg', config.widgetStyles.widgetBackground || 'none');
+    setValueIfExists('style-review-card-bg', config.widgetStyles.reviewCardBackground || '#ffffff');
     setValueIfExists('style-layout', config.widgetStyles.layoutStyle || 'clean');
     setValueIfExists('style-preview-state', config.widgetStyles.previewState || 'reviews');
     setValueIfExists('style-header-align', config.widgetStyles.reviewStarAlignment || config.widgetStyles.headerAlignment || 'left');
@@ -331,6 +339,10 @@ function hydrateSettings(config) {
     if (document.getElementById('card-badge-text')) document.getElementById('card-badge-text').value = config.cardStyles.badgeTextColor || '#ffffff';
     if (document.getElementById('card-badge-star')) document.getElementById('card-badge-star').value = config.cardStyles.badgeStarColor || config.cardStyles.starColor || '#ffc700';
     if (document.getElementById('card-badge-radius')) document.getElementById('card-badge-radius').value = config.cardStyles.badgeRadius ?? 999;
+    setValueIfExists('card-badge-layout', config.cardStyles.badgeLayout || 'pill');
+    setValueIfExists('card-badge-position', config.cardStyles.badgePosition || 'above');
+    setValueIfExists('card-badge-padding', config.cardStyles.badgePadding || '6px 12px');
+    setValueIfExists('card-badge-label', config.cardStyles.badgeLabel || '4.8 (12)');
   }
   if (config.carouselStyles) {
     document.getElementById('car-layout').value = config.carouselStyles.layout || 'infinite';
@@ -714,10 +726,16 @@ window.updatePreviews = function() {
   const emptyText = getValue('style-empty-text', 'No reviews yet. Be the first to write one.');
   const showSummary = getChecked('style-show-summary', true);
   const showVerified = getChecked('style-show-verified', true);
-  const badgeBg = getValue('card-badge-bg', '#111827');
+  const widgetBg = cssValueOrNone(getValue('style-widget-bg', 'none'));
+  const reviewCardBg = cssValueOrNone(getValue('style-review-card-bg', '#ffffff'), '#ffffff');
+  const badgeBg = cssValueOrNone(getValue('card-badge-bg', '#111827'), '#111827');
   const badgeText = getValue('card-badge-text', '#ffffff');
   const badgeStar = getValue('card-badge-star', star);
   const badgeRadius = `${getValue('card-badge-radius', '999')}px`;
+  const badgeLayout = getValue('card-badge-layout', 'pill');
+  const badgePosition = getValue('card-badge-position', 'above');
+  const badgePadding = getValue('card-badge-padding', '6px 12px');
+  const badgeLabel = getValue('card-badge-label', '4.8 (12)');
 
   const previewWrap = document.getElementById('preview-container-wrap');
   if (previewWrap && previewWrap.style.maxWidth !== '375px') previewWrap.style.maxWidth = maxWidth;
@@ -753,7 +771,7 @@ window.updatePreviews = function() {
   const widget = document.getElementById('preview-widget');
   if (widget) {
     widget.innerHTML = `
-      <div class="nr-admin-preview" data-layout="${escapeHtml(layout)}" style="--nr-primary:${primary};--nr-star:${star};">
+      <div class="nr-admin-preview" data-layout="${escapeHtml(layout)}" style="--nr-primary:${primary};--nr-star:${star};--nr-widget-bg:${escapeHtml(widgetBg)};--nr-card-bg:${escapeHtml(reviewCardBg)};">
         <div class="nr-admin-preview__header" data-align="${escapeHtml(headerAlign)}">
           <h3 id="pre-title" class="nr-admin-preview__title" style="color:${primary}">${escapeHtml(title)}</h3>
           <button class="nr-admin-preview__button" style="${buttonCss}">Write a Review</button>
@@ -764,12 +782,16 @@ window.updatePreviews = function() {
 
   const card = document.getElementById('preview-card');
   if (card) {
-    card.innerHTML = `<span id="pre-card-badge" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;min-width:76px;padding:6px 12px;border-radius:${badgeRadius};background:${badgeBg};color:${badgeText};font-weight:800;"><span id="pre-card-icon" style="font-size:${cardStar};color:${badgeStar};">★</span> <span id="pre-card-count" style="display:${getChecked('card-count', true) ? 'inline' : 'none'}">4.8 (12)</span></span><h4>Sample Product</h4><p>$29.99</p>`;
+    const badgeMarkup = `<span id="pre-card-badge" class="pre-card-badge" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;min-width:76px;padding:${escapeHtml(badgePadding)};border-radius:${badgeRadius};background:${badgeBg};color:${badgeText};font-weight:800;"><span id="pre-card-icon" style="font-size:${cardStar};color:${badgeStar};">★</span> <span id="pre-card-count" style="display:${getChecked('card-count', true) ? 'inline' : 'none'}">${escapeHtml(badgeLabel)}</span></span>`;
+    const titleMarkup = `<h4 class="pre-card-title">Sample Product</h4><p>$29.99</p>`;
+    card.innerHTML = `<div class="nr-admin-preview-card-demo" data-layout="${escapeHtml(badgeLayout)}" data-position="${escapeHtml(badgePosition)}">${badgePosition === 'below' ? `${titleMarkup}${badgeMarkup}` : badgePosition === 'inline' ? `${titleMarkup}${badgeMarkup}` : `${badgeMarkup}${titleMarkup}`}</div>`;
   }
 
   const carousel = document.getElementById('preview-carousel');
   if (carousel) {
-    carousel.innerHTML = `<div class="nr-admin-preview" data-layout="carousel"><div class="nr-admin-preview__header" data-align="left"><h3 class="nr-admin-preview__title" style="color:${primary}">Global Review Carousel</h3><span class="style-help">${getChecked('car-autoplay', true) ? 'Auto-play on' : 'Manual'} · ${getChecked('car-arrows', false) ? 'Arrows shown' : 'No arrows'} · ${getValue('car-limit','10')} reviews</span></div><div class="nr-admin-preview__list">${reviewCardsHtml}</div></div>`;
+    const carLayout = getValue('car-layout', 'infinite');
+    const controls = getChecked('car-arrows', false) ? '<div class="nr-admin-preview-carousel-controls"><button type="button">‹</button><button type="button">›</button></div>' : '';
+    carousel.innerHTML = `<div class="nr-admin-preview" data-layout="${carLayout === 'grid' ? 'cards' : 'carousel'}" style="--nr-widget-bg:${escapeHtml(widgetBg)};--nr-card-bg:${escapeHtml(reviewCardBg)};"><div class="nr-admin-preview__header" data-align="left"><h3 class="nr-admin-preview__title" style="color:${primary}">Global Review Display</h3><span class="style-help">${carLayout === 'infinite' ? 'Horizontal auto-scroll' : carLayout === 'grid' ? 'Static grid' : 'Masonry-style cards'} · ${getChecked('car-autoplay', true) ? 'Auto-play on' : 'Manual'} · ${getChecked('car-arrows', false) ? 'Navigation arrows on' : 'Navigation arrows off'} · ${getValue('car-limit','10')} reviews</span></div>${controls}<div class="nr-admin-preview__list">${reviewCardsHtml}</div></div>`;
   }
 };
 
@@ -800,17 +822,23 @@ window.saveSettings = async function() {
       emptyText: getValue('style-empty-text', 'No reviews yet. Be the first to write one.'),
       showSummary: getChecked('style-show-summary', true),
       showVerifiedLabel: getChecked('style-show-verified', true),
-      sliderTrackColor: getValue('style-slider-track', '#e6ebf1'),
-      sliderKnobColor: getValue('style-slider-knob', '#111111'),
+      sliderTrackColor: cssValueOrNone(getValue('style-slider-track', '#e6ebf1'), '#e6ebf1'),
+      sliderKnobColor: cssValueOrNone(getValue('style-slider-knob', '#111111'), '#111111'),
+      widgetBackground: cssValueOrNone(getValue('style-widget-bg', 'none')),
+      reviewCardBackground: cssValueOrNone(getValue('style-review-card-bg', '#ffffff'), '#ffffff'),
     },
     trashRetentionDays: Math.max(1, Math.min(28, parseInt(document.getElementById('trash-retention-days')?.value || '28', 10))),
     cardStyles: {
       starSize: parseInt(document.getElementById('card-star').value, 10),
       showCount: document.getElementById('card-count').checked,
-      badgeBackground: document.getElementById('card-badge-bg')?.value || '#111827',
+      badgeBackground: cssValueOrNone(document.getElementById('card-badge-bg')?.value || '#111827', '#111827'),
       badgeTextColor: document.getElementById('card-badge-text')?.value || '#ffffff',
       badgeStarColor: document.getElementById('card-badge-star')?.value || '#ffc700',
       badgeRadius: parseInt(document.getElementById('card-badge-radius')?.value || '999', 10),
+      badgeLayout: getValue('card-badge-layout', 'pill'),
+      badgePosition: getValue('card-badge-position', 'above'),
+      badgePadding: getValue('card-badge-padding', '6px 12px'),
+      badgeLabel: getValue('card-badge-label', '4.8 (12)'),
     },
     carouselStyles: {
       layout: document.getElementById('car-layout').value,
@@ -1231,7 +1259,7 @@ window.autoResizeReplyBoxes = function() {
 };
 
 function enhanceModernColorPickers() {
-  const ids = ['style-primary','style-star','style-slider-track','style-slider-knob','card-badge-bg','card-badge-text','card-badge-star'];
+  const ids = ['style-primary','style-star','style-slider-track','style-slider-knob','style-widget-bg','style-review-card-bg','card-badge-bg','card-badge-text','card-badge-star'];
   ids.forEach((id) => {
     const input = document.getElementById(id);
     if (!input || input.dataset.modernColor === 'true') return;

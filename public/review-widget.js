@@ -37,6 +37,13 @@
     return String(value || '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[char]));
   }
 
+
+  function cssValueOrNone(value, fallback = 'transparent') {
+    const raw = String(value || '').trim();
+    if (!raw || /^none$/i.test(raw) || /^transparent$/i.test(raw)) return 'transparent';
+    return raw || fallback;
+  }
+
   function stars(rating) {
     const full = Math.max(0, Math.min(5, Math.round(Number(rating || 0))));
     return `${'★'.repeat(full)}${'☆'.repeat(5 - full)}`;
@@ -77,7 +84,7 @@
     const style = document.createElement('style');
     style.id = 'nectar-review-widget-styles';
     style.textContent = `
-      .nectar-review-widget { --nr-primary:#111827; --nr-muted:#667085; --nr-border:#dfe7f1; --nr-soft:#f8fafc; --nr-star:#f5a400; box-sizing:border-box; width:100%; max-width:var(--nr-max-width,1160px); margin:48px auto; padding:0 18px; color:var(--nr-primary); font-family:inherit; }
+      .nectar-review-widget { --nr-primary:#111827; --nr-muted:#667085; --nr-border:#dfe7f1; --nr-soft:#f8fafc; --nr-star:#f5a400; --nr-widget-bg:transparent; --nr-card-bg:#fff; box-sizing:border-box; width:100%; max-width:var(--nr-max-width,1160px); margin:48px auto; padding:28px 18px; background:var(--nr-widget-bg); color:var(--nr-primary); font-family:inherit; }
       .nectar-review-widget *, .nectar-review-widget *::before, .nectar-review-widget *::after { box-sizing:border-box; }
       .nr-widget-header { display:flex; align-items:center; justify-content:space-between; gap:24px; margin-bottom:28px; }
       .nectar-review-widget[data-header-align="center"] .nr-widget-header { flex-direction:column; justify-content:center; text-align:center; }
@@ -102,7 +109,7 @@
       .nr-consensus-bar { position:relative; height:12px; border-radius:999px; background:#e6ebf1; overflow:hidden; box-shadow:inset 0 1px 2px rgba(15,23,42,.06); }
       .nr-consensus-fill { position:absolute; left:0; top:0; bottom:0; border-radius:999px; background:#111827; display:block; } .nr-consensus-notch { display:none; }
       .nr-review-list { display:grid; gap:20px; }
-      .nr-review-card { position:relative; padding:32px; border:1px solid var(--nr-border); border-radius:var(--nr-card-radius,0); background:#fff; margin:0; }
+      .nr-review-card { position:relative; padding:32px; border:1px solid var(--nr-border); border-radius:var(--nr-card-radius,0); background:var(--nr-card-bg,#fff); margin:0; }
       .nectar-review-widget[data-layout="cards"] .nr-review-list { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .nectar-review-widget[data-layout="compact"] .nr-review-card { padding:18px 20px; }
       .nectar-review-widget[data-layout="compact"] .nr-comment, .nectar-review-widget[data-layout="compact"] .nr-attrs { display:none; }
@@ -119,7 +126,7 @@
       .nr-attr-bar { position:relative; height:12px; border-radius:999px; background:#e6ebf1; overflow:hidden; box-shadow:inset 0 1px 2px rgba(15,23,42,.06); }
       .nr-attr-fill { position:absolute; left:0; top:0; bottom:0; border-radius:999px; background:#111827; display:block; }
       .nr-attr-notch { display:none; }
-      .nr-public-reply{margin-top:18px;padding:14px 16px;border-radius:12px;background:#f8fafc;border:1px solid #e5eaf1;color:#344054}.nr-public-reply strong{display:block;margin-bottom:5px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:#667085}.nr-public-reply p{margin:0;line-height:1.55}.nr-empty { padding:32px; border:1px solid var(--nr-border); border-radius:var(--nr-card-radius,0); background:#fff; color:var(--nr-muted); text-align:center; }
+      .nr-public-reply{margin-top:18px;padding:14px 16px;border-radius:12px;background:#f8fafc;border:1px solid #e5eaf1;color:#344054}.nr-public-reply strong{display:block;margin-bottom:5px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:#667085}.nr-public-reply p{margin:0;line-height:1.55}.nr-empty { padding:32px; border:1px solid var(--nr-border); border-radius:var(--nr-card-radius,0); background:var(--nr-card-bg,#fff); color:var(--nr-muted); text-align:center; }
       .nr-empty[data-empty-mode="simple"] { border:0; background:transparent; padding:18px 0; }
       .nr-empty[data-empty-mode="hidden"] { display:none; }
       .nr-modal-backdrop { position:fixed; inset:0; z-index:2147483000; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(15,23,42,.48); }
@@ -435,7 +442,7 @@
     const hasReviews = Boolean(reviews.length || Number(json.count || 0));
     const summary = hasReviews && styles.showSummary !== false ? buildSummary(json, reviews) : '';
     el.innerHTML = `
-      <section class="nectar-review-widget" data-layout="${escapeHtml(layout)}" data-header-align="${escapeHtml(headerAlign)}" data-button-style="${escapeHtml(buttonStyle)}" style="--nr-primary:${escapeHtml(styles.primaryColor || '#111827')};--nr-star:${escapeHtml(styles.starColor || '#f5a400')};--nr-review-star-size:${Number(styles.reviewStarSize || 52)}px;--nr-slider-track:${escapeHtml((styles.sliderTrackColor && styles.sliderTrackColor !== '#ffffff') ? styles.sliderTrackColor : '#e6ebf1')};--nr-slider-knob:${escapeHtml(styles.sliderKnobColor || '#111827')};--nr-max-width:${Number(styles.maxWidth || 1160)}px;--nr-button-radius:${Number(styles.buttonRadius ?? 8)}px;--nr-card-radius:${Number(styles.cardRadius ?? 0)}px;">
+      <section class="nectar-review-widget" data-layout="${escapeHtml(layout)}" data-header-align="${escapeHtml(headerAlign)}" data-button-style="${escapeHtml(buttonStyle)}" style="--nr-primary:${escapeHtml(styles.primaryColor || '#111827')};--nr-star:${escapeHtml(styles.starColor || '#f5a400')};--nr-review-star-size:${Number(styles.reviewStarSize || 52)}px;--nr-slider-track:${escapeHtml(cssValueOrNone(styles.sliderTrackColor && styles.sliderTrackColor !== '#ffffff' ? styles.sliderTrackColor : '#e6ebf1', '#e6ebf1'))};--nr-slider-knob:${escapeHtml(cssValueOrNone(styles.sliderKnobColor || '#111827', '#111827'))};--nr-widget-bg:${escapeHtml(cssValueOrNone(styles.widgetBackground || 'transparent'))};--nr-card-bg:${escapeHtml(cssValueOrNone(styles.reviewCardBackground || '#ffffff', '#ffffff'))};--nr-max-width:${Number(styles.maxWidth || 1160)}px;--nr-button-radius:${Number(styles.buttonRadius ?? 8)}px;--nr-card-radius:${Number(styles.cardRadius ?? 0)}px;">
         <div class="nr-widget-header"><h3 class="nr-widget-title">${escapeHtml(title)}</h3><button type="button" class="nr-write-btn">Write a Review</button></div>
         ${hasReviews ? summary : buildEmptyState(styles)}
         <div class="nr-review-list">${reviews.map((review) => buildReview(review, styles)).join('')}</div>
