@@ -6,6 +6,7 @@ const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 
 const { env } = require('./config/env');
+const { getShopFromRequest } = require('./core/utils/clean-shop-domain');
 const { registerModuleRoutes, getAvailableModules } = require('./core/module-registry');
 const moduleSettingsRoutes = require('./core/settings/module-settings.routes');
 const shopifyAuthRoutes = require('./core/auth/shopify-auth.routes');
@@ -16,7 +17,21 @@ function createApp() {
   const app = express();
 
   app.disable('x-powered-by');
-  app.use(helmet({ contentSecurityPolicy: false }));
+
+  // Shopify embedded apps are loaded inside the Shopify Admin iframe.
+  // Helmet's default X-Frame-Options: SAMEORIGIN blocks that iframe, so disable
+  // frameguard and set Shopify's required frame-ancestors CSP instead.
+  app.use((req, res, next) => {
+    const shop = getShopFromRequest(req);
+    const frameAncestors = shop
+      ? `https://${shop} https://admin.shopify.com`
+      : `https://*.myshopify.com https://admin.shopify.com`;
+
+    res.setHeader('Content-Security-Policy', `frame-ancestors ${frameAncestors};`);
+    next();
+  });
+
+  app.use(helmet({ contentSecurityPolicy: false, frameguard: false }));
   app.use(cors({ origin: true, credentials: true }));
   app.use(express.json({ limit: '5mb' }));
   app.use(express.urlencoded({ extended: true, limit: '5mb' }));

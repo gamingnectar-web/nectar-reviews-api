@@ -1,6 +1,6 @@
 {
   "name": "nectar-reviews-api",
-  "version": "2.0.2-liquid-validation-fix",
+  "version": "2.0.3-shopify-iframe-fix",
   "description": "Nectar modular Shopify reviews, loyalty, discounts, cart rewards and campaigns API.",
   "main": "server.js",
   "type": "commonjs",
