@@ -1,7 +1,7 @@
 const express = require('express');
 const { env } = require('../config/env');
 const nodemailer = require('nodemailer');
-const { Review, Settings, CampaignEvent, EmailProviderSettings, Shop } = require('../models');
+const { Review, Settings, CampaignEvent, EmailProviderSettings, EmailProviderProfile, Shop } = require('../models');
 const { requireAdminSession } = require('../utils/security');
 const { cleanText, cleanEmail, clampNumber, cleanReviewStatus } = require('../utils/validation');
 const { encryptSecret, decryptSecret } = require('../utils/crypto');
@@ -41,6 +41,72 @@ async function ensureShop(shopDomain) {
     },
     { new: true, upsert: true, setDefaultsOnInsert: true }
   );
+}
+
+
+function publicProviderProfile(profile) {
+  if (!profile) return null;
+  return {
+    _id: String(profile._id),
+    name: profile.name || 'Email provider',
+    enabled: Boolean(profile.enabled),
+    provider: profile.provider || 'smtp',
+    smtpHost: profile.smtpHost || '',
+    smtpPort: profile.smtpPort || '',
+    secureMode: profile.secureMode || 'starttls',
+    smtpUser: profile.smtpUser || '',
+    smtpPasswordSet: Boolean(profile.smtpPassEncrypted),
+    fromName: profile.fromName || '',
+    fromEmail: profile.fromEmail || '',
+    replyToEmail: profile.replyToEmail || '',
+    primaryFor: Array.isArray(profile.primaryFor) ? profile.primaryFor : [],
+    lastUsedAt: profile.lastUsedAt || null,
+    lastTestedAt: profile.lastTestedAt || null,
+    lastTestStatus: profile.lastTestStatus || '',
+    lastTestError: profile.lastTestError || '',
+  };
+}
+
+function providerUpdateFromBody(body = {}, existing = null) {
+  if (!body.provider || body.provider === 'none') throw new Error('Choose a provider.');
+  if (!body.smtpHost || !body.smtpUser || !body.fromEmail) throw new Error('SMTP host, username, and from email are required.');
+  if (!body.smtpPass && !existing?.smtpPassEncrypted) throw new Error('SMTP password/app password is required the first time you save.');
+  const update = {
+    enabled: body.enabled !== false,
+    provider: cleanText(body.provider, 60),
+    smtpHost: cleanText(body.smtpHost, 200),
+    smtpPort: clampNumber(body.smtpPort, 1, 65535, 587),
+    secureMode: ['starttls', 'ssl', 'none'].includes(body.secureMode) ? body.secureMode : 'starttls',
+    smtpUser: cleanText(body.smtpUser, 254),
+    fromName: cleanText(body.fromName, 120),
+    fromEmail: cleanEmail(body.fromEmail),
+    replyToEmail: cleanEmail(body.replyToEmail),
+  };
+  if (body.smtpPass) update.smtpPassEncrypted = encryptSecret(body.smtpPass);
+  return update;
+}
+
+function createTransporterFromSettings(settings) {
+  return nodemailer.createTransport({
+    host: settings.smtpHost,
+    port: Number(settings.smtpPort || 587),
+    secure: settings.secureMode === 'ssl' || Number(settings.smtpPort) === 465,
+    requireTLS: settings.secureMode === 'starttls',
+    auth: { user: settings.smtpUser, pass: decryptSecret(settings.smtpPassEncrypted) },
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
+  });
+}
+
+async function activeEmailSettings(shopDomain) {
+  const settings = await EmailProviderSettings.findOne({ shopDomain });
+  if (!settings || !settings.enabled || !settings.smtpPassEncrypted) {
+    const error = new Error('Email provider is not configured for this shop.');
+    error.statusCode = 400;
+    throw error;
+  }
+  return settings;
 }
 
 async function buildCampaignAnalytics(shopDomain) {
@@ -156,6 +222,48 @@ async function buildCampaignAnalytics(shopDomain) {
     lists[key] = lists[key].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 50);
   });
 
+  const recipientMap = new Map();
+  const recipientKey = (event = {}) => {
+    const email = cleanEmail(event.email) || 'no-email';
+    const orderId = cleanText(event.orderId, 120) || 'no-order';
+    const campaign = cleanText(event.campaign, 120) || 'review_request';
+    return `${campaign}:${email}:${orderId}`;
+  };
+  events.forEach((event) => {
+    const key = recipientKey(event);
+    if (!recipientMap.has(key)) {
+      recipientMap.set(key, {
+        campaign: event.campaign || 'review_request',
+        email: event.email || '',
+        orderId: event.orderId || '',
+        itemId: event.itemId || '',
+        token: event.token || '',
+        isTest: String(event.campaign || '').toLowerCase().includes('test') || String(event.token || '').toLowerCase().startsWith('test'),
+        sentAt: null,
+        openedAt: null,
+        clickedAt: null,
+        reviewedAt: null,
+      });
+    }
+    const row = recipientMap.get(key);
+    const eventDate = event.createdAt;
+    if (event.eventType === 'sent' && (!row.sentAt || new Date(eventDate) < new Date(row.sentAt))) row.sentAt = eventDate;
+    if (event.eventType === 'open' && (!row.openedAt || new Date(eventDate) < new Date(row.openedAt))) row.openedAt = eventDate;
+    if (event.eventType === 'click' && (!row.clickedAt || new Date(eventDate) < new Date(row.clickedAt))) row.clickedAt = eventDate;
+  });
+  reviews.forEach((review) => {
+    const campaign = review.isTestReview || review.testMode ? 'test_review_request' : (review.campaign || review.source === 'email' ? 'review_request' : 'storefront_review');
+    const key = `${campaign}:${cleanEmail(review.email) || 'no-email'}:${cleanText(review.orderId, 120) || 'no-order'}`;
+    if (!recipientMap.has(key)) {
+      recipientMap.set(key, { campaign, email: review.email || '', orderId: review.orderId || '', itemId: review.itemId || '', token: '', isTest: Boolean(review.isTestReview || review.testMode), sentAt: null, openedAt: null, clickedAt: null, reviewedAt: null });
+    }
+    const row = recipientMap.get(key);
+    if (!row.reviewedAt || new Date(review.createdAt) < new Date(row.reviewedAt)) row.reviewedAt = review.createdAt;
+  });
+  const recipients = Array.from(recipientMap.values())
+    .sort((a, b) => new Date(b.sentAt || b.openedAt || b.reviewedAt || 0) - new Date(a.sentAt || a.openedAt || a.reviewedAt || 0))
+    .slice(0, 100);
+
   return {
     windowDays: 30,
     totals,
@@ -163,6 +271,7 @@ async function buildCampaignAnalytics(shopDomain) {
     openRate: totals.sent ? Math.min(100, Number(((totals.open / totals.sent) * 100).toFixed(1))) : 0,
     clickRate: totals.sent ? Math.min(100, Number(((totals.click / totals.sent) * 100).toFixed(1))) : 0,
     lists,
+    recipients,
     recentEvents: events
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       .slice(0, 20),
@@ -544,6 +653,93 @@ router.get('/campaign-analytics', async (req, res, next) => {
   }
 });
 
+
+router.get('/email-provider-profiles', async (req, res, next) => {
+  try {
+    const providers = await EmailProviderProfile.find({ shopDomain: shopDomainFromReq(req) }).sort({ updatedAt: -1 }).lean();
+    return res.json({ providers: providers.map(publicProviderProfile) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/email-provider-profiles', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const body = req.body || {};
+    const name = cleanText(body.name || body.fromName || 'Email provider', 120);
+    const existing = await EmailProviderProfile.findOne({ shopDomain, name });
+    let update;
+    try {
+      update = providerUpdateFromBody(body, existing);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    update.shopDomain = shopDomain;
+    update.name = name;
+    const primaryFor = Array.isArray(body.primaryFor) ? body.primaryFor.map((item) => cleanText(item, 40)).filter(Boolean) : [];
+    update.primaryFor = primaryFor;
+
+    for (const purpose of primaryFor) {
+      await EmailProviderProfile.updateMany({ shopDomain, primaryFor: purpose }, { $pull: { primaryFor: purpose } });
+    }
+
+    const saved = await EmailProviderProfile.findOneAndUpdate(
+      { shopDomain, name },
+      { $set: update },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+    return res.json({ provider: publicProviderProfile(saved) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/email-provider-profiles/:id/use', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const purpose = cleanText(req.body?.purpose || 'reviews', 40);
+    const provider = await EmailProviderProfile.findOne({ _id: req.params.id, shopDomain });
+    if (!provider) return res.status(404).json({ error: 'Provider profile not found.' });
+    if (!provider.smtpPassEncrypted) return res.status(400).json({ error: 'This provider does not have a saved password/app password.' });
+
+    await EmailProviderProfile.updateMany({ shopDomain, primaryFor: purpose }, { $pull: { primaryFor: purpose } });
+    await EmailProviderProfile.updateOne({ _id: provider._id }, { $addToSet: { primaryFor: purpose }, $set: { lastUsedAt: new Date() } });
+
+    const active = await EmailProviderSettings.findOneAndUpdate(
+      { shopDomain },
+      {
+        $set: {
+          shopDomain,
+          enabled: provider.enabled,
+          provider: provider.provider,
+          smtpHost: provider.smtpHost,
+          smtpPort: provider.smtpPort,
+          secureMode: provider.secureMode,
+          smtpUser: provider.smtpUser,
+          smtpPassEncrypted: provider.smtpPassEncrypted,
+          fromName: provider.fromName,
+          fromEmail: provider.fromEmail,
+          replyToEmail: provider.replyToEmail,
+        },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+    return res.json({ ok: true, active: publicEmailSettings(active) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/email-provider-profiles/:id', async (req, res, next) => {
+  try {
+    await EmailProviderProfile.deleteOne({ _id: req.params.id, shopDomain: shopDomainFromReq(req) });
+    return res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/email-settings', async (req, res, next) => {
   try {
     const settings = await EmailProviderSettings.findOne({ shopDomain: shopDomainFromReq(req) });
@@ -592,6 +788,44 @@ router.delete('/email-settings', async (req, res, next) => {
   try {
     await EmailProviderSettings.deleteOne({ shopDomain: shopDomainFromReq(req) });
     return res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+router.post('/campaign-reminder', async (req, res, next) => {
+  const shopDomain = shopDomainFromReq(req);
+  try {
+    const email = cleanEmail(req.body?.email);
+    if (!email) return res.status(400).json({ error: 'A valid recipient email is required.' });
+    const orderId = cleanText(req.body?.orderId || '', 120);
+    const campaign = cleanText(req.body?.campaign || 'manual_review_reminder', 120);
+    const settings = await activeEmailSettings(shopDomain);
+    const transporter = createTransporterFromSettings(settings);
+    const fromName = settings.fromName || 'Store Reviews';
+    const fromEmail = settings.fromEmail || settings.smtpUser;
+    const token = `reminder-${Date.now()}`;
+    const reviewUrl = `https://${shopDomain}/pages/leave-review?shopDomain=${encodeURIComponent(shopDomain)}&mode=order&order_id=${encodeURIComponent(orderId)}&email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
+    const html = `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.55;color:#111827;max-width:620px;margin:0 auto;padding:24px;"><h2 style="margin:0 0 10px;">Quick reminder</h2><p style="margin:0 0 18px;color:#4b5563;">We noticed the review request has not been opened yet. You can manually resend this reminder from Nectar.</p><p style="margin:0 0 22px;color:#4b5563;">Order: <strong>${orderId || 'recent order'}</strong></p><a href="${reviewUrl}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;font-weight:bold;border-radius:10px;padding:12px 16px;">Leave a review</a></div>`;
+    await transporter.sendMail({
+      from: `${fromName.replace(/"/g, '')} <${fromEmail}>`,
+      to: email,
+      replyTo: settings.replyToEmail || fromEmail,
+      subject: cleanText(req.body?.subject || 'Quick reminder to leave a review', 160),
+      html,
+    });
+    await CampaignEvent.create({
+      shopDomain,
+      campaign,
+      eventType: 'sent',
+      orderId,
+      email,
+      token,
+      userAgent: cleanText(req.headers['user-agent'], 500),
+    });
+    await Settings.findOneAndUpdate({ shopDomain }, { $inc: { emailsSentTotal: 1 }, $setOnInsert: { shopDomain } }, { upsert: true });
+    return res.json({ ok: true, message: 'Reminder sent.' });
   } catch (error) {
     next(error);
   }

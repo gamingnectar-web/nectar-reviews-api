@@ -122,6 +122,28 @@ const emailProviderSettingsSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 
+const emailProviderProfileSchema = new mongoose.Schema({
+  shopDomain: { type: String, required: true, index: true },
+  name: { type: String, default: 'Email provider' },
+  enabled: { type: Boolean, default: true },
+  provider: { type: String, default: 'smtp' },
+  smtpHost: { type: String, default: '' },
+  smtpPort: { type: Number, default: 587 },
+  secureMode: { type: String, enum: ['starttls', 'ssl', 'none'], default: 'starttls' },
+  smtpUser: { type: String, default: '' },
+  smtpPassEncrypted: { type: String, default: '' },
+  fromName: { type: String, default: '' },
+  fromEmail: { type: String, default: '' },
+  replyToEmail: { type: String, default: '' },
+  primaryFor: { type: [String], default: [] },
+  lastUsedAt: { type: Date },
+  lastTestedAt: { type: Date },
+  lastTestStatus: { type: String, default: '' },
+  lastTestError: { type: String, default: '' },
+}, { timestamps: true });
+emailProviderProfileSchema.index({ shopDomain: 1, name: 1 });
+
+
 const loyaltyRewardTemplateSchema = new mongoose.Schema({
   id: { type: String, required: true },
   name: { type: String, default: 'Review thank-you discount' },
@@ -202,6 +224,7 @@ module.exports = {
   Settings: mongoose.models.Settings || mongoose.model('Settings', settingsSchema, 'settings'),
   CampaignEvent: mongoose.models.CampaignEvent || mongoose.model('CampaignEvent', campaignEventSchema, 'campaign_events'),
   EmailProviderSettings: mongoose.models.EmailProviderSettings || mongoose.model('EmailProviderSettings', emailProviderSettingsSchema, 'email_provider_settings'),
+  EmailProviderProfile: mongoose.models.EmailProviderProfile || mongoose.model('EmailProviderProfile', emailProviderProfileSchema, 'email_provider_profiles'),
   Shop: mongoose.models.Shop || mongoose.model('Shop', shopSchema, 'shops'),
   // Loyalty models intentionally live in src/modules/loyalty/loyalty.models.js
   // so they can bind to LOYALTY_DB_URI instead of the core reviews database.
