@@ -29,4 +29,54 @@ if (missing.length) {
   process.exit(1);
 }
 
-console.log(`Liquid and extension structure check passed (${required.length} required files).`);
+function walk(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return walk(full);
+    return full;
+  });
+}
+
+const liquidFiles = [
+  ...walk(path.join(root, 'Shopify-Liquid')).filter((file) => file.endsWith('.liquid')),
+  ...walk(path.join(root, 'extensions', 'theme-app-extension')).filter((file) => file.endsWith('.liquid'))
+];
+
+const errors = [];
+
+for (const file of liquidFiles) {
+  const rel = path.relative(root, file);
+  const text = fs.readFileSync(file, 'utf8');
+
+  const schemaMatch = text.match(/{%\s*schema\s*%}([\s\S]*?){%\s*endschema\s*%}/);
+  if (schemaMatch) {
+    let schema;
+    try {
+      schema = JSON.parse(schemaMatch[1]);
+    } catch (error) {
+      errors.push(`${rel}: schema JSON does not parse: ${error.message}`);
+    }
+
+    if (schema && Array.isArray(schema.settings)) {
+      for (const setting of schema.settings) {
+        if (setting.type === 'url' && Object.prototype.hasOwnProperty.call(setting, 'default')) {
+          const allowedDefaults = new Set(['/collections', '/collections/all']);
+          if (!allowedDefaults.has(setting.default)) {
+            errors.push(`${rel}: url setting "${setting.id}" has invalid default "${setting.default}"`);
+          }
+        }
+      }
+    }
+  }
+
+  if (/\{%-?\s*(if|elsif)\s+[^%]*\|\s*minus:/.test(text)) {
+    errors.push(`${rel}: do not pipe filters directly inside if/elsif comparisons; assign filtered value first.`);
+  }
+}
+
+if (errors.length) {
+  console.error('Liquid validation check failed:\n' + errors.map((m) => ` - ${m}`).join('\n'));
+  process.exit(1);
+}
+
+console.log(`Liquid and extension structure check passed (${required.length} required files, ${liquidFiles.length} Liquid files validated).`);

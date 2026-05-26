@@ -48,3 +48,9 @@ npm run check
 ```
 
 This checks JavaScript syntax, required backend structure, and required Shopify Liquid/extension files.
+
+## 2026-05-26 Liquid validation patch
+
+Shopify CLI rejected the theme app extension because `type: "url"` settings used an external URL as `default`. Shopify only permits `/collections` and `/collections/all` as defaults for URL settings, so the `app_url` defaults were removed from every Liquid block. The frontend widget scripts already include a safe fallback to `https://nectar-reviews-api.onrender.com` when the setting is empty.
+
+The shared `nectar-stars.liquid` snippet was also fixed so Liquid filters are assigned before conditional comparisons, avoiding syntax such as `nectar_rating > i | minus: 1`.

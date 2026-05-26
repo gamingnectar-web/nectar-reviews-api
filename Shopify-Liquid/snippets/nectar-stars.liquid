@@ -9,9 +9,10 @@ Accepts:
 {%- assign nectar_count = count | default: 0 | plus: 0 -%}
 <span class="nectar-stars" aria-label="{{ nectar_rating }} out of 5 stars">
   {%- for i in (1..5) -%}
+    {%- assign nectar_previous_star = i | minus: 1 -%}
     {%- if nectar_rating >= i -%}
       <span class="nectar-star nectar-star--filled">★</span>
-    {%- elsif nectar_rating > i | minus: 1 -%}
+    {%- elsif nectar_rating > nectar_previous_star -%}
       <span class="nectar-star nectar-star--half">★</span>
     {%- else -%}
       <span class="nectar-star nectar-star--empty">☆</span>
