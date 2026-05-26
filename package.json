@@ -1,12 +1,13 @@
 {
   "name": "reviews-platform-api",
-  "version": "1.2.6-v25-logic-restored",
-  "description": "Reviews Platform API - loyalty customer mode, modular email builder, checkout beta preview and private ledger profile foundation",
+  "version": "1.2.8-v25-cart-rewards-visual-modules",
+  "description": "Reviews Platform API with v25 review/loyalty logic and advanced modular Cart Rewards suite",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check src/app.js && find src public Shopify-Liquid/assets extensions/review-widget-extension/assets -name '*.js' -print0 | xargs -0 -n1 node --check && node scripts/verify-restore.js",
-    "verify:restore": "node scripts/verify-restore.js"
+    "check": "node --check server.js && node --check src/app.js && find src public Shopify-Liquid/assets extensions/review-widget-extension/assets -name '*.js' -print0 | xargs -0 -n1 node --check && node scripts/verify-restore.js && node scripts/cart-rewards-smoke-test.js",
+    "verify:restore": "node scripts/verify-restore.js",
+    "cart-rewards:smoke": "node scripts/cart-rewards-smoke-test.js"
   },
   "engines": {
     "node": ">=18"
@@ -16,6 +17,8 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "mongoose": "^8.3.2",
-    "nodemailer": "^6.9.16"
+    "nodemailer": "^6.9.16",
+    "luxon": "^3.5.0",
+    "node-cron": "^3.0.3"
   }
 }

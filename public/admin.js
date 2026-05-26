@@ -40,6 +40,28 @@ function escapeHtml(value) {
     .replace(/'/g, '&#039;');
 }
 
+
+function setValueIfExists(id, value) {
+  const node = document.getElementById(id);
+  if (node && value !== undefined && value !== null) node.value = value;
+}
+
+function setCheckedIfExists(id, value) {
+  const node = document.getElementById(id);
+  if (node) node.checked = Boolean(value);
+}
+
+function getValue(id, fallback = '') {
+  const node = document.getElementById(id);
+  if (!node) return fallback;
+  return node.value !== undefined && node.value !== '' ? node.value : fallback;
+}
+
+function getChecked(id, fallback = false) {
+  const node = document.getElementById(id);
+  return node ? Boolean(node.checked) : fallback;
+}
+
 function withShop(path) {
   const separator = path.includes('?') ? '&' : '?';
   return `${path}${separator}shopDomain=${encodeURIComponent(SHOP_DOMAIN)}`;
@@ -290,6 +312,16 @@ function hydrateSettings(config) {
     if (document.getElementById('style-review-star-size')) document.getElementById('style-review-star-size').value = config.widgetStyles.reviewStarSize || 52;
     if (document.getElementById('style-slider-track')) document.getElementById('style-slider-track').value = (config.widgetStyles.sliderTrackColor && config.widgetStyles.sliderTrackColor !== '#ffffff') ? config.widgetStyles.sliderTrackColor : '#e6ebf1';
     if (document.getElementById('style-slider-knob')) document.getElementById('style-slider-knob').value = config.widgetStyles.sliderKnobColor || '#111111';
+    setValueIfExists('style-layout', config.widgetStyles.layoutStyle || 'clean');
+    setValueIfExists('style-preview-state', config.widgetStyles.previewState || 'reviews');
+    setValueIfExists('style-header-align', config.widgetStyles.reviewStarAlignment || config.widgetStyles.headerAlignment || 'left');
+    setValueIfExists('style-button-style', config.widgetStyles.buttonStyle || 'solid');
+    setValueIfExists('style-button-radius', config.widgetStyles.buttonRadius ?? 8);
+    setValueIfExists('style-card-radius', config.widgetStyles.cardRadius ?? 14);
+    setValueIfExists('style-empty-mode', config.widgetStyles.emptyMode || 'simple');
+    setValueIfExists('style-empty-text', config.widgetStyles.emptyText || 'No reviews yet. Be the first to write one.');
+    setCheckedIfExists('style-show-summary', config.widgetStyles.showSummary !== false);
+    setCheckedIfExists('style-show-verified', config.widgetStyles.showVerifiedLabel !== false);
   }
   if (document.getElementById('trash-retention-days')) document.getElementById('trash-retention-days').value = config.trashRetentionDays || 28;
   if (config.cardStyles) {
@@ -666,30 +698,79 @@ window.removeAttribute = async function(index) {
 };
 
 window.updatePreviews = function() {
-  const title = document.getElementById('style-title')?.value || 'Customer Reviews';
-  const primary = document.getElementById('style-primary')?.value || '#000000';
-  const star = document.getElementById('style-star')?.value || '#ffc700';
-  const txt = `${document.getElementById('style-text')?.value || 15}px`;
-  const cardStar = `${document.getElementById('card-star')?.value || 14}px`;
-  const maxWidth = `${document.getElementById('style-width')?.value || 1160}px`;
-  const badgeBg = document.getElementById('card-badge-bg')?.value || '#111827';
-  const badgeText = document.getElementById('card-badge-text')?.value || '#ffffff';
-  const badgeStar = document.getElementById('card-badge-star')?.value || star;
-  const badgeRadius = `${document.getElementById('card-badge-radius')?.value || 999}px`;
-  const preTitle = document.getElementById('pre-title');
-  if (preTitle) preTitle.innerText = title;
-  document.querySelectorAll('.pre-color-primary').forEach((el) => { el.style.background = primary; });
-  document.querySelectorAll('.pre-color-star').forEach((el) => { el.style.color = star; });
-  document.querySelectorAll('.pre-color-text').forEach((el) => { el.style.fontSize = txt; });
-  document.querySelectorAll('.pre-color-text-brand').forEach((el) => { el.style.color = primary; });
-  const cardIcon = document.getElementById('pre-card-icon');
+  const title = getValue('style-title', 'Customer Reviews');
+  const primary = getValue('style-primary', '#000000');
+  const star = getValue('style-star', '#ffc700');
+  const txt = `${getValue('style-text', '15')}px`;
+  const cardStar = `${getValue('card-star', '14')}px`;
+  const maxWidth = `${getValue('style-width', '1160')}px`;
+  const layout = getValue('style-layout', 'clean');
+  const previewState = getValue('style-preview-state', 'reviews');
+  const headerAlign = getValue('style-header-align', 'left');
+  const buttonStyle = getValue('style-button-style', 'solid');
+  const buttonRadius = `${getValue('style-button-radius', buttonStyle === 'pill' ? '999' : '8')}px`;
+  const reviewCardRadius = `${getValue('style-card-radius', '14')}px`;
+  const emptyMode = getValue('style-empty-mode', 'simple');
+  const emptyText = getValue('style-empty-text', 'No reviews yet. Be the first to write one.');
+  const showSummary = getChecked('style-show-summary', true);
+  const showVerified = getChecked('style-show-verified', true);
+  const badgeBg = getValue('card-badge-bg', '#111827');
+  const badgeText = getValue('card-badge-text', '#ffffff');
+  const badgeStar = getValue('card-badge-star', star);
+  const badgeRadius = `${getValue('card-badge-radius', '999')}px`;
+
   const previewWrap = document.getElementById('preview-container-wrap');
   if (previewWrap && previewWrap.style.maxWidth !== '375px') previewWrap.style.maxWidth = maxWidth;
-  if (cardIcon) { cardIcon.style.fontSize = cardStar; cardIcon.style.color = badgeStar; }
-  const badge = document.getElementById('pre-card-badge');
-  if (badge) { badge.style.background = badgeBg; badge.style.color = badgeText; badge.style.borderRadius = badgeRadius; }
-  const cardCount = document.getElementById('pre-card-count');
-  if (cardCount) cardCount.style.display = document.getElementById('card-count')?.checked ? 'inline' : 'none';
+
+  const buttonCss = buttonStyle === 'outline'
+    ? `background:#fff;color:${primary};border:1px solid ${primary};border-radius:${buttonRadius}`
+    : `background:${primary};color:#fff;border:0;border-radius:${buttonRadius}`;
+
+  const sampleReviews = [
+    { stars: '★★★★★', headline: 'Amazing quality', comment: 'The quality is top notch and it arrived perfectly.', name: 'Jane Doe' },
+    { stars: '★★★★★', headline: 'Would recommend', comment: 'Helpful feedback displayed clearly and easy to trust.', name: 'Sarah M.' },
+    { stars: '★★★★☆', headline: 'Brilliant service', comment: 'Clean review section and a smooth customer experience.', name: 'Alex P.' },
+  ];
+
+  const summaryHtml = showSummary && previewState !== 'empty' ? `
+    <div class="nr-admin-preview__summary">
+      <div><div class="nr-admin-preview__score">4.8</div><div class="nr-admin-preview__stars" style="color:${star}">★★★★★</div><div class="nr-admin-preview__meta">12 reviews</div></div>
+      <div class="nr-admin-preview__bars"><div class="nr-admin-preview__bar"><span style="width:82%;background:${primary}"></span></div><div class="nr-admin-preview__bar"><span style="width:14%;background:${primary}"></span></div><div class="nr-admin-preview__bar"><span style="width:4%;background:${primary}"></span></div></div>
+    </div>` : '';
+
+  const reviewCardsHtml = sampleReviews.map((review) => `
+    <article class="nr-admin-preview__card" style="border-radius:${reviewCardRadius}">
+      <div class="nr-admin-preview__stars" style="color:${star}">${review.stars}</div>
+      <h4 class="nr-admin-preview__headline">${escapeHtml(review.headline)}</h4>
+      <p class="nr-admin-preview__comment" style="font-size:${txt}">${escapeHtml(review.comment)}</p>
+      <p class="nr-admin-preview__meta">${escapeHtml(review.name)} ${showVerified ? '✓ Verified' : ''}</p>
+    </article>`).join('');
+
+  const emptyHtml = emptyMode === 'hidden'
+    ? '<p class="style-help">Empty state hidden. The widget will not show a review panel until reviews exist.</p>'
+    : `<div class="nr-admin-preview__empty" data-mode="${escapeHtml(emptyMode)}"><strong>${emptyMode === 'boxed' ? 'No reviews yet' : ''}</strong><span>${escapeHtml(emptyText)}</span></div>`;
+
+  const widget = document.getElementById('preview-widget');
+  if (widget) {
+    widget.innerHTML = `
+      <div class="nr-admin-preview" data-layout="${escapeHtml(layout)}" style="--nr-primary:${primary};--nr-star:${star};">
+        <div class="nr-admin-preview__header" data-align="${escapeHtml(headerAlign)}">
+          <h3 id="pre-title" class="nr-admin-preview__title" style="color:${primary}">${escapeHtml(title)}</h3>
+          <button class="nr-admin-preview__button" style="${buttonCss}">Write a Review</button>
+        </div>
+        ${previewState === 'empty' ? emptyHtml : `${summaryHtml}<div class="nr-admin-preview__list">${reviewCardsHtml}</div>`}
+      </div>`;
+  }
+
+  const card = document.getElementById('preview-card');
+  if (card) {
+    card.innerHTML = `<span id="pre-card-badge" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;min-width:76px;padding:6px 12px;border-radius:${badgeRadius};background:${badgeBg};color:${badgeText};font-weight:800;"><span id="pre-card-icon" style="font-size:${cardStar};color:${badgeStar};">★</span> <span id="pre-card-count" style="display:${getChecked('card-count', true) ? 'inline' : 'none'}">4.8 (12)</span></span><h4>Sample Product</h4><p>$29.99</p>`;
+  }
+
+  const carousel = document.getElementById('preview-carousel');
+  if (carousel) {
+    carousel.innerHTML = `<div class="nr-admin-preview" data-layout="carousel"><div class="nr-admin-preview__header" data-align="left"><h3 class="nr-admin-preview__title" style="color:${primary}">Global Review Carousel</h3><span class="style-help">${getChecked('car-autoplay', true) ? 'Auto-play on' : 'Manual'} · ${getChecked('car-arrows', false) ? 'Arrows shown' : 'No arrows'} · ${getValue('car-limit','10')} reviews</span></div><div class="nr-admin-preview__list">${reviewCardsHtml}</div></div>`;
+  }
 };
 
 window.saveSettings = async function() {
@@ -702,14 +783,25 @@ window.saveSettings = async function() {
     attributeProfiles: currentAttributes,
     seo: { richSnippets: document.getElementById('set-seo').checked },
     widgetStyles: {
-      widgetTitle: document.getElementById('style-title').value,
-      primaryColor: document.getElementById('style-primary').value,
-      starColor: document.getElementById('style-star').value,
-      textSize: parseInt(document.getElementById('style-text').value, 10),
-      maxWidth: parseInt(document.getElementById('style-width')?.value || '1160', 10),
-      reviewStarSize: parseInt(document.getElementById('style-review-star-size')?.value || '52', 10),
-      sliderTrackColor: document.getElementById('style-slider-track')?.value || '#e6ebf1',
-      sliderKnobColor: document.getElementById('style-slider-knob')?.value || '#111111',
+      widgetTitle: getValue('style-title', 'Customer Reviews'),
+      primaryColor: getValue('style-primary', '#000000'),
+      starColor: getValue('style-star', '#ffc700'),
+      textSize: parseInt(getValue('style-text', '15'), 10),
+      maxWidth: parseInt(getValue('style-width', '1160'), 10),
+      reviewStarSize: parseInt(getValue('style-review-star-size', '52'), 10),
+      reviewStarAlignment: getValue('style-header-align', 'left'),
+      headerAlignment: getValue('style-header-align', 'left'),
+      layoutStyle: getValue('style-layout', 'clean'),
+      previewState: getValue('style-preview-state', 'reviews'),
+      buttonStyle: getValue('style-button-style', 'solid'),
+      buttonRadius: parseInt(getValue('style-button-radius', '8'), 10),
+      cardRadius: parseInt(getValue('style-card-radius', '14'), 10),
+      emptyMode: getValue('style-empty-mode', 'simple'),
+      emptyText: getValue('style-empty-text', 'No reviews yet. Be the first to write one.'),
+      showSummary: getChecked('style-show-summary', true),
+      showVerifiedLabel: getChecked('style-show-verified', true),
+      sliderTrackColor: getValue('style-slider-track', '#e6ebf1'),
+      sliderKnobColor: getValue('style-slider-knob', '#111111'),
     },
     trashRetentionDays: Math.max(1, Math.min(28, parseInt(document.getElementById('trash-retention-days')?.value || '28', 10))),
     cardStyles: {

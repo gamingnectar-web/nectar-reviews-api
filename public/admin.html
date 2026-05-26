@@ -583,7 +583,47 @@
     @media(max-width:950px){.loyalty-checkout-grid{grid-template-columns:1fr;}}
 
 
+
+    /* Visual Customiser v26 refinements */
+    .style-help { margin:8px 0 0; color:var(--text-light); font-size:12px; line-height:1.45; }
+    .style-section-label { display:block; margin:18px 0 8px; color:#344054; font-size:12px; font-weight:950; letter-spacing:.04em; text-transform:uppercase; }
+    .style-control-grid.full { grid-template-columns:repeat(3,minmax(170px,1fr)); }
+    .style-control-grid .wide { grid-column:1 / -1; }
+    .style-switch-row { display:flex; flex-wrap:wrap; gap:10px; margin:12px 0; }
+    .style-check-card { display:flex; align-items:flex-start; gap:10px; padding:12px 14px; border:1px solid var(--border); border-radius:12px; background:#fbfdff; font-weight:850; }
+    .style-check-card small { display:block; margin-top:3px; color:var(--text-light); font-weight:700; }
+    .nr-admin-preview { width:100%; background:#fff; border:1px solid var(--border); border-radius:16px; padding:24px; color:#111827; }
+    .nr-admin-preview__header { display:flex; justify-content:space-between; align-items:center; gap:18px; margin-bottom:20px; }
+    .nr-admin-preview__header[data-align="center"] { flex-direction:column; text-align:center; align-items:center; }
+    .nr-admin-preview__header[data-align="right"] { flex-direction:row-reverse; text-align:right; }
+    .nr-admin-preview__title { margin:0; font-size:28px; letter-spacing:-.04em; line-height:1.1; font-weight:950; }
+    .nr-admin-preview__button { border:0; min-height:44px; padding:10px 18px; font-weight:950; cursor:pointer; }
+    .nr-admin-preview__summary { display:grid; grid-template-columns:110px minmax(0,1fr); gap:18px; align-items:center; padding:18px; border:1px solid var(--border); border-radius:14px; background:#fbfdff; margin-bottom:18px; }
+    .nr-admin-preview__score { font-size:40px; font-weight:950; letter-spacing:-.06em; }
+    .nr-admin-preview__bars { display:grid; gap:8px; }
+    .nr-admin-preview__bar { height:8px; border-radius:999px; background:#e6ebf1; overflow:hidden; }
+    .nr-admin-preview__bar span { display:block; height:100%; background:#111827; border-radius:999px; }
+    .nr-admin-preview__list { display:grid; gap:14px; }
+    .nr-admin-preview[data-layout="cards"] .nr-admin-preview__list { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .nr-admin-preview[data-layout="compact"] .nr-admin-preview__card { padding:14px 16px; }
+    .nr-admin-preview[data-layout="compact"] .nr-admin-preview__comment { display:none; }
+    .nr-admin-preview[data-layout="carousel"] .nr-admin-preview__list { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; padding-bottom:8px; }
+    .nr-admin-preview[data-layout="carousel"] .nr-admin-preview__card { min-width:min(340px,80%); scroll-snap-align:start; }
+    .nr-admin-preview__card { border:1px solid var(--border); border-radius:14px; padding:20px; background:#fff; }
+    .nr-admin-preview__stars { letter-spacing:2px; font-size:18px; }
+    .nr-admin-preview__headline { margin:10px 0 8px; font-size:17px; font-weight:950; }
+    .nr-admin-preview__comment { margin:0 0 12px; color:#475467; line-height:1.55; }
+    .nr-admin-preview__meta { color:#667085; font-size:13px; font-weight:800; }
+    .nr-admin-preview__empty { padding:28px; text-align:center; border:1px dashed var(--border); border-radius:14px; color:#667085; background:#fbfdff; }
+    .nr-admin-preview__empty strong { display:block; color:#111827; font-size:17px; margin-bottom:6px; }
+    .msg-module-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+    .msg-module-card { border:1px solid var(--border,#e5e7eb); border-radius:16px; padding:16px; background:#fbfdff; }
+    .msg-module-card h4 { margin:0 0 6px; font-size:16px; }
+    .msg-module-card p { margin:0 0 12px; color:#667085; line-height:1.45; }
+    .msg-module-card label { margin-top:10px!important; }
+    @media(max-width:900px){.style-control-grid.full,.nr-admin-preview[data-layout="cards"] .nr-admin-preview__list,.msg-module-grid{grid-template-columns:1fr}.nr-admin-preview__header,.nr-admin-preview__summary{grid-template-columns:1fr;flex-direction:column;align-items:flex-start}.nr-admin-preview__header[data-align="right"]{flex-direction:column;align-items:flex-end}}
   </style>
+  <link rel="stylesheet" href="/module-shell.css?v=cart-rewards-module-1">
 </head>
 <body>
   <div id="custom-toast"></div>
@@ -811,25 +851,41 @@
         <div class="grid-2">
           <div class="panel">
             <div class="sub-tabs">
-              <button class="sub-tab-btn active" onclick="window.subTab('style-widget','preview-widget')">Product Widget</button>
+              <button class="sub-tab-btn active" onclick="window.subTab('style-widget','preview-widget')">Customer Reviews Widget</button>
               <button class="sub-tab-btn" onclick="window.subTab('style-card','preview-card')">Product Card Stars</button>
               <button class="sub-tab-btn" onclick="window.subTab('style-carousel','preview-carousel')">Global Carousel</button>
             </div>
+
             <div id="style-widget" class="sub-view active">
-              <p><input id="style-title" class="premium-input" placeholder="Widget Title" value="Customer Reviews" oninput="window.updatePreviews()" /></p>
-              <div class="style-control-grid">
-                <div><label>Brand Color</label><input id="style-primary" class="premium-input color-text" type="text" value="#000000" oninput="window.updatePreviews()" /></div>
-                <div><label>Star Color</label><input id="style-star" class="premium-input color-text" type="text" value="#ffc700" oninput="window.updatePreviews()" /></div>
-                <div><label>Text Size (px)</label><input id="style-text" class="premium-input" type="number" value="15" oninput="window.updatePreviews()" /></div>
+              <label class="style-section-label">Customer review section</label>
+              <div class="style-control-grid full">
+                <div><label>Widget title</label><input id="style-title" class="premium-input" placeholder="Widget Title" value="Customer Reviews" oninput="window.updatePreviews()" /></div>
+                <div><label>Section layout</label><select id="style-layout" class="filter-select" onchange="window.updatePreviews()"><option value="clean">Clean list</option><option value="cards">Card grid</option><option value="compact">Compact list</option><option value="carousel">Scrollable carousel</option></select></div>
+                <div><label>Preview state</label><select id="style-preview-state" class="filter-select" onchange="window.updatePreviews()"><option value="reviews">With reviews</option><option value="empty">No reviews yet</option></select></div>
+                <div><label>Header alignment</label><select id="style-header-align" class="filter-select" onchange="window.updatePreviews()"><option value="left">Left / button right</option><option value="center">Centred</option><option value="right">Right aligned</option></select></div>
+                <div><label>Button style</label><select id="style-button-style" class="filter-select" onchange="window.updatePreviews()"><option value="solid">Solid</option><option value="pill">Pill</option><option value="outline">Outline</option></select></div>
+                <div><label>Button radius (px)</label><input id="style-button-radius" class="premium-input" type="number" min="0" max="999" value="8" oninput="window.updatePreviews()" /></div>
+                <div><label>Brand colour</label><input id="style-primary" class="premium-input color-text" type="text" value="#000000" oninput="window.updatePreviews()" /></div>
+                <div><label>Star colour</label><input id="style-star" class="premium-input color-text" type="text" value="#ffc700" oninput="window.updatePreviews()" /></div>
+                <div><label>Text size (px)</label><input id="style-text" class="premium-input" type="number" value="15" oninput="window.updatePreviews()" /></div>
                 <div><label>Widget max width (px)</label><input id="style-width" class="premium-input" type="number" min="720" max="1800" value="1160" oninput="window.updatePreviews()" /></div>
                 <div><label>Review star size (px)</label><input id="style-review-star-size" class="premium-input" type="number" min="24" max="60" value="52" oninput="window.updatePreviews()" /></div>
+                <div><label>Review card radius (px)</label><input id="style-card-radius" class="premium-input" type="number" min="0" max="40" value="14" oninput="window.updatePreviews()" /></div>
+                <div><label>Empty state style</label><select id="style-empty-mode" class="filter-select" onchange="window.updatePreviews()"><option value="simple">Simple line</option><option value="boxed">Boxed prompt</option><option value="hidden">Hide until first review</option></select></div>
+                <div class="wide"><label>Empty state text</label><input id="style-empty-text" class="premium-input" value="No reviews yet. Be the first to write one." oninput="window.updatePreviews()" /></div>
                 <div><label>Slider track colour</label><input id="style-slider-track" class="premium-input color-text" type="text" value="#e6ebf1" oninput="window.updatePreviews()" /></div>
                 <div><label>Slider notch colour</label><input id="style-slider-knob" class="premium-input color-text" type="text" value="#111111" oninput="window.updatePreviews()" /></div>
               </div>
+              <div class="style-switch-row">
+                <label class="style-check-card"><input id="style-show-summary" type="checkbox" checked onchange="window.updatePreviews()" /><span>Show rating summary<small>Average score and rating distribution above review cards.</small></span></label>
+                <label class="style-check-card"><input id="style-show-verified" type="checkbox" checked onchange="window.updatePreviews()" /><span>Show verified label<small>Keeps trust signals visible in the customer view.</small></span></label>
+              </div>
+              <p class="style-help">This preview now mirrors the customer-facing “Customer Reviews” section. The carousel is only shown when the widget layout is set to carousel or the Global Carousel tab is selected.</p>
               <div class="style-actions"><button class="primary-btn" onclick="window.saveSettings()">Publish Styles</button></div>
             </div>
+
             <div id="style-card" class="sub-view">
-              <div class="style-control-grid">
+              <div class="style-control-grid full">
                 <div><label>Star Size (px)</label><input id="card-star" class="premium-input" type="number" value="14" min="10" max="32" oninput="window.updatePreviews()" /></div>
                 <div><label>Badge background</label><input id="card-badge-bg" class="premium-input color-text" type="text" value="#111827" oninput="window.updatePreviews()" /></div>
                 <div><label>Badge text colour</label><input id="card-badge-text" class="premium-input color-text" type="text" value="#ffffff" oninput="window.updatePreviews()" /></div>
@@ -839,35 +895,25 @@
               <p><label><input id="card-count" type="checkbox" checked onchange="window.updatePreviews()" /> Show Count</label></p>
               <div class="style-actions"><button class="primary-btn" onclick="window.saveSettings()">Publish Styles</button></div>
             </div>
+
             <div id="style-carousel" class="sub-view">
-              <p><select id="car-layout" class="filter-select"><option value="infinite">Infinite Auto-Scroll</option><option value="grid">Standard Grid</option><option value="masonry">Pinterest Masonry</option></select></p>
-              <label><input id="car-autoplay" type="checkbox" checked /> Auto-Play Carousel</label>
-              <p><input id="car-delay" class="premium-input" type="number" value="4000" placeholder="Slide Delay (ms)" /></p>
-              <label><input id="car-arrows" type="checkbox" /> Show Arrows</label>
-              <p><input id="car-limit" class="premium-input" type="number" value="10" placeholder="Max Reviews" /></p>
+              <div class="style-control-grid full">
+                <div><label>Carousel layout</label><select id="car-layout" class="filter-select" onchange="window.updatePreviews()"><option value="infinite">Infinite Auto-Scroll</option><option value="grid">Standard Grid</option><option value="masonry">Pinterest Masonry</option></select></div>
+                <div><label>Slide delay (ms)</label><input id="car-delay" class="premium-input" type="number" value="4000" placeholder="Slide Delay (ms)" oninput="window.updatePreviews()" /></div>
+                <div><label>Max reviews</label><input id="car-limit" class="premium-input" type="number" value="10" placeholder="Max Reviews" oninput="window.updatePreviews()" /></div>
+              </div>
+              <div class="style-switch-row"><label class="style-check-card"><input id="car-autoplay" type="checkbox" checked onchange="window.updatePreviews()" /><span>Auto-play carousel<small>For homepage/global review blocks.</small></span></label><label class="style-check-card"><input id="car-arrows" type="checkbox" onchange="window.updatePreviews()" /><span>Show arrows<small>Useful when the carousel is not auto-scrolling.</small></span></label></div>
               <div class="style-actions"><button class="primary-btn" onclick="window.saveSettings()">Publish Styles</button></div>
             </div>
           </div>
+
           <div class="panel">
-            <h3>Live Preview</h3>
+            <h3>Live Customer Preview</h3>
             <div class="filter-row"><button id="btn-desk-prev" class="secondary-btn active" onclick="window.setPreviewMode('desktop')">Desktop</button><button id="btn-mob-prev" class="secondary-btn" onclick="window.setPreviewMode('mobile')">Mobile</button></div>
             <div id="preview-container-wrap">
-              <div id="preview-widget" class="sub-preview active preview-card">
-                <h3 id="pre-title" class="pre-color-text-brand">Customer Reviews</h3>
-                <button class="pre-color-primary" style="border:0; border-radius:999px; color:#fff; padding:10px 14px; font-weight:800;">Write Review</button>
-                <p class="pre-color-star" style="font-size:22px;">★★★★★</p>
-                <h4>Amazing Quality</h4><p class="pre-color-text">This product is absolutely amazing! The quality is top notch and it arrived perfectly.</p><p>Jane Doe ✓ Verified</p>
-              </div>
-              <div id="preview-card" class="sub-preview preview-card"><span id="pre-card-badge" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;min-width:76px;padding:6px 12px;border-radius:999px;background:#111827;color:#fff;font-weight:800;"><span id="pre-card-icon" class="pre-color-star">★</span> <span id="pre-card-count">4.8 (12)</span></span><h4>Sample Product</h4><p>$29.99</p></div>
-              <div id="preview-carousel" class="sub-preview preview-card preview-carousel-demo">
-                <button type="button" class="carousel-arrow" aria-label="Previous review">‹</button>
-                <div class="carousel-track-demo">
-                  <article class="carousel-review"><p class="pre-color-star">★★★★★</p><h4>Incredible!</h4><p>Best purchase I've made all year.</p><p>Sarah M.</p></article>
-                  <article class="carousel-review"><p class="pre-color-star">★★★★★</p><h4>Brilliant quality</h4><p>The review carousel looks clean on the homepage.</p><p>Alex P.</p></article>
-                  <article class="carousel-review"><p class="pre-color-star">★★★★☆</p><h4>Would recommend</h4><p>Helpful feedback displayed clearly.</p><p>Danny R.</p></article>
-                </div>
-                <button type="button" class="carousel-arrow" aria-label="Next review">›</button>
-              </div>
+              <div id="preview-widget" class="sub-preview active preview-card"></div>
+              <div id="preview-card" class="sub-preview preview-card"></div>
+              <div id="preview-carousel" class="sub-preview preview-card"></div>
             </div>
           </div>
         </div>
@@ -1113,5 +1159,7 @@
   <script src="/admin-messaging-campaigns.js?v=secure-6"></script>
   <script src="/admin-help-drawer.js" defer></script>
   <script src="/admin-loyalty-foundation.js?v=secure-24"></script>
+  <script src="/module-registry.js?v=cart-rewards-module-1" defer></script>
+  <script src="/module-shell.js?v=cart-rewards-module-1" defer></script>
 </body>
 </html>

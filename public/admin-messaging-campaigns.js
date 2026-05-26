@@ -104,6 +104,7 @@
           <button type="button" class="msg-tab" data-msg-tab="tester">Review Page Tester</button>
           <button type="button" class="msg-tab" data-msg-tab="delivery">Email Delivery</button>
           <button type="button" class="msg-tab" data-msg-tab="analytics">Analytics</button>
+          <button type="button" class="msg-tab" data-msg-tab="modules">Modules</button>
           <button type="button" class="msg-tab" data-msg-tab="settings">Settings</button>
         </div>
 
@@ -157,13 +158,17 @@
 
 
   const emailSections = [];
-  function sectionLabel(type){ return ({ notice:'Notice box', promo:'Promo / offer box', support:'Support reminder', text:'Plain text section' }[type] || 'Custom section'); }
+  function sectionLabel(type){ return ({ notice:'Notice box', promo:'Promo / offer box', support:'Support reminder', text:'Plain text section', review_reassurance:'Review reassurance', loyalty_points:'Loyalty points reminder', cart_rewards:'Cart rewards nudge', support_first:'Support before review' }[type] || 'Custom section'); }
   function sectionDefaults(type){
     return {
       notice:'A quick note before you review: your feedback helps other customers choose confidently.',
       promo:'Thanks again for shopping with us — we appreciate your support.',
       support:'Need help before leaving a review? Reply to this email and we will sort it.',
-      text:'Add your custom message here.'
+      text:'Add your custom message here.',
+      review_reassurance:'Your review will be checked by our team before it appears publicly, so you can share honest feedback with confidence.',
+      loyalty_points:'Leave a verified review and you may earn loyalty points once your review has been approved.',
+      cart_rewards:'Remember to check your cart before checkout — you may unlock milestone rewards as you shop.',
+      support_first:'Something not right? Reply to this email before reviewing and our team will help put it right.'
     }[type] || 'Add your custom message here.';
   }
   function renderEmailSections(){
@@ -201,6 +206,7 @@
     });
   }
   function addEmailSection(){ const type = val('msg-section-template','notice'); emailSections.push({ type, title: sectionLabel(type), text: sectionDefaults(type), position: 'before', bgColor:'#f8fafc', borderColor:'#e5e7eb', radius:12, padding:14 }); renderEmailSections(); updatePreview(); }
+  function addModuleSection(type){ emailSections.push({ type, title: sectionLabel(type), text: sectionDefaults(type), position: type === 'support_first' ? 'after' : 'before', bgColor: type === 'cart_rewards' ? '#fff7ed' : '#f8fafc', borderColor: type === 'cart_rewards' ? '#fed7aa' : '#e5e7eb', radius:14, padding:15 }); renderEmailSections(); updatePreview(); switchPane('builder'); showToast('Message module added'); }
   function renderEmailSectionRows(position){
     const rows = emailSections.filter((section)=> (section.position || 'before') === position);
     if(!rows.length) return '';
@@ -580,6 +586,7 @@
     el('msg-copy-test-url')?.addEventListener('click', () => copyText(testUrl(), 'Test review URL copied'));
     el('msg-save-template')?.addEventListener('click', saveTemplate);
     el('msg-add-section')?.addEventListener('click', addEmailSection);
+    document.querySelectorAll('#nr-messaging-campaigns-mount [data-add-module-section]').forEach((btn) => btn.addEventListener('click', () => addModuleSection(btn.dataset.addModuleSection)));
     el('msg-add-link-rule')?.addEventListener('click', addLinkRule);
     el('msg-preview-desktop')?.addEventListener('click', () => setPreviewMode('desktop'));
     el('msg-preview-mobile')?.addEventListener('click', () => setPreviewMode('mobile'));
