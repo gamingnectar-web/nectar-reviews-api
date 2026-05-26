@@ -13,6 +13,9 @@ const required = [
   'src/modules/campaigns/module.config.js',
   'src/modules/help/module.config.js',
   'public/admin/index.html',
+  'public/admin/legacy-admin.css',
+  'public/admin/legacy-admin.js',
+  'public/admin.html',
   'public/review-widget.js'
 ];
 

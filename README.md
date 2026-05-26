@@ -15,7 +15,7 @@ This is a clean modular replacement structure for the Nectar Shopify app. It sep
   - `campaigns`
   - `help`
 - Per-shop module toggles.
-- Admin shell at `/admin`.
+- Full legacy-style admin surface at `/admin` with dashboard, review manager, messaging, importer, trash, docs, module access and visual customiser.
 - Shopify OAuth install routes.
 - Shopify product search route.
 - Review widget compatibility at `/review-widget.js`.
@@ -130,3 +130,7 @@ npm run liquid:check
 ```
 
 to confirm those pieces are present.
+
+## Full admin restore note
+
+This build restores the full admin surface instead of the bare modular scaffold. The UI files live in `public/admin/legacy-admin.css` and `public/admin/legacy-admin.js`, while `public/admin/index.html` is the main admin entry.

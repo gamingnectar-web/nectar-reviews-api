@@ -17,12 +17,14 @@ Shopify-Liquid/blocks/star_rating.liquid
 Shopify-Liquid/nectar-review-widget-block.liquid
 Shopify-Liquid/snippets/nectar-review-summary.liquid
 Shopify-Liquid/snippets/nectar-stars.liquid
+docs/RESTORE-FULL-REPO.md
 docs/architecture.md
 docs/deployment.md
 docs/github-replace.md
 docs/migration-audit.md
 docs/modules.md
 docs/replacement-guide.md
+docs/shopify-iframe-fix.md
 docs/theme-and-liquid.md
 extensions/cart-reward-discount-function/Cargo.toml
 extensions/cart-reward-discount-function/README.md
@@ -56,7 +58,10 @@ extensions/theme-app-extension/snippets/nectar-review-summary.liquid
 extensions/theme-app-extension/snippets/nectar-stars.liquid
 package-lock.json
 package.json
+public/admin.html
 public/admin/index.html
+public/admin/legacy-admin.css
+public/admin/legacy-admin.js
 public/admin/shell.css
 public/admin/shell.js
 public/assets/nectar-logo.svg

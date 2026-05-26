@@ -3,53 +3,374 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Nectar Admin</title>
-  <link rel="stylesheet" href="/admin/shell.css" />
+  <title>Nectar Reviews Admin</title>
+  <link rel="stylesheet" href="/admin/legacy-admin.css" />
 </head>
 <body>
   <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <div class="brand-block">
         <div class="brand-mark">N</div>
-        <div><strong>Nectar</strong><span>Modular admin</span></div>
+        <div>
+          <p class="eyebrow">Nectar API</p>
+          <h1>Reviews Platform</h1>
+        </div>
       </div>
-      <div class="shop-box">
-        <label>Shop domain</label>
-        <input data-shop-input placeholder="your-store.myshopify.com" />
-        <button data-save-shop>Use shop</button>
+
+      <div class="shop-card">
+        <span class="status-dot"></span>
+        <div>
+          <strong id="shopLabel">Connected</strong>
+          <small id="shopSubLabel">Shop context loading…</small>
+        </div>
       </div>
-      <nav data-nav></nav>
-      <button class="settings-link" data-open-settings>Module settings</button>
+
+      <nav class="nav-groups">
+        <div class="nav-group">
+          <span>Manage</span>
+          <button class="nav-btn active" data-section="dashboard">Dashboard</button>
+          <button class="nav-btn" data-section="reviews">Review Manager</button>
+          <button class="nav-btn" data-section="messaging">Messaging & Campaigns</button>
+          <button class="nav-btn" data-section="importer">Import CSV</button>
+        </div>
+
+        <div class="nav-group">
+          <span>Configuration</span>
+          <button class="nav-btn" data-section="rules">Rules & Settings</button>
+          <button class="nav-btn" data-section="visuals">Visual Customiser</button>
+          <button class="nav-btn" data-section="modules">Module Access</button>
+        </div>
+
+        <div class="nav-group">
+          <span>Future Products</span>
+          <button class="nav-btn" data-section="discounts">Discounts</button>
+          <button class="nav-btn" data-section="loyalty">Loyalty</button>
+          <button class="nav-btn" data-section="cart-rewards">Cart Rewards</button>
+        </div>
+
+        <div class="nav-group">
+          <span>Developers</span>
+          <button class="nav-btn" data-section="documentation">Documentation</button>
+          <button class="nav-btn" data-section="manual-setup">Manual Setup</button>
+        </div>
+      </nav>
     </aside>
 
     <main class="main">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Nectar API</p>
-          <h1 data-page-title>Loading</h1>
+          <p class="eyebrow" id="sectionEyebrow">Performance Dashboard</p>
+          <h2 id="sectionTitle">Dashboard</h2>
         </div>
-        <div class="status-pill" data-status>Connecting</div>
+        <div class="topbar-actions">
+          <button class="ghost" id="refreshBtn">Refresh</button>
+          <button class="primary" data-section-jump="documentation">Setup Guide</button>
+        </div>
       </header>
-      <section data-content class="content-card"></section>
+
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+      <section class="panel-section active" id="section-dashboard" data-title="Dashboard" data-eyebrow="Performance Dashboard">
+        <div class="hero-card">
+          <div>
+            <p class="eyebrow">Customer proof</p>
+            <h3>Reviews, trust signals and reward performance in one place.</h3>
+            <p>Keep reviews, messaging, imports, trash, documentation and future modules available without mixing their source files together.</p>
+          </div>
+          <div class="hero-actions">
+            <button class="primary" data-section-jump="reviews">Moderate Reviews</button>
+            <button class="ghost" data-section-jump="messaging">Build Campaign</button>
+          </div>
+        </div>
+
+        <div class="metrics-grid">
+          <article class="metric-card"><span>Total Reviews</span><strong id="metricTotal">0</strong><small>All non-deleted reviews.</small></article>
+          <article class="metric-card"><span>Live on Store</span><strong id="metricApproved">0</strong><small>Approved reviews visible publicly.</small></article>
+          <article class="metric-card"><span>Pending Review</span><strong id="metricPending">0</strong><small>Waiting for approval.</small></article>
+          <article class="metric-card"><span>Average Rating</span><strong id="metricAverage">0.0</strong><small>Approved reviews only.</small></article>
+        </div>
+
+        <div class="two-col">
+          <article class="card tall">
+            <div class="card-head"><h3>Reviews over time</h3><span class="pill">Monthly</span></div>
+            <div class="chart-bars" id="reviewBars"></div>
+          </article>
+          <article class="card tall">
+            <div class="card-head"><h3>Publishing status</h3><span class="pill">Safety first</span></div>
+            <div class="status-split" id="statusSplit"></div>
+          </article>
+        </div>
+
+        <article class="card">
+          <div class="card-head">
+            <h3>Product leaderboard</h3>
+            <button class="ghost small" data-section-jump="reviews">Open Review Manager</button>
+          </div>
+          <div id="productLeaderboard" class="table-list">Loading product performance…</div>
+        </article>
+      </section>
+
+      <section class="panel-section" id="section-reviews" data-title="Review Manager" data-eyebrow="Moderation, trash and verification">
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-review-tab="list">Reviews</button>
+          <button class="tab" data-review-tab="rules">Approval rules</button>
+          <button class="tab" data-review-tab="trash">Trash</button>
+          <button class="tab" data-review-tab="tokens">Review links</button>
+        </div>
+
+        <div class="review-tab active" id="review-tab-list">
+          <div class="filter-row">
+            <select id="ratingFilter"><option value="">All Stars</option><option value="5">5 Stars</option><option value="4">4 Stars</option><option value="3">3 Stars</option><option value="2">2 Stars</option><option value="1">1 Star</option></select>
+            <select id="statusFilter"><option value="">All Statuses</option><option value="pending">Pending</option><option value="approved">Accepted</option><option value="rejected">Rejected</option><option value="spam">Spam / Test</option></select>
+            <input id="reviewSearch" placeholder="Search title, customer, product or review text" />
+            <button class="ghost" id="clearReviewFilters">Clear</button>
+          </div>
+          <div id="reviewList" class="review-list">Loading reviews…</div>
+        </div>
+
+        <div class="review-tab" id="review-tab-rules">
+          <article class="card">
+            <div class="card-head"><h3>Publishing controls</h3><span class="pill">Server-led</span></div>
+            <p>Choose when reviews can go live. Test reviews are always blocked from the storefront.</p>
+            <div class="settings-grid">
+              <label class="switch-row"><input type="checkbox" id="betaMode" /> <span>Developer beta mode</span><small>Hide public display while testing on a live theme.</small></label>
+              <label class="switch-row"><input type="checkbox" id="richSnippets" checked /> <span>Google Rich Snippets</span><small>Allow structured review data for eligible public reviews.</small></label>
+              <label class="switch-row"><input type="checkbox" id="autoApprove" /> <span>Auto-approve reviews</span><small>Only after verification checks pass.</small></label>
+              <label><span>Auto-approve source</span><select id="approveSource"><option>Verified Purchases Only</option><option>All Reviews (Inc. Unverified)</option></select></label>
+              <label><span>Minimum star rating</span><select id="minimumStars"><option>5 Stars only</option><option selected>4 Stars & up</option><option>3 Stars & up</option></select></label>
+              <label><span>Beta access email</span><input id="betaEmail" placeholder="testing@example.com" /></label>
+            </div>
+            <button class="primary" id="saveRules">Save approval rules</button>
+          </article>
+
+          <article class="card safety-card">
+            <div class="card-head"><h3>Current safety logic</h3><span class="pill">Protected</span></div>
+            <ul class="check-list">
+              <li>Verified means signed, imported, or manually verified — public storefront submissions cannot verify themselves.</li>
+              <li>One signed review token can be used once only, then it lapses.</li>
+              <li>Test/spam reviews never go live and are excluded from public APIs.</li>
+              <li>Private notes are never returned to the storefront.</li>
+              <li>Trashed/rejected reviews stay hidden unless restored.</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="review-tab" id="review-tab-trash">
+          <div class="metrics-grid compact">
+            <article class="metric-card"><span>Total in trash</span><strong id="trashCount">0</strong><small>Rejected or spam reviews.</small></article>
+            <article class="metric-card"><span>Oldest deletion</span><strong id="trashOldest">—</strong><small>Based on latest data.</small></article>
+            <article class="metric-card"><span>Retention</span><strong id="trashRetentionLabel">28 days</strong><small>Configurable setting.</small></article>
+          </div>
+          <article class="card">
+            <div class="card-head"><h3>Trash list</h3><div><button class="ghost small" id="restoreAllVisible">Restore visible</button><button class="danger small" id="deleteAllVisible">Mark spam</button></div></div>
+            <div id="trashList" class="review-list">No trashed reviews.</div>
+          </article>
+          <article class="card">
+            <div class="card-head"><h3>Automatic deletion</h3><span class="pill">Local setting</span></div>
+            <label class="inline-field">Keep trashed reviews for <input id="trashRetention" type="number" min="1" max="90" value="28" /> days</label>
+            <button class="primary" id="saveTrashSettings">Save trash settings</button>
+          </article>
+        </div>
+
+        <div class="review-tab" id="review-tab-tokens">
+          <article class="card">
+            <div class="card-head"><h3>Create one-use review link</h3><span class="pill">Verified request</span></div>
+            <div class="settings-grid">
+              <label><span>Product / item ID</span><input id="tokenItemId" placeholder="gid://shopify/Product/123" /></label>
+              <label><span>Order ID</span><input id="tokenOrderId" placeholder="Order reference" /></label>
+              <label><span>Customer email</span><input id="tokenEmail" placeholder="customer@example.com" /></label>
+            </div>
+            <button class="primary" id="generateToken">Generate token</button>
+            <pre id="tokenOutput" class="code-output"></pre>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel-section" id="section-messaging" data-title="Messaging & Campaigns" data-eyebrow="Email templates, review requests and campaign planning">
+        <div class="two-col wide-left">
+          <article class="card">
+            <div class="card-head"><h3>Email builder</h3><span class="pill">Review request</span></div>
+            <div class="settings-grid single">
+              <label><span>Template name</span><input id="emailTemplateName" value="Review request" /></label>
+              <label><span>Subject</span><input id="emailSubject" value="How did we do?" /></label>
+              <label><span>Heading</span><input id="emailHeading" value="Review your recent order" /></label>
+              <label><span>Email body</span><textarea id="emailBody">Thank you for shopping with us. Your feedback helps other customers choose with confidence.</textarea></label>
+            </div>
+            <div class="builder-tools">
+              <button class="ghost small" data-token="{{ customer_name }}">Customer name</button>
+              <button class="ghost small" data-token="{{ review_link }}">Review link</button>
+              <button class="ghost small" data-token="{{ product_title }}">Product title</button>
+              <button class="ghost small" id="toggleBorderTool">Add border</button>
+              <button class="ghost small" id="toggleBackgroundTool">Add background</button>
+            </div>
+            <div class="designer-row">
+              <label>Accent colour <input id="emailAccent" type="color" value="#f5b301" /></label>
+              <label>Button radius <input id="emailRadius" type="number" value="14" /></label>
+              <label>Border thickness <input id="emailBorder" type="number" value="1" /></label>
+            </div>
+            <button class="primary" id="saveEmailTemplate">Save template</button>
+          </article>
+
+          <article class="card preview-card">
+            <div class="card-head"><h3>Realtime preview</h3><span class="pill">Customer view</span></div>
+            <div id="emailPreview" class="email-preview"></div>
+          </article>
+        </div>
+
+        <article class="card">
+          <div class="card-head"><h3>Campaign calendar</h3><button class="primary small" id="addCampaign">Create campaign</button></div>
+          <div class="calendar-toolbar"><button class="ghost small" id="prevMonth">‹</button><strong id="calendarLabel">Month</strong><button class="ghost small" id="nextMonth">›</button></div>
+          <div id="campaignCalendar" class="calendar-grid"></div>
+        </article>
+      </section>
+
+      <section class="panel-section" id="section-importer" data-title="Importer Tool" data-eyebrow="CSV imports and product mapping">
+        <div class="two-col wide-left">
+          <article class="card">
+            <div class="card-head"><h3>1. Export from your old platform</h3><span class="pill">Safe staging</span></div>
+            <p>Choose the source format, then upload the CSV. Nothing goes live until you review the staging table.</p>
+            <label><span>Platform format</span><select id="importFormat"><option>Generic / Other</option><option>Weebly / Square</option><option>Judge.me</option></select></label>
+            <label class="file-drop"><input id="csvFile" type="file" accept=".csv,text/csv" /><span>No CSV selected yet.</span></label>
+            <button class="primary" id="parseCsv">Preview & Map Products</button>
+          </article>
+
+          <article class="card">
+            <div class="card-head"><h3>2. Smart product mapping</h3><span class="pill">Shopify lookup</span></div>
+            <div class="filter-row"><input id="productSearch" placeholder="Search Shopify products" /><button class="ghost" id="searchProducts">Search</button></div>
+            <div id="productResults" class="table-list">Search for products to map imported rows.</div>
+          </article>
+        </div>
+        <article class="card">
+          <div class="card-head"><h3>Import preview</h3><button class="primary small" id="publishImport">Publish staged reviews</button></div>
+          <div id="importPreview" class="table-list">No CSV staged yet.</div>
+        </article>
+      </section>
+
+      <section class="panel-section" id="section-rules" data-title="Rules & Settings" data-eyebrow="Conditional questions and review scoring">
+        <article class="card">
+          <div class="card-head"><h3>Smart Conditional Sliders</h3><span class="pill">Product targeting</span></div>
+          <p>Add scoring questions that appear only for products matching a tag or metafield.</p>
+          <div class="settings-grid">
+            <label><span>Condition type</span><select id="conditionType"><option>Product Tag</option><option>Metafield Key</option></select></label>
+            <label><span>Condition</span><input id="conditionValue" placeholder="protein, flavour, apparel:size" /></label>
+            <label><span>Slider label</span><input id="sliderLabel" placeholder="Taste, fit, quality, mixability" /></label>
+          </div>
+          <button class="primary" id="createSliderRule">+ Create Rule</button>
+          <div id="sliderRules" class="chip-list"></div>
+        </article>
+      </section>
+
+      <section class="panel-section" id="section-visuals" data-title="Visual Customiser" data-eyebrow="Storefront display settings">
+        <div class="tabs visual-tabs">
+          <button class="tab active" data-visual-tab="widget">Product Widget</button>
+          <button class="tab" data-visual-tab="stars">Product Card Stars</button>
+          <button class="tab" data-visual-tab="carousel">Global Carousel</button>
+        </div>
+        <div class="two-col">
+          <article class="card">
+            <div class="settings-grid">
+              <label><span>Brand Color</span><input id="brandColor" type="color" value="#0f172a" /></label>
+              <label><span>Star Color</span><input id="starColor" type="color" value="#f5b301" /></label>
+              <label><span>Text Size (px)</span><input id="textSize" type="number" value="15" /></label>
+              <label><span>Widget max width (px)</span><input id="widgetWidth" type="number" value="860" /></label>
+              <label><span>Badge radius (px)</span><input id="badgeRadius" type="number" value="18" /></label>
+              <label class="switch-row"><input id="showCount" type="checkbox" checked /> <span>Show Count</span></label>
+            </div>
+            <button class="primary" id="publishStyles">Publish Styles</button>
+          </article>
+          <article class="card preview-card">
+            <div class="card-head"><h3>Live Preview</h3><span class="pill">Desktop / Mobile</span></div>
+            <div id="stylePreview" class="style-preview"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel-section" id="section-modules" data-title="Module Access" data-eyebrow="Merchant feature switches">
+        <article class="card">
+          <div class="card-head"><h3>Enabled product areas</h3><span class="pill">Per shop</span></div>
+          <p>Switches keep merchants focused. Reviews, loyalty, discounts and cart rewards remain in separate source folders.</p>
+          <div id="moduleList" class="module-list">Loading module settings…</div>
+          <button class="primary" id="saveModules">Save module settings</button>
+        </article>
+      </section>
+
+      <section class="panel-section" id="section-discounts" data-title="Discounts" data-eyebrow="Reward rules and Shopify Functions">
+        <article class="card">
+          <div class="card-head"><h3>Review discount rule</h3><span class="pill">Module</span></div>
+          <div class="settings-grid">
+            <label><span>Template name</span><input id="discountName" value="Review thank-you reward" /></label>
+            <label><span>Discount %</span><input id="discountPercent" type="number" value="10" /></label>
+            <label><span>Trigger</span><select id="discountTrigger"><option>When review is approved</option><option>When review is written</option></select></label>
+            <label><span>Minimum stars</span><select id="discountStars"><option>Any rating</option><option selected>4 stars & up</option><option>5 stars only</option></select></label>
+          </div>
+          <button class="primary" id="saveDiscountRule">Save discount rule</button>
+          <div id="discountRules" class="table-list"></div>
+        </article>
+      </section>
+
+      <section class="panel-section" id="section-loyalty" data-title="Loyalty" data-eyebrow="Private points, tiers and rewards">
+        <div class="tabs loyalty-tabs">
+          <button class="tab active" data-loyalty-tab="overview">Overview</button>
+          <button class="tab" data-loyalty-tab="userboard">Userboard</button>
+          <button class="tab" data-loyalty-tab="rules">Points Rules</button>
+          <button class="tab" data-loyalty-tab="rewards">Rewards</button>
+        </div>
+        <div class="metrics-grid compact">
+          <article class="metric-card"><span>Customers</span><strong id="loyaltyCustomers">0</strong><small>Private hashed refs.</small></article>
+          <article class="metric-card"><span>Available</span><strong id="loyaltyAvailable">0</strong><small>Spendable points.</small></article>
+          <article class="metric-card"><span>Pending</span><strong id="loyaltyPending">0</strong><small>Delayed rewards.</small></article>
+        </div>
+        <article class="card">
+          <div class="card-head"><h3>Manual points adjustment</h3><span class="pill">Hashed customer reference</span></div>
+          <div class="settings-grid">
+            <label><span>Customer reference</span><input id="loyaltyCustomerRef" placeholder="Email/customer ID is hashed server-side" /></label>
+            <label><span>Points change</span><input id="loyaltyPoints" type="number" value="50" /></label>
+            <label><span>Status</span><select id="loyaltyStatus"><option value="available">Available now</option><option value="pending">Pending</option></select></label>
+            <label><span>Reason</span><input id="loyaltyReason" value="Manual adjustment" /></label>
+          </div>
+          <button class="primary" id="saveLoyaltyAdjustment">Save adjustment</button>
+          <div id="loyaltyLedger" class="table-list">No loyalty ledger rows yet.</div>
+        </article>
+      </section>
+
+      <section class="panel-section" id="section-cart-rewards" data-title="Cart Rewards" data-eyebrow="Milestones, gifts and drawer rewards">
+        <article class="card">
+          <div class="card-head"><h3>Create cart campaign</h3><span class="pill">Calendar ready</span></div>
+          <div class="settings-grid">
+            <label><span>Campaign name</span><input id="cartCampaignName" value="Free gift threshold" /></label>
+            <label><span>Threshold</span><input id="cartThreshold" type="number" value="50" /></label>
+            <label><span>Reward type</span><select id="cartRewardType"><option>Free gift</option><option>Discount</option><option>Free shipping</option></select></label>
+            <label><span>Start date</span><input id="cartStart" type="date" /></label>
+          </div>
+          <button class="primary" id="saveCartReward">Save cart reward campaign</button>
+          <div id="cartRewardsList" class="table-list"></div>
+        </article>
+      </section>
+
+      <section class="panel-section" id="section-documentation" data-title="Documentation" data-eyebrow="Setup, testing and safeguards">
+        <div class="docs-grid">
+          <article class="card"><h3>Theme App Extension</h3><p>Use the Liquid blocks in <code>extensions/theme-app-extension/blocks</code> or the manual files in <code>Shopify-Liquid/blocks</code>.</p><pre>shopify app deploy</pre></article>
+          <article class="card"><h3>One-use review links</h3><p>Generate signed tokens from Review Manager → Review links. A token marks itself used after the first submission.</p><pre>POST /api/reviews/tokens</pre></article>
+          <article class="card"><h3>Module replacement</h3><p>Each product area can be deleted and replaced as a whole folder without touching the rest of the repo.</p><pre>rm -rf src/modules/reviews</pre></article>
+          <article class="card"><h3>Shopify iframe</h3><p>The app sends a Shopify-compatible <code>frame-ancestors</code> Content Security Policy so it loads inside Shopify Admin.</p><pre>https://admin.shopify.com</pre></article>
+        </div>
+      </section>
+
+      <section class="panel-section" id="section-manual-setup" data-title="Manual Setup" data-eyebrow="Files and environment variables">
+        <article class="card">
+          <h3>Deployment checklist</h3>
+          <ul class="check-list">
+            <li>Repo root contains <code>package.json</code>, <code>server.js</code>, <code>src/</code>, <code>public/</code>, <code>extensions/</code> and <code>Shopify-Liquid/</code>.</li>
+            <li>Render start command is <code>npm start</code>.</li>
+            <li>Mongo is provided as <code>CORE_DB_URI</code> or <code>MONGODB_URI</code>.</li>
+            <li>Shopify values are set: <code>SHOPIFY_API_KEY</code>, <code>SHOPIFY_API_SECRET</code>, <code>SHOPIFY_SCOPES</code>.</li>
+            <li>Run <code>npm run check</code> before deploying.</li>
+          </ul>
+        </article>
+      </section>
     </main>
   </div>
 
-  <template data-settings-template>
-    <section class="module-page settings-page">
-      <div class="module-header">
-        <div>
-          <p class="eyebrow">Core</p>
-          <h1>Module settings</h1>
-          <p>Turn product areas on or off per merchant. Disabled modules disappear from navigation and their APIs are blocked.</p>
-        </div>
-      </div>
-      <section class="panel">
-        <h2>Enabled modules</h2>
-        <div data-module-toggles class="toggle-grid"></div>
-      </section>
-    </section>
-  </template>
-
-  <script src="/admin/shell.js"></script>
+  <script src="/admin/legacy-admin.js"></script>
 </body>
 </html>
