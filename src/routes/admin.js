@@ -47,6 +47,40 @@ async function ensureShop(shopDomain) {
 }
 
 
+function defaultReviewWidgets() {
+  return [
+    { key: 'reviews_widget', name: 'Reviews Widget', status: 'live', enabled: true, placement: 'product_page', description: 'Full customer review section for product pages.', renderSnippet: "{% render 'bulk_review_page', product: product %}" },
+    { key: 'star_rating', name: 'Star Rating', status: 'live', enabled: true, placement: 'product_card', description: 'Compact rating stars for product and collection cards.', renderSnippet: "{% render 'product_card_stars', product: product %}" },
+    { key: 'reviews_carousel', name: 'Reviews Carousel', status: 'live', enabled: false, placement: 'homepage', description: 'Global carousel of accepted reviews for landing pages.', renderSnippet: "{% render 'carousel' %}" },
+    { key: 'reviews_tab', name: 'Reviews Tab', status: 'draft', enabled: false, placement: 'floating_tab', description: 'Floating review tab for store-wide social proof.', renderSnippet: "<div data-nectar-review-tab></div>" },
+    { key: 'seo_page', name: 'All Reviews SEO Page', status: 'draft', enabled: false, placement: 'page', description: 'Dedicated review landing page for organic search and imported review archives.', renderSnippet: "{% render 'bulk_review_page' %}" },
+    { key: 'qa_widget', name: 'Q&A Widget', status: 'coming_soon', enabled: false, placement: 'product_page', description: 'Product questions and answers. Planned but not active yet.', renderSnippet: '' },
+  ];
+}
+
+function mergeReviewWidgets(saved = []) {
+  const defaults = defaultReviewWidgets();
+  const savedMap = new Map((Array.isArray(saved) ? saved : []).map((item) => [item.key, item]));
+  return defaults.map((item) => ({ ...item, ...(savedMap.get(item.key) || {}) }));
+}
+
+function publicMigrationSettings(settings = {}) {
+  const mode = settings?.migrationMode || {};
+  return {
+    enabled: Boolean(mode.enabled),
+    sourcePlatform: mode.sourcePlatform || 'yotpo',
+    yotpoStillLive: mode.yotpoStillLive !== false,
+    nectarWidgetsEnabled: Boolean(mode.nectarWidgetsEnabled),
+    nectarEmailsEnabled: Boolean(mode.nectarEmailsEnabled),
+    duplicateSchemaProtection: mode.duplicateSchemaProtection !== false,
+    importOnlyPublished: mode.importOnlyPublished !== false,
+    importVerifiedWhenAvailable: mode.importVerifiedWhenAvailable !== false,
+    lastCheckedAt: mode.lastCheckedAt || null,
+    notes: mode.notes || '',
+  };
+}
+
+
 function publicProviderProfile(profile) {
   if (!profile) return null;
   return {
@@ -426,9 +460,13 @@ router.post('/reviews/import', async (req, res, next) => {
         headline: cleanText(review.headline || review.title || '', 160),
         comment: cleanText(review.comment || review.body, 2500),
         source: 'import',
+        sourcePlatform: cleanText(review.sourcePlatform || req.body.sourcePlatform || 'generic', 80),
+        sourceLabel: cleanText(review.sourceLabel || req.body.sourceLabel || 'Imported review', 120),
+        externalReviewId: cleanText(review.externalReviewId || review.id || '', 160),
+        importBatchId: cleanText(req.body.importBatchId || `import-${Date.now()}`, 80),
         status: 'accepted',
         verifiedPurchase: review.verifiedPurchase !== false,
-        verificationNote: review.verifiedPurchase === false ? '' : 'Imported by merchant from previous verified review platform',
+        verificationNote: review.verifiedPurchase === false ? '' : cleanText(review.verificationNote || `Imported from ${review.sourceLabel || req.body.sourceLabel || 'previous review platform'}`, 250),
         createdAt: review.createdAt ? new Date(review.createdAt) : new Date(),
       };
     }).filter((review) => review && review.itemId && review.rating && (review.comment || review.headline));
@@ -436,6 +474,76 @@ router.post('/reviews/import', async (req, res, next) => {
     if (!docs.length) return res.status(400).json({ error: 'No valid import rows after mapping.', skipped });
     const inserted = await Review.insertMany(docs, { ordered: false });
     return res.status(201).json({ ok: true, imported: inserted.length, skipped });
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+router.get('/migration', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const settings = await Settings.findOneAndUpdate({ shopDomain }, { $setOnInsert: { shopDomain } }, { new: true, upsert: true, setDefaultsOnInsert: true }).lean();
+    const sourceBreakdown = await Review.aggregate([
+      { $match: { shopDomain, isDeleted: { $ne: true }, isTestReview: { $ne: true }, testMode: { $ne: true } } },
+      { $group: { _id: { source: '$source', platform: '$sourcePlatform', label: '$sourceLabel' }, count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ]).catch(() => []);
+    const yotpoImports = sourceBreakdown.filter((row) => String(row._id?.platform || '').toLowerCase().includes('yotpo')).reduce((sum, row) => sum + Number(row.count || 0), 0);
+    const shopImports = sourceBreakdown.filter((row) => String(row._id?.platform || '').toLowerCase().includes('shop')).reduce((sum, row) => sum + Number(row.count || 0), 0);
+    return res.json({
+      migrationMode: publicMigrationSettings(settings),
+      widgets: mergeReviewWidgets(settings?.reviewWidgetLibrary),
+      sourceBreakdown,
+      summary: {
+        totalReviews: await Review.countDocuments({ shopDomain, isDeleted: { $ne: true }, isTestReview: { $ne: true }, testMode: { $ne: true } }),
+        importedReviews: await Review.countDocuments({ shopDomain, source: 'import', isDeleted: { $ne: true } }),
+        yotpoImports,
+        shopImports,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/migration', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const body = req.body || {};
+    const update = {};
+    if (body.migrationMode) {
+      update.migrationMode = {
+        enabled: Boolean(body.migrationMode.enabled),
+        sourcePlatform: cleanText(body.migrationMode.sourcePlatform || 'yotpo', 80),
+        yotpoStillLive: body.migrationMode.yotpoStillLive !== false,
+        nectarWidgetsEnabled: Boolean(body.migrationMode.nectarWidgetsEnabled),
+        nectarEmailsEnabled: Boolean(body.migrationMode.nectarEmailsEnabled),
+        duplicateSchemaProtection: body.migrationMode.duplicateSchemaProtection !== false,
+        importOnlyPublished: body.migrationMode.importOnlyPublished !== false,
+        importVerifiedWhenAvailable: body.migrationMode.importVerifiedWhenAvailable !== false,
+        lastCheckedAt: new Date(),
+        notes: cleanText(body.migrationMode.notes || '', 1500),
+      };
+    }
+    if (Array.isArray(body.widgets)) {
+      const defaults = defaultReviewWidgets();
+      const allowed = new Set(defaults.map((item) => item.key));
+      update.reviewWidgetLibrary = body.widgets
+        .filter((item) => allowed.has(item.key))
+        .map((item) => ({
+          key: item.key,
+          name: cleanText(item.name, 120),
+          status: ['live', 'draft', 'coming_soon'].includes(item.status) ? item.status : 'draft',
+          enabled: Boolean(item.enabled) && item.status !== 'coming_soon',
+          placement: cleanText(item.placement, 80),
+          description: cleanText(item.description, 240),
+          renderSnippet: cleanText(item.renderSnippet, 300),
+          updatedAt: new Date(),
+        }));
+    }
+    const saved = await Settings.findOneAndUpdate({ shopDomain }, { $set: update, $setOnInsert: { shopDomain } }, { new: true, upsert: true, setDefaultsOnInsert: true }).lean();
+    return res.json({ ok: true, migrationMode: publicMigrationSettings(saved), widgets: mergeReviewWidgets(saved?.reviewWidgetLibrary) });
   } catch (error) {
     next(error);
   }

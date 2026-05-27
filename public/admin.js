@@ -197,6 +197,7 @@ window.tab = function(id) {
   if (['v-discounts', 'v-loyalty', 'v-referrals'].includes(id)) window.loadModules();
   if (id === 'v-loyalty') window.loadLoyaltyConfig?.();
   if (id === 'v-test-centre') window.loadE2ETestCentre?.();
+  if (['v-migration','v-widget-library'].includes(id)) window.loadMigrationHub?.();
   refreshResponsiveNavGroups();
 };
 
@@ -320,6 +321,7 @@ window.load = async function() {
     window.renderLists();
     window.loadStats();
     window.loadModules();
+    window.loadMigrationHub?.();
     window.loadLoyaltyConfig?.();
     window.generateFlowCode();
   } catch (error) {
@@ -557,6 +559,10 @@ window.buildCard = function(r, isTrash) {
   const productHtml = r.itemId
     ? (productUrl ? `<a class="admin-product-pill" href="${productUrl}" target="_blank" rel="noopener">${escapeHtml(r.itemId)} ↗</a>` : `<span class="admin-product-pill">${escapeHtml(r.itemId)}</span>`)
     : '<span class="muted">No Product ID</span>';
+  const sourcePlatform = String(r.sourcePlatform || '').toLowerCase();
+  const sourceClass = sourcePlatform.includes('yotpo') ? 'yotpo' : (sourcePlatform.includes('shop') ? 'shop' : '');
+  const sourceLabel = r.sourceLabel || (r.source === 'import' ? 'Imported review' : r.source === 'email' ? 'Email request' : 'Storefront');
+  const sourceHtml = `<span class="source-pill ${escapeHtml(sourceClass)}">${escapeHtml(sourceLabel)}${r.externalReviewId ? ` · ${escapeHtml(r.externalReviewId)}` : ''}</span>`;
 
   return `
     <div class="review-card status-border-${escapeHtml(r.status || 'pending')}">
@@ -579,6 +585,7 @@ window.buildCard = function(r, isTrash) {
         <div class="card-side" style="min-width:240px; text-align:right; border-left:1px solid var(--border); padding-left:22px;">
           <p class="admin-card-meta-label">Product ID:</p>
           ${productHtml}
+          <div>${sourceHtml}</div>
           <p class="admin-card-meta-label" style="margin-top:10px;">${escapeHtml(createdDate)}</p>
           <div style="font-size:13px; color:var(--primary); font-weight:800; margin:10px 0;">${escapeHtml(r.email || 'No Email')}</div>
           <div style="margin-bottom:18px;">${verifyHtml}</div>
@@ -1058,6 +1065,9 @@ window.generateStagingArea = function() {
       comment: String(csvValue(row, map.comment) || '').trim(),
       createdAt: String(csvValue(row, map.createdAt) || '').trim(),
       verifiedPurchase: verifiedByDefault ? true : coerceBool(csvValue(row, map.verifiedPurchase)),
+      sourcePlatform: document.getElementById('import-platform-select')?.value || 'generic',
+      sourceLabel: document.getElementById('import-platform-select')?.selectedOptions?.[0]?.textContent || 'Imported review',
+      externalReviewId: String(row.id || row.review_id || row.reviewId || row['Review ID'] || '').trim(),
     };
   }).filter((r) => r.rating && (r.comment || r.headline));
 
@@ -1249,7 +1259,13 @@ window.processFinalImport = async function() {
   try {
     const result = await adminFetch('/reviews/import', {
       method: 'POST',
-      body: JSON.stringify({ shopDomain: SHOP_DOMAIN, reviews: ready }),
+      body: JSON.stringify({
+        shopDomain: SHOP_DOMAIN,
+        sourcePlatform: document.getElementById('import-platform-select')?.value || 'generic',
+        sourceLabel: document.getElementById('import-platform-select')?.selectedOptions?.[0]?.textContent || 'Imported review',
+        importBatchId: `admin-import-${Date.now()}`,
+        reviews: ready,
+      }),
     });
     window.showToast(`Import successful: ${result.imported || 0} reviews${missing ? `; ${missing} still need mapping` : ''}.`);
     document.getElementById('mapping-ui').style.display = 'none';
@@ -1960,5 +1976,157 @@ Testing:
   ['e2e-scenario','e2e-email','e2e-customer','e2e-order'].forEach((id)=>document.getElementById(id)?.addEventListener('input', updateFlowAssistantPrompt));
   setTimeout(() => { updateFlowAssistantPrompt(); window.loadE2ETestCentre?.(); }, 1200);
 })();
+
+
+
+(function migrationAndWidgetLibrary(){
+  if (window.__nectarMigrationHubLoaded) return;
+  window.__nectarMigrationHubLoaded = true;
+  let migrationCache = null;
+  let widgetLibraryCache = [];
+
+  const widgetPreview = (widget) => {
+    if (widget.key === 'star_rating') return '<span class="widget-preview-stars">★★★★★</span><strong>4.8 (132)</strong>';
+    if (widget.key === 'reviews_carousel') return '<span class="widget-preview-stars">★★★★★</span><span style="min-width:120px">Amazing quality…</span><span style="opacity:.4">›</span>';
+    if (widget.key === 'reviews_tab') return '<span style="border-radius:999px;background:#111827;color:#fff;padding:7px 10px;font-weight:900;">Reviews</span>';
+    if (widget.key === 'seo_page') return '<span class="widget-preview-stars">★★★★★</span><span>All reviews page</span>';
+    if (widget.key === 'qa_widget') return '<strong>Q&A</strong><span>Coming soon</span>';
+    return '<span class="widget-preview-stars">★★★★★</span><strong>Customer Reviews</strong>';
+  };
+
+  function statusText(status){
+    if (status === 'live') return 'Live-ready';
+    if (status === 'coming_soon') return 'Coming soon';
+    return 'Draft';
+  }
+
+  function migrationModePayload(){
+    return {
+      enabled: getChecked('migration-enabled', false),
+      sourcePlatform: getValue('migration-source-platform', 'yotpo'),
+      yotpoStillLive: getChecked('migration-yotpo-live', true),
+      nectarWidgetsEnabled: getChecked('migration-nectar-widgets', false),
+      nectarEmailsEnabled: getChecked('migration-nectar-emails', false),
+      duplicateSchemaProtection: getChecked('migration-schema-protection', true),
+      importOnlyPublished: getChecked('migration-published-only', true),
+      importVerifiedWhenAvailable: getChecked('migration-verified-when-available', true),
+      notes: getValue('migration-notes', ''),
+    };
+  }
+
+  function renderMigrationChecks(mode, summary){
+    const checks = [];
+    if (mode.yotpoStillLive && mode.nectarWidgetsEnabled) checks.push(['⚠️','Two review widgets may be visible','Turn Nectar widgets off until the duplicate theme preview is ready.']);
+    else checks.push(['✓','Storefront display is controlled','Only one live review display should be active.']);
+    if (mode.yotpoStillLive && mode.nectarEmailsEnabled) checks.push(['⚠️','Two apps may email customers','Keep Nectar review emails off until Yotpo requests are disabled.']);
+    else checks.push(['✓','Customer emails are controlled','Only one review-request sender should be active.']);
+    if (mode.duplicateSchemaProtection) checks.push(['✓','Duplicate schema protection planned','Avoid two apps outputting review schema at once.']);
+    else checks.push(['⚠️','Schema protection off','Google may see duplicate review markup if Yotpo and Nectar both output schema.']);
+    checks.push(['↧', `${Number(summary.importedReviews || 0)} imported review${Number(summary.importedReviews || 0) === 1 ? '' : 's'}`, 'Use Import CSV for Yotpo/Shop exports, then edit in Review Manager.']);
+    return checks.map(([icon,title,body]) => `<div class="migration-check"><span>${icon}</span><div><strong>${escapeHtml(title)}</strong><p class="muted" style="margin:3px 0 0;">${escapeHtml(body)}</p></div></div>`).join('');
+  }
+
+  function renderMigrationHub(data){
+    migrationCache = data || {};
+    const mode = data.migrationMode || {};
+    widgetLibraryCache = Array.isArray(data.widgets) ? data.widgets : [];
+    setCheckedIfExists('migration-enabled', mode.enabled);
+    setValueIfExists('migration-source-platform', mode.sourcePlatform || 'yotpo');
+    setCheckedIfExists('migration-yotpo-live', mode.yotpoStillLive !== false);
+    setCheckedIfExists('migration-nectar-widgets', Boolean(mode.nectarWidgetsEnabled));
+    setCheckedIfExists('migration-nectar-emails', Boolean(mode.nectarEmailsEnabled));
+    setCheckedIfExists('migration-schema-protection', mode.duplicateSchemaProtection !== false);
+    setCheckedIfExists('migration-published-only', mode.importOnlyPublished !== false);
+    setCheckedIfExists('migration-verified-when-available', mode.importVerifiedWhenAvailable !== false);
+    setValueIfExists('migration-notes', mode.notes || '');
+
+    const pill = document.getElementById('migration-status-pill');
+    if (pill) {
+      const risky = (mode.yotpoStillLive && (mode.nectarWidgetsEnabled || mode.nectarEmailsEnabled));
+      pill.className = `migration-status-pill ${risky ? 'warn' : 'safe'}`;
+      pill.textContent = risky ? 'Coexistence needs attention' : 'Safe migration posture';
+    }
+    const checks = document.getElementById('migration-checks');
+    if (checks) checks.innerHTML = renderMigrationChecks(mode, data.summary || {});
+    const summary = document.getElementById('migration-import-summary');
+    if (summary) {
+      const rows = (data.sourceBreakdown || []).map((row) => {
+        const label = row._id?.label || row._id?.platform || row._id?.source || 'Reviews';
+        return `<div class="migration-check"><span>↧</span><div><strong>${escapeHtml(label)}</strong><p class="muted" style="margin:3px 0 0;">${Number(row.count || 0)} review${Number(row.count || 0) === 1 ? '' : 's'} · source ${escapeHtml(row._id?.source || 'unknown')}</p></div></div>`;
+      }).join('');
+      summary.innerHTML = rows || '<p class="muted">No imported review sources yet. Import a Yotpo or Shop CSV to see source breakdown here.</p>';
+    }
+    renderWidgetLibrary(widgetLibraryCache);
+  }
+
+  function renderWidgetLibrary(widgets){
+    const grid = document.getElementById('review-widget-library-grid');
+    if (!grid) return;
+    grid.innerHTML = (widgets || []).map((widget) => {
+      const disabled = widget.status === 'coming_soon';
+      return `<div class="widget-library-card ${widget.enabled ? 'enabled' : ''}">
+        <div class="widget-preview-mini">${widgetPreview(widget)}</div>
+        <div><h3>${escapeHtml(widget.name)}</h3><p class="muted" style="margin:0;">${escapeHtml(widget.description || '')}</p></div>
+        <div class="widget-meta-row"><span>${escapeHtml(statusText(widget.status))}</span><span>${escapeHtml(widget.placement || '')}</span>${widget.enabled ? '<span>Enabled</span>' : '<span>Not enabled</span>'}</div>
+        ${widget.renderSnippet ? `<code style="white-space:normal;word-break:break-word;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:7px;">${escapeHtml(widget.renderSnippet)}</code>` : ''}
+        <div class="widget-card-actions">
+          <button type="button" class="${widget.enabled ? 'secondary-btn' : 'primary-btn'}" ${disabled ? 'disabled' : ''} onclick="window.toggleReviewWidget('${escapeHtml(widget.key)}')">${widget.enabled ? 'Disable' : 'Enable'}</button>
+          <button type="button" class="secondary-btn" ${disabled ? 'disabled' : ''} onclick="window.editReviewWidget('${escapeHtml(widget.key)}')">Edit design</button>
+        </div>
+      </div>`;
+    }).join('') || '<p class="muted">No review widgets available.</p>';
+  }
+
+  window.loadMigrationHub = async function(){
+    try {
+      const data = await adminFetch(`/admin/migration?t=${Date.now()}`);
+      renderMigrationHub(data);
+    } catch (error) {
+      console.warn('Migration hub load failed', error);
+      const checks = document.getElementById('migration-checks');
+      if (checks) checks.innerHTML = `<div class="migration-check"><span>!</span><div><strong>Could not load Migration Centre</strong><p class="muted">${escapeHtml(error.message || 'Unknown error')}</p></div></div>`;
+    }
+  };
+
+  window.saveMigrationMode = async function(){
+    try {
+      const result = await adminFetch('/admin/migration', { method:'PATCH', body: JSON.stringify({ migrationMode: migrationModePayload(), widgets: widgetLibraryCache }) });
+      renderMigrationHub(result);
+      window.showToast('Migration mode saved.');
+    } catch (error) { window.showToast(error.message || 'Could not save migration mode.'); }
+  };
+
+  window.saveWidgetLibrary = async function(){
+    try {
+      const result = await adminFetch('/admin/migration', { method:'PATCH', body: JSON.stringify({ migrationMode: migrationModePayload(), widgets: widgetLibraryCache }) });
+      renderMigrationHub(result);
+      window.showToast('Widget library saved.');
+    } catch (error) { window.showToast(error.message || 'Could not save widget library.'); }
+  };
+
+  window.toggleReviewWidget = function(key){
+    widgetLibraryCache = (widgetLibraryCache || []).map((widget) => widget.key === key ? { ...widget, enabled: !widget.enabled } : widget);
+    renderWidgetLibrary(widgetLibraryCache);
+  };
+
+  window.editReviewWidget = function(key){
+    window.tab('v-style');
+    setTimeout(() => {
+      if (key === 'star_rating') document.querySelector('button[onclick*="style-card"]')?.click();
+      else if (key === 'reviews_carousel') document.querySelector('button[onclick*="style-carousel"]')?.click();
+      else document.querySelector('button[onclick*="style-widget"]')?.click();
+    }, 80);
+  };
+
+  window.applyMigrationSafeMode = function(){
+    setCheckedIfExists('migration-enabled', true);
+    setCheckedIfExists('migration-yotpo-live', true);
+    setCheckedIfExists('migration-nectar-widgets', false);
+    setCheckedIfExists('migration-nectar-emails', false);
+    setCheckedIfExists('migration-schema-protection', true);
+    window.saveMigrationMode?.();
+  };
+})();
+
 
 document.addEventListener('DOMContentLoaded', initResponsiveNavGroups);

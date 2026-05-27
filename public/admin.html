@@ -688,6 +688,34 @@
     .e2e-artifact code { display:block; white-space:normal; word-break:break-word; background:#fff; border:1px solid #edf0f3; border-radius:8px; padding:6px; font-size:12px; }
     @media(max-width:1100px){.e2e-layout,.e2e-scenario-grid,.e2e-artifacts{grid-template-columns:1fr}.e2e-history-row{grid-template-columns:1fr}.e2e-run-actions .primary-btn,.e2e-run-actions .secondary-btn{width:100%;}}
 
+
+    .migration-hero { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(260px,.8fr); gap:18px; align-items:start; margin-bottom:18px; }
+    .migration-stage { border:1px solid #d9e0ea; border-radius:18px; background:#fff; padding:18px; box-shadow:0 10px 24px rgba(15,23,42,.05); }
+    .migration-stage h3, .widget-library-card h3 { margin:0 0 8px; }
+    .migration-status-pill { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:7px 10px; font-size:12px; font-weight:900; background:#eef4ff; color:#3538cd; border:1px solid #c7d7fe; }
+    .migration-status-pill.safe { background:#ecfdf3; color:#027a48; border-color:#abefc6; }
+    .migration-status-pill.warn { background:#fff7ed; color:#b54708; border-color:#fed7aa; }
+    .migration-checks { display:grid; gap:10px; margin-top:12px; }
+    .migration-check { display:flex; gap:10px; align-items:flex-start; border:1px solid #e5e7eb; background:#fbfdff; border-radius:14px; padding:12px; }
+    .migration-check span:first-child { width:28px; height:28px; border-radius:999px; display:grid; place-items:center; font-weight:900; background:#f2f4f7; flex:0 0 auto; }
+    .migration-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .migration-form-grid .wide { grid-column:1/-1; }
+    .widget-library-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+    .widget-library-card { border:1px solid #e5e7eb; border-radius:18px; background:#fff; padding:16px; display:flex; flex-direction:column; gap:12px; min-height:210px; box-shadow:0 10px 22px rgba(15,23,42,.045); }
+    .widget-library-card.enabled { border-color:#006dff; box-shadow:0 0 0 2px rgba(0,109,255,.12); }
+    .widget-preview-mini { height:74px; border:1px solid #e5e7eb; border-radius:14px; background:linear-gradient(135deg,#f8fafc,#fff); padding:12px; display:flex; align-items:center; gap:8px; overflow:hidden; }
+    .widget-preview-stars { color:#f5b301; letter-spacing:1px; white-space:nowrap; }
+    .widget-card-actions { margin-top:auto; display:flex; flex-wrap:wrap; gap:8px; }
+    .widget-meta-row { display:flex; flex-wrap:wrap; gap:6px; }
+    .widget-meta-row span { border:1px solid #e5e7eb; background:#f8fafc; border-radius:999px; padding:4px 8px; font-size:11px; font-weight:850; color:#475467; }
+    .source-pill { display:inline-flex; align-items:center; gap:5px; margin-top:8px; border:1px solid #d0d5dd; border-radius:999px; padding:5px 8px; background:#f8fafc; color:#475467; font-size:12px; font-weight:850; }
+    .source-pill.yotpo { background:#f4f3ff; color:#5925dc; border-color:#d9d6fe; }
+    .source-pill.shop { background:#ecfdf3; color:#027a48; border-color:#abefc6; }
+    .coexistence-card { border:1px solid #fedf89; background:#fffcf5; border-radius:16px; padding:14px; }
+    .coexistence-card strong { display:block; margin-bottom:5px; }
+    @media(max-width:1200px){.widget-library-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.migration-hero{grid-template-columns:1fr}}
+    @media(max-width:760px){.widget-library-grid,.migration-form-grid{grid-template-columns:1fr}.migration-form-grid .wide{grid-column:auto}.widget-card-actions .secondary-btn,.widget-card-actions .primary-btn{width:100%;}}
+
   </style>
   <link rel="stylesheet" href="/module-shell.css?v=cart-rewards-module-1">
   <link rel="stylesheet" href="/admin-responsive-polish.css?v=nav-polish-1">
@@ -705,6 +733,8 @@
           <p class="nav-title">Manage</p>
           <button class="tab-btn active" onclick="window.tab('v-dash')">Dashboard</button>
           <button class="tab-btn" onclick="window.tab('v-mgr')">Reviews</button>
+          <button class="tab-btn" onclick="window.tab('v-widget-library')">Reviews Widget Library</button>
+          <button class="tab-btn" onclick="window.tab('v-migration')">Migration Centre</button>
           <button class="tab-btn" onclick="window.tab('v-msg')">Messaging &amp; Campaigns ✉️</button>
           <button class="tab-btn" onclick="window.tab('v-style')">Reviews Visual Customiser</button>
           <button class="tab-btn" onclick="window.tab('v-loyalty')">Loyalty <span class="pill">Beta</span></button>
@@ -861,7 +891,62 @@
         <div id="nr-messaging-campaigns-mount" class="panel"><p>Loading Messaging &amp; Campaigns...</p></div>
       </section>
 
-      <section id="v-import" class="view">
+      
+      <section id="v-widget-library" class="view">
+        <div class="dash-header">
+          <div>
+            <h2 class="page-title">Reviews Widget Library</h2>
+            <p class="dash-subtitle">Choose which review experiences you want before editing styles. This keeps the visual customiser focused on widgets you actually use.</p>
+          </div>
+          <div class="dash-actions"><button class="secondary-btn" type="button" onclick="window.loadMigrationHub?.()">Refresh</button><button class="primary-btn" type="button" onclick="window.saveWidgetLibrary?.()">Save Widget Library</button></div>
+        </div>
+        <div class="coexistence-card" style="margin-bottom:18px;"><strong>Safe with Yotpo installed</strong><p class="muted" style="margin:0;">Keep Nectar widgets disabled while Yotpo is live. Enable one Nectar widget at a time on a duplicate theme, then switch over when you are happy.</p></div>
+        <div id="review-widget-library-grid" class="widget-library-grid"><p class="muted">Loading widgets…</p></div>
+      </section>
+
+      <section id="v-migration" class="view">
+        <div class="dash-header">
+          <div>
+            <h2 class="page-title">Migration Centre</h2>
+            <p class="dash-subtitle">Run Yotpo and Nectar side-by-side safely, import existing reviews, then switch the live storefront when the new review experience is ready.</p>
+          </div>
+          <div class="dash-actions"><button class="secondary-btn" type="button" onclick="window.loadMigrationHub?.()">Refresh</button><button class="primary-btn" type="button" onclick="window.saveMigrationMode?.()">Save Migration Mode</button></div>
+        </div>
+        <div class="migration-hero">
+          <div class="migration-stage">
+            <h3>Coexistence controls</h3>
+            <p class="muted">Use these while Yotpo remains installed. The aim is one live review display and one live email sender at a time.</p>
+            <div class="migration-form-grid">
+              <label>Current source platform<select id="migration-source-platform" class="filter-select"><option value="yotpo">Yotpo</option><option value="shop">Shop App / Shop channel</option><option value="judgeme">Judge.me</option><option value="generic">Generic CSV</option></select></label>
+              <label class="nice-check"><input id="migration-enabled" type="checkbox"> Enable migration mode</label>
+              <label class="nice-check"><input id="migration-yotpo-live" type="checkbox" checked> Yotpo is still live</label>
+              <label class="nice-check"><input id="migration-nectar-widgets" type="checkbox"> Nectar storefront widgets are live</label>
+              <label class="nice-check"><input id="migration-nectar-emails" type="checkbox"> Nectar review-request emails are live</label>
+              <label class="nice-check"><input id="migration-schema-protection" type="checkbox" checked> Prevent duplicate review schema/widgets</label>
+              <label class="nice-check"><input id="migration-published-only" type="checkbox" checked> Import published reviews only</label>
+              <label class="nice-check"><input id="migration-verified-when-available" type="checkbox" checked> Keep verified badge where export provides it</label>
+              <label class="wide">Migration notes<textarea id="migration-notes" class="premium-input" rows="4" placeholder="Example: Yotpo widgets live on published theme. Nectar testing on duplicate theme until imported reviews are checked."></textarea></label>
+            </div>
+          </div>
+          <div class="migration-stage">
+            <h3>Migration health</h3>
+            <div id="migration-status-pill" class="migration-status-pill warn">Checking…</div>
+            <div id="migration-checks" class="migration-checks"><p class="muted">Loading migration checks…</p></div>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="panel settings-card">
+            <div class="settings-card-header"><div><h3>Import existing reviews</h3><p>Bring Yotpo/Shop/exported reviews into Nectar, then edit and moderate them inside Review Manager.</p></div><button class="secondary-btn" type="button" onclick="window.tab('v-import')">Open Importer</button></div>
+            <div class="settings-card-body"><div id="migration-import-summary" class="migration-checks"><p class="muted">No source summary loaded yet.</p></div></div>
+          </div>
+          <div class="panel settings-card">
+            <div class="settings-card-header"><div><h3>Go-live sequence</h3><p>This is the safe order for keeping two apps installed.</p></div></div>
+            <div class="settings-card-body"><ol class="launch-path-list"><li>Keep Yotpo live and Nectar hidden.</li><li>Import Yotpo/Shop CSV into Nectar.</li><li>Preview Nectar widgets on a duplicate theme.</li><li>Turn off Yotpo widgets and review-request emails.</li><li>Turn on Nectar widgets and the native 14-day scheduler.</li><li>Keep Yotpo installed briefly as a fallback, then remove it.</li></ol></div>
+          </div>
+        </div>
+      </section>
+
+<section id="v-import" class="view">
         <h2 class="page-title">Importer Tool</h2>
         <div class="import-shell">
           <div class="import-step">
@@ -870,10 +955,12 @@
             <div class="import-row">
               <label for="import-platform-select" style="font-weight:900;">Platform</label>
               <select id="import-platform-select" class="filter-select" onchange="window.toggleImportInst()">
-                <option value="generic">Generic / Other Format</option><option value="weebly">Weebly / Square</option><option value="judgeme">Judge.me</option>
+                <option value="generic">Generic / Other Format</option><option value="yotpo">Yotpo CSV</option><option value="shop">Shop App / Shop reviews CSV</option><option value="weebly">Weebly / Square</option><option value="judgeme">Judge.me</option>
               </select>
             </div>
             <div id="inst-generic" class="import-inst-box active"><p class="import-help">Generic CSV: include Product ID where possible. If your export only has Product Name/Title, upload it and use Smart Product Mapping to select the correct Shopify product before import.</p></div>
+            <div id="inst-yotpo" class="import-inst-box"><p class="import-help">Yotpo CSV: export published reviews from Yotpo, then map product IDs/titles, rating, title, content, reviewer, date and verified buyer. Imported reviews will be labelled as Yotpo import so you can filter/edit them in Review Manager.</p></div>
+            <div id="inst-shop" class="import-inst-box"><p class="import-help">Shop reviews are not currently available as a normal public Admin API pull. Use any available Shop/Yotpo export if provided, then import it here with source label “Shop review”.</p></div>
             <div id="inst-weebly" class="import-inst-box"><p class="import-help">Weebly / Square: upload the export, map the product title/name column, then choose the matching Shopify product in the staging step before publishing.</p></div>
             <div id="inst-judgeme" class="import-inst-box"><p class="import-help">Judge.me: export reviews, map Product ID or Product Title, then review product matches before publishing.</p></div>
           </div>

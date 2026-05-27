@@ -1,7 +1,7 @@
 {
   "name": "reviews-platform-api",
-  "version": "1.2.17-reviews-live-launch",
-  "description": "Reviews Platform API with native 14-day review scheduler and launch checklist",
+  "version": "1.2.18-migration-widget-library",
+  "description": "Reviews Platform API with reviews-first launch mode, migration centre and widget library",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
