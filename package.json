@@ -1,7 +1,7 @@
 {
   "name": "reviews-platform-api",
-  "version": "1.2.18-migration-widget-library",
-  "description": "Reviews Platform API with reviews-first launch mode, migration centre and widget library",
+  "version": "1.2.19-delivery-gated-support-modules",
+  "description": "Reviews Platform API with migration centre, native delivery-tag-gated review scheduling, support modal and removable email modules",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

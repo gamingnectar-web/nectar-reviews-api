@@ -39,6 +39,9 @@ function reviewAutomationConfig(settings = {}) {
     sendWindowTimezone: cleanText(cfg.sendWindowTimezone || 'store', 80),
     campaign: cleanText(cfg.campaign || DEFAULT_CAMPAIGN, 120),
     subject: cleanText(cfg.subject || 'How was your recent order?', 160),
+    deliveryTagRequired: cfg.deliveryTagRequired !== false,
+    deliveryTag: cleanText(cfg.deliveryTag || 'delivered', 80).toLowerCase(),
+    deliveryAnchor: ['fulfilled_at', 'delivered_tag'].includes(cfg.deliveryAnchor) ? cfg.deliveryAnchor : 'delivered_tag',
     enabled: cfg.enabled !== false,
   };
 }
@@ -100,6 +103,16 @@ function makeOrderDisplayName(order = {}) {
   return cleanText(order.name || order.order_number || order.id || '', 120);
 }
 
+function orderTags(order = {}) {
+  const raw = Array.isArray(order.tags) ? order.tags.join(',') : String(order.tags || '');
+  return raw.split(',').map((tag) => cleanText(tag, 80).toLowerCase()).filter(Boolean);
+}
+
+function hasRequiredDeliveryTag(order = {}, tag = 'delivered') {
+  const wanted = cleanText(tag || 'delivered', 80).toLowerCase();
+  return orderTags(order).includes(wanted);
+}
+
 async function scheduleReviewRequestFromOrder({ shopDomain, order = {}, source = 'shopify_webhook', delayDays, testMode = false, webhookId = '' }) {
   const cleanShop = cleanText(shopDomain, 200).toLowerCase();
   if (!cleanShop) throw new Error('Missing shop domain for review request scheduling.');
@@ -111,16 +124,21 @@ async function scheduleReviewRequestFromOrder({ shopDomain, order = {}, source =
   const email = resolveOrderEmail(order);
   const customerName = resolveOrderName(order);
   const fulfilledAt = resolveFulfilledAt(order);
+  const tags = orderTags(order);
+  const delivered = !cfg.deliveryTagRequired || hasRequiredDeliveryTag(order, cfg.deliveryTag) || Boolean(testMode && order.delivered !== false);
+  const deliveredAt = delivered ? new Date(order.delivered_at || order.updated_at || order.fulfilled_at || new Date()) : null;
+  const anchorDate = cfg.deliveryAnchor === 'delivered_tag' && deliveredAt ? deliveredAt : fulfilledAt;
   const products = productsFromOrder(order);
-  const scheduledAt = addDays(fulfilledAt, effectiveDelay);
-  const status = email && products.length && cfg.enabled && cfg.nativeEnabled ? 'scheduled' : 'blocked';
-  const blockedReason = !cfg.enabled || !cfg.nativeEnabled
-    ? 'Native review request automation is disabled.'
-    : !email
-      ? 'Order has no customer email.'
-      : !products.length
-        ? 'Order has no reviewable products.'
-        : '';
+  const scheduledAt = delivered ? addDays(anchorDate, effectiveDelay) : null;
+  let status = email && products.length && cfg.enabled && cfg.nativeEnabled ? 'scheduled' : 'blocked';
+  let blockedReason = '';
+  if (!cfg.enabled || !cfg.nativeEnabled) blockedReason = 'Native review request automation is disabled.';
+  else if (!email) blockedReason = 'Order has no customer email.';
+  else if (!products.length) blockedReason = 'Order has no reviewable products.';
+  else if (!delivered) {
+    status = 'awaiting_delivery';
+    blockedReason = `Waiting for Shopify order tag "${cfg.deliveryTag}" before starting the ${effectiveDelay}-day review timer.`;
+  }
 
   const update = {
     shopDomain: cleanShop,
@@ -131,10 +149,14 @@ async function scheduleReviewRequestFromOrder({ shopDomain, order = {}, source =
     customerName,
     products,
     fulfilledAt,
+    deliveredAt,
     scheduledAt,
     delayDays: effectiveDelay,
     status,
     blockedReason,
+    orderTags: tags,
+    deliveryRequired: Boolean(cfg.deliveryTagRequired),
+    requiredDeliveryTag: cfg.deliveryTag,
     testMode: Boolean(testMode),
     webhookId: cleanText(webhookId, 160),
     campaign: cfg.campaign || DEFAULT_CAMPAIGN,
@@ -147,11 +169,42 @@ async function scheduleReviewRequestFromOrder({ shopDomain, order = {}, source =
   );
 }
 
+async function updateReviewRequestDeliveryFromOrder({ shopDomain, order = {}, webhookId = '' }) {
+  const cleanShop = cleanText(shopDomain, 200).toLowerCase();
+  const cfg = await getAutomationConfig(cleanShop);
+  const orderId = makeOrderId(order);
+  const email = resolveOrderEmail(order);
+  const tags = orderTags(order);
+  const delivered = hasRequiredDeliveryTag(order, cfg.deliveryTag);
+  const filter = email ? { shopDomain: cleanShop, orderId, customerEmail: email } : { shopDomain: cleanShop, orderId };
+  if (!delivered) {
+    await ReviewRequestJob.updateMany(filter, { $set: { orderTags: tags, webhookId: cleanText(webhookId, 160) } });
+    return { ok: true, delivered: false, updated: 0, reason: `Order does not have tag "${cfg.deliveryTag}" yet.` };
+  }
+  const deliveredAt = new Date(order.delivered_at || order.updated_at || new Date());
+  const scheduledAt = addDays(deliveredAt, cfg.delayDays);
+  const result = await ReviewRequestJob.updateMany({ ...filter, status: 'awaiting_delivery' }, {
+    $set: {
+      status: 'scheduled',
+      blockedReason: '',
+      deliveredAt,
+      scheduledAt,
+      orderTags: tags,
+      requiredDeliveryTag: cfg.deliveryTag,
+      deliveryRequired: true,
+      webhookId: cleanText(webhookId, 160),
+    },
+  });
+  return { ok: true, delivered: true, updated: result.modifiedCount || 0, scheduledAt };
+}
+
+
 function reviewRequestHtml({ shopDomain, customerName, orderId, reviewUrl, products = [] }) {
   const productList = products.length
     ? `<ul style="text-align:left;margin:0 auto 20px;max-width:460px;color:#4b5563;">${products.slice(0, 6).map((product) => `<li>${product.title || 'Purchased product'}</li>`).join('')}</ul>`
     : '';
-  return `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.55;color:#111827;background:#f3f4f6;padding:28px;"><div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:18px;padding:28px;text-align:center;"><p style="margin:0 0 8px;color:#667085;font-weight:700;letter-spacing:.04em;text-transform:uppercase;font-size:12px;">Review request</p><h1 style="margin:0 0 12px;font-size:28px;line-height:1.15;">How was your recent order?</h1><p style="margin:0 0 16px;color:#4b5563;">Hi ${customerName || 'there'}, thanks for shopping with ${shopDomain}. Your order has had time to arrive, and we would love your feedback.</p><p style="margin:0 0 14px;color:#667085;font-size:13px;">Order: <strong>${orderId || 'recent order'}</strong></p>${productList}<a href="${reviewUrl}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;font-weight:bold;border-radius:12px;padding:13px 18px;">Leave a review</a><p style="margin:22px 0 0;color:#98a2b3;font-size:12px;">This review link is unique to your order.</p></div></div>`;
+  const supportUrl = `${reviewUrl}${String(reviewUrl).includes('?') ? '&' : '?'}support=1`;
+  return `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.55;color:#111827;background:#f3f4f6;padding:28px;"><div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:18px;padding:28px;text-align:center;"><p style="margin:0 0 8px;color:#667085;font-weight:700;letter-spacing:.04em;text-transform:uppercase;font-size:12px;">Review request</p><h1 style="margin:0 0 12px;font-size:28px;line-height:1.15;">How was your recent order?</h1><p style="margin:0 0 16px;color:#4b5563;">Hi ${customerName || 'there'}, thanks for shopping with ${shopDomain}. Your order has had time to arrive, and we would love your feedback.</p><p style="margin:0 0 14px;color:#667085;font-size:13px;">Order: <strong>${orderId || 'recent order'}</strong></p>${productList}<a href="${reviewUrl}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;font-weight:bold;border-radius:12px;padding:13px 18px;">Leave a review</a><p style="margin:16px 0 0;color:#4b5563;font-size:14px;">Something wrong with delivery or your order?</p><a href="${supportUrl}" style="display:inline-block;margin-top:8px;color:#111827;text-decoration:underline;font-weight:bold;">Contact customer service before reviewing</a><p style="margin:22px 0 0;color:#98a2b3;font-size:12px;">This review link is unique to your order.</p></div></div>`;
 }
 
 function campaignUniqueKey({ shopDomain, campaign, token }) {
@@ -247,20 +300,28 @@ async function sendDueReviewRequests({ limit = 25 } = {}) {
 async function registerReviewWebhookSubscriptions(shopDomain) {
   const appBase = env.appUrl || '';
   if (!appBase || !shopDomain) return { ok: false, skipped: true, reason: 'APP_URL or shop domain missing.' };
-  const address = `${appBase.replace(/\/$/, '')}/api/webhooks/shopify/orders-fulfilled`;
-  const topic = 'orders/fulfilled';
-  const existing = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/webhooks.json?topic=${encodeURIComponent(topic)}`, { shopDomain });
-  const already = (existing?.webhooks || []).some((hook) => String(hook.address || '').replace(/\/$/, '') === address);
-  if (already) return { ok: true, already: true, topic, address };
-  const created = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/webhooks.json`, {
-    shopDomain,
-    method: 'POST',
-    body: JSON.stringify({ webhook: { topic, address, format: 'json' } }),
-  });
-  if (!created?.webhook?.id) return { ok: false, topic, address, reason: 'Shopify did not confirm webhook creation. Check scopes/install.' };
-  await Shop.findOneAndUpdate({ shopDomain }, { $set: { 'modules.reviews.webhookInstalledAt': new Date(), 'modules.reviews.webhookTopic': topic, 'modules.reviews.webhookAddress': address } }).catch(() => {});
-  return { ok: true, topic, address, webhookId: String(created.webhook.id) };
+  const base = appBase.replace(/\/$/, '');
+  const hooks = [
+    { topic: 'orders/fulfilled', address: `${base}/api/webhooks/shopify/orders-fulfilled` },
+    { topic: 'orders/updated', address: `${base}/api/webhooks/shopify/orders-updated` },
+  ];
+  const results = [];
+  for (const hook of hooks) {
+    const existing = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/webhooks.json?topic=${encodeURIComponent(hook.topic)}`, { shopDomain });
+    const already = (existing?.webhooks || []).some((item) => String(item.address || '').replace(/\/$/, '') === hook.address);
+    if (already) { results.push({ ok: true, already: true, ...hook }); continue; }
+    const created = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/webhooks.json`, {
+      shopDomain,
+      method: 'POST',
+      body: JSON.stringify({ webhook: { topic: hook.topic, address: hook.address, format: 'json' } }),
+    });
+    results.push(created?.webhook?.id ? { ok: true, ...hook, webhookId: String(created.webhook.id) } : { ok: false, ...hook, reason: 'Shopify did not confirm webhook creation. Check scopes/install.' });
+  }
+  const allOk = results.every((item) => item.ok);
+  await Shop.findOneAndUpdate({ shopDomain }, { $set: { 'modules.reviews.webhookInstalledAt': allOk ? new Date() : null, 'modules.reviews.webhookTopics': results.map((r) => r.topic), 'modules.reviews.webhookAddresses': results.map((r) => r.address) } }).catch(() => {});
+  return { ok: allOk, topics: results.map((r) => r.topic), results };
 }
+
 
 async function automationReadiness(shopDomain) {
   const [settings, emailSettings, shop, scheduledCount, sentCount, failedCount] = await Promise.all([
@@ -281,7 +342,8 @@ async function automationReadiness(shopDomain) {
     nativeReady,
     flowOptional: true,
     checks: [
-      { key: 'native_scheduler', label: 'Nectar native scheduler', status: cfg.enabled && cfg.nativeEnabled ? 'ready' : 'blocked', detail: cfg.enabled && cfg.nativeEnabled ? `Native automation waits ${cfg.delayDays} days after fulfilment, then sends using Nectar email.` : 'Native automation is disabled.' },
+      { key: 'native_scheduler', label: 'Nectar native scheduler', status: cfg.enabled && cfg.nativeEnabled ? 'ready' : 'blocked', detail: cfg.enabled && cfg.nativeEnabled ? `Native automation waits ${cfg.delayDays} days after ${cfg.deliveryTagRequired ? `Shopify order tag ${cfg.deliveryTag}` : 'fulfilment'}, then sends using Nectar email.` : 'Native automation is disabled.' },
+      { key: 'delivery_tag_gate', label: 'Delivery tag gate', status: cfg.deliveryTagRequired ? 'ready' : 'warning', detail: cfg.deliveryTagRequired ? `Review emails wait until the Shopify order has tag ${cfg.deliveryTag}. Your tracking app can add this tag when delivered.` : 'Review emails use fulfilment date only. Enable the delivery tag gate to avoid reviews before delivery.' },
       { key: 'email_provider', label: 'Email provider', status: emailReady ? 'ready' : 'blocked', detail: emailReady ? `Emails send from ${emailSettings.fromEmail || emailSettings.smtpUser}.` : 'No active email provider is saved.' },
       { key: 'signed_links', label: 'Signed review links', status: tokenReady ? 'ready' : 'blocked', detail: tokenReady ? 'Review links can be signed and verified.' : 'Set EMAIL_CREDENTIAL_SECRET or SHOPIFY_API_SECRET.' },
       { key: 'shopify_oauth', label: 'Shopify OAuth / order webhook', status: oauthReady ? 'ready' : 'warning', detail: oauthReady ? 'The app can register Shopify webhooks for real fulfilled orders.' : 'OAuth is not connected. Fake-order tests still work, but live order webhooks will not.' },
@@ -314,6 +376,7 @@ module.exports = {
   reviewAutomationConfig,
   getAutomationConfig,
   scheduleReviewRequestFromOrder,
+  updateReviewRequestDeliveryFromOrder,
   sendDueReviewRequests,
   registerReviewWebhookSubscriptions,
   automationReadiness,

@@ -991,7 +991,7 @@ router.post('/campaign-reminder', async (req, res, next) => {
     const transporter = createTransporterFromSettings(settings);
     const fromName = settings.fromName || 'Store Reviews';
     const fromEmail = settings.fromEmail || settings.smtpUser;
-    const products = itemId ? [{ id: itemId, productId: itemId, title: productTitle }] : [];
+    const products = itemId ? [{ id: itemId, productId: itemId, title: productTitle }] : [{ id: `order-${orderId || Date.now()}`, productId: `order-${orderId || Date.now()}`, title: productTitle || 'Recent order' }];
     const token = createReviewToken({ shopDomain, email, customerName: '', orderId, products, expiresDays: 14, testMode: false });
     if (!token) return res.status(400).json({ error: 'Review token could not be created. Set EMAIL_CREDENTIAL_SECRET or SHOPIFY_API_SECRET.' });
     const reviewUrl = `https://${shopDomain}/pages/leave-review?shopDomain=${encodeURIComponent(shopDomain)}&mode=${itemId ? 'product' : 'order'}&order_id=${encodeURIComponent(orderId)}&email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}${itemId ? `&product_id=${encodeURIComponent(itemId)}` : ''}`;
@@ -1271,6 +1271,9 @@ router.patch('/review-automation', async (req, res, next) => {
       'reviewAutomation.nativeEnabled': body.nativeEnabled !== false,
       'reviewAutomation.flowEnabled': Boolean(body.flowEnabled),
       'reviewAutomation.trigger': ['orders/fulfilled', 'fulfillments/create', 'manual'].includes(body.trigger) ? body.trigger : 'orders/fulfilled',
+      'reviewAutomation.deliveryTagRequired': body.deliveryTagRequired !== false,
+      'reviewAutomation.deliveryTag': cleanText(body.deliveryTag || 'delivered', 80).toLowerCase(),
+      'reviewAutomation.deliveryAnchor': ['fulfilled_at', 'delivered_tag'].includes(body.deliveryAnchor) ? body.deliveryAnchor : 'delivered_tag',
       'reviewAutomation.delayDays': clampNumber(body.delayDays, 0, 365, 14),
       'reviewAutomation.sendWindowHour': clampNumber(body.sendWindowHour, 0, 23, 10),
       'reviewAutomation.sendWindowTimezone': cleanText(body.sendWindowTimezone || 'store', 80),

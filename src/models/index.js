@@ -119,6 +119,9 @@ const settingsSchema = new mongoose.Schema({
     nativeEnabled: { type: Boolean, default: true },
     flowEnabled: { type: Boolean, default: false },
     trigger: { type: String, enum: ['orders/fulfilled', 'fulfillments/create', 'manual'], default: 'orders/fulfilled' },
+    deliveryTagRequired: { type: Boolean, default: true },
+    deliveryTag: { type: String, default: 'delivered' },
+    deliveryAnchor: { type: String, enum: ['fulfilled_at', 'delivered_tag'], default: 'delivered_tag' },
     delayDays: { type: Number, default: 14, min: 0, max: 365 },
     sendWindowHour: { type: Number, default: 10, min: 0, max: 23 },
     sendWindowTimezone: { type: String, default: 'store' },
@@ -270,6 +273,23 @@ e2eTestRunSchema.index({ shopDomain: 1, createdAt: -1 });
 e2eTestRunSchema.index({ shopDomain: 1, scenario: 1, createdAt: -1 });
 
 
+
+const supportRequestSchema = new mongoose.Schema({
+  shopDomain: { type: String, required: true, index: true },
+  orderId: { type: String, default: '', index: true },
+  email: { type: String, default: '', index: true },
+  customerName: { type: String, default: '' },
+  subject: { type: String, default: '' },
+  message: { type: String, default: '' },
+  products: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  reviewToken: { type: String, default: '', index: true },
+  status: { type: String, enum: ['received', 'emailed', 'email_failed'], default: 'received', index: true },
+  notificationError: { type: String, default: '' },
+  userAgent: { type: String, default: '' },
+  ipHash: { type: String, default: '' },
+}, { timestamps: true });
+supportRequestSchema.index({ shopDomain: 1, createdAt: -1 });
+
 const reviewRequestProductSchema = new mongoose.Schema({
   id: { type: String, default: '' },
   productId: { type: String, default: '' },
@@ -289,9 +309,13 @@ const reviewRequestJobSchema = new mongoose.Schema({
   products: { type: [reviewRequestProductSchema], default: [] },
   delayDays: { type: Number, default: 14 },
   fulfilledAt: { type: Date, default: Date.now },
+  deliveredAt: { type: Date, default: null },
+  orderTags: { type: [String], default: [] },
+  deliveryRequired: { type: Boolean, default: true },
+  requiredDeliveryTag: { type: String, default: 'delivered' },
   scheduledAt: { type: Date, default: Date.now, index: true },
   sentAt: { type: Date, default: null, index: true },
-  status: { type: String, enum: ['scheduled', 'sending', 'sent', 'blocked', 'failed', 'cancelled', 'skipped'], default: 'scheduled', index: true },
+  status: { type: String, enum: ['awaiting_delivery', 'scheduled', 'sending', 'sent', 'blocked', 'failed', 'cancelled', 'skipped'], default: 'scheduled', index: true },
   blockedReason: { type: String, default: '' },
   errorMessage: { type: String, default: '' },
   attempts: { type: Number, default: 0 },
@@ -331,6 +355,7 @@ module.exports = {
   Shop: mongoose.models.Shop || mongoose.model('Shop', shopSchema, 'shops'),
   E2ETestRun: mongoose.models.E2ETestRun || mongoose.model('E2ETestRun', e2eTestRunSchema, 'e2e_test_runs'),
   ReviewRequestJob: mongoose.models.ReviewRequestJob || mongoose.model('ReviewRequestJob', reviewRequestJobSchema, 'review_request_jobs'),
+  SupportRequest: mongoose.models.SupportRequest || mongoose.model('SupportRequest', supportRequestSchema, 'support_requests'),
   // Loyalty models intentionally live in src/modules/loyalty/loyalty.models.js
   // so they can bind to LOYALTY_DB_URI instead of the core reviews database.
 

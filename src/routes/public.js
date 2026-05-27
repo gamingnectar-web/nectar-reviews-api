@@ -1,7 +1,8 @@
 const express = require('express');
-const { Review, Settings, CampaignEvent } = require('../models');
+const nodemailer = require('nodemailer');
+const { Review, Settings, CampaignEvent, EmailProviderSettings, SupportRequest } = require('../models');
 const { cleanShopDomain, isValidShopDomain, cleanText, cleanEmail, clampNumber, getClientIp } = require('../utils/validation');
-const { hashValue } = require('../utils/crypto');
+const { hashValue, decryptSecret } = require('../utils/crypto');
 const { shopifyFetchOptional } = require('../utils/shopify');
 const { verifyReviewToken, productMatchesToken, normaliseProduct } = require('../utils/reviewTokens');
 const { awardForReview } = require('../modules/loyalty/loyalty.service');
@@ -579,17 +580,72 @@ router.post('/support-requests', async (req, res, next) => {
   try {
     const shopDomain = cleanShopDomain(req.body.shopDomain || req.body.shop);
     if (!shopDomain || !isValidShopDomain(shopDomain)) return res.status(400).json({ error: 'Valid shopDomain is required.' });
+    const orderId = cleanText(req.body.orderId, 120);
+    const email = cleanEmail(req.body.email);
+    const customerName = cleanText(req.body.customerName || 'Customer', 140);
+    const subject = cleanText(req.body.subject || 'Customer service request before review', 180);
+    const message = cleanText(req.body.message || '', 5000);
+    const products = Array.isArray(req.body.products) ? req.body.products.slice(0, 20).map((product) => ({ id: cleanText(product.id || product.productId, 180), title: cleanText(product.title || 'Product', 200) })) : [];
+    if (!subject || !message) return res.status(400).json({ error: 'Subject and message are required.' });
+
+    const supportRequest = await SupportRequest.create({
+      shopDomain,
+      orderId,
+      email,
+      customerName,
+      subject,
+      message,
+      products,
+      reviewToken: cleanText(req.body.reviewToken || '', 3000),
+      userAgent: cleanText(req.headers['user-agent'], 500),
+      ipHash: hashValue(getClientIp(req)),
+    });
+
     await CampaignEvent.create({
       shopDomain,
       campaign: 'support_request',
       eventType: 'click',
-      orderId: cleanText(req.body.orderId, 120),
-      email: cleanEmail(req.body.email),
+      orderId,
+      email,
       url: 'support-request',
+      token: supportRequest.reviewToken || '',
+      subject,
+      templateName: 'Support before review',
+      layoutName: 'review_page_modal',
+      moduleNames: ['support_before_review'],
       userAgent: cleanText(req.headers['user-agent'], 500),
       ipHash: hashValue(getClientIp(req)),
     });
-    return res.json({ ok: true });
+
+    const provider = await EmailProviderSettings.findOne({ shopDomain, enabled: true }).lean();
+    if (provider?.smtpPassEncrypted && (provider.replyToEmail || provider.fromEmail || provider.smtpUser)) {
+      const to = provider.replyToEmail || provider.fromEmail || provider.smtpUser;
+      const fromEmail = provider.fromEmail || provider.smtpUser;
+      const fromName = provider.fromName || 'Nectar Reviews';
+      const productLines = products.length ? products.map((product) => `<li>${product.title || product.id || 'Product'}</li>`).join('') : '<li>No product list supplied.</li>';
+      const html = `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.55;color:#111827;max-width:680px;margin:0 auto;padding:24px;"><h2>Customer service request before review</h2><p>A customer used the Nectar support modal before leaving a review.</p><p><strong>Customer:</strong> ${customerName || 'Customer'}<br><strong>Email:</strong> ${email || 'Not supplied'}<br><strong>Order:</strong> ${orderId || 'Not supplied'}</p><p><strong>Subject:</strong> ${subject}</p><p style="white-space:pre-wrap;">${message.replace(/[&<>]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</p><h3>Products</h3><ul>${productLines}</ul><p style="color:#667085;font-size:12px;">Saved in Nectar support_requests as ${supportRequest._id}.</p></div>`;
+      try {
+        const transporter = nodemailer.createTransport({
+          host: provider.smtpHost,
+          port: Number(provider.smtpPort || 587),
+          secure: provider.secureMode === 'ssl' || Number(provider.smtpPort) === 465,
+          requireTLS: provider.secureMode === 'starttls',
+          auth: { user: provider.smtpUser, pass: decryptSecret(provider.smtpPassEncrypted) },
+          connectionTimeout: 15000,
+          greetingTimeout: 15000,
+          socketTimeout: 20000,
+        });
+        await transporter.sendMail({ from: `${String(fromName).replace(/"/g, '')} <${fromEmail}>`, to, replyTo: email || to, subject: `[Nectar Support] ${subject}`, html });
+        supportRequest.status = 'emailed';
+        await supportRequest.save();
+      } catch (mailError) {
+        supportRequest.status = 'email_failed';
+        supportRequest.notificationError = mailError.message || 'Support notification failed.';
+        await supportRequest.save().catch(() => {});
+      }
+    }
+
+    return res.json({ ok: true, supportRequestId: String(supportRequest._id), status: supportRequest.status });
   } catch (error) {
     next(error);
   }

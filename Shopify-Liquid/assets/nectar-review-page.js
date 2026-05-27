@@ -471,7 +471,7 @@
     btn.disabled = true;
     btn.textContent = 'Sending…';
     try {
-      const res = await fetch(`${API}/support-requests`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shopDomain: SHOP_DOMAIN, orderId: orderData?.orderId || params.get('order') || '', email: orderData?.customerEmail || params.get('email') || '', customerName: orderData?.customerName || 'Customer', subject, message }) });
+      const res = await fetch(`${API}/support-requests`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shopDomain: SHOP_DOMAIN, orderId: orderData?.orderId || params.get('order') || '', email: orderData?.customerEmail || params.get('email') || '', customerName: orderData?.customerName || 'Customer', subject, message, reviewToken: params.get('token') || params.get('reviewToken') || '', products: products.map((product) => ({ id: product.id, productId: product.productId, title: product.title })).slice(0, 20) }) });
       if (!res.ok) throw new Error('Support request failed');
       closeSupportModal();
       alert('Your message has been sent to customer service.');
@@ -507,6 +507,11 @@
       }
       renderProducts();
       show('main');
+      if (params.get('support') === '1' || params.get('openSupport') === '1') {
+        const subjectInput = document.getElementById('nectar-support-subject');
+        if (subjectInput && !subjectInput.value) subjectInput.value = `Help with order ${orderData.orderId || params.get('order') || ''}`.trim();
+        setTimeout(openSupportModal, 120);
+      }
     } catch (error) {
       console.error(error);
       if (error.code === 'NOT_DELIVERED') show('notDelivered');

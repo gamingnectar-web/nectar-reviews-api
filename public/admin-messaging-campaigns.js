@@ -8,12 +8,13 @@
   let reviewTemplates = [];
   let linkRules = [];
   let messageModules = [];
+  let hiddenModuleIds = [];
   let providerProfiles = [];
 
   const BUILT_IN_MODULES = [
     { id: 'notice', name: 'Notice box', title: 'Before you review', text: 'A quick note before you review: your feedback helps other customers choose confidently.', bgColor: '#f8fafc', borderColor: '#e5e7eb', borderWidth: 1, radius: 12, padding: 14, buttonText: '', buttonUrl: '' },
     { id: 'promo', name: 'Promo / offer box', title: 'Thanks again', text: 'Thanks again for shopping with us — we appreciate your support.', bgColor: '#f8fafc', borderColor: '#e5e7eb', borderWidth: 1, radius: 12, padding: 14, buttonText: '', buttonUrl: '' },
-    { id: 'support', name: 'Support reminder', title: 'Need help first?', text: 'Need help before leaving a review? Reply to this email and we will sort it.', bgColor: '#f8fafc', borderColor: '#e5e7eb', borderWidth: 1, radius: 12, padding: 14, buttonText: '', buttonUrl: '' },
+    { id: 'support', name: 'Support reminder', title: 'Need help first?', text: 'Need help before leaving a review? Tell us what happened and customer service will pick it up before you submit feedback.', bgColor: '#f8fafc', borderColor: '#e5e7eb', borderWidth: 1, radius: 12, padding: 14, buttonText: 'Contact customer service', buttonUrl: '{{support_link}}' },
     { id: 'text', name: 'Plain text section', title: 'Quick note', text: 'Add your custom message here.', bgColor: '#ffffff', borderColor: '#ffffff', borderWidth: 0, radius: 0, padding: 8, buttonText: '', buttonUrl: '' },
   ];
 
@@ -90,7 +91,7 @@
   function normaliseButtonUrl(raw) {
     const value = String(raw || '').trim();
     if (!value) return '';
-    if (/^https?:\/\//i.test(value) || /^mailto:/i.test(value)) return value;
+    if (/^\{\{.*\}\}$/i.test(value) || /^https?:\/\//i.test(value) || /^mailto:/i.test(value)) return value;
     return value.startsWith('/') ? value : `/${value}`;
   }
 
@@ -184,7 +185,7 @@
         <section id="msg-pane-settings" class="msg-pane">
           <div class="msg-grid msg-settings-grid">
             <div class="msg-stack">
-              <div class="msg-card"><h3>Review link rules</h3><p>Create conditional wording for product and order review buttons based on product tags, metafields, order number, order value, or order tags.</p><div class="msg-link-rule-row"><div><label>Check</label><select id="msg-link-rule-type"><option value="tag">Product tag</option><option value="metafield">Product metafield</option><option value="order">Order number / name</option><option value="order_value">Order value</option><option value="order_tag">Order tag</option></select></div><div><label>Value</label><input id="msg-link-rule-condition" type="text" placeholder="e.g. Snowboard, #1001, VIP"></div><div><label>Use button text</label><input id="msg-link-rule-text" type="text" placeholder="Review this board"></div><button type="button" id="msg-add-link-rule" class="msg-btn secondary">Add rule</button></div><div id="msg-link-rule-list" class="msg-link-rule-list"></div></div>
+              <div class="msg-card"><h3>Review button wording rules</h3><p>These only change button text. Delivery timing is controlled by the native scheduler so customers are not asked to review before delivery.</p><div class="msg-help"><strong>Recommended live rule:</strong> Settings → Reviews Launch Checklist should show <b>Delivery tag gate: delivered</b>. Nectar then waits until Shopify order tag <code>delivered</code> exists before starting the 14-day timer.</div><div class="msg-link-rule-row"><div><label>Check</label><select id="msg-link-rule-type"><option value="tag">Product tag</option><option value="metafield">Product metafield</option><option value="order">Order number / name</option><option value="order_value">Order value</option><option value="order_tag">Order tag</option></select></div><div><label>Value</label><input id="msg-link-rule-condition" type="text" placeholder="e.g. Snowboard, #1001, VIP"></div><div><label>Use button text</label><input id="msg-link-rule-text" type="text" placeholder="Review this board"></div><button type="button" id="msg-add-link-rule" class="msg-btn secondary">Add wording rule</button></div><div id="msg-link-rule-list" class="msg-link-rule-list"></div></div>
               <div class="msg-card"><h3>Shopify Flow guidance</h3><p>Paste the HTML on the right into a Shopify Flow “Send email” action with HTML enabled.</p><div class="msg-help">Recommended flow: Order fulfilled → Wait <span id="msg-delay-preview-settings">14</span> days → Send email.</div></div>
             </div>
             <div class="msg-card msg-code-card" style="padding:0;"><details class="msg-collapsible-code"><summary><div>Copy Shopify Flow HTML<br><span>Open only when you need to paste code into Shopify Flow.</span></div><button type="button" id="msg-copy-code-btn" class="msg-btn">Copy Code</button></summary><textarea id="msg-code-output" class="msg-code" spellcheck="false" readonly></textarea></details></div>
@@ -210,8 +211,8 @@
       { id: 'review_reassurance', name: 'Review reassurance', title: 'A note on moderation', text: 'Your review will be checked by our team before it appears publicly, so you can share honest feedback with confidence.', bgColor:'#f8fafc', borderColor:'#e5e7eb', borderWidth:1, radius:14, padding:15, position:'before' },
       { id: 'loyalty_points', name: 'Loyalty points reminder', title: 'Earn loyalty points', text: 'Leave a verified review and you may earn loyalty points once your review has been approved.', bgColor:'#f8fafc', borderColor:'#e5e7eb', borderWidth:1, radius:14, padding:15, position:'before' },
       { id: 'cart_rewards', name: 'Cart rewards nudge', title: 'Unlock cart rewards', text: 'Remember to check your cart before checkout — you may unlock milestone rewards as you shop.', bgColor:'#fff7ed', borderColor:'#fed7aa', borderWidth:1, radius:14, padding:15, position:'before' },
-      { id: 'support_first', name: 'Support before review', title: 'Need help first?', text: 'Something not right? Reply to this email before reviewing and our team will help put it right.', bgColor:'#f8fafc', borderColor:'#e5e7eb', borderWidth:1, radius:14, padding:15, position:'after' },
-    ];
+      { id: 'support_first', name: 'Support before review', title: 'Need help first?', text: 'Something not right? Tell us what happened before reviewing and our team will help put it right.', bgColor:'#f8fafc', borderColor:'#e5e7eb', borderWidth:1, radius:14, padding:15, position:'after', buttonText:'Contact customer service', buttonUrl:'{{support_link}}' },
+    ].filter((module) => !hiddenModuleIds.includes(module.id));
     return presets.concat(messageModules.map((m) => ({ ...m, id: `custom:${m.id}` })));
   }
   function findSectionModule(type){ return allSectionModules().find((m)=>m.id === type || m.id === String(type).replace(/^custom:/,'custom:')); }
@@ -271,20 +272,33 @@
   }
   function addEmailSection(){ const type = val('msg-section-template','notice'); emailSections.push(sectionFromModule(type)); renderEmailSections(); updatePreview(); }
   function addModuleSection(type){ emailSections.push(sectionFromModule(type)); renderEmailSections(); updatePreview(); switchPane('builder'); showToast('Message module added'); }
-  function renderEmailSectionRows(position){
+  function resolveModuleButtonUrl(url, context = {}) {
+    const normalised = normaliseButtonUrl(url);
+    if (normalised === '{{support_link}}') return context.supportLink || normalised;
+    if (normalised === '{{review_link}}') return context.reviewLink || normalised;
+    return normalised;
+  }
+
+  function withSupportParam(url) {
+    if (!url) return url;
+    return `${url}${String(url).includes('?') ? '&' : '?'}support=1`;
+  }
+
+  function renderEmailSectionRows(position, context = {}){
     const rows = emailSections.filter((section)=> (section.position || 'before') === position);
     if(!rows.length) return '';
     return rows.map((section)=>{
       const bg = cssOrNone(section.bgColor, 'transparent'); const border = borderColorOrNone(section.borderColor || '#e5e7eb'); const radius = Number(section.radius ?? 12); const padding = Number(section.padding ?? 14); const borderWidth = border === 'transparent' ? 0 : Math.max(0, Number(section.borderWidth ?? 1));
-      const button = section.buttonText && section.buttonUrl ? `<p style="margin:12px 0 0 0;"><a href="${escapeHtml(normaliseButtonUrl(section.buttonUrl))}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;border-radius:10px;padding:9px 12px;font-weight:bold;font-size:13px;">${escapeHtml(section.buttonText)}</a></p>` : '';
+      const href = section.buttonText && section.buttonUrl ? resolveModuleButtonUrl(section.buttonUrl, context) : '';
+      const button = section.buttonText && href ? `<p style="margin:12px 0 0 0;"><a href="${escapeHtml(href)}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;border-radius:10px;padding:9px 12px;font-weight:bold;font-size:13px;">${escapeHtml(section.buttonText)}</a></p>` : '';
       return `<tr><td style="padding:10px 0;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:${escapeHtml(bg)};border:${borderWidth}px solid ${escapeHtml(border)};border-radius:${radius}px;"><tr><td style="padding:${padding}px;font-family:Arial,Helvetica,sans-serif;text-align:left;"><strong style="display:block;color:#111827;font-size:15px;margin-bottom:5px;">${escapeHtml(section.title || sectionLabel(section.type))}</strong><p style="margin:0;color:#4b5563;font-size:14px;line-height:1.55;">${escapeHtml(section.text || '')}</p>${button}</td></tr></table></td></tr>`;
     }).join('');
   }
 
   function storageKey(name) { return `nectar_${name}_${getShopDomain()}`; }
 
-  function loadMessageModules() { try { messageModules = JSON.parse(localStorage.getItem(storageKey('message_modules')) || '[]'); } catch (_) { messageModules = []; } renderModuleLibrary(); populateSectionTemplates(); }
-  function saveMessageModules() { localStorage.setItem(storageKey('message_modules'), JSON.stringify(messageModules.slice(0, 50))); renderModuleLibrary(); populateSectionTemplates(); }
+  function loadMessageModules() { try { messageModules = JSON.parse(localStorage.getItem(storageKey('message_modules')) || '[]'); } catch (_) { messageModules = []; } try { hiddenModuleIds = JSON.parse(localStorage.getItem(storageKey('hidden_message_modules')) || '[]'); } catch (_) { hiddenModuleIds = []; } renderModuleLibrary(); populateSectionTemplates(); }
+  function saveMessageModules() { localStorage.setItem(storageKey('message_modules'), JSON.stringify(messageModules.slice(0, 50))); localStorage.setItem(storageKey('hidden_message_modules'), JSON.stringify(hiddenModuleIds.slice(0, 50))); renderModuleLibrary(); populateSectionTemplates(); }
   function populateSectionTemplates() {
     const select = el('msg-section-template'); if (!select) return;
     const current = select.value;
@@ -318,9 +332,12 @@
   function renderModuleLibrary() {
     const box = el('msg-module-library'); if (!box) return;
     const all = allSectionModules();
-    box.innerHTML = all.map((module)=>`<div class="msg-module-card"><div class="msg-module-card-head"><div><strong>${escapeHtml(module.name || module.title)}</strong><div class="msg-template-meta"><span>${escapeHtml(module.position || 'before')} products</span><span>${Number(module.borderWidth ?? 1)}px border</span><span>${Number(module.radius ?? 0)}px radius</span></div></div><div class="msg-provider-badges">${String(module.id).startsWith('custom:') ? '<span class="msg-badge green">Custom</span>' : '<span class="msg-badge gray">Preset</span>'}</div></div><div class="msg-help" style="margin-top:8px;"><strong>${escapeHtml(module.title || module.name)}</strong><br>${escapeHtml(module.text || '')}${module.buttonText ? `<br><br>Button: ${escapeHtml(module.buttonText)}` : ''}</div><div class="msg-template-actions"><button type="button" class="msg-btn secondary" data-insert-module="${escapeHtml(module.id)}">Add to email</button>${String(module.id).startsWith('custom:') ? `<button type="button" class="msg-btn secondary danger" data-delete-module="${escapeHtml(module.id.replace(/^custom:/,''))}">Remove</button>` : ''}</div></div>`).join('');
+    const hiddenNote = hiddenModuleIds.length ? `<div class="msg-help"><strong>${hiddenModuleIds.length} preset module(s) hidden.</strong> <button type="button" class="msg-btn secondary" data-restore-modules>Restore presets</button></div>` : '';
+    box.innerHTML = hiddenNote + all.map((module)=>`<div class="msg-module-card"><div class="msg-module-card-head"><div><strong>${escapeHtml(module.name || module.title)}</strong><div class="msg-template-meta"><span>${escapeHtml(module.position || 'before')} products</span><span>${Number(module.borderWidth ?? 1)}px border</span><span>${Number(module.radius ?? 0)}px radius</span></div></div><div class="msg-provider-badges">${String(module.id).startsWith('custom:') ? '<span class="msg-badge green">Custom</span>' : '<span class="msg-badge gray">Preset</span>'}</div></div><div class="msg-help" style="margin-top:8px;"><strong>${escapeHtml(module.title || module.name)}</strong><br>${escapeHtml(module.text || '')}${module.buttonText ? `<br><br>Button: ${escapeHtml(module.buttonText)}` : ''}</div><div class="msg-template-actions"><button type="button" class="msg-btn secondary" data-insert-module="${escapeHtml(module.id)}">Add to email</button>${String(module.id).startsWith('custom:') ? `<button type="button" class="msg-btn secondary danger" data-delete-module="${escapeHtml(module.id.replace(/^custom:/,''))}">Remove</button>` : `<button type="button" class="msg-btn secondary danger" data-hide-module="${escapeHtml(module.id)}">Hide preset</button>`}</div></div>`).join('');
     box.querySelectorAll('[data-insert-module]').forEach((btn)=>btn.addEventListener('click',()=>addModuleSection(btn.dataset.insertModule)));
     box.querySelectorAll('[data-delete-module]').forEach((btn)=>btn.addEventListener('click',()=>{ messageModules = messageModules.filter((m)=>m.id !== btn.dataset.deleteModule); saveMessageModules(); }));
+    box.querySelectorAll('[data-hide-module]').forEach((btn)=>btn.addEventListener('click',()=>{ if (!hiddenModuleIds.includes(btn.dataset.hideModule)) hiddenModuleIds.push(btn.dataset.hideModule); saveMessageModules(); }));
+    box.querySelector('[data-restore-modules]')?.addEventListener('click',()=>{ hiddenModuleIds = []; saveMessageModules(); });
   }
 
   function loadTemplates() { try { reviewTemplates = JSON.parse(localStorage.getItem(storageKey('review_templates')) || '[]'); } catch (_) { reviewTemplates = []; } renderTemplates(); }
@@ -425,10 +442,10 @@
     return `${shopUrl()}/pages/${o.pageHandle}?${params.toString()}`;
   }
 
-  function buildEmailShell(o, inner, footerExtra = '') {
+  function buildEmailShell(o, inner, footerExtra = '', context = {}) {
     const logoHtml = o.logo ? `<tr><td align="center" style="padding:0 0 18px 0;"><img src="${escapeHtml(o.logo)}" alt="" style="max-width:160px;height:auto;display:block;"></td></tr>` : '';
-    const beforeSections = renderEmailSectionRows('before');
-    const afterSections = renderEmailSectionRows('after');
+    const beforeSections = renderEmailSectionRows('before', context);
+    const afterSections = renderEmailSectionRows('after', context);
     return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:${o.bgColor};margin:0;padding:0;width:100%;"><tr><td align="center" style="padding:28px 12px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:620px;background:${o.cardColor};border-radius:16px;overflow:hidden;"><tr><td style="padding:34px 26px;font-family:Arial,Helvetica,sans-serif;text-align:center;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${logoHtml}<tr><td align="center" style="padding:0 0 12px 0;"><h1 style="margin:0;color:#111827;font-size:28px;line-height:1.25;font-weight:700;">${escapeHtml(o.heading)}</h1></td></tr><tr><td align="center" style="padding:0 0 10px 0;"><p style="margin:0;color:#4b5563;font-size:16px;line-height:1.6;">${o.intro}</p></td></tr><tr><td align="center" style="padding:0 0 12px 0;"><p style="margin:0;color:#4b5563;font-size:16px;line-height:1.6;">${escapeHtml(o.body)}</p></td></tr>${beforeSections}${inner}${afterSections}<tr><td align="center" style="padding:24px 0 0 0;"><p style="margin:0;color:#6b7280;font-size:13px;line-height:1.5;">${escapeHtml(o.signoff)}</p></td></tr><tr><td align="center" style="padding:20px 0 0 0;"><p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;">${escapeHtml(o.footerLabel || 'Sent by {{ shop.name }}.')} </p></td></tr>${footerExtra}</table></td></tr></table></td></tr></table>`;
   }
 
@@ -443,7 +460,7 @@
     const productButtons = `<tr><td style="padding:18px 0 0 0;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">{% for line_item in order.lineItems %}<tr><td style="padding:12px 0;border-top:1px solid #e5e7eb;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td width="58" style="padding-right:12px;vertical-align:middle;"><div style="width:58px;height:58px;border-radius:10px;background:#eef2f7;overflow:hidden;"><img src="{{ line_item.image | image_url: width: 116 }}" width="58" height="58" alt="" style="display:block;width:58px;height:58px;object-fit:cover;border:0;"></div></td><td style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px;font-weight:bold;line-height:1.35;vertical-align:middle;padding-right:12px;">{{ line_item.title }}</td><td align="right" style="vertical-align:middle;white-space:nowrap;"><div style="margin-bottom:8px;">${productStars(starColor)}</div><a href="${flowReviewUrl(o, 'product', '&product_id={{ line_item.product.id }}&variant_id={{ line_item.variant.id }}&product_title={{ line_item.title | url_encode }}')}" style="display:inline-block;background:${o.accentColor};color:#ffffff;text-decoration:none;font-size:13px;font-weight:bold;padding:9px 13px;border-radius:${o.buttonRadius}px;white-space:nowrap;">${escapeHtml(o.productButtonText)}</a></td></tr></table></td></tr>{% endfor %}</table></td></tr>`;
     const links = o.linkMode === 'order' ? orderButton : o.linkMode === 'products' ? productButtons : orderButton + productButtons;
     const pixel = `<tr><td><img src="${DEFAULT_API}/campaign/open?shopDomain=${encodeURIComponent(getShopDomain())}&campaign=flow_review_request&orderId={{ order.name | remove: '#' | url_encode }}&email={{ order.customer.email | url_encode }}" width="1" height="1" alt="" style="display:none;opacity:0;width:1px;height:1px;"></td></tr>`;
-    return buildEmailShell(o, links, pixel);
+    return buildEmailShell(o, links, pixel, { reviewLink: orderUrl, supportLink: withSupportParam(orderUrl) });
   }
 
   function buildRenderedTestEmailHtml(o, tokenOverride = '') {
@@ -463,7 +480,7 @@
     const intro = o.intro.replace(/\{\{[^}]+\}\}/g, escapeHtml(val('msg-test-name', 'Alex')));
     const testOpts = { ...o, intro, footerLabel: `Sent by ${getShopDomain()}.` };
     const pixel = `<img src="${trackingOpenPixel({ campaign: 'test_review_request', orderId, email, token })}" width="1" height="1" alt="" style="display:none;opacity:0;width:1px;height:1px;">`;
-    return buildEmailShell(testOpts, links, `<tr><td>${pixel}</td></tr>`);
+    return buildEmailShell(testOpts, links, `<tr><td>${pixel}</td></tr>`, { reviewLink: orderUrl, supportLink: withSupportParam(orderUrl) });
   }
 
   function updatePreview() {

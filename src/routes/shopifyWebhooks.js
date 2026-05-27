@@ -3,7 +3,7 @@ const express = require('express');
 const { env } = require('../config/env');
 const { cleanShopDomain } = require('../utils/validation');
 const { timingSafeEqualString } = require('../utils/crypto');
-const { scheduleReviewRequestFromOrder } = require('../modules/reviews/reviewRequestAutomation');
+const { scheduleReviewRequestFromOrder, updateReviewRequestDeliveryFromOrder } = require('../modules/reviews/reviewRequestAutomation');
 
 const router = express.Router();
 
@@ -40,8 +40,34 @@ async function handleOrderFulfilled(req, res) {
   return res.status(200).json({ ok: true, jobId: String(job._id), status: job.status, scheduledAt: job.scheduledAt });
 }
 
+async function handleOrderUpdated(req, res) {
+  const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || '');
+  const hmac = req.headers['x-shopify-hmac-sha256'];
+  const shopDomain = cleanShopDomain(req.headers['x-shopify-shop-domain'] || req.query.shop || '');
+  const webhookId = String(req.headers['x-shopify-webhook-id'] || req.headers['x-shopify-event-id'] || '');
+
+  if (!verifyShopifyWebhook(rawBody, hmac)) {
+    return res.status(401).json({ error: 'Invalid Shopify webhook signature.' });
+  }
+  if (!shopDomain) return res.status(400).json({ error: 'Missing Shopify shop domain.' });
+
+  let order = {};
+  try {
+    order = JSON.parse(rawBody.toString('utf8') || '{}');
+  } catch (error) {
+    return res.status(400).json({ error: 'Invalid Shopify webhook JSON.' });
+  }
+
+  const result = await updateReviewRequestDeliveryFromOrder({ shopDomain, order, webhookId });
+  return res.status(200).json({ ok: true, ...result });
+}
+
 router.post('/shopify/orders-fulfilled', express.raw({ type: '*/*', limit: '1mb' }), (req, res, next) => {
   handleOrderFulfilled(req, res).catch(next);
+});
+
+router.post('/shopify/orders-updated', express.raw({ type: '*/*', limit: '1mb' }), (req, res, next) => {
+  handleOrderUpdated(req, res).catch(next);
 });
 
 module.exports = router;
