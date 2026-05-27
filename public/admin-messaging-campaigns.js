@@ -636,18 +636,36 @@
       replyToEmail: val('msg-smtp-reply-to'),
     };
   }
+  function upsertLocalProvider(payload, id) {
+    const localId = id || payload.id || `local-${(payload.name || payload.fromEmail || 'provider').toLowerCase().replace(/[^a-z0-9]+/g,'-')}`;
+    const fallback = { ...payload, _id: localId, id: localId, smtpPass: undefined, smtpPasswordSet: Boolean(payload.smtpPass), passwordSet: Boolean(payload.smtpPass) };
+    providerProfiles = providerProfiles.filter((p) => String(p._id || p.id || p.name) !== String(localId) && String(p.name || '').toLowerCase() !== String(payload.name || '').toLowerCase());
+    providerProfiles.unshift(fallback);
+    localStorage.setItem(storageKey('provider_profiles'), JSON.stringify(providerProfiles.slice(0, 20)));
+    renderProviderProfiles();
+  }
+
   async function saveProviderProfile() {
     const payload = providerPayload();
     if (!payload.smtpHost || !payload.smtpUser || !payload.fromEmail) throw new Error('SMTP host, username and from email are required.');
     try { await securedFetch('/admin/email-provider-profiles', { method: 'POST', body: JSON.stringify(payload) }); await loadProviderProfiles(); showToast('Provider profile saved'); }
     catch (error) {
-      const fallback = { ...payload, id: uid('provider'), smtpPass: undefined, passwordSet: Boolean(payload.smtpPass) };
-      providerProfiles.unshift(fallback); localStorage.setItem(storageKey('provider_profiles'), JSON.stringify(providerProfiles.slice(0, 20))); renderProviderProfiles(); showToast('Provider saved locally');
+      upsertLocalProvider(payload);
+      showToast(`Provider saved locally because the server could not save it: ${error.message || 'unknown error'}`);
     }
   }
-  async function useProviderProfile(id, purpose) { await securedFetch(`/admin/email-provider-profiles/${encodeURIComponent(id)}/use`, { method: 'POST', body: JSON.stringify({ purpose }) }); await loadProviderProfiles(); await loadEmailSettings(); showToast(`Provider assigned to ${purposeLabel(purpose)}`); }
-  async function unassignProviderProfile(id, purpose) { await securedFetch(`/admin/email-provider-profiles/${encodeURIComponent(id)}/unassign`, { method: 'POST', body: JSON.stringify({ purpose }) }); await loadProviderProfiles(); showToast(`Provider removed from ${purposeLabel(purpose)}`); }
-  async function deleteProviderProfile(id) { await securedFetch(`/admin/email-provider-profiles/${encodeURIComponent(id)}`, { method: 'DELETE' }); await loadProviderProfiles(); showToast('Provider removed'); }
+  async function useProviderProfile(id, purpose) {
+    if (String(id || '').startsWith('local-')) { const p = providerProfiles.find((item)=>String(item._id || item.id) === String(id)); if (p) { p.primaryFor = Array.from(new Set([...(p.primaryFor || []).filter((x)=>x !== purpose), purpose])); localStorage.setItem(storageKey('provider_profiles'), JSON.stringify(providerProfiles)); renderProviderProfiles(); showToast(`Provider assigned locally to ${purposeLabel(purpose)}`); return; } }
+    await securedFetch(`/admin/email-provider-profiles/${encodeURIComponent(id)}/use`, { method: 'POST', body: JSON.stringify({ purpose }) }); await loadProviderProfiles(); await loadEmailSettings(); showToast(`Provider assigned to ${purposeLabel(purpose)}`);
+  }
+  async function unassignProviderProfile(id, purpose) {
+    if (String(id || '').startsWith('local-')) { const p = providerProfiles.find((item)=>String(item._id || item.id) === String(id)); if (p) { p.primaryFor = (p.primaryFor || []).filter((x)=>x !== purpose); localStorage.setItem(storageKey('provider_profiles'), JSON.stringify(providerProfiles)); renderProviderProfiles(); showToast(`Provider removed locally from ${purposeLabel(purpose)}`); return; } }
+    await securedFetch(`/admin/email-provider-profiles/${encodeURIComponent(id)}/unassign`, { method: 'POST', body: JSON.stringify({ purpose }) }); await loadProviderProfiles(); showToast(`Provider removed from ${purposeLabel(purpose)}`);
+  }
+  async function deleteProviderProfile(id) {
+    if (String(id || '').startsWith('local-')) { providerProfiles = providerProfiles.filter((item)=>String(item._id || item.id) !== String(id)); localStorage.setItem(storageKey('provider_profiles'), JSON.stringify(providerProfiles)); renderProviderProfiles(); showToast('Provider removed locally'); return; }
+    await securedFetch(`/admin/email-provider-profiles/${encodeURIComponent(id)}`, { method: 'DELETE' }); await loadProviderProfiles(); showToast('Provider removed');
+  }
 
   async function loadEmailSettings() {
     const state = el('msg-smtp-state');
@@ -674,9 +692,15 @@
       enabled: el('msg-smtp-enabled').value === 'true', provider: val('msg-smtp-provider', 'smtp'), smtpHost: val('msg-smtp-host'), smtpPort: Number(val('msg-smtp-port', '587')), secureMode: val('msg-smtp-secure', 'starttls'), smtpUser: val('msg-smtp-user'), smtpPass: val('msg-smtp-pass'), fromName: val('msg-smtp-from-name', 'Nectar Reviews'), fromEmail: val('msg-smtp-from-email'), replyToEmail: val('msg-smtp-reply-to'),
     };
     await securedFetch('/admin/email-settings', { method: 'PATCH', body: JSON.stringify(payload) });
+    try {
+      await securedFetch('/admin/email-provider-profiles', { method: 'POST', body: JSON.stringify({ ...payload, name: val('msg-provider-profile-name', payload.fromName || payload.fromEmail || 'Email provider'), primaryFor: [val('msg-provider-primary-for','reviews')] }) });
+      await loadProviderProfiles();
+    } catch (error) {
+      upsertLocalProvider({ ...payload, name: val('msg-provider-profile-name', payload.fromName || payload.fromEmail || 'Email provider'), primaryFor: [val('msg-provider-primary-for','reviews')] });
+    }
     el('msg-smtp-pass').value = '';
     await loadEmailSettings();
-    showToast('Email provider saved');
+    showToast('Email provider saved and added to Saved providers');
   }
 
   async function removeEmailSettings() {
@@ -768,6 +792,7 @@
     document.querySelectorAll('#nr-messaging-campaigns-mount .msg-tab').forEach((b) => b.classList.toggle('active', b.dataset.msgTab === name));
     document.querySelectorAll('#nr-messaging-campaigns-mount .msg-pane').forEach((p) => p.classList.toggle('active', p.id === `msg-pane-${name}`));
   }
+  window.msgTab = switchPane;
 
   function setPreviewMode(mode) {
     el('msg-preview-desktop')?.classList.toggle('active', mode === 'desktop');

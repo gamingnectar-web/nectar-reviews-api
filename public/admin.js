@@ -188,11 +188,45 @@ window.tab = function(id) {
   document.querySelectorAll('.view, .tab-btn').forEach((el) => el.classList.remove('active'));
   target.classList.add('active');
   const activeBtn = document.querySelector(`button[onclick="window.tab('${id}')"]`);
-  if (activeBtn) activeBtn.classList.add('active');
+  if (activeBtn) {
+    activeBtn.classList.add('active');
+    const group = activeBtn.closest('.nav-group');
+    if (group) group.classList.remove('collapsed');
+  }
   if (id === 'v-dash') window.loadStats();
   if (['v-discounts', 'v-loyalty', 'v-referrals'].includes(id)) window.loadModules();
   if (id === 'v-loyalty') window.loadLoyaltyConfig?.();
+  if (id === 'v-test-centre') window.loadE2ETestCentre?.();
+  refreshResponsiveNavGroups();
 };
+
+window.toggleNavGroup = function(title) {
+  const group = title?.closest?.('.nav-group');
+  if (!group) return;
+  group.classList.toggle('collapsed');
+};
+
+function refreshResponsiveNavGroups() {
+  const compact = window.matchMedia('(max-width: 900px)').matches;
+  document.querySelectorAll('.sidebar .nav-group').forEach((group) => {
+    if (!compact) { group.classList.remove('collapsed'); return; }
+    const hasActive = Boolean(group.querySelector('.tab-btn.active'));
+    if (!hasActive && group.dataset.userOpened !== 'true') group.classList.add('collapsed');
+  });
+}
+
+function initResponsiveNavGroups() {
+  document.querySelectorAll('.sidebar .nav-title').forEach((title) => {
+    if (title.dataset.bound === 'true') return;
+    title.dataset.bound = 'true';
+    title.setAttribute('role', 'button');
+    title.setAttribute('tabindex', '0');
+    title.addEventListener('click', () => { const group = title.closest('.nav-group'); if (group) group.dataset.userOpened = String(group.classList.contains('collapsed')); window.toggleNavGroup(title); });
+    title.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); const group = title.closest('.nav-group'); if (group) group.dataset.userOpened = String(group.classList.contains('collapsed')); window.toggleNavGroup(title); } });
+  });
+  refreshResponsiveNavGroups();
+  window.addEventListener('resize', refreshResponsiveNavGroups);
+}
 
 
 window.docsTab = function(name) {
@@ -1764,7 +1798,11 @@ setTimeout(() => { window.initLoyaltyTabs?.(); window.updateLoyaltyPreview?.(); 
 
   function renderPrereqs(items = []){
     const box = document.getElementById('e2e-prereq-list'); if (!box) return;
-    box.innerHTML = items.map((item) => `<div class="e2e-check" data-status="${esc(item.status)}"><span class="e2e-dot">${statusIcon(item.status)}</span><div><strong>${esc(item.label)}</strong><p>${esc(item.detail)}</p>${item.action ? `<small>Next step: ${esc(item.action)}</small>` : ''}</div></div>`).join('') || '<p class="muted">No checks returned.</p>';
+    box.innerHTML = items.map((item) => {
+      const isFlow = item.key === 'shopify_flow';
+      const flowGuide = isFlow ? `<div class="e2e-flow-guide"><strong>How to make this real in Shopify Flow</strong><ol><li>Open Shopify Admin → Apps → Flow.</li><li>Create a workflow, or open your existing review request workflow.</li><li>Choose a trigger: Order fulfilled is recommended for review requests. Order paid can be used for purchase/loyalty points.</li><li>Add a Wait step, such as 14 days, so the customer has time to receive the order.</li><li>Add an action. For simple setup, use Send internal email and paste the Nectar Flow HTML from Messaging & Campaigns. For advanced setup, use Send HTTP request to call your Nectar endpoint.</li><li>Turn the workflow on, then tick “Shopify Flow review email is installed” in this Test Centre.</li><li>Run the real-world test. If it sends and the review link comes back into Reviews, the chain is working.</li></ol><button type="button" class="secondary-btn compact" onclick="window.tab('v-msg'); setTimeout(()=>window.msgTab?.('settings'),150)">Open Flow HTML</button></div>` : '';
+      return `<div class="e2e-check" data-status="${esc(item.status)}"><span class="e2e-dot">${statusIcon(item.status)}</span><div><strong>${esc(item.label)}</strong><p>${esc(item.detail)}</p>${item.action ? `<small>Next step: ${esc(item.action)}</small>` : ''}${flowGuide}</div></div>`;
+    }).join('') || '<p class="muted">No checks returned.</p>';
   }
 
   function renderSteps(items = []){
@@ -1851,3 +1889,5 @@ setTimeout(() => { window.initLoyaltyTabs?.(); window.updateLoyaltyPreview?.(); 
   }
   setTimeout(() => window.loadE2ETestCentre?.(), 1200);
 })();
+
+document.addEventListener('DOMContentLoaded', initResponsiveNavGroups);

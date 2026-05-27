@@ -846,12 +846,17 @@ router.post('/campaign-reminder', async (req, res, next) => {
     const fromEmail = settings.fromEmail || settings.smtpUser;
     const token = `reminder-${Date.now()}`;
     const reviewUrl = `https://${shopDomain}/pages/leave-review?shopDomain=${encodeURIComponent(shopDomain)}&mode=order&order_id=${encodeURIComponent(orderId)}&email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
-    const html = `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.55;color:#111827;max-width:620px;margin:0 auto;padding:24px;"><h2 style="margin:0 0 10px;">Quick reminder</h2><p style="margin:0 0 18px;color:#4b5563;">We noticed the review request has not been opened yet. You can manually resend this reminder from Nectar.</p><p style="margin:0 0 22px;color:#4b5563;">Order: <strong>${orderId || 'recent order'}</strong></p><a href="${reviewUrl}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;font-weight:bold;border-radius:10px;padding:12px 16px;">Leave a review</a></div>`;
+    const subject = cleanText(req.body?.subject || 'Quick reminder to leave a review', 160);
+    const templateName = cleanText(req.body?.templateName || 'Manual reminder', 160);
+    const layoutName = cleanText(req.body?.layoutName || 'reminder', 80);
+    const moduleNames = Array.isArray(req.body?.moduleNames) ? req.body.moduleNames.map((item) => cleanText(item, 120)).filter(Boolean).slice(0, 20) : ['manual_reminder'];
+    const html = `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.55;color:#111827;max-width:620px;margin:0 auto;padding:24px;"><h2 style="margin:0 0 10px;">Quick reminder</h2><p style="margin:0 0 18px;color:#4b5563;">We noticed the review request has not been opened yet. You can manually resend this reminder from Nectar.</p><p style="margin:0 0 22px;color:#4b5563;">Order: <strong>${orderId || 'recent order'}</strong></p><a href="${reviewUrl}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;font-weight:bold;border-radius:10px;padding:12px 16px;">Leave a review</a><p style="margin:18px 0 0;color:#667085;font-size:12px;">This reminder was sent manually from Nectar.</p></div>`;
+    const htmlHash = crypto.createHash('sha256').update(html).digest('hex').slice(0, 16);
     await transporter.sendMail({
       from: `${fromName.replace(/"/g, '')} <${fromEmail}>`,
       to: email,
       replyTo: settings.replyToEmail || fromEmail,
-      subject: cleanText(req.body?.subject || 'Quick reminder to leave a review', 160),
+      subject,
       html,
     });
     await CampaignEvent.create({
@@ -1020,7 +1025,15 @@ async function buildE2EReadiness(shopDomain, scenarioRaw = 'reviews') {
 
   if (cfg.needsReviews) {
     prerequisites.push(e2eCheck('review_token_secret', 'Signed review links', tokenSecretReady ? 'ready' : 'blocked', tokenSecretReady ? 'Review links can be signed and verified.' : 'No signing secret is available. Set EMAIL_CREDENTIAL_SECRET or SHOPIFY_API_SECRET before review-link tests can work.', 'Set EMAIL_CREDENTIAL_SECRET / SHOPIFY_API_SECRET.'));
-    prerequisites.push(e2eCheck('shopify_flow', 'Shopify Flow handoff', flowConfirmed ? 'ready' : 'blocked', flowConfirmed ? 'Merchant has confirmed the Flow email HTML is installed.' : 'Flow has not been marked as installed. A fulfilled order will not automatically send a review request yet.', 'Open Messaging & Campaigns, copy the Shopify Flow HTML, paste it into Flow, then mark Flow ready here.'));
+    prerequisites.push(e2eCheck(
+      'shopify_flow',
+      'Shopify Flow handoff',
+      flowConfirmed ? 'ready' : 'blocked',
+      flowConfirmed
+        ? 'Flow has been marked as installed. Real fulfilled orders should be able to trigger review request emails.'
+        : 'Flow has not been marked as installed. Email can work by itself, but real fulfilled orders will not automatically trigger review requests until a Shopify Flow workflow is created and switched on.',
+      'Use the Flow setup guide in this Test Centre: create a Shopify Flow workflow, choose an order/fulfilment trigger, add a wait step, add Send internal email or HTTP request, paste the Nectar HTML/payload, switch the workflow on, then run this test again.'
+    ));
   }
 
   if (cfg.needsEmail) {

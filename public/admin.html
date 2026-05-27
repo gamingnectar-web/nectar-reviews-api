@@ -940,7 +940,19 @@
                 <label class="loyalty-field">Fake customer name<input id="e2e-customer" class="premium-input" value="Nectar Test Customer"></label>
                 <label class="loyalty-field">Fake order ID<input id="e2e-order" class="premium-input" value="NECTAR-TEST-1001"></label>
               </div>
-              <label class="e2e-flow-toggle"><input id="e2e-flow-confirmed" type="checkbox" onchange="window.saveE2EFlowStatus?.()"><span><strong>Shopify Flow review email is installed</strong><small>Tick this only after the Flow HTML has been pasted into a Shopify Flow order/fulfilment automation. If this is off, review journeys will be blocked because real orders will not trigger emails.</small></span></label>
+              <label class="e2e-flow-toggle"><input id="e2e-flow-confirmed" type="checkbox" onchange="window.saveE2EFlowStatus?.()"><span><strong>Shopify Flow review email is installed</strong><small>Tick this only after the Flow workflow has been created, switched on, and tested. Email provider tests prove SMTP works; Flow proves real orders can start the journey.</small></span></label>
+              <details class="e2e-flow-setup" open>
+                <summary>How to create the Shopify Flow workflow</summary>
+                <ol>
+                  <li>In Shopify Admin, open <strong>Apps → Flow</strong> and choose <strong>Create workflow</strong>.</li>
+                  <li>Select a trigger. For review requests, use an order/fulfilment trigger such as <strong>Order fulfilled</strong>. For loyalty purchase points, use an order paid/completed trigger.</li>
+                  <li>Add a <strong>Wait</strong> step, for example 14 days, so customers have time to receive the order.</li>
+                  <li>Add the email/action step. For a simple setup, paste the generated Nectar HTML from <strong>Messaging &amp; Campaigns → Settings</strong> into the Flow email message. For advanced setups, use an HTTP request action to call the Nectar endpoint.</li>
+                  <li>Turn the workflow on, then tick the checkbox above.</li>
+                  <li>Run this test centre. If a fake-order email sends, the customer link opens, and the submitted review appears in Reviews as a test, the chain is working.</li>
+                </ol>
+                <div class="e2e-flow-links"><button type="button" class="secondary-btn" onclick="window.tab('v-msg'); setTimeout(()=>window.msgTab?.('settings'),150)">Open Flow HTML</button><button type="button" class="secondary-btn" onclick="window.open('https://help.shopify.com/en/manual/shopify-flow/create/create-workflow','_blank','noopener')">Open Shopify Flow docs</button></div>
+              </details>
               <div class="e2e-run-actions">
                 <button class="secondary-btn" type="button" onclick="window.validateE2EJourney?.()">Validate setup only</button>
                 <button class="primary-btn" type="button" onclick="window.runE2EJourney?.()">Start fake-order journey</button>
