@@ -1,7 +1,7 @@
 {
   "name": "reviews-platform-api",
-  "version": "1.2.16-native-review-scheduler",
-  "description": "Reviews Platform API with v25 review/loyalty logic and advanced modular Cart Rewards suite",
+  "version": "1.2.17-reviews-live-launch",
+  "description": "Reviews Platform API with native 14-day review scheduler and launch checklist",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

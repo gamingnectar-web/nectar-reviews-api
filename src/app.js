@@ -13,6 +13,7 @@ const authRoutes = require('./routes/auth');
 const loyaltyRoutes = require('./routes/loyalty');
 const loyaltyCheckoutRoutes = require('./routes/loyaltyCheckout');
 const shopifyWebhookRoutes = require('./routes/shopifyWebhooks');
+const taskRoutes = require('./routes/tasks');
 const { securityHeaders, corsOptions, makeRateLimiter, errorHandler, requireAdminSession, setAdminSessionCookie } = require('./utils/security');
 const { mountPlatformModules } = require('./modules');
 
@@ -53,6 +54,7 @@ app.use(express.json({ limit: env.jsonLimit }));
 app.use(express.urlencoded({ extended: true, limit: env.jsonLimit }));
 
 app.use('/api/admin', makeRateLimiter({ windowMs: 60 * 1000, max: 120, keyPrefix: 'admin' }));
+app.use('/api/tasks', makeRateLimiter({ windowMs: 60 * 1000, max: 30, keyPrefix: 'tasks' }), taskRoutes);
 app.use('/api/reviews', makeRateLimiter({ windowMs: 60 * 1000, max: 60, keyPrefix: 'reviews' }));
 app.use('/api/admin/test-email', makeRateLimiter({ windowMs: 60 * 1000, max: 10, keyPrefix: 'test-email' }));
 app.use('/api/campaign', makeRateLimiter({ windowMs: 60 * 1000, max: 300, keyPrefix: 'campaign' }));

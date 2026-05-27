@@ -1485,4 +1485,137 @@ router.get('/products/search', async (req, res, next) => {
   }
 });
 
+
+router.get('/review-launch-checklist', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const [readiness, settings, emailSettings, providers, shop, recentJobs, totalReviews, pendingReviews, acceptedReviews] = await Promise.all([
+      automationReadiness(shopDomain),
+      Settings.findOne({ shopDomain }).lean(),
+      EmailProviderSettings.findOne({ shopDomain }).lean(),
+      EmailProviderProfile.find({ shopDomain }).lean().catch(() => []),
+      Shop.findOne({ shopDomain }).lean(),
+      ReviewRequestJob.find({ shopDomain }).sort({ createdAt: -1 }).limit(10).lean(),
+      Review.countDocuments({ shopDomain, isDeleted: { $ne: true }, isTestReview: { $ne: true } }),
+      Review.countDocuments({ shopDomain, status: 'pending', isDeleted: { $ne: true } }),
+      Review.countDocuments({ shopDomain, status: 'accepted', isDeleted: { $ne: true } }),
+    ]);
+
+    const emailReady = Boolean(emailSettings?.enabled && emailSettings?.smtpPassEncrypted && (emailSettings?.fromEmail || emailSettings?.smtpUser));
+    const primaryReviewsProvider = providers.find((provider) => Array.isArray(provider.primaryFor) && provider.primaryFor.includes('reviews'));
+    const oauthReady = Boolean(shop?.accessTokenEncrypted || env.shopifyAccessToken);
+    const tokenReady = Boolean(env.emailCredentialSecret || env.shopifyApiSecret);
+    const auto = settings?.reviewAutomation || {};
+    const nativeReady = Boolean(auto.enabled !== false && auto.nativeEnabled !== false && emailReady && tokenReady);
+    const webhookReady = Boolean(shop?.modules?.reviews?.webhookInstalledAt || shop?.modules?.reviews?.webhookAddress);
+    const latestJob = recentJobs[0] || null;
+
+    const checks = [
+      {
+        key: 'email_provider',
+        label: 'Reviews email sender',
+        status: emailReady ? 'ready' : 'blocked',
+        detail: emailReady ? `Emails can send from ${emailSettings.fromEmail || emailSettings.smtpUser}.` : 'Save an email provider with SMTP/app-password details before going live.',
+        action: 'Open Messaging & Campaigns → Email Delivery.',
+        target: 'v-msg:delivery',
+      },
+      {
+        key: 'primary_provider',
+        label: 'Primary provider for Reviews',
+        status: primaryReviewsProvider ? 'ready' : (emailReady ? 'warning' : 'blocked'),
+        detail: primaryReviewsProvider ? `${primaryReviewsProvider.name || 'Provider'} is primary for Reviews.` : 'A provider is saved, but none is marked primary for Reviews yet.',
+        action: 'Mark the saved provider as Primary: Reviews.',
+        target: 'v-msg:delivery',
+      },
+      {
+        key: 'signed_links',
+        label: 'Signed one-use review links',
+        status: tokenReady ? 'ready' : 'blocked',
+        detail: tokenReady ? 'Unique order-review links can be signed and verified.' : 'Set EMAIL_CREDENTIAL_SECRET or SHOPIFY_API_SECRET in Render so links cannot be forged.',
+        action: 'Add EMAIL_CREDENTIAL_SECRET in Render environment variables.',
+        target: 'v-settings',
+      },
+      {
+        key: 'shopify_oauth',
+        label: 'Shopify connection',
+        status: oauthReady ? 'ready' : 'blocked',
+        detail: oauthReady ? 'OAuth is connected, so Nectar can register order webhooks and search products.' : 'OAuth is not connected for this shop. Real fulfilled orders will not create review jobs yet.',
+        action: 'Open the app from Shopify Admin and complete OAuth.',
+        target: 'v-settings',
+      },
+      {
+        key: 'orders_fulfilled_webhook',
+        label: 'Fulfilled-order webhook',
+        status: webhookReady ? 'ready' : (oauthReady ? 'warning' : 'blocked'),
+        detail: webhookReady ? `Webhook registered${shop?.modules?.reviews?.webhookTopic ? ` for ${shop.modules.reviews.webhookTopic}` : ''}.` : 'Webhook is not marked as registered yet. Fake-order tests still work, but live fulfilled orders will not schedule emails.',
+        action: 'Click Register webhook in the launch checklist.',
+        target: 'v-review-launch',
+      },
+      {
+        key: 'native_scheduler',
+        label: 'Native 14-day scheduler',
+        status: nativeReady ? 'ready' : 'blocked',
+        detail: nativeReady ? `Nectar waits ${Number(auto.delayDays ?? 14)} days after fulfilment, then sends automatically.` : 'Native scheduler is not ready. Check sender, signed links and scheduler settings.',
+        action: 'Keep mode set to Native and delay set to 14 days.',
+        target: 'v-review-launch',
+      },
+      {
+        key: 'theme_widget',
+        label: 'Storefront review blocks',
+        status: 'manual',
+        detail: 'Add the Customer Reviews and Product Card Stars app blocks to the live theme, or use the Liquid snippets shown in Settings.',
+        action: 'Open Reviews Visual Customiser and Manual Setup.',
+        target: 'v-style',
+      },
+      {
+        key: 'discounts',
+        label: 'Discounts kept off for review launch',
+        status: 'info',
+        detail: 'Discounts, Loyalty, Cart Rewards and Referrals can stay disabled while Reviews goes live. Basic Shopify stores can launch reviews without discount automation.',
+        action: 'Turn discounts on later after a native-code test succeeds.',
+        target: 'v-discounts',
+      },
+    ];
+
+    return res.json({
+      ok: true,
+      shopDomain,
+      recommendedMode: 'reviews_launch_native_scheduler',
+      summary: {
+        ready: checks.every((check) => !['blocked'].includes(check.status)),
+        blockers: checks.filter((check) => check.status === 'blocked').length,
+        warnings: checks.filter((check) => check.status === 'warning').length,
+        delayDays: Number(auto.delayDays ?? 14),
+        totalReviews,
+        pendingReviews,
+        acceptedReviews,
+        latestJob: latestJob ? { status: latestJob.status, orderId: latestJob.orderId, scheduledAt: latestJob.scheduledAt, sentAt: latestJob.sentAt, blockedReason: latestJob.blockedReason || latestJob.errorMessage || '' } : null,
+      },
+      checks,
+      recentJobs: recentJobs.map((job) => ({
+        id: String(job._id),
+        status: job.status,
+        orderId: job.orderName || job.orderId,
+        email: job.customerEmail,
+        productCount: Array.isArray(job.products) ? job.products.length : 0,
+        scheduledAt: job.scheduledAt,
+        sentAt: job.sentAt,
+        blockedReason: job.blockedReason || job.errorMessage || '',
+        testMode: Boolean(job.testMode),
+      })),
+      livePath: [
+        'Customer order is fulfilled in Shopify.',
+        'Shopify sends an orders/fulfilled webhook to Nectar.',
+        'Nectar creates a private review-request job.',
+        'Nectar waits the configured delay, normally 14 days.',
+        'Nectar sends the review request from the saved Reviews email provider.',
+        'The customer submits through a signed one-use order link.',
+        'The review lands in Review Manager for approval.',
+      ],
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

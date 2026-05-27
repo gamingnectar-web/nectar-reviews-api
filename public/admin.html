@@ -713,6 +713,7 @@
         <div class="nav-group">
           <p class="nav-title">Configuration</p>
           <button class="tab-btn" onclick="window.tab('v-settings')">App Settings &amp; Render Names</button>
+          <button class="tab-btn" onclick="window.tab('v-review-launch')">Reviews Launch Checklist</button>
           <button class="tab-btn" onclick="window.tab('v-test-centre')">Real-world Test Centre</button>
         </div>
         <div class="nav-group">
@@ -935,7 +936,53 @@
       </section>
 
 
-      <section id="v-test-centre" class="view">
+      
+      <section id="v-review-launch" class="view">
+        <div class="dash-header">
+          <div>
+            <h2 class="page-title">Reviews Launch Checklist</h2>
+            <p class="dash-subtitle">Use this before migrating Reviews to a live store. It checks the exact customer journey: fulfilled order → wait 14 days → review email → signed review page → Review Manager.</p>
+          </div>
+          <div class="dash-actions">
+            <button class="secondary-btn" type="button" onclick="window.loadReviewsLaunchChecklist?.()">Refresh checks</button>
+            <button class="primary-btn" type="button" onclick="window.runReviewLaunchFakeOrder?.()">Run fake-order test</button>
+          </div>
+        </div>
+        <div class="launch-mode-banner">
+          <div>
+            <strong>Recommended live mode: Reviews only</strong>
+            <p>Discounts, Loyalty, Cart Rewards and Referrals should stay off until their native Shopify tests pass. Reviews do not need Shopify Flow or discount logic to go live.</p>
+          </div>
+          <span class="launch-pill">Basic-plan friendly</span>
+        </div>
+        <div class="launch-grid">
+          <div class="panel launch-card">
+            <div class="settings-card-header"><div><h3>Go-live checks</h3><p>Blocked items must be fixed before moving this to your live Shopify store.</p></div><button class="secondary-btn compact" type="button" onclick="window.loadReviewsLaunchChecklist?.()">Refresh</button></div>
+            <div id="review-launch-checks" class="launch-check-list"><p class="muted">Loading launch checks…</p></div>
+          </div>
+          <div class="panel launch-card">
+            <h3>Customer journey</h3>
+            <p class="muted">This is the journey Nectar will run when the review system is live.</p>
+            <ol id="review-launch-path" class="launch-path-list"><li>Loading…</li></ol>
+            <div class="launch-actions-stack">
+              <button class="secondary-btn" type="button" onclick="window.registerReviewWebhook?.()">Register Shopify fulfilled-order webhook</button>
+              <button class="secondary-btn" type="button" onclick="window.forceRunDueReviewJobs?.()">Run due scheduled jobs now</button>
+              <button class="secondary-btn" type="button" onclick="window.goReviewLaunchTarget?.('v-msg','delivery')">Open Email Delivery</button>
+            </div>
+          </div>
+        </div>
+        <div class="panel launch-card">
+          <div class="settings-card-header"><div><h3>Recent review request jobs</h3><p>Shows fake-order and live-order jobs. A real go-live path should create a scheduled job first, then mark it sent after the delay.</p></div><button class="secondary-btn compact" type="button" onclick="window.loadReviewsLaunchChecklist?.()">Refresh</button></div>
+          <div id="review-launch-jobs" class="launch-job-list"><p class="muted">No jobs loaded yet.</p></div>
+        </div>
+        <div class="panel launch-card launch-note">
+          <h3>What this proves</h3>
+          <p>A normal “send test email” only proves SMTP works. This checklist proves the real system path: the app receives an order event, schedules the request, sends the correct review email, and creates a signed link that lands back in Review Manager.</p>
+          <p><strong>Flow is optional.</strong> For launch, use Nectar’s native scheduler. Shopify Flow can be kept as a fallback later.</p>
+        </div>
+      </section>
+
+<section id="v-test-centre" class="view">
         <div class="dash-header">
           <div>
             <h2 class="page-title">Real-world Test Centre</h2>
@@ -1381,6 +1428,7 @@
   <script src="/admin-email-tracking-enhancer.js?v=secure-6"></script>
   <script src="/admin-messaging-campaigns.js?v=secure-6"></script>
   <script src="/admin-help-drawer.js?v=context-help-1" defer></script>
+  <script src="/reviews-launch-checklist.js?v=launch-1" defer></script>
   <script src="/admin-product-context.js?v=context-nav-1" defer></script>
   <script src="/admin-loyalty-foundation.js?v=secure-24"></script>
   <script src="/module-registry.js?v=cart-rewards-module-1" defer></script>
