@@ -90,6 +90,12 @@ const settingsSchema = new mongoose.Schema({
     showArrows: { type: Boolean, default: false },
     limit: { type: Number, default: 10 },
   },
+  testCentre: {
+    shopifyFlowConfirmed: { type: Boolean, default: false },
+    flowConfirmedAt: { type: Date, default: null },
+    flowConfirmedBy: { type: String, default: '' },
+    lastScenario: { type: String, default: 'reviews' },
+  },
 }, { timestamps: true });
 
 const campaignEventSchema = new mongoose.Schema({
@@ -213,6 +219,27 @@ const loyaltyLedgerSchema = new mongoose.Schema({
 loyaltyLedgerSchema.index({ shopDomain: 1, customerRefHash: 1, createdAt: -1 });
 loyaltyLedgerSchema.index({ shopDomain: 1, customerRefHash: 1, sourceReviewHash: 1, ruleId: 1, eventType: 1 });
 
+
+const e2eTestRunSchema = new mongoose.Schema({
+  shopDomain: { type: String, required: true, index: true },
+  scenario: { type: String, default: 'reviews', index: true },
+  status: { type: String, enum: ['validated', 'blocked', 'running', 'awaiting_customer', 'completed', 'failed'], default: 'validated', index: true },
+  recipientEmail: { type: String, default: '' },
+  fakeOrderId: { type: String, default: '', index: true },
+  fakeCustomerName: { type: String, default: '' },
+  reviewToken: { type: String, default: '' },
+  reviewUrl: { type: String, default: '' },
+  discountCode: { type: String, default: '' },
+  prerequisites: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  steps: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  artifacts: { type: mongoose.Schema.Types.Mixed, default: {} },
+  blockedReason: { type: String, default: '' },
+  startedAt: { type: Date, default: Date.now },
+  completedAt: { type: Date, default: null },
+}, { timestamps: true });
+e2eTestRunSchema.index({ shopDomain: 1, createdAt: -1 });
+e2eTestRunSchema.index({ shopDomain: 1, scenario: 1, createdAt: -1 });
+
 const shopSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, unique: true, index: true },
   accessTokenEncrypted: { type: String, default: '' },
@@ -237,6 +264,7 @@ module.exports = {
   EmailProviderSettings: mongoose.models.EmailProviderSettings || mongoose.model('EmailProviderSettings', emailProviderSettingsSchema, 'email_provider_settings'),
   EmailProviderProfile: mongoose.models.EmailProviderProfile || mongoose.model('EmailProviderProfile', emailProviderProfileSchema, 'email_provider_profiles'),
   Shop: mongoose.models.Shop || mongoose.model('Shop', shopSchema, 'shops'),
+  E2ETestRun: mongoose.models.E2ETestRun || mongoose.model('E2ETestRun', e2eTestRunSchema, 'e2e_test_runs'),
   // Loyalty models intentionally live in src/modules/loyalty/loyalty.models.js
   // so they can bind to LOYALTY_DB_URI instead of the core reviews database.
 

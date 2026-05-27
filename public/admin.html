@@ -651,6 +651,29 @@
     .nr-admin-preview-card-demo[data-position="under_title_right"] .pre-card-badge { margin-left:auto; display:flex!important; width:max-content; }
     @media(max-width:1000px){.discount-status-grid,.discount-grid{grid-template-columns:1fr}.render-name-card{grid-template-columns:1fr}}
 
+    .e2e-layout { display:grid; grid-template-columns:minmax(320px,520px) minmax(0,1fr); gap:18px; align-items:start; }
+    .e2e-control-card, .e2e-card { margin-bottom:18px; }
+    .e2e-scenario-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .e2e-run-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; padding-top:14px; border-top:1px solid var(--border); }
+    .e2e-flow-toggle { display:flex; align-items:flex-start; gap:10px; border:1px solid #d9e0ea; background:#fbfdff; border-radius:14px; padding:12px; margin-top:12px; }
+    .e2e-flow-toggle input { width:auto; margin-top:3px; }
+    .e2e-status-list, .e2e-step-list, .e2e-history-list { display:grid; gap:10px; }
+    .e2e-check, .e2e-step, .e2e-history-row { border:1px solid var(--border); background:#fff; border-radius:14px; padding:13px 14px; display:grid; grid-template-columns:auto minmax(0,1fr); gap:12px; align-items:start; }
+    .e2e-history-row { grid-template-columns:minmax(0,1fr) auto; }
+    .e2e-dot { width:30px; height:30px; border-radius:999px; display:grid; place-items:center; font-weight:900; font-size:13px; border:1px solid #e5e7eb; background:#f8fafc; }
+    .e2e-check[data-status="ready"] .e2e-dot, .e2e-step[data-status="complete"] .e2e-dot { background:#ecfdf3; color:#027a48; border-color:#abefc6; }
+    .e2e-check[data-status="blocked"] .e2e-dot, .e2e-step[data-status="failed"] .e2e-dot { background:#fff1f3; color:#b42318; border-color:#fecdd6; }
+    .e2e-check[data-status="warning"] .e2e-dot { background:#fffaeb; color:#b54708; border-color:#fedf89; }
+    .e2e-step[data-status="awaiting"] .e2e-dot { background:#eef4ff; color:#3538cd; border-color:#c7d7fe; }
+    .e2e-check strong, .e2e-step strong, .e2e-history-row strong { display:block; margin-bottom:4px; }
+    .e2e-check p, .e2e-step p, .e2e-history-row p { margin:0; color:#667085; line-height:1.45; }
+    .e2e-check small { display:block; color:#475467; margin-top:6px; font-weight:800; }
+    .e2e-artifacts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:12px; }
+    .e2e-artifact { border:1px solid #e5e7eb; background:#fbfdff; border-radius:12px; padding:10px; }
+    .e2e-artifact span { display:block; color:#667085; font-size:11px; font-weight:900; text-transform:uppercase; margin-bottom:4px; }
+    .e2e-artifact code { display:block; white-space:normal; word-break:break-word; background:#fff; border:1px solid #edf0f3; border-radius:8px; padding:6px; font-size:12px; }
+    @media(max-width:1100px){.e2e-layout,.e2e-scenario-grid,.e2e-artifacts{grid-template-columns:1fr}.e2e-history-row{grid-template-columns:1fr}.e2e-run-actions .primary-btn,.e2e-run-actions .secondary-btn{width:100%;}}
+
   </style>
   <link rel="stylesheet" href="/module-shell.css?v=cart-rewards-module-1">
   <link rel="stylesheet" href="/admin-responsive-polish.css?v=nav-polish-1">
@@ -676,6 +699,7 @@
         <div class="nav-group">
           <p class="nav-title">Configuration</p>
           <button class="tab-btn" onclick="window.tab('v-settings')">App Settings &amp; Render Names</button>
+          <button class="tab-btn" onclick="window.tab('v-test-centre')">Real-world Test Centre</button>
         </div>
         <div class="nav-group">
           <p class="nav-title">Products</p>
@@ -881,6 +905,10 @@
               <div id="widget-render-names" class="render-name-list"><p class="muted">Loading widget render names…</p></div>
             </div>
           </div>
+
+          <div class="panel settings-card settings-wide-card">
+            <div class="settings-card-header"><div><h3>Real-world Test Centre</h3><p>Run fake-order customer journeys for Reviews, Loyalty, Discounts and Cart Rewards. It checks Flow, email, discount and loyalty prerequisites before sending anything.</p></div><button class="primary-btn" type="button" onclick="window.tab('v-test-centre')">Open Test Centre</button></div>
+          </div>
           <div class="panel settings-card settings-wide-card">
             <div class="settings-card-header"><div><h3>Product configuration tabs</h3><p>Shared configuration belongs here. Reviews, loyalty, discounts and referrals can each have their own settings without crowding the product screens.</p></div></div>
             <div class="settings-card-body config-tabs-mini">
@@ -890,6 +918,57 @@
               <button type="button" class="secondary-btn" onclick="window.tab('v-referrals')">Referral config</button>
             </div>
           </div>
+      </section>
+
+
+      <section id="v-test-centre" class="view">
+        <div class="dash-header">
+          <div>
+            <h2 class="page-title">Real-world Test Centre</h2>
+            <p class="dash-subtitle">Push a safe fake-order journey through the same checks a customer flow needs. The system validates setup first, then sends a real email only when the scenario is ready.</p>
+          </div>
+          <button class="secondary-btn" type="button" onclick="window.loadE2ETestCentre?.()">Refresh readiness</button>
+        </div>
+        <div class="e2e-layout">
+          <div>
+            <div class="panel e2e-control-card">
+              <h3>Choose the journey to test</h3>
+              <p class="muted">The fake order lives only inside Nectar. It is not created in Shopify and any review submitted from the test link is marked as a test.</p>
+              <div class="e2e-scenario-grid">
+                <label class="loyalty-field">Area<select id="e2e-scenario" class="filter-select" onchange="window.loadE2ETestCentre?.()"><option value="reviews">Reviews request journey</option><option value="loyalty">Loyalty reward journey</option><option value="discounts">Discount-code journey</option><option value="cart_rewards">Cart reward journey</option><option value="full_journey">Full reviews → loyalty → discount journey</option></select></label>
+                <label class="loyalty-field">Recipient email<input id="e2e-email" class="premium-input" type="email" placeholder="you@example.com"></label>
+                <label class="loyalty-field">Fake customer name<input id="e2e-customer" class="premium-input" value="Nectar Test Customer"></label>
+                <label class="loyalty-field">Fake order ID<input id="e2e-order" class="premium-input" value="NECTAR-TEST-1001"></label>
+              </div>
+              <label class="e2e-flow-toggle"><input id="e2e-flow-confirmed" type="checkbox" onchange="window.saveE2EFlowStatus?.()"><span><strong>Shopify Flow review email is installed</strong><small>Tick this only after the Flow HTML has been pasted into a Shopify Flow order/fulfilment automation. If this is off, review journeys will be blocked because real orders will not trigger emails.</small></span></label>
+              <div class="e2e-run-actions">
+                <button class="secondary-btn" type="button" onclick="window.validateE2EJourney?.()">Validate setup only</button>
+                <button class="primary-btn" type="button" onclick="window.runE2EJourney?.()">Start fake-order journey</button>
+              </div>
+            </div>
+            <div class="panel e2e-card">
+              <h3>Latest test artifacts</h3>
+              <p class="muted">Use these to follow the customer journey after a test is sent.</p>
+              <div id="e2e-artifacts" class="e2e-artifacts"><p class="muted">No test has run yet.</p></div>
+            </div>
+          </div>
+          <div>
+            <div class="panel e2e-card">
+              <h3>Readiness checks</h3>
+              <p class="muted">Anything blocked must be fixed before this can behave like a real customer flow.</p>
+              <div id="e2e-prereq-list" class="e2e-status-list"><p class="muted">Loading readiness…</p></div>
+            </div>
+            <div class="panel e2e-card">
+              <h3>Customer journey steps</h3>
+              <div id="e2e-step-list" class="e2e-step-list"><p class="muted">Validate or start a journey to see the steps.</p></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel e2e-card">
+          <h3>Recent real-world tests</h3>
+          <p class="muted">Shows fake-order tests, whether they were blocked, and what was sent.</p>
+          <div id="e2e-history-list" class="e2e-history-list"><p class="muted">Loading history…</p></div>
+        </div>
       </section>
 
       <section id="v-style" class="view">

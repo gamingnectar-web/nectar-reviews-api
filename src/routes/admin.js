@@ -2,14 +2,15 @@ const express = require('express');
 const { env } = require('../config/env');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
-const { Review, Settings, CampaignEvent, EmailProviderSettings, EmailProviderProfile, Shop } = require('../models');
+const { Review, Settings, CampaignEvent, EmailProviderSettings, EmailProviderProfile, Shop, E2ETestRun } = require('../models');
 const { requireAdminSession } = require('../utils/security');
 const { cleanText, cleanEmail, clampNumber, cleanReviewStatus } = require('../utils/validation');
 const { encryptSecret, decryptSecret } = require('../utils/crypto');
 const { publicEmailSettings } = require('../utils/emailSettings');
 const { shopifyFetch, shopifyFetchOptional, getAccessTokenForShop, buildInstallUrl } = require('../utils/shopify');
 const { createReviewToken } = require('../utils/reviewTokens');
-const { awardForReview } = require('../modules/loyalty/loyalty.service');
+const { awardForReview, getOrCreateLoyaltyProgram, normaliseCustomerRef, customerHintFromHash, createLedgerEntry } = require('../modules/loyalty/loyalty.service');
+const { getOrCreateDiscountProgram, issueDiscountCode } = require('../modules/discounts/discounts.service');
 
 const router = express.Router();
 
@@ -943,6 +944,324 @@ router.post('/test-email', async (req, res, next) => {
     next(error);
   }
 });
+
+function e2eCheck(key, label, status, detail, action = '') {
+  return { key, label, status, detail, action };
+}
+
+function e2eStatusRank(status) {
+  return status === 'blocked' ? 3 : status === 'warning' ? 2 : status === 'ready' ? 1 : 0;
+}
+
+function e2eHasBlocking(prerequisites = []) {
+  return prerequisites.some((item) => item.status === 'blocked');
+}
+
+function e2eFakeProducts(body = {}) {
+  const input = Array.isArray(body.products) ? body.products : [];
+  const products = input.length ? input : [{
+    id: 'gid://shopify/Product/999999999001',
+    productId: 'gid://shopify/Product/999999999001',
+    title: 'Nectar End-to-End Test Product',
+    handle: 'nectar-e2e-test-product',
+    quantity: 1,
+  }];
+  return products.slice(0, 10).map((product, index) => ({
+    id: cleanText(product.id || product.productId || product.itemId || `gid://shopify/Product/99999999900${index + 1}`, 180),
+    productId: cleanText(product.productId || product.id || product.itemId || `gid://shopify/Product/99999999900${index + 1}`, 180),
+    itemId: cleanText(product.itemId || product.productId || product.id || `gid://shopify/Product/99999999900${index + 1}`, 180),
+    title: cleanText(product.title || `Nectar Test Product ${index + 1}`, 180),
+    handle: cleanText(product.handle || `nectar-test-product-${index + 1}`, 180),
+    quantity: clampNumber(product.quantity, 1, 99, 1),
+  }));
+}
+
+function e2eScenarioConfig(rawScenario = 'reviews') {
+  const scenario = ['reviews', 'loyalty', 'discounts', 'cart_rewards', 'full_journey'].includes(rawScenario) ? rawScenario : 'reviews';
+  return {
+    scenario,
+    needsReviews: ['reviews', 'loyalty', 'full_journey'].includes(scenario),
+    needsEmail: ['reviews', 'loyalty', 'discounts', 'full_journey'].includes(scenario),
+    needsDiscounts: ['discounts', 'loyalty', 'cart_rewards', 'full_journey'].includes(scenario),
+    needsLoyalty: ['loyalty', 'full_journey'].includes(scenario),
+    needsCartRewards: ['cart_rewards', 'full_journey'].includes(scenario),
+  };
+}
+
+async function getCartRewardReadiness(shopDomain) {
+  try {
+    const CartRewardCampaign = require('../modules/cart-rewards/models/CartRewardCampaign');
+    const active = await CartRewardCampaign.countDocuments({ shopDomain, status: { $in: ['active', 'scheduled', 'draft'] } });
+    return { available: true, active };
+  } catch (error) {
+    return { available: false, active: 0, error: error.message };
+  }
+}
+
+async function buildE2EReadiness(shopDomain, scenarioRaw = 'reviews') {
+  const cfg = e2eScenarioConfig(scenarioRaw);
+  const [shop, settings, emailSettings, providers, discountProgram, loyaltyProgram, cartReward] = await Promise.all([
+    ensureShop(shopDomain),
+    Settings.findOneAndUpdate({ shopDomain }, { $setOnInsert: { shopDomain } }, { new: true, upsert: true, setDefaultsOnInsert: true }).lean(),
+    EmailProviderSettings.findOne({ shopDomain }).lean(),
+    EmailProviderProfile.find({ shopDomain }).lean().catch(() => []),
+    getOrCreateDiscountProgram(shopDomain).then((doc) => doc.toObject ? doc.toObject() : doc).catch(() => null),
+    getOrCreateLoyaltyProgram(shopDomain).then((doc) => doc.toObject ? doc.toObject() : doc).catch(() => null),
+    getCartRewardReadiness(shopDomain),
+  ]);
+
+  const prerequisites = [];
+  const flowConfirmed = Boolean(settings?.testCentre?.shopifyFlowConfirmed);
+  const tokenSecretReady = Boolean(env.emailCredentialSecret || env.shopifyApiSecret);
+  const activeEmailReady = Boolean(emailSettings?.enabled && emailSettings?.smtpPassEncrypted && emailSettings?.fromEmail);
+  const primaryReviewsProvider = providers.find((provider) => Array.isArray(provider.primaryFor) && provider.primaryFor.includes('reviews'));
+  const primaryLoyaltyProvider = providers.find((provider) => Array.isArray(provider.primaryFor) && provider.primaryFor.includes('loyalty'));
+  const hasOauth = Boolean(shop?.accessTokenEncrypted);
+
+  if (cfg.needsReviews) {
+    prerequisites.push(e2eCheck('review_token_secret', 'Signed review links', tokenSecretReady ? 'ready' : 'blocked', tokenSecretReady ? 'Review links can be signed and verified.' : 'No signing secret is available. Set EMAIL_CREDENTIAL_SECRET or SHOPIFY_API_SECRET before review-link tests can work.', 'Set EMAIL_CREDENTIAL_SECRET / SHOPIFY_API_SECRET.'));
+    prerequisites.push(e2eCheck('shopify_flow', 'Shopify Flow handoff', flowConfirmed ? 'ready' : 'blocked', flowConfirmed ? 'Merchant has confirmed the Flow email HTML is installed.' : 'Flow has not been marked as installed. A fulfilled order will not automatically send a review request yet.', 'Open Messaging & Campaigns, copy the Shopify Flow HTML, paste it into Flow, then mark Flow ready here.'));
+  }
+
+  if (cfg.needsEmail) {
+    prerequisites.push(e2eCheck('email_provider', 'Email provider', activeEmailReady ? 'ready' : 'blocked', activeEmailReady ? `Active sender is ${emailSettings.fromEmail || emailSettings.smtpUser}.` : 'No active email provider with a saved password/app password is configured.', 'Open Messaging & Campaigns → Email Delivery and save/test a provider.'));
+    if (cfg.needsReviews && primaryReviewsProvider) prerequisites.push(e2eCheck('reviews_primary_sender', 'Reviews primary sender', 'ready', `${primaryReviewsProvider.name || 'Provider'} is assigned as primary for Reviews.`));
+    if (cfg.needsLoyalty && primaryLoyaltyProvider) prerequisites.push(e2eCheck('loyalty_primary_sender', 'Loyalty primary sender', 'ready', `${primaryLoyaltyProvider.name || 'Provider'} is assigned as primary for Loyalty.`));
+  }
+
+  prerequisites.push(e2eCheck('shopify_oauth', 'Shopify OAuth connection', hasOauth ? 'ready' : 'warning', hasOauth ? 'Shop OAuth token is saved for product lookup and native Shopify calls.' : 'OAuth token is not saved. Fake-order tests can still use sample products, but product search/native Shopify code issuing may not work.', 'Reconnect the app from Shopify Admin if product lookup or native code creation fails.'));
+
+  if (cfg.needsDiscounts) {
+    const templates = Array.isArray(discountProgram?.templates) ? discountProgram.templates : [];
+    const enabledTemplates = templates.filter((template) => template.enabled !== false);
+    const areaTemplates = enabledTemplates.filter((template) => {
+      if (cfg.scenario === 'discounts') return ['reviews', 'manual', 'general'].includes(template.area) || template.trigger === 'review_milestone';
+      if (cfg.scenario === 'loyalty') return template.area === 'loyalty' || template.trigger === 'loyalty_redemption' || template.trigger === 'checkout_redemption';
+      if (cfg.scenario === 'cart_rewards') return template.area === 'cart_rewards' || template.trigger === 'cart_reward_claimed';
+      return true;
+    });
+    const nativeTemplates = areaTemplates.filter((template) => template.method === 'native_shopify_code');
+    const scopes = String(shop?.scopes || '');
+    const hasDiscountScope = /write_discounts|write_price_rules/.test(scopes) || !nativeTemplates.length;
+    prerequisites.push(e2eCheck('discount_module', 'Discount module', discountProgram?.enabled ? 'ready' : 'blocked', discountProgram?.enabled ? 'Discounts module is enabled.' : 'Discounts module is not enabled, so reward-code tests cannot issue/track codes.', 'Open Discounts and enable the module.'));
+    prerequisites.push(e2eCheck('discount_template', 'Applicable discount template', areaTemplates.length ? 'ready' : 'blocked', areaTemplates.length ? `${areaTemplates.length} active template(s) can be used for this test.` : 'No active discount template matches this scenario.', 'Create an active Reviews/Loyalty/Cart Rewards discount template.'));
+    prerequisites.push(e2eCheck('discount_scopes', 'Native Shopify discount scope', hasDiscountScope ? 'ready' : 'warning', hasDiscountScope ? 'Native-code scope is either present or this test uses draft/reserved codes.' : 'At least one applicable template wants native Shopify codes, but the saved scopes do not show write_discounts/write_price_rules.', 'Use draft mode first or reinstall with discount scopes.'));
+  }
+
+  if (cfg.needsLoyalty) {
+    const rules = Array.isArray(loyaltyProgram?.pointsRules) ? loyaltyProgram.pointsRules : [];
+    const rewards = Array.isArray(loyaltyProgram?.redemptionRewards) ? loyaltyProgram.redemptionRewards : [];
+    const reviewRules = rules.filter((rule) => rule.enabled !== false && ['review_submitted', 'review_approved'].includes(rule.trigger));
+    const purchaseRules = rules.filter((rule) => rule.enabled !== false && rule.trigger === 'purchase_completed');
+    const enabledRewards = rewards.filter((reward) => reward.enabled !== false);
+    prerequisites.push(e2eCheck('loyalty_enabled', 'Loyalty programme', loyaltyProgram?.enabled ? 'ready' : 'blocked', loyaltyProgram?.enabled ? 'Loyalty is enabled.' : 'Loyalty is disabled, so points/rewards will not be allocated.', 'Open Loyalty → Settings and enable it.'));
+    prerequisites.push(e2eCheck('loyalty_review_rule', 'Review points rule', reviewRules.length ? 'ready' : 'warning', reviewRules.length ? `${reviewRules.length} review rule(s) can award points.` : 'No enabled review-submitted/review-approved points rule exists. Review completion will not award points.', 'Open Loyalty → Points Rules and add/enable a review rule.'));
+    prerequisites.push(e2eCheck('loyalty_purchase_rule', 'Purchase earning rule', purchaseRules.length ? 'ready' : 'warning', purchaseRules.length ? `${purchaseRules.length} purchase rule(s) can award points per order spend.` : 'No enabled purchase-completed rule exists. Purchase-point testing will not show points per £/$ yet.', 'Open Loyalty → Points Rules and add a purchase-completed rule with points per currency.'));
+    prerequisites.push(e2eCheck('loyalty_reward', 'Redeemable reward', enabledRewards.length ? 'ready' : 'warning', enabledRewards.length ? `${enabledRewards.length} reward(s) are enabled.` : 'No enabled redemption reward exists. Customers can earn points but cannot redeem them yet.', 'Open Loyalty → Rewards and add a reward linked to Discounts.'));
+  }
+
+  if (cfg.needsCartRewards) {
+    prerequisites.push(e2eCheck('cart_rewards_module', 'Cart rewards module files', cartReward.available ? 'ready' : 'blocked', cartReward.available ? 'Cart Rewards module is available.' : `Cart Rewards module could not be loaded: ${cartReward.error || 'unknown error'}.`, 'Check src/modules/cart-rewards.'));
+    prerequisites.push(e2eCheck('cart_rewards_campaign', 'Cart reward campaign', cartReward.active > 0 ? 'ready' : 'warning', cartReward.active > 0 ? `${cartReward.active} campaign(s) exist.` : 'No cart reward campaign exists yet. The storefront cart will not have a reward to show.', 'Open Cart Rewards and create a campaign with at least one tier/reward.'));
+  }
+
+  prerequisites.sort((a, b) => e2eStatusRank(b.status) - e2eStatusRank(a.status));
+  return { scenario: cfg.scenario, prerequisites, settings, shop, emailSettings, discountProgram, loyaltyProgram, cartReward };
+}
+
+function e2eEmailHtml({ shopDomain, customerName, orderId, reviewUrl, scenario, discountCode = '' }) {
+  const discountLine = discountCode ? `<p style="margin:0 0 18px;color:#4b5563;">A test discount code has also been generated: <strong>${discountCode}</strong></p>` : '';
+  return `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.55;color:#111827;max-width:640px;margin:0 auto;padding:24px;"><p style="margin:0 0 8px;color:#667085;font-size:13px;font-weight:bold;text-transform:uppercase;">Nectar real-world test</p><h1 style="margin:0 0 12px;font-size:28px;">Review your fake test order</h1><p style="margin:0 0 14px;color:#4b5563;">Hi ${customerName || 'there'}, this is a safe end-to-end test for ${scenario.replace('_', ' ')}. It uses a fake order and will not publish reviews to the storefront.</p><p style="margin:0 0 18px;color:#4b5563;">Fake order: <strong>${orderId}</strong></p>${discountLine}<a href="${reviewUrl}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;font-weight:bold;border-radius:10px;padding:13px 18px;">Open customer review page</a><p style="margin:18px 0 0;color:#667085;font-size:12px;">Sent by ${shopDomain}. This is a Nectar test journey; completed reviews are marked as test/spam.</p></div>`;
+}
+
+router.get('/e2e-tests', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const scenario = cleanText(req.query.scenario || 'reviews', 40);
+    const readiness = await buildE2EReadiness(shopDomain, scenario);
+    const history = await E2ETestRun.find({ shopDomain }).sort({ createdAt: -1 }).limit(20).lean();
+    return res.json({
+      ok: true,
+      scenario: readiness.scenario,
+      flowConfirmed: Boolean(readiness.settings?.testCentre?.shopifyFlowConfirmed),
+      flowConfirmedAt: readiness.settings?.testCentre?.flowConfirmedAt || null,
+      prerequisites: readiness.prerequisites,
+      history,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/e2e-tests/settings', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const flowConfirmed = Boolean(req.body?.shopifyFlowConfirmed);
+    const updated = await Settings.findOneAndUpdate(
+      { shopDomain },
+      {
+        $set: {
+          shopDomain,
+          'testCentre.shopifyFlowConfirmed': flowConfirmed,
+          'testCentre.flowConfirmedAt': flowConfirmed ? new Date() : null,
+          'testCentre.flowConfirmedBy': cleanEmail(req.body?.confirmedBy || ''),
+        },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    ).lean();
+    return res.json({ ok: true, testCentre: updated.testCentre || {} });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/e2e-tests/run', async (req, res, next) => {
+  const shopDomain = shopDomainFromReq(req);
+  try {
+    const scenario = cleanText(req.body?.scenario || 'reviews', 40);
+    const validationOnly = Boolean(req.body?.validationOnly);
+    const readiness = await buildE2EReadiness(shopDomain, scenario);
+    const recipientEmail = cleanEmail(req.body?.email || req.body?.recipientEmail || readiness.emailSettings?.fromEmail || '');
+    const fakeOrderId = cleanText(req.body?.orderId || `NECTAR-TEST-${Date.now().toString().slice(-6)}`, 120);
+    const fakeCustomerName = cleanText(req.body?.customerName || 'Nectar Test Customer', 120);
+    const products = e2eFakeProducts(req.body || {});
+    const blocked = e2eHasBlocking(readiness.prerequisites);
+    const steps = [
+      { key: 'fake_order', label: 'Create fake order context', status: 'ready', detail: `Prepared fake order ${fakeOrderId} with ${products.length} product(s).` },
+      { key: 'customer_email', label: 'Send customer email', status: readiness.prerequisites.find((p) => p.key === 'email_provider')?.status || 'ready', detail: 'Uses the same sender path as live review/reward messages.' },
+      { key: 'customer_action', label: 'Customer completes journey', status: 'awaiting', detail: 'Customer opens the fake-order link and submits the review/reward action.' },
+      { key: 'admin_result', label: 'Result returns to admin', status: 'awaiting', detail: 'The resulting review/code/ledger entry is visible in the admin area and marked as a test.' },
+    ];
+
+    if (validationOnly || blocked) {
+      const run = await E2ETestRun.create({
+        shopDomain,
+        scenario: readiness.scenario,
+        status: blocked ? 'blocked' : 'validated',
+        recipientEmail,
+        fakeOrderId,
+        fakeCustomerName,
+        prerequisites: readiness.prerequisites,
+        steps: blocked ? steps.map((step) => ({ ...step, status: step.status === 'awaiting' ? 'blocked' : step.status })) : steps,
+        blockedReason: blocked ? readiness.prerequisites.filter((item) => item.status === 'blocked').map((item) => item.label).join(', ') : '',
+        artifacts: { products, validationOnly },
+      });
+      return res.status(200).json({ ok: !blocked, status: run.status, run, prerequisites: readiness.prerequisites, steps: run.steps });
+    }
+
+    if (!recipientEmail) return res.status(400).json({ error: 'A recipient email is required for a real-world test email.' });
+
+    let reviewToken = '';
+    let reviewUrl = '';
+    let discountCode = '';
+    let discountIssueId = '';
+    let loyaltyLedgerId = '';
+
+    if (e2eScenarioConfig(scenario).needsReviews) {
+      reviewToken = createReviewToken({ shopDomain, email: recipientEmail, customerName: fakeCustomerName, orderId: fakeOrderId, products, expiresDays: 14, testMode: true });
+      if (!reviewToken) return res.status(500).json({ error: 'Could not create signed review token. Check EMAIL_CREDENTIAL_SECRET or SHOPIFY_API_SECRET.' });
+      reviewUrl = `https://${shopDomain}/pages/leave-review?shopDomain=${encodeURIComponent(shopDomain)}&mode=order&order_id=${encodeURIComponent(fakeOrderId)}&email=${encodeURIComponent(recipientEmail)}&token=${encodeURIComponent(reviewToken)}&test=1`;
+    }
+
+    if (e2eScenarioConfig(scenario).needsDiscounts) {
+      const issue = await issueDiscountCode({
+        shopDomain,
+        area: scenario === 'cart_rewards' ? 'cart_rewards' : scenario === 'loyalty' ? 'loyalty' : 'reviews',
+        trigger: scenario === 'loyalty' ? 'loyalty_redemption' : scenario === 'cart_rewards' ? 'cart_reward_claimed' : 'review_milestone',
+        sourceId: fakeOrderId,
+        email: recipientEmail,
+        override: { privateNote: `End-to-end fake-order test for ${scenario}.`, code: undefined },
+      });
+      discountCode = issue.code || '';
+      discountIssueId = String(issue._id || '');
+    }
+
+    if (e2eScenarioConfig(scenario).needsLoyalty) {
+      const ref = normaliseCustomerRef({ shopDomain, email: recipientEmail });
+      if (ref) {
+        const ledger = await createLedgerEntry({
+          shopDomain,
+          customerRefHash: ref,
+          customerRefHint: customerHintFromHash(ref),
+          eventType: 'manual_adjustment',
+          source: 'e2e_fake_order',
+          points: 100,
+          status: 'available',
+          availableAt: new Date(),
+          awardedAt: new Date(),
+          ruleId: 'e2e_fake_order',
+          ruleName: 'End-to-end fake-order test',
+          privateNote: `Safe test ledger entry generated for ${fakeOrderId}.`,
+        });
+        loyaltyLedgerId = String(ledger._id || '');
+      }
+    }
+
+    const settings = await activeEmailSettings(shopDomain);
+    const transporter = createTransporterFromSettings(settings);
+    const fromName = settings.fromName || 'Store Reviews';
+    const fromEmail = settings.fromEmail || settings.smtpUser;
+    const subject = cleanText(req.body?.subject || `Nectar test journey for ${fakeOrderId}`, 160);
+    const html = e2eEmailHtml({ shopDomain, customerName: fakeCustomerName, orderId: fakeOrderId, reviewUrl: reviewUrl || `https://${shopDomain}`, scenario: readiness.scenario, discountCode });
+    const htmlHash = crypto.createHash('sha256').update(html).digest('hex').slice(0, 16);
+
+    await transporter.sendMail({ from: `${fromName.replace(/"/g, '')} <${fromEmail}>`, to: recipientEmail, replyTo: settings.replyToEmail || fromEmail, subject, html });
+    await CampaignEvent.create({
+      shopDomain,
+      campaign: `e2e_${readiness.scenario}`,
+      eventType: 'sent',
+      orderId: fakeOrderId,
+      email: recipientEmail,
+      itemId: products[0]?.itemId || products[0]?.productId || '',
+      token: reviewToken || `e2e-${Date.now()}`,
+      subject,
+      templateName: 'E2E fake-order journey',
+      layoutName: readiness.scenario,
+      moduleNames: ['fake_order', readiness.scenario],
+      htmlHash,
+      userAgent: cleanText(req.headers['user-agent'], 500),
+    });
+    await Settings.findOneAndUpdate({ shopDomain }, { $inc: { emailsSentTotal: 1 }, $set: { 'testCentre.lastScenario': readiness.scenario }, $setOnInsert: { shopDomain } }, { upsert: true });
+
+    const runSteps = [
+      { key: 'fake_order', label: 'Fake order created', status: 'complete', detail: `${fakeOrderId} created inside Nectar only. No Shopify order was created.` },
+      { key: 'review_link', label: 'Signed customer link created', status: reviewUrl ? 'complete' : 'skipped', detail: reviewUrl ? 'The link opens the customer review page with a signed test token.' : 'No review link was needed for this scenario.' },
+      { key: 'discount_code', label: 'Discount code reserved/issued', status: discountCode ? 'complete' : 'skipped', detail: discountCode ? `${discountCode} created and tracked in the Discounts module.` : 'No discount code was needed for this scenario.' },
+      { key: 'loyalty_entry', label: 'Loyalty ledger simulated', status: loyaltyLedgerId ? 'complete' : 'skipped', detail: loyaltyLedgerId ? 'A safe test ledger entry was created against a hashed fake customer reference.' : 'No loyalty ledger entry was needed for this scenario.' },
+      { key: 'email_sent', label: 'Customer email sent', status: 'complete', detail: `Sent to ${recipientEmail}.` },
+      { key: 'awaiting_customer', label: 'Waiting for customer action', status: 'awaiting', detail: 'Open the email, follow the customer link, and submit the review/reward action. Test reviews never publish live.' },
+    ];
+
+    const run = await E2ETestRun.create({
+      shopDomain,
+      scenario: readiness.scenario,
+      status: 'awaiting_customer',
+      recipientEmail,
+      fakeOrderId,
+      fakeCustomerName,
+      reviewToken,
+      reviewUrl,
+      discountCode,
+      prerequisites: readiness.prerequisites,
+      steps: runSteps,
+      artifacts: { products, discountIssueId, loyaltyLedgerId, htmlHash },
+    });
+    return res.status(201).json({ ok: true, status: run.status, run, prerequisites: readiness.prerequisites, steps: runSteps });
+  } catch (error) {
+    await E2ETestRun.create({
+      shopDomain,
+      scenario: cleanText(req.body?.scenario || 'reviews', 40),
+      status: 'failed',
+      recipientEmail: cleanEmail(req.body?.email || req.body?.recipientEmail || ''),
+      fakeOrderId: cleanText(req.body?.orderId || '', 120),
+      prerequisites: [],
+      steps: [{ key: 'failed', label: 'Test failed', status: 'failed', detail: error.message || 'Unknown error' }],
+      blockedReason: error.message || 'Unknown error',
+    }).catch(() => {});
+    next(error);
+  }
+});
+
 
 router.get('/metafields', async (req, res, next) => {
   try {

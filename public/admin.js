@@ -1743,3 +1743,111 @@ setTimeout(() => { window.initLoyaltyTabs?.(); window.updateLoyaltyPreview?.(); 
   document.addEventListener('change', (e)=>{ if (e.target?.id === 'discount-enabled') window.saveDiscountConfig?.(); });
   setTimeout(()=>{ window.loadDiscountConfig?.(); window.loadRenderNames?.(); }, 800);
 })();
+
+(function(){
+  const esc = (value) => (typeof window.escapeHtml === 'function' ? window.escapeHtml(value) : String(value ?? '').replace(/[&<>"']/g, (m)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])));
+  const api = (path, options={}) => window.adminFetch(path, options);
+  const statusIcon = (status) => status === 'ready' || status === 'complete' ? '✓' : status === 'blocked' || status === 'failed' ? '!' : status === 'warning' ? '⚠' : '…';
+  const statusLabel = (status) => ({ ready:'Ready', complete:'Complete', blocked:'Blocked', warning:'Warning', awaiting:'Awaiting customer', skipped:'Skipped', validated:'Validated', running:'Running', failed:'Failed' }[status] || status || 'Info');
+
+  function selectedScenario(){ return document.getElementById('e2e-scenario')?.value || 'reviews'; }
+  function e2ePayload(validationOnly = false){
+    return {
+      scenario: selectedScenario(),
+      validationOnly,
+      email: document.getElementById('e2e-email')?.value || '',
+      customerName: document.getElementById('e2e-customer')?.value || 'Nectar Test Customer',
+      orderId: document.getElementById('e2e-order')?.value || `NECTAR-TEST-${Date.now().toString().slice(-6)}`,
+      products: [{ id:'gid://shopify/Product/999999999001', productId:'gid://shopify/Product/999999999001', title:'Nectar End-to-End Test Product', handle:'nectar-e2e-test-product', quantity:1 }],
+    };
+  }
+
+  function renderPrereqs(items = []){
+    const box = document.getElementById('e2e-prereq-list'); if (!box) return;
+    box.innerHTML = items.map((item) => `<div class="e2e-check" data-status="${esc(item.status)}"><span class="e2e-dot">${statusIcon(item.status)}</span><div><strong>${esc(item.label)}</strong><p>${esc(item.detail)}</p>${item.action ? `<small>Next step: ${esc(item.action)}</small>` : ''}</div></div>`).join('') || '<p class="muted">No checks returned.</p>';
+  }
+
+  function renderSteps(items = []){
+    const box = document.getElementById('e2e-step-list'); if (!box) return;
+    box.innerHTML = items.map((item) => `<div class="e2e-step" data-status="${esc(item.status)}"><span class="e2e-dot">${statusIcon(item.status)}</span><div><strong>${esc(item.label)}</strong><p>${esc(item.detail)}</p></div></div>`).join('') || '<p class="muted">Validate or start a journey to see the steps.</p>';
+  }
+
+  function renderArtifacts(run = {}){
+    const box = document.getElementById('e2e-artifacts'); if (!box) return;
+    if (!run || !run._id) { box.innerHTML = '<p class="muted">No test has run yet.</p>'; return; }
+    const rows = [
+      ['Status', statusLabel(run.status)],
+      ['Fake order', run.fakeOrderId || '—'],
+      ['Email', run.recipientEmail || '—'],
+      ['Review link', run.reviewUrl || 'Not created'],
+      ['Discount code', run.discountCode || 'Not created'],
+      ['Run ID', run._id || '—'],
+    ];
+    box.innerHTML = rows.map(([label, value]) => `<div class="e2e-artifact"><span>${esc(label)}</span><code>${esc(value)}</code></div>`).join('');
+  }
+
+  function renderHistory(rows = []){
+    const box = document.getElementById('e2e-history-list'); if (!box) return;
+    box.innerHTML = rows.map((row) => {
+      const date = row.createdAt ? new Date(row.createdAt).toLocaleString() : '';
+      const blockers = row.blockedReason ? `<p><strong>Blocked by:</strong> ${esc(row.blockedReason)}</p>` : '';
+      return `<div class="e2e-history-row"><div><strong>${esc(row.fakeOrderId || row.scenario || 'Test run')}</strong><p>${esc(row.scenario || '')} · ${esc(row.recipientEmail || 'no email')} · ${esc(date)}</p>${blockers}${row.reviewUrl ? `<p><a href="${esc(row.reviewUrl)}" target="_blank" rel="noopener">Open customer review link</a></p>` : ''}</div><span class="loyalty-pill ${row.status === 'blocked' || row.status === 'failed' ? 'optout' : row.status === 'awaiting_customer' ? 'beta' : 'good'}">${esc(statusLabel(row.status))}</span></div>`;
+    }).join('') || '<p class="muted">No real-world tests have been run yet.</p>';
+  }
+
+  window.loadE2ETestCentre = async function(){
+    if (!document.getElementById('v-test-centre')) return;
+    try {
+      const data = await api(`/admin/e2e-tests?scenario=${encodeURIComponent(selectedScenario())}`);
+      const flow = document.getElementById('e2e-flow-confirmed'); if (flow) flow.checked = Boolean(data.flowConfirmed);
+      renderPrereqs(data.prerequisites || []);
+      renderHistory(data.history || []);
+      if ((data.history || [])[0]) renderArtifacts(data.history[0]);
+    } catch (error) {
+      renderPrereqs([{ status:'blocked', label:'Could not load Test Centre', detail:error.message || 'Unknown error', action:'Refresh the admin page and try again.' }]);
+    }
+  };
+
+  window.saveE2EFlowStatus = async function(){
+    try {
+      const confirmed = Boolean(document.getElementById('e2e-flow-confirmed')?.checked);
+      await api('/admin/e2e-tests/settings', { method:'PATCH', body: JSON.stringify({ shopifyFlowConfirmed: confirmed, confirmedBy: document.getElementById('e2e-email')?.value || '' }) });
+      (window.showToast || console.log)(confirmed ? 'Flow marked as installed for real-world tests.' : 'Flow marked as not installed. Review journeys will be blocked until it is ready.');
+      await window.loadE2ETestCentre?.();
+    } catch (error) { (window.showToast || console.log)(error.message || 'Could not save Flow status.'); }
+  };
+
+  window.validateE2EJourney = async function(){
+    try {
+      const result = await api('/admin/e2e-tests/run', { method:'POST', body: JSON.stringify(e2ePayload(true)) });
+      renderPrereqs(result.prerequisites || []);
+      renderSteps(result.steps || []);
+      renderArtifacts(result.run || {});
+      await window.loadE2ETestCentre?.();
+      (window.showToast || console.log)(result.ok ? 'Setup validation passed.' : 'Setup is blocked. Fix the listed requirements first.');
+    } catch (error) { (window.showToast || console.log)(error.message || 'Validation failed.'); }
+  };
+
+  window.runE2EJourney = async function(){
+    try {
+      const payload = e2ePayload(false);
+      if (!payload.email) { (window.showToast || console.log)('Enter a recipient email for the fake-order journey.'); return; }
+      const result = await api('/admin/e2e-tests/run', { method:'POST', body: JSON.stringify(payload) });
+      renderPrereqs(result.prerequisites || []);
+      renderSteps(result.steps || []);
+      renderArtifacts(result.run || {});
+      await window.loadE2ETestCentre?.();
+      (window.showToast || console.log)(result.ok ? 'Fake-order customer journey started.' : 'Test blocked. Fix the listed requirements first.');
+    } catch (error) { (window.showToast || console.log)(error.message || 'Could not start fake-order test.'); }
+  };
+
+  const originalTab = window.tab;
+  if (typeof originalTab === 'function' && !window.__nectarE2ETabHooked) {
+    window.__nectarE2ETabHooked = true;
+    window.tab = function(id){
+      originalTab(id);
+      if (id === 'v-test-centre') setTimeout(() => window.loadE2ETestCentre?.(), 50);
+    };
+  }
+  setTimeout(() => window.loadE2ETestCentre?.(), 1200);
+})();
