@@ -12,6 +12,7 @@ const adminRoutes = require('./routes/admin');
 const authRoutes = require('./routes/auth');
 const loyaltyRoutes = require('./routes/loyalty');
 const loyaltyCheckoutRoutes = require('./routes/loyaltyCheckout');
+const shopifyWebhookRoutes = require('./routes/shopifyWebhooks');
 const { securityHeaders, corsOptions, makeRateLimiter, errorHandler, requireAdminSession, setAdminSessionCookie } = require('./utils/security');
 const { mountPlatformModules } = require('./modules');
 
@@ -46,6 +47,8 @@ app.set('trust proxy', 1);
 app.use(securityHeaders);
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
+// Shopify webhooks must be mounted before express.json so HMAC verification uses the raw body.
+app.use('/api/webhooks', shopifyWebhookRoutes);
 app.use(express.json({ limit: env.jsonLimit }));
 app.use(express.urlencoded({ extended: true, limit: env.jsonLimit }));
 

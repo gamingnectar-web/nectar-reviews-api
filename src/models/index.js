@@ -96,6 +96,18 @@ const settingsSchema = new mongoose.Schema({
     flowConfirmedBy: { type: String, default: '' },
     lastScenario: { type: String, default: 'reviews' },
   },
+  reviewAutomation: {
+    enabled: { type: Boolean, default: true },
+    mode: { type: String, enum: ['native', 'flow', 'manual'], default: 'native' },
+    nativeEnabled: { type: Boolean, default: true },
+    flowEnabled: { type: Boolean, default: false },
+    trigger: { type: String, enum: ['orders/fulfilled', 'fulfillments/create', 'manual'], default: 'orders/fulfilled' },
+    delayDays: { type: Number, default: 14, min: 0, max: 365 },
+    sendWindowHour: { type: Number, default: 10, min: 0, max: 23 },
+    sendWindowTimezone: { type: String, default: 'store' },
+    campaign: { type: String, default: 'native_review_request' },
+    subject: { type: String, default: 'How was your recent order?' },
+  },
 }, { timestamps: true });
 
 const campaignEventSchema = new mongoose.Schema({
@@ -240,6 +252,42 @@ const e2eTestRunSchema = new mongoose.Schema({
 e2eTestRunSchema.index({ shopDomain: 1, createdAt: -1 });
 e2eTestRunSchema.index({ shopDomain: 1, scenario: 1, createdAt: -1 });
 
+
+const reviewRequestProductSchema = new mongoose.Schema({
+  id: { type: String, default: '' },
+  productId: { type: String, default: '' },
+  variantId: { type: String, default: '' },
+  title: { type: String, default: 'Purchased product' },
+  handle: { type: String, default: '' },
+  quantity: { type: Number, default: 1 },
+}, { _id: false });
+
+const reviewRequestJobSchema = new mongoose.Schema({
+  shopDomain: { type: String, required: true, index: true },
+  source: { type: String, default: 'native_scheduler', index: true },
+  orderId: { type: String, required: true, index: true },
+  orderName: { type: String, default: '' },
+  customerEmail: { type: String, default: '', index: true },
+  customerName: { type: String, default: 'Customer' },
+  products: { type: [reviewRequestProductSchema], default: [] },
+  delayDays: { type: Number, default: 14 },
+  fulfilledAt: { type: Date, default: Date.now },
+  scheduledAt: { type: Date, default: Date.now, index: true },
+  sentAt: { type: Date, default: null, index: true },
+  status: { type: String, enum: ['scheduled', 'sending', 'sent', 'blocked', 'failed', 'cancelled', 'skipped'], default: 'scheduled', index: true },
+  blockedReason: { type: String, default: '' },
+  errorMessage: { type: String, default: '' },
+  attempts: { type: Number, default: 0 },
+  lastAttemptAt: { type: Date, default: null },
+  reviewToken: { type: String, default: '', index: true },
+  reviewUrl: { type: String, default: '' },
+  webhookId: { type: String, default: '', index: true },
+  campaign: { type: String, default: 'native_review_request' },
+  testMode: { type: Boolean, default: false, index: true },
+}, { timestamps: true });
+reviewRequestJobSchema.index({ shopDomain: 1, orderId: 1, customerEmail: 1 }, { unique: true });
+reviewRequestJobSchema.index({ shopDomain: 1, status: 1, scheduledAt: 1 });
+
 const shopSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, unique: true, index: true },
   accessTokenEncrypted: { type: String, default: '' },
@@ -265,6 +313,7 @@ module.exports = {
   EmailProviderProfile: mongoose.models.EmailProviderProfile || mongoose.model('EmailProviderProfile', emailProviderProfileSchema, 'email_provider_profiles'),
   Shop: mongoose.models.Shop || mongoose.model('Shop', shopSchema, 'shops'),
   E2ETestRun: mongoose.models.E2ETestRun || mongoose.model('E2ETestRun', e2eTestRunSchema, 'e2e_test_runs'),
+  ReviewRequestJob: mongoose.models.ReviewRequestJob || mongoose.model('ReviewRequestJob', reviewRequestJobSchema, 'review_request_jobs'),
   // Loyalty models intentionally live in src/modules/loyalty/loyalty.models.js
   // so they can bind to LOYALTY_DB_URI instead of the core reviews database.
 

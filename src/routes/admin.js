@@ -2,13 +2,14 @@ const express = require('express');
 const { env } = require('../config/env');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
-const { Review, Settings, CampaignEvent, EmailProviderSettings, EmailProviderProfile, Shop, E2ETestRun } = require('../models');
+const { Review, Settings, CampaignEvent, EmailProviderSettings, EmailProviderProfile, Shop, E2ETestRun, ReviewRequestJob } = require('../models');
 const { requireAdminSession } = require('../utils/security');
 const { cleanText, cleanEmail, clampNumber, cleanReviewStatus } = require('../utils/validation');
 const { encryptSecret, decryptSecret } = require('../utils/crypto');
 const { publicEmailSettings } = require('../utils/emailSettings');
 const { shopifyFetch, shopifyFetchOptional, getAccessTokenForShop, buildInstallUrl } = require('../utils/shopify');
 const { createReviewToken } = require('../utils/reviewTokens');
+const { scheduleReviewRequestFromOrder, sendDueReviewRequests, automationReadiness, registerReviewWebhookSubscriptions } = require('../modules/reviews/reviewRequestAutomation');
 const { awardForReview, getOrCreateLoyaltyProgram, normaliseCustomerRef, customerHintFromHash, createLedgerEntry } = require('../modules/loyalty/loyalty.service');
 const { getOrCreateDiscountProgram, issueDiscountCode } = require('../modules/discounts/discounts.service');
 
@@ -1058,6 +1059,7 @@ async function buildE2EReadiness(shopDomain, scenarioRaw = 'reviews') {
 
   const prerequisites = [];
   const flowConfirmed = Boolean(settings?.testCentre?.shopifyFlowConfirmed);
+  const reviewAutomation = await automationReadiness(shopDomain).catch(() => null);
   const tokenSecretReady = Boolean(env.emailCredentialSecret || env.shopifyApiSecret);
   const activeEmailReady = Boolean(emailSettings?.enabled && emailSettings?.smtpPassEncrypted && emailSettings?.fromEmail);
   const primaryReviewsProvider = providers.find((provider) => Array.isArray(provider.primaryFor) && provider.primaryFor.includes('reviews'));
@@ -1066,14 +1068,25 @@ async function buildE2EReadiness(shopDomain, scenarioRaw = 'reviews') {
 
   if (cfg.needsReviews) {
     prerequisites.push(e2eCheck('review_token_secret', 'Signed review links', tokenSecretReady ? 'ready' : 'blocked', tokenSecretReady ? 'Review links can be signed and verified.' : 'No signing secret is available. Set EMAIL_CREDENTIAL_SECRET or SHOPIFY_API_SECRET before review-link tests can work.', 'Set EMAIL_CREDENTIAL_SECRET / SHOPIFY_API_SECRET.'));
+    const nativeReady = Boolean(reviewAutomation?.nativeReady);
+    const nativeCfg = reviewAutomation?.config || {};
     prerequisites.push(e2eCheck(
-      'shopify_flow',
-      'Shopify Flow handoff',
-      flowConfirmed ? 'ready' : 'blocked',
+      'native_review_scheduler',
+      'Nectar 14-day review scheduler',
+      nativeReady ? 'ready' : 'blocked',
+      nativeReady
+        ? `Nectar can create a fake fulfilled order, wait ${nativeCfg.delayDays || 14} days for live orders, then send the review email from your saved provider. Shopify Flow is optional.`
+        : 'Native review scheduling is not ready. This needs an active email provider, signed review links, and native automation switched on.',
+      'Open Settings → Review automation and keep Native scheduler enabled. Flow is only needed if you prefer merchant-managed automation.'
+    ));
+    prerequisites.push(e2eCheck(
+      'shopify_flow_optional',
+      'Shopify Flow optional fallback',
+      flowConfirmed ? 'ready' : 'warning',
       flowConfirmed
-        ? 'Flow has been marked as installed. Real fulfilled orders should be able to trigger review request emails.'
-        : 'Flow has not been marked as installed. Email can work by itself, but real fulfilled orders will not automatically trigger review requests until a Shopify Flow workflow is created and switched on.',
-      'Use the Flow setup guide in this Test Centre: create a Shopify Flow workflow, choose an order/fulfilment trigger, add a wait step, add Send internal email or HTTP request, paste the Nectar HTML/payload, switch the workflow on, then run this test again.'
+        ? 'Flow has been marked as installed as an optional fallback.'
+        : 'Flow is not required for the Nectar native scheduler. Use Flow only if the merchant wants to own the wait/action in Shopify Admin.',
+      'For development stores, use the native fake-order test; Flow can be configured later on a live merchant store.'
     ));
   }
 
@@ -1127,6 +1140,83 @@ function e2eEmailHtml({ shopDomain, customerName, orderId, reviewUrl, scenario, 
   const discountLine = discountCode ? `<p style="margin:0 0 18px;color:#4b5563;">A test discount code has also been generated: <strong>${discountCode}</strong></p>` : '';
   return `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.55;color:#111827;max-width:640px;margin:0 auto;padding:24px;"><p style="margin:0 0 8px;color:#667085;font-size:13px;font-weight:bold;text-transform:uppercase;">Nectar real-world test</p><h1 style="margin:0 0 12px;font-size:28px;">Review your fake test order</h1><p style="margin:0 0 14px;color:#4b5563;">Hi ${customerName || 'there'}, this is a safe end-to-end test for ${scenario.replace('_', ' ')}. It uses a fake order and will not publish reviews to the storefront.</p><p style="margin:0 0 18px;color:#4b5563;">Fake order: <strong>${orderId}</strong></p>${discountLine}<a href="${reviewUrl}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;font-weight:bold;border-radius:10px;padding:13px 18px;">Open customer review page</a><p style="margin:18px 0 0;color:#667085;font-size:12px;">Sent by ${shopDomain}. This is a Nectar test journey; completed reviews are marked as test/spam.</p></div>`;
 }
+
+
+router.get('/review-automation', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const readiness = await automationReadiness(shopDomain);
+    const jobs = await ReviewRequestJob.find({ shopDomain }).sort({ createdAt: -1 }).limit(25).lean();
+    return res.json({ ok: true, ...readiness, jobs });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/review-automation', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const body = req.body || {};
+    const update = {
+      'reviewAutomation.enabled': body.enabled !== false,
+      'reviewAutomation.mode': ['native', 'flow', 'manual'].includes(body.mode) ? body.mode : 'native',
+      'reviewAutomation.nativeEnabled': body.nativeEnabled !== false,
+      'reviewAutomation.flowEnabled': Boolean(body.flowEnabled),
+      'reviewAutomation.trigger': ['orders/fulfilled', 'fulfillments/create', 'manual'].includes(body.trigger) ? body.trigger : 'orders/fulfilled',
+      'reviewAutomation.delayDays': clampNumber(body.delayDays, 0, 365, 14),
+      'reviewAutomation.sendWindowHour': clampNumber(body.sendWindowHour, 0, 23, 10),
+      'reviewAutomation.sendWindowTimezone': cleanText(body.sendWindowTimezone || 'store', 80),
+      'reviewAutomation.campaign': cleanText(body.campaign || 'native_review_request', 120),
+      'reviewAutomation.subject': cleanText(body.subject || 'How was your recent order?', 160),
+    };
+    await Settings.findOneAndUpdate({ shopDomain }, { $set: update, $setOnInsert: { shopDomain } }, { upsert: true, new: true, setDefaultsOnInsert: true });
+    const readiness = await automationReadiness(shopDomain);
+    return res.json({ ok: true, ...readiness });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/review-automation/register-webhook', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const result = await registerReviewWebhookSubscriptions(shopDomain);
+    const readiness = await automationReadiness(shopDomain);
+    return res.json({ ok: Boolean(result.ok), result, readiness });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/review-automation/fake-order', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const order = {
+      id: req.body?.orderId || `NECTAR-TEST-${Date.now().toString().slice(-6)}`,
+      name: req.body?.orderName || req.body?.orderId || `NECTAR-TEST-${Date.now().toString().slice(-6)}`,
+      email: req.body?.email || req.body?.recipientEmail || '',
+      customer: { first_name: req.body?.customerName || 'Nectar', last_name: 'Test Customer', email: req.body?.email || req.body?.recipientEmail || '' },
+      fulfilled_at: req.body?.fulfilledAt || new Date().toISOString(),
+      line_items: Array.isArray(req.body?.products) && req.body.products.length ? req.body.products : [{ product_id: 999999999001, variant_id: 999999999002, title: 'Nectar fake-order product', quantity: 1 }],
+    };
+    const delayDays = req.body?.sendNow ? 0 : req.body?.delayDays;
+    const job = await scheduleReviewRequestFromOrder({ shopDomain, order, source: 'admin_fake_order', delayDays, testMode: true, webhookId: `fake-${Date.now()}` });
+    if (req.body?.sendNow) await sendDueReviewRequests({ limit: 10 });
+    const refreshed = await ReviewRequestJob.findById(job._id).lean();
+    return res.status(201).json({ ok: true, job: refreshed || job });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/review-automation/run-due', async (req, res, next) => {
+  try {
+    const result = await sendDueReviewRequests({ limit: clampNumber(req.body?.limit, 1, 50, 10) });
+    return res.json({ ok: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get('/e2e-tests', async (req, res, next) => {
   try {

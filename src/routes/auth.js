@@ -4,6 +4,7 @@ const { env } = require('../config/env');
 const { Shop } = require('../models');
 const { encryptSecret, base64UrlEncode, base64UrlDecode, timingSafeEqualString } = require('../utils/crypto');
 const { cleanShopDomain, isValidShopDomain } = require('../utils/validation');
+const { registerReviewWebhookSubscriptions } = require('../modules/reviews/reviewRequestAutomation');
 const { createAdminAuthToken, setAdminSessionCookie } = require('../utils/security');
 
 const router = express.Router();
@@ -142,6 +143,12 @@ async function callbackHandler(req, res, next) {
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
+
+    // Native review automation does not require Shopify Flow. After OAuth, try to register
+    // the fulfilled-order webhook used by Nectar's 14-day delayed email scheduler.
+    registerReviewWebhookSubscriptions(shopDomain).catch((error) => {
+      console.warn('Review webhook registration skipped:', error.message);
+    });
 
     const adminToken = setAdminSessionCookie(res, shopDomain) || createAdminAuthToken(shopDomain);
     return res.redirect(`/admin?shop=${encodeURIComponent(shopDomain)}&installed=1${adminToken ? `&admin_token=${encodeURIComponent(adminToken)}` : ''}`);

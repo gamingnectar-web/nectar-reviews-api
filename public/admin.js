@@ -1814,46 +1814,26 @@ setTimeout(() => { window.initLoyaltyTabs?.(); window.updateLoyaltyPreview?.(); 
 
 
   function flowHelperPrompt(){
-    const payload = e2ePayload(true);
-    const reviewPage = `https://${SHOP_DOMAIN}/pages/leave-review`;
-    const httpEndpoint = `${window.location.origin}/api/magic-link/order`;
-    return `Build a Shopify Flow workflow for a Nectar review request journey.
+    return `Build an OPTIONAL Shopify Flow fallback for Nectar review requests.
 
-Goal:
-When an order is fulfilled, wait 14 days, then send the customer a review request that lets them review the products from that order. This must behave like a real customer journey, not a one-off test email.
+Important:
+Nectar can already run the recommended live path without Flow: Shopify sends an orders/fulfilled webhook to Nectar, Nectar waits 14 days, then sends the review email from the saved Reviews email provider.
 
-Recommended Flow steps:
-1. Trigger: Order fulfilled. If unavailable, use Fulfillment created or Order paid only if fulfilment data is not required.
-2. Condition: customer email exists and order is not cancelled/refunded.
+Only build this Flow if the merchant wants to manage the wait/action inside Shopify Admin as a fallback.
+
+Workflow steps:
+1. Trigger: Order fulfilled.
+2. Condition: customer email exists, order is not cancelled, and order does not have a tag like nectar_review_request_sent.
 3. Wait: 14 days.
-4. Action option A - simple email: add a Send email action and paste the Nectar HTML from Nectar > Messaging & Campaigns > Settings.
-5. Action option B - advanced HTTP handoff: use Send HTTP request to POST order/customer/product data to Nectar.
+4. Action: Send email using Shopify Flow email action.
+5. Paste the Nectar review email HTML from Nectar > Messaging & Campaigns > Settings.
+6. Add an order tag after sending, such as nectar_review_request_sent.
+7. Turn the workflow on.
 
-Nectar details:
-- Shop: ${SHOP_DOMAIN}
-- Review page fallback: ${reviewPage}
-- Nectar endpoint for magic links: ${httpEndpoint}
-- Fake test order to use in Flow testing: ${payload.orderId}
-- Fake recipient while testing: ${payload.email || 'enter your own test email'}
-
-HTTP request guidance if using the HTTP action:
-Method: POST
-URL: ${httpEndpoint}
-Content-Type: application/json
-Body fields to include using Flow variables:
-{
-  "shopDomain": "${SHOP_DOMAIN}",
-  "orderId": "{{ order.name }}",
-  "email": "{{ order.email }}",
-  "customerName": "{{ order.customer.firstName }} {{ order.customer.lastName }}",
-  "products": [use the order line items/product IDs available in Flow],
-  "source": "shopify_flow_order_fulfilled"
-}
-
-After building:
-- Turn the workflow on.
-- In Nectar > Real-world Test Centre, tick "Shopify Flow review email is installed".
-- Run the fake-order journey. It should send an email, the link should open the review page, and the submitted review should appear as a test review in Nectar.`;
+Testing:
+- In development, use Nectar > Real-world Test Centre instead of Flow.
+- In a live Shopify store, fulfil a real/test order and confirm the customer receives the review request after the wait period.
+- If the merchant wants one source of truth, keep Nectar native scheduler enabled and do not create this Flow fallback.`;
   }
 
   function updateFlowAssistantPrompt(){
@@ -1865,7 +1845,7 @@ After building:
     const text = flowHelperPrompt();
     try { await navigator.clipboard.writeText(text); }
     catch (_) { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
-    (window.showToast || console.log)('Flow helper prompt copied. Open Shopify Flow/Sidekick and paste it.');
+    (window.showToast || console.log)('Optional Flow prompt copied. Native Nectar scheduling is still the recommended launch path.');
   };
 
   window.openShopifyFlowBuilder = function(){
@@ -1874,11 +1854,22 @@ After building:
     window.open(url, '_blank', 'noopener');
   };
 
+  window.registerReviewWebhook = async function(){
+    try {
+      const result = await api('/admin/review-automation/register-webhook', { method:'POST', body: JSON.stringify({}) });
+      if (result.ok) (window.showToast || console.log)('Shopify orders/fulfilled webhook is registered for native review scheduling.');
+      else (window.showToast || console.log)(result.result?.reason || 'Webhook could not be registered yet. Check OAuth and app scopes.');
+      await window.loadE2ETestCentre?.();
+    } catch (error) {
+      (window.showToast || console.log)(error.message || 'Could not register Shopify webhook.');
+    }
+  };
+
   function renderPrereqs(items = []){
     const box = document.getElementById('e2e-prereq-list'); if (!box) return;
     box.innerHTML = items.map((item) => {
-      const isFlow = item.key === 'shopify_flow';
-      const flowGuide = isFlow ? `<div class="e2e-flow-guide"><strong>How to make this real in Shopify Flow</strong><ol><li>Open Shopify Admin → Apps → Flow.</li><li>Create a workflow, or open your existing review request workflow.</li><li>Choose a trigger: Order fulfilled is recommended for review requests. Order paid can be used for purchase/loyalty points.</li><li>Add a Wait step, such as 14 days, so the customer has time to receive the order.</li><li>Add an action. For simple setup, use Send internal email and paste the Nectar Flow HTML from Messaging & Campaigns. For advanced setup, use Send HTTP request to call your Nectar endpoint.</li><li>Turn the workflow on, then tick “Shopify Flow review email is installed” in this Test Centre.</li><li>Run the real-world test. If it sends and the review link comes back into Reviews, the chain is working.</li></ol><button type="button" class="secondary-btn compact" onclick="window.tab('v-msg'); setTimeout(()=>window.msgTab?.('settings'),150)">Open Flow HTML</button></div>` : '';
+      const isFlow = item.key === 'shopify_flow_optional';
+      const flowGuide = isFlow ? `<div class="e2e-flow-guide"><strong>Optional Flow fallback</strong><p>Nectar native scheduling is the recommended launch path and works in development. Flow is only needed if a merchant wants Shopify to own the 14-day wait and email action.</p><button type="button" class="secondary-btn compact" onclick="window.copyFlowAssistantPrompt?.()">Copy optional Flow prompt</button></div>` : '';
       return `<div class="e2e-check" data-status="${esc(item.status)}"><span class="e2e-dot">${statusIcon(item.status)}</span><div><strong>${esc(item.label)}</strong><p>${esc(item.detail)}</p>${item.action ? `<small>Next step: ${esc(item.action)}</small>` : ''}${flowGuide}</div></div>`;
     }).join('') || '<p class="muted">No checks returned.</p>';
   }
@@ -1929,7 +1920,7 @@ After building:
     try {
       const confirmed = Boolean(document.getElementById('e2e-flow-confirmed')?.checked);
       await api('/admin/e2e-tests/settings', { method:'PATCH', body: JSON.stringify({ shopifyFlowConfirmed: confirmed, confirmedBy: document.getElementById('e2e-email')?.value || '' }) });
-      (window.showToast || console.log)(confirmed ? 'Flow marked as installed for real-world tests.' : 'Flow marked as not installed. Review journeys will be blocked until it is ready.');
+      (window.showToast || console.log)(confirmed ? 'Optional Flow fallback marked as installed.' : 'Optional Flow fallback marked as not installed. Native Nectar scheduling can still run review journeys.');
       await window.loadE2ETestCentre?.();
     } catch (error) { (window.showToast || console.log)(error.message || 'Could not save Flow status.'); }
   };

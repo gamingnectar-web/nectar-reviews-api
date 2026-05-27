@@ -1,4 +1,5 @@
 const { listModules } = require('./moduleRegistry');
+const { startReviewRequestJobs } = require('./reviews');
 const { mountCartRewardsModule, startCartRewardsJobs } = require('./cart-rewards');
 const { mountDiscountsModule, startDiscountJobs } = require('./discounts');
 
@@ -20,6 +21,7 @@ function mountPlatformModules(app, deps = {}) {
 function startPlatformModuleJobs() {
   if (moduleJobsStarted) return;
   moduleJobsStarted = true;
+  startReviewRequestJobs();
   startDiscountJobs();
   startCartRewardsJobs();
 }

@@ -921,7 +921,7 @@
           </div>
 
           <div class="panel settings-card settings-wide-card">
-            <div class="settings-card-header"><div><h3>Real-world Test Centre</h3><p>Run fake-order customer journeys for Reviews, Loyalty, Discounts and Cart Rewards. It checks Flow, email, discount and loyalty prerequisites before sending anything.</p></div><button class="primary-btn" type="button" onclick="window.tab('v-test-centre')">Open Test Centre</button></div>
+            <div class="settings-card-header"><div><h3>Real-world Test Centre</h3><p>Run fake-order customer journeys for Reviews, Loyalty, Discounts and Cart Rewards. It checks the native 14-day scheduler, email, discount and loyalty prerequisites before sending anything. Shopify Flow is optional.</p></div><button class="primary-btn" type="button" onclick="window.tab('v-test-centre')">Open Test Centre</button></div>
           </div>
           <div class="panel settings-card settings-wide-card">
             <div class="settings-card-header"><div><h3>Product configuration tabs</h3><p>Shared configuration belongs here. Reviews, loyalty, discounts and referrals can each have their own settings without crowding the product screens.</p></div></div>
@@ -939,7 +939,7 @@
         <div class="dash-header">
           <div>
             <h2 class="page-title">Real-world Test Centre</h2>
-            <p class="dash-subtitle">Push a safe fake-order journey through the same checks a customer flow needs. The system validates setup first, then sends a real email only when the scenario is ready.</p>
+            <p class="dash-subtitle">Push a safe fake-order journey through the same checks a real customer needs. For reviews, Nectar can simulate a fulfilled order, schedule/send the review email, and confirm the signed link works without Shopify Flow.</p>
           </div>
           <button class="secondary-btn" type="button" onclick="window.loadE2ETestCentre?.()">Refresh readiness</button>
         </div>
@@ -954,24 +954,24 @@
                 <label class="loyalty-field">Fake customer name<input id="e2e-customer" class="premium-input" value="Nectar Test Customer"></label>
                 <label class="loyalty-field">Fake order ID<input id="e2e-order" class="premium-input" value="NECTAR-TEST-1001"></label>
               </div>
-              <label class="e2e-flow-toggle"><input id="e2e-flow-confirmed" type="checkbox" onchange="window.saveE2EFlowStatus?.()"><span><strong>Shopify Flow review email is installed</strong><small>Tick this only after the Flow workflow has been created, switched on, and tested. Email provider tests prove SMTP works; Flow proves real orders can start the journey.</small></span></label>
+              <label class="e2e-flow-toggle"><input id="e2e-flow-confirmed" type="checkbox" onchange="window.saveE2EFlowStatus?.()"><span><strong>Optional Shopify Flow fallback is installed</strong><small>Nectar native mode is recommended for development and launch: Shopify sends the fulfilled-order webhook, Nectar waits 14 days, then sends the email. Tick this only if you also created a Flow fallback.</small></span></label>
               <details class="e2e-flow-setup" open>
-                <summary>How to create the Shopify Flow workflow</summary>
+                <summary>Recommended live setup: Nectar native scheduler</summary>
                 <ol>
-                  <li>In Shopify Admin, open <strong>Apps → Flow</strong> and choose <strong>Create workflow</strong>.</li>
-                  <li>Select a trigger. For review requests, use an order/fulfilment trigger such as <strong>Order fulfilled</strong>. For loyalty purchase points, use an order paid/completed trigger.</li>
-                  <li>Add a <strong>Wait</strong> step, for example 14 days, so customers have time to receive the order.</li>
-                  <li>Add the email/action step. For a simple setup, paste the generated Nectar HTML from <strong>Messaging &amp; Campaigns → Settings</strong> into the Flow email message. For advanced setups, use an HTTP request action to call the Nectar endpoint.</li>
-                  <li>Turn the workflow on, then tick the checkbox above.</li>
-                  <li>Run this test centre. If a fake-order email sends, the customer link opens, and the submitted review appears in Reviews as a test, the chain is working.</li>
+                  <li>Install/connect the app through Shopify OAuth.</li>
+                  <li>Nectar registers an <strong>orders/fulfilled</strong> webhook for the shop.</li>
+                  <li>When a real order is fulfilled, Nectar creates a private review-request job.</li>
+                  <li>The job waits <strong>14 days</strong> by default, then sends the review request from the saved Reviews email provider.</li>
+                  <li>The email contains a signed order-review link. When the customer submits, the review returns to Review Manager as verified by signed link.</li>
+                  <li>Use <strong>Start fake-order journey</strong> here in development. It does not need Shopify Flow.</li>
                 </ol>
-                <div class="e2e-flow-links"><button type="button" class="secondary-btn" onclick="window.tab('v-msg'); setTimeout(()=>window.msgTab?.('settings'),150)">Open Flow HTML</button><button type="button" class="secondary-btn" onclick="window.open('https://help.shopify.com/en/manual/shopify-flow/create/create-workflow','_blank','noopener')">Open Shopify Flow docs</button></div>
+                <div class="e2e-flow-links"><button type="button" class="secondary-btn" onclick="window.registerReviewWebhook?.()">Register Shopify webhook</button><button type="button" class="secondary-btn" onclick="window.openShopifyFlowBuilder?.()">Open Shopify Flow optional fallback</button><button type="button" class="secondary-btn" onclick="window.open('https://help.shopify.com/en/manual/fulfillment/setup/notifications/webhooks','_blank','noopener')">Open Shopify webhook docs</button></div>
                 <div class="e2e-flow-assistant">
-                  <strong>Make Shopify's helper build it for you</strong>
-                  <p class="muted">Copy this prompt, open Shopify Flow/Sidekick/Ask Assistant, and paste it. The app cannot type into Shopify for you, but this gives the exact workflow instructions.</p>
+                  <strong>Optional Flow fallback prompt</strong>
+                  <p class="muted">Native mode is preferred for launch. Copy this only if a merchant wants to build a Shopify Flow fallback manually.</p>
                   <textarea id="e2e-flow-helper-prompt" readonly></textarea>
                   <div class="e2e-flow-assistant-actions">
-                    <button type="button" class="primary-btn" onclick="window.copyFlowAssistantPrompt?.()">Copy helper prompt</button>
+                    <button type="button" class="primary-btn" onclick="window.copyFlowAssistantPrompt?.()">Copy optional Flow prompt</button>
                     <button type="button" class="secondary-btn" onclick="window.openShopifyFlowBuilder?.()">Open Shopify Flow</button>
                     <button type="button" class="secondary-btn" onclick="window.tab('v-msg'); setTimeout(()=>window.msgTab?.('settings'),150)">Show Nectar HTML</button>
                   </div>
