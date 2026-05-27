@@ -1,6 +1,6 @@
 {
   "name": "reviews-platform-api",
-  "version": "1.2.14-v25-flow-provider-responsive-fix",
+  "version": "1.2.15-flow-assistant-discount-email-clarity",
   "description": "Reviews Platform API with v25 review/loyalty logic and advanced modular Cart Rewards suite",
   "main": "server.js",
   "scripts": {

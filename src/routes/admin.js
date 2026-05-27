@@ -817,6 +817,42 @@ router.patch('/email-settings', async (req, res, next) => {
     if (body.smtpPass) update.smtpPassEncrypted = encryptSecret(body.smtpPass);
 
     const saved = await EmailProviderSettings.findOneAndUpdate({ shopDomain }, { $set: update }, { new: true, upsert: true, setDefaultsOnInsert: true });
+
+    // Keep the multi-provider library in sync whenever the merchant saves the active sender.
+    // This prevents the confusing state where Gmail/SMTP is connected but the Saved providers
+    // column is empty. We use the encrypted password already stored on the active settings.
+    const profileName = cleanText(body.name || body.profileName || update.fromName || update.fromEmail || 'Reviews email provider', 120);
+    const primaryFor = Array.isArray(body.primaryFor)
+      ? body.primaryFor.map((item) => cleanText(item, 40)).filter(Boolean)
+      : [cleanText(body.primaryFor || 'reviews', 40)].filter(Boolean);
+
+    for (const purpose of primaryFor) {
+      await EmailProviderProfile.updateMany({ shopDomain, primaryFor: purpose }, { $pull: { primaryFor: purpose } }).catch(() => {});
+    }
+
+    await EmailProviderProfile.findOneAndUpdate(
+      { shopDomain, name: profileName },
+      {
+        $set: {
+          shopDomain,
+          name: profileName,
+          enabled: saved.enabled,
+          provider: saved.provider,
+          smtpHost: saved.smtpHost,
+          smtpPort: saved.smtpPort,
+          secureMode: saved.secureMode,
+          smtpUser: saved.smtpUser,
+          smtpPassEncrypted: saved.smtpPassEncrypted,
+          fromName: saved.fromName,
+          fromEmail: saved.fromEmail,
+          replyToEmail: saved.replyToEmail,
+          primaryFor,
+          lastUsedAt: new Date(),
+        },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    ).catch((error) => console.warn('Provider profile sync skipped:', error.message));
+
     return res.json(publicEmailSettings(saved));
   } catch (error) {
     next(error);
@@ -839,13 +875,17 @@ router.post('/campaign-reminder', async (req, res, next) => {
     const email = cleanEmail(req.body?.email);
     if (!email) return res.status(400).json({ error: 'A valid recipient email is required.' });
     const orderId = cleanText(req.body?.orderId || '', 120);
+    const itemId = cleanText(req.body?.itemId || '', 180);
+    const productTitle = cleanText(req.body?.productTitle || 'Recent purchase', 180);
     const campaign = cleanText(req.body?.campaign || 'manual_review_reminder', 120);
     const settings = await activeEmailSettings(shopDomain);
     const transporter = createTransporterFromSettings(settings);
     const fromName = settings.fromName || 'Store Reviews';
     const fromEmail = settings.fromEmail || settings.smtpUser;
-    const token = `reminder-${Date.now()}`;
-    const reviewUrl = `https://${shopDomain}/pages/leave-review?shopDomain=${encodeURIComponent(shopDomain)}&mode=order&order_id=${encodeURIComponent(orderId)}&email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
+    const products = itemId ? [{ id: itemId, productId: itemId, title: productTitle }] : [];
+    const token = createReviewToken({ shopDomain, email, customerName: '', orderId, products, expiresDays: 14, testMode: false });
+    if (!token) return res.status(400).json({ error: 'Review token could not be created. Set EMAIL_CREDENTIAL_SECRET or SHOPIFY_API_SECRET.' });
+    const reviewUrl = `https://${shopDomain}/pages/leave-review?shopDomain=${encodeURIComponent(shopDomain)}&mode=${itemId ? 'product' : 'order'}&order_id=${encodeURIComponent(orderId)}&email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}${itemId ? `&product_id=${encodeURIComponent(itemId)}` : ''}`;
     const subject = cleanText(req.body?.subject || 'Quick reminder to leave a review', 160);
     const templateName = cleanText(req.body?.templateName || 'Manual reminder', 160);
     const layoutName = cleanText(req.body?.layoutName || 'reminder', 80);
@@ -864,6 +904,7 @@ router.post('/campaign-reminder', async (req, res, next) => {
       campaign,
       eventType: 'sent',
       orderId,
+      itemId,
       email,
       token,
       subject,

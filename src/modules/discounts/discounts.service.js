@@ -233,7 +233,7 @@ async function issueDiscountCode({ shopDomain, templateId = '', area = 'general'
       issue.status = 'failed';
       issue.errorMessage = error.message || 'Could not issue Shopify discount code.';
       await issue.save();
-      throw error;
+      return issue;
     }
   }
   return issue;

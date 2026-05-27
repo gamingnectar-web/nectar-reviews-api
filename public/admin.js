@@ -1719,7 +1719,16 @@ setTimeout(() => { window.initLoyaltyTabs?.(); window.updateLoyaltyPreview?.(); 
       const used = row.usedAt ? new Date(row.usedAt).toLocaleString() : 'Not used yet';
       const recipient = row.email ? ` · ${esc(row.email)}` : '';
       const source = row.sourceId ? ` · Source: ${esc(row.sourceId)}` : '';
-      return `<div class="discount-issue-row"><div><strong>${esc(row.templateName || row.area || 'Discount code')}</strong><span class="muted-small">${esc(row.trigger)}${recipient}${source}</span><br><code>${esc(row.code || 'Draft code')}</code>${row.privateNote ? `<span class="muted-small">${esc(row.privateNote)}</span>` : ''}${row.errorMessage ? `<span class="muted-small" style="color:#b42318">${esc(row.errorMessage)}</span>` : ''}</div><span class="loyalty-pill ${row.status === 'issued' ? 'good' : row.status === 'failed' ? 'optout' : row.status === 'used' ? 'good' : 'beta'}">${esc(row.status)}</span><div class="muted-small"><strong>Created</strong><br>${created}<br><strong>Used</strong><br>${used}</div><strong>${esc(row.discountType)} ${Number(row.discountValue||0)}</strong></div>`;
+      const methodLabel = row.method === 'native_shopify_code' ? 'Native Shopify' : 'Draft / reserved only';
+      const statusHelp = row.status === 'draft'
+        ? 'Tracked in Nectar only. Not redeemable at checkout until issued as a native Shopify code.'
+        : row.status === 'failed'
+          ? 'Tried to create a Shopify code but failed. Check discount scopes and OAuth.'
+          : row.status === 'issued'
+            ? 'Created in Shopify and can be sent/redeemed subject to template limits.'
+            : row.status || 'Tracked';
+      const emailStatus = row.emailedAt ? `Email sent ${new Date(row.emailedAt).toLocaleString()}` : (row.email ? 'Email not sent from this screen' : 'No recipient email');
+      return `<div class="discount-issue-row"><div><strong>${esc(row.templateName || row.area || 'Discount code')}</strong><span class="muted-small">${esc(row.trigger)}${recipient}${source}</span><br><code>${esc(row.code || 'Draft code')}</code><div class="discount-issue-meta"><span>${esc(methodLabel)}</span><span>${esc(statusHelp)}</span><span>${esc(emailStatus)}</span></div>${row.privateNote ? `<span class="muted-small">${esc(row.privateNote)}</span>` : ''}${row.errorMessage ? `<span class="muted-small" style="color:#b42318">${esc(row.errorMessage)}</span>` : ''}</div><span class="loyalty-pill ${row.status === 'issued' ? 'good' : row.status === 'failed' ? 'optout' : row.status === 'used' ? 'good' : 'beta'}">${esc(row.status)}</span><div class="muted-small"><strong>Created</strong><br>${created}<br><strong>Used</strong><br>${used}</div><strong>${esc(row.discountType)} ${Number(row.discountValue||0)}</strong></div>`;
     }).join('') || '<p class="muted">No codes issued yet.</p>';
   }
 
@@ -1756,15 +1765,21 @@ setTimeout(() => { window.initLoyaltyTabs?.(); window.updateLoyaltyPreview?.(); 
     try {
       const override = templateFromForm();
       const selectedTemplateId = document.getElementById('discount-test-template')?.value || '';
+      const shouldEmail = Boolean(document.getElementById('discount-send-email')?.checked);
+      const recipient = document.getElementById('discount-test-email')?.value || '';
+      if (shouldEmail && !recipient) return toast('Enter a recipient email before sending the discount email.');
       const issue = await api('/admin/discounts/issue', { method:'POST', body: JSON.stringify({
         templateId: selectedTemplateId,
         area: override.area,
         trigger: override.trigger,
         sourceId: document.getElementById('discount-test-source')?.value || 'manual_test',
-        email: document.getElementById('discount-test-email')?.value || '',
+        email: recipient,
+        sendEmail: shouldEmail,
         override: { ...override, privateNote: document.getElementById('discount-test-note')?.value || 'Manual tracked test issue' }
       }) });
-      discountState.issues.unshift(issue.issue || issue); renderDiscountIssues(); toast('Discount code reserved/issued and added to tracking.');
+      discountState.issues.unshift(issue.issue || issue); renderDiscountIssues();
+      const emailMsg = issue.email?.sent ? ' Email sent using the active provider.' : shouldEmail ? ` Email was not sent: ${issue.email?.reason || 'provider not ready'}.` : '';
+      toast(`Discount code reserved/issued and added to tracking.${emailMsg}`);
     } catch (error) { toast(error.message || 'Could not issue discount code.'); }
   };
   window.loadRenderNames = async function(){
@@ -1795,6 +1810,69 @@ setTimeout(() => { window.initLoyaltyTabs?.(); window.updateLoyaltyPreview?.(); 
       products: [{ id:'gid://shopify/Product/999999999001', productId:'gid://shopify/Product/999999999001', title:'Nectar End-to-End Test Product', handle:'nectar-e2e-test-product', quantity:1 }],
     };
   }
+
+
+
+  function flowHelperPrompt(){
+    const payload = e2ePayload(true);
+    const reviewPage = `https://${SHOP_DOMAIN}/pages/leave-review`;
+    const httpEndpoint = `${window.location.origin}/api/magic-link/order`;
+    return `Build a Shopify Flow workflow for a Nectar review request journey.
+
+Goal:
+When an order is fulfilled, wait 14 days, then send the customer a review request that lets them review the products from that order. This must behave like a real customer journey, not a one-off test email.
+
+Recommended Flow steps:
+1. Trigger: Order fulfilled. If unavailable, use Fulfillment created or Order paid only if fulfilment data is not required.
+2. Condition: customer email exists and order is not cancelled/refunded.
+3. Wait: 14 days.
+4. Action option A - simple email: add a Send email action and paste the Nectar HTML from Nectar > Messaging & Campaigns > Settings.
+5. Action option B - advanced HTTP handoff: use Send HTTP request to POST order/customer/product data to Nectar.
+
+Nectar details:
+- Shop: ${SHOP_DOMAIN}
+- Review page fallback: ${reviewPage}
+- Nectar endpoint for magic links: ${httpEndpoint}
+- Fake test order to use in Flow testing: ${payload.orderId}
+- Fake recipient while testing: ${payload.email || 'enter your own test email'}
+
+HTTP request guidance if using the HTTP action:
+Method: POST
+URL: ${httpEndpoint}
+Content-Type: application/json
+Body fields to include using Flow variables:
+{
+  "shopDomain": "${SHOP_DOMAIN}",
+  "orderId": "{{ order.name }}",
+  "email": "{{ order.email }}",
+  "customerName": "{{ order.customer.firstName }} {{ order.customer.lastName }}",
+  "products": [use the order line items/product IDs available in Flow],
+  "source": "shopify_flow_order_fulfilled"
+}
+
+After building:
+- Turn the workflow on.
+- In Nectar > Real-world Test Centre, tick "Shopify Flow review email is installed".
+- Run the fake-order journey. It should send an email, the link should open the review page, and the submitted review should appear as a test review in Nectar.`;
+  }
+
+  function updateFlowAssistantPrompt(){
+    const box = document.getElementById('e2e-flow-helper-prompt');
+    if (box) box.value = flowHelperPrompt();
+  }
+
+  window.copyFlowAssistantPrompt = async function(){
+    const text = flowHelperPrompt();
+    try { await navigator.clipboard.writeText(text); }
+    catch (_) { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+    (window.showToast || console.log)('Flow helper prompt copied. Open Shopify Flow/Sidekick and paste it.');
+  };
+
+  window.openShopifyFlowBuilder = function(){
+    const handle = String(SHOP_DOMAIN || '').replace(/\.myshopify\.com$/i, '').replace(/[^a-z0-9-]/gi, '');
+    const url = handle ? `https://admin.shopify.com/store/${handle}/apps/flow` : `https://${SHOP_DOMAIN}/admin/apps/flow`;
+    window.open(url, '_blank', 'noopener');
+  };
 
   function renderPrereqs(items = []){
     const box = document.getElementById('e2e-prereq-list'); if (!box) return;
@@ -1841,6 +1919,7 @@ setTimeout(() => { window.initLoyaltyTabs?.(); window.updateLoyaltyPreview?.(); 
       renderPrereqs(data.prerequisites || []);
       renderHistory(data.history || []);
       if ((data.history || [])[0]) renderArtifacts(data.history[0]);
+      updateFlowAssistantPrompt();
     } catch (error) {
       renderPrereqs([{ status:'blocked', label:'Could not load Test Centre', detail:error.message || 'Unknown error', action:'Refresh the admin page and try again.' }]);
     }
@@ -1887,7 +1966,8 @@ setTimeout(() => { window.initLoyaltyTabs?.(); window.updateLoyaltyPreview?.(); 
       if (id === 'v-test-centre') setTimeout(() => window.loadE2ETestCentre?.(), 50);
     };
   }
-  setTimeout(() => window.loadE2ETestCentre?.(), 1200);
+  ['e2e-scenario','e2e-email','e2e-customer','e2e-order'].forEach((id)=>document.getElementById(id)?.addEventListener('input', updateFlowAssistantPrompt));
+  setTimeout(() => { updateFlowAssistantPrompt(); window.loadE2ETestCentre?.(); }, 1200);
 })();
 
 document.addEventListener('DOMContentLoaded', initResponsiveNavGroups);

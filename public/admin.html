@@ -651,6 +651,20 @@
     .nr-admin-preview-card-demo[data-position="under_title_right"] .pre-card-badge { margin-left:auto; display:flex!important; width:max-content; }
     @media(max-width:1000px){.discount-status-grid,.discount-grid{grid-template-columns:1fr}.render-name-card{grid-template-columns:1fr}}
 
+    .discount-explainer-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:12px 0 18px; }
+    .discount-explainer { border:1px solid #e5e7eb; border-radius:14px; background:#fbfdff; padding:14px; }
+    .discount-explainer strong { display:block; margin-bottom:6px; }
+    .discount-explainer p { margin:0; color:#667085; font-size:13px; line-height:1.45; }
+    .discount-test-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:14px; }
+    .discount-test-grid .wide { grid-column:span 2; }
+    .discount-email-toggle { margin-top:12px; }
+    .discount-issue-meta { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+    .discount-issue-meta span { display:inline-flex; align-items:center; border:1px solid #e5e7eb; background:#f8fafc; border-radius:999px; padding:4px 8px; font-size:11px; font-weight:800; color:#475467; }
+    .e2e-flow-assistant { border:1px solid #d6e4ff; background:#f5f8ff; border-radius:16px; padding:14px; margin-top:12px; }
+    .e2e-flow-assistant textarea { width:100%; min-height:160px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; line-height:1.45; border:1px solid #c7d7fe; border-radius:12px; padding:10px; background:#fff; resize:vertical; }
+    .e2e-flow-assistant-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    @media(max-width:1100px){.discount-explainer-grid,.discount-test-grid{grid-template-columns:1fr}.discount-test-grid .wide{grid-column:auto}.discount-issue-row{grid-template-columns:1fr}.discount-issue-row>*{min-width:0}}
+
     .e2e-layout { display:grid; grid-template-columns:minmax(320px,520px) minmax(0,1fr); gap:18px; align-items:start; }
     .e2e-control-card, .e2e-card { margin-bottom:18px; }
     .e2e-scenario-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
@@ -952,6 +966,16 @@
                   <li>Run this test centre. If a fake-order email sends, the customer link opens, and the submitted review appears in Reviews as a test, the chain is working.</li>
                 </ol>
                 <div class="e2e-flow-links"><button type="button" class="secondary-btn" onclick="window.tab('v-msg'); setTimeout(()=>window.msgTab?.('settings'),150)">Open Flow HTML</button><button type="button" class="secondary-btn" onclick="window.open('https://help.shopify.com/en/manual/shopify-flow/create/create-workflow','_blank','noopener')">Open Shopify Flow docs</button></div>
+                <div class="e2e-flow-assistant">
+                  <strong>Make Shopify's helper build it for you</strong>
+                  <p class="muted">Copy this prompt, open Shopify Flow/Sidekick/Ask Assistant, and paste it. The app cannot type into Shopify for you, but this gives the exact workflow instructions.</p>
+                  <textarea id="e2e-flow-helper-prompt" readonly></textarea>
+                  <div class="e2e-flow-assistant-actions">
+                    <button type="button" class="primary-btn" onclick="window.copyFlowAssistantPrompt?.()">Copy helper prompt</button>
+                    <button type="button" class="secondary-btn" onclick="window.openShopifyFlowBuilder?.()">Open Shopify Flow</button>
+                    <button type="button" class="secondary-btn" onclick="window.tab('v-msg'); setTimeout(()=>window.msgTab?.('settings'),150)">Show Nectar HTML</button>
+                  </div>
+                </div>
               </details>
               <div class="e2e-run-actions">
                 <button class="secondary-btn" type="button" onclick="window.validateE2EJourney?.()">Validate setup only</button>
@@ -1073,6 +1097,11 @@
           <div class="panel discount-mini"><span>Connected products</span><strong>Reviews · Loyalty · Cart Rewards</strong><p>Review milestones and loyalty checkout can both use this module.</p></div>
           <div class="panel discount-mini"><label class="loyalty-pill"><input id="discount-enabled" type="checkbox"> Enable discounts module</label><p>Controls whether reward products can issue codes automatically.</p></div>
         </div>
+        <div class="discount-explainer-grid">
+          <div class="discount-explainer"><strong>Draft / reserved</strong><p>Nectar creates and tracks a code record only. Useful for testing rules, but the code will not redeem in Shopify checkout.</p></div>
+          <div class="discount-explainer"><strong>Native Shopify code</strong><p>Nectar creates the price rule and code inside Shopify. This is what customer emails and checkout redemption should use when scopes are ready.</p></div>
+          <div class="discount-explainer"><strong>Automated emails</strong><p>Real journeys generate the code from a template, replace <code>{{ code }}</code> in the email, then track sent/opened/clicked events.</p></div>
+        </div>
         <div class="discount-grid">
           <div class="panel discount-card">
             <h3>Discount template builder</h3>
@@ -1094,7 +1123,14 @@
               <label class="style-check-card"><input id="discount-template-enabled" type="checkbox" checked><span>Template active<small>Inactive templates can stay saved as drafts.</small></span></label>
             </div>
             <label class="loyalty-field">Email body<textarea id="discount-email-body" class="premium-input" rows="3">Thanks — your reward code is {{ code }}.</textarea></label>
-            <div class="loyalty-actions"><button class="secondary-btn" type="button" onclick="window.addDiscountTemplate?.()">Add template</button><button class="primary-btn" type="button" onclick="window.issueManualDiscount?.()">Issue test code</button></div>
+            <div class="discount-test-grid">
+              <label class="loyalty-field">Test recipient email<input id="discount-test-email" class="premium-input" type="email" placeholder="customer@example.com"></label>
+              <label class="loyalty-field">Source / order / review ID<input id="discount-test-source" class="premium-input" placeholder="Order 1001 or Review ID"></label>
+              <label class="loyalty-field wide">Use saved template<select id="discount-test-template" class="filter-select"><option value="">Use builder values</option></select></label>
+              <label class="loyalty-field wide">Private tracking note<input id="discount-test-note" class="premium-input" value="Manual tracked test issue"></label>
+            </div>
+            <label class="style-check-card discount-email-toggle"><input id="discount-send-email" type="checkbox"><span>Send the discount email now<small>Uses the active email provider and the email body above. Leave off to only reserve/create the code.</small></span></label>
+            <div class="loyalty-actions"><button class="secondary-btn" type="button" onclick="window.addDiscountTemplate?.()">Add template</button><button class="primary-btn" type="button" onclick="window.issueManualDiscount?.()">Issue / test code</button></div>
           </div>
           <div class="panel discount-card">
             <h3>Template list</h3>
