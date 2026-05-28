@@ -42,4 +42,50 @@ function normaliseTitle(value) {
   return cleanText(value, 220).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
-module.exports = { cleanText, cleanUrl, toMoney, suggestedRetailFromCost, safeJsonParse, makeLineId, normaliseTitle };
+function slugify(value, fallback = 'imported-product') {
+  const slug = cleanText(value, 180)
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-');
+  return slug || fallback;
+}
+
+function parseTags(value) {
+  if (Array.isArray(value)) return value.map((tag) => cleanText(tag, 80)).filter(Boolean);
+  return String(value || '')
+    .split(',')
+    .map((tag) => cleanText(tag, 80))
+    .filter(Boolean);
+}
+
+function normaliseMetafield(raw = {}) {
+  const namespace = cleanText(raw.namespace || '', 80);
+  const key = cleanText(raw.key || '', 80);
+  const value = raw.value === undefined || raw.value === null ? '' : String(raw.value);
+  if (!namespace || !key || value === '') return null;
+  return {
+    namespace,
+    key,
+    type: cleanText(raw.type || 'single_line_text_field', 80) || 'single_line_text_field',
+    value: String(value).slice(0, 5000),
+    label: cleanText(raw.label || raw.name || '', 120),
+    source: cleanText(raw.source || '', 80),
+    confidence: Number(raw.confidence || 0),
+  };
+}
+
+function normaliseMetafields(value) {
+  const list = Array.isArray(value) ? value : Object.entries(value || {}).map(([compoundKey, itemValue]) => {
+    const [namespace, key] = compoundKey.split('.');
+    return { namespace, key, value: itemValue };
+  });
+  const byKey = new Map();
+  list.map(normaliseMetafield).filter(Boolean).forEach((item) => {
+    byKey.set(`${item.namespace}.${item.key}`, item);
+  });
+  return Array.from(byKey.values()).slice(0, 100);
+}
+
+module.exports = { cleanText, cleanUrl, toMoney, suggestedRetailFromCost, safeJsonParse, makeLineId, normaliseTitle, slugify, parseTags, normaliseMetafield, normaliseMetafields };

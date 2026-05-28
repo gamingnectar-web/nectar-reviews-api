@@ -1,4 +1,4 @@
-const { cleanText, cleanUrl, toMoney, suggestedRetailFromCost } = require('../utils/safe');
+const { cleanText, cleanUrl, toMoney, suggestedRetailFromCost, slugify, parseTags, normaliseMetafields } = require('../utils/safe');
 
 function escapeHtml(value) {
   return String(value || '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m]));
@@ -19,41 +19,63 @@ function normaliseImage(image, title) {
   return src ? { src, alt: cleanText(image.alt || title || 'Imported product', 180) } : null;
 }
 
+function coreMetafieldDefaults(raw = {}) {
+  const meta = raw.core || raw.coreMetafields || {};
+  const defaults = [
+    { namespace: 'core', key: 'formula_version', label: 'Formula Version', value: raw.formulaVersion || meta.formula_version || meta.formulaVersion || '' },
+    { namespace: 'core', key: 'grouped_profiles', label: 'Grouped Profiles', value: raw.groupedProfiles || meta.grouped_profiles || meta.groupedProfiles || '' },
+    { namespace: 'core', key: 'sourness', label: 'Sourness', value: raw.sourness || meta.sourness || '' },
+    { namespace: 'core', key: 'sweetness', label: 'Sweetness', value: raw.sweetness || meta.sweetness || '' },
+    { namespace: 'core', key: 'flavour_profile', label: 'Flavour Profile', value: raw.flavourProfile || meta.flavour_profile || meta.flavourProfile || '' },
+  ];
+  return defaults.filter((item) => item.value !== '' && item.value !== undefined && item.value !== null).map((item) => ({ ...item, type: 'single_line_text_field', source: 'normalised' }));
+}
+
 function normaliseDraftProduct(raw = {}) {
   const title = cleanText(raw.title || raw.name || 'Imported product', 220) || 'Imported product';
   const cost = toMoney(raw.cost || raw.unitCost || raw.pricePaid || '');
   const price = toMoney(raw.price || raw.retailPrice || raw.suggestedRetailPrice || suggestedRetailFromCost(cost));
+  const handle = slugify(raw.handle || raw.slug || title);
   const images = (Array.isArray(raw.images) ? raw.images : [raw.imageUrl || raw.image || raw.featuredImage])
     .map((image) => normaliseImage(image, title))
     .filter(Boolean)
     .slice(0, 12);
+  const tags = Array.from(new Set(parseTags(raw.tags)
+    .concat(raw.source === 'url' ? ['url-import'] : [])
+    .concat(raw.source === 'invoice' ? ['invoice-import'] : [])
+    .concat(['product-import'])
+  )).slice(0, 40);
+
+  const metafields = normaliseMetafields([
+    ...coreMetafieldDefaults(raw),
+    ...(Array.isArray(raw.metafields) ? raw.metafields : normaliseMetafields(raw.metafields || {})),
+  ]);
 
   return {
     source: cleanText(raw.source || 'manual', 40),
     sourceUrl: cleanUrl(raw.sourceUrl || raw.url || ''),
     title,
+    handle,
     descriptionHtml: raw.descriptionHtml || htmlFromPlainText(raw.description || raw.body || ''),
     vendor: cleanText(raw.vendor || raw.brand || raw.supplierName || '', 120),
     productType: cleanText(raw.productType || raw.category || '', 120),
     status: 'draft',
-    tags: Array.from(new Set((Array.isArray(raw.tags) ? raw.tags : String(raw.tags || '').split(','))
-      .map((tag) => cleanText(tag, 80))
-      .filter(Boolean)
-      .concat(['product-import'])
-    )).slice(0, 30),
+    tags,
     price,
     cost,
-    compareAtPrice: toMoney(raw.compareAtPrice || ''),
+    compareAtPrice: toMoney(raw.compareAtPrice || raw.originalPrice || ''),
     sku: cleanText(raw.sku || raw.supplierProductCode || '', 120),
     barcode: cleanText(raw.barcode || raw.gtin || raw.gtin13 || '', 120),
     quantity: Number(raw.quantity || 1) || 1,
     images,
+    metafields,
     seo: {
       title: cleanText(raw.seo?.title || title, 70),
       description: cleanText(raw.seo?.description || raw.description || title, 160),
     },
+    enrichment: raw.enrichment || {},
     raw,
   };
 }
 
-module.exports = { normaliseDraftProduct, htmlFromPlainText };
+module.exports = { normaliseDraftProduct, htmlFromPlainText, coreMetafieldDefaults };

@@ -1453,13 +1453,13 @@
           </div>
           <div class="pci-card">
             <h3>Connection status</h3>
-            <div id="pci-health" class="pci-status">Loading product import status…</div>
+            <div id="pci-health" class="pci-status">Loading product import status…</div><datalist id="pci-tag-list"></datalist>
           </div>
         </div>
 
         <div class="pci-card pci-pane active" id="pci-pane-url">
           <h3>URL import</h3>
-          <p>Paste a public supplier/product page. The app extracts JSON-LD, Open Graph and page data into an editable Shopify draft.</p>
+          <p>Paste a public supplier/product page. The app extracts page data, suggests an optimised Shopify handle, lets you reuse previous tags, and pre-fills product metafields before draft creation.</p>
           <label class="pci-label" for="pci-url-input">External product URL</label>
           <input id="pci-url-input" class="pci-input" placeholder="https://supplier.example/products/example-product" />
           <div class="pci-actions"><button id="pci-scan-url" class="primary-btn" type="button">Scan product URL</button></div>
@@ -1467,6 +1467,7 @@
           <div class="pci-form-grid" style="margin-top:18px;">
             <div><label class="pci-label">Title</label><input id="pci-url-title" class="pci-input"></div>
             <div><label class="pci-label">Vendor / Brand</label><input id="pci-url-vendor" class="pci-input"></div>
+            <div><label class="pci-label">Optimised URL / Handle</label><input id="pci-url-handle" class="pci-input" placeholder="sonics-peach-rings"></div>
             <div><label class="pci-label">Product Type</label><input id="pci-url-type" class="pci-input"></div>
             <div><label class="pci-label">Retail Price</label><input id="pci-url-price" class="pci-input"></div>
             <div><label class="pci-label">Price Paid / Cost</label><input id="pci-url-cost" class="pci-input"></div>
@@ -1474,15 +1475,16 @@
             <div><label class="pci-label">Barcode</label><input id="pci-url-barcode" class="pci-input"></div>
             <div><label class="pci-label">Image URL</label><input id="pci-url-image" class="pci-input"></div>
             <div class="full"><label class="pci-label">Source URL</label><input id="pci-url-source" class="pci-input"></div>
-            <div class="full"><label class="pci-label">Tags</label><input id="pci-url-tags" class="pci-input" placeholder="supplier-import, url-import"></div>
+            <div class="full"><label class="pci-label">Tags</label><input id="pci-url-tags" class="pci-input" list="pci-tag-list" placeholder="supplier-import, url-import"><div id="pci-url-tag-suggestions" class="pci-tag-suggestions"></div><p class="pci-form-help">Click previously used tags to keep this product aligned with existing collections and product-line logic.</p></div>
             <div class="full"><label class="pci-label">Description</label><textarea id="pci-url-description" class="pci-textarea"></textarea></div>
+            <div class="full"><div class="pci-section-subtitle">Product metafields</div><p class="pci-form-help">All product metafield definitions are shown here when Shopify exposes them. Core G Fuel profile fields are always included.</p><div id="pci-url-metafields" class="pci-metafields"></div></div>
           </div>
-          <div id="pci-url-draft"></div>
+          <div class="pci-actions"><button id="pci-url-suggest-profile" class="secondary-btn" type="button">Generate tags &amp; metafields</button></div><div id="pci-url-draft"></div>
         </div>
 
         <div class="pci-card pci-pane" id="pci-pane-invoice">
           <h3>Invoice import</h3>
-          <p>Upload a picture of a supplier invoice. The app extracts product lines, paid cost, titles and codes, then tries to match each line to existing Shopify products. Unmatched lines can be assigned manually or created as new draft products.</p>
+          <p>Upload a picture of a supplier invoice, PO, receipt or order confirmation. The app extracts product lines, thumbnails/image hints, quantities, price paid, original prices, discounts and promo labels, then matches each line to Shopify products. Unmatched lines can be assigned, created from a URL, or created manually.</p>
           <div class="pci-form-grid">
             <div><label class="pci-label">Invoice image / picture</label><input id="pci-invoice-file" type="file" class="pci-input" accept="image/*"></div>
             <div><label class="pci-label">Supplier URL</label><input id="pci-invoice-supplier-url" class="pci-input" placeholder="https://supplier.example"></div>
@@ -1499,6 +1501,7 @@
           <div class="pci-form-grid">
             <div><label class="pci-label">Title</label><input id="pci-manual-title" class="pci-input"></div>
             <div><label class="pci-label">Vendor / Brand</label><input id="pci-manual-vendor" class="pci-input"></div>
+            <div><label class="pci-label">Optimised URL / Handle</label><input id="pci-manual-handle" class="pci-input" placeholder="sonics-peach-rings"></div>
             <div><label class="pci-label">Product Type</label><input id="pci-manual-type" class="pci-input"></div>
             <div><label class="pci-label">Retail Price</label><input id="pci-manual-price" class="pci-input"></div>
             <div><label class="pci-label">Price Paid / Cost</label><input id="pci-manual-cost" class="pci-input"></div>
@@ -1506,10 +1509,11 @@
             <div><label class="pci-label">Barcode</label><input id="pci-manual-barcode" class="pci-input"></div>
             <div><label class="pci-label">Image URL</label><input id="pci-manual-image" class="pci-input"></div>
             <div class="full"><label class="pci-label">Source URL</label><input id="pci-manual-source" class="pci-input"></div>
-            <div class="full"><label class="pci-label">Tags</label><input id="pci-manual-tags" class="pci-input" placeholder="manual-import, supplier-name"></div>
+            <div class="full"><label class="pci-label">Tags</label><input id="pci-manual-tags" class="pci-input" list="pci-tag-list" placeholder="manual-import, supplier-name"><div id="pci-manual-tag-suggestions" class="pci-tag-suggestions"></div><p class="pci-form-help">Use existing tags to trigger the right product-line metafield defaults.</p></div>
             <div class="full"><label class="pci-label">Description</label><textarea id="pci-manual-description" class="pci-textarea"></textarea></div>
+            <div class="full"><div class="pci-section-subtitle">Product metafields</div><p class="pci-form-help">Core profile fields can be filled by GPT or copied from matching existing products after tags are selected.</p><div id="pci-manual-metafields" class="pci-metafields"></div></div>
           </div>
-          <div class="pci-actions"><button id="pci-create-manual" class="primary-btn" type="button">Create Shopify draft product</button></div>
+          <div class="pci-actions"><button id="pci-manual-suggest-profile" class="secondary-btn" type="button">Generate tags &amp; metafields</button><button id="pci-create-manual" class="primary-btn" type="button">Create Shopify draft product</button></div>
           <div id="pci-manual-status" class="pci-status">Manual drafts are created unpublished in Shopify.</div>
         </div>
 
@@ -1586,7 +1590,7 @@
     </main>
   </div>
 
-  <link rel="stylesheet" href="/product-creation-import.css?v=pci-v1">
+  <link rel="stylesheet" href="/product-creation-import.css?v=pci-v2">
   <script src="/admin.js?v=secure-6"></script>
   <script src="/admin-review-manager-enhancements.js?v=secure-6"></script>
   <script src="/nectar-score-notch-fix.js?v=secure-6"></script>
@@ -1596,7 +1600,7 @@
   <script src="/admin-ai-module-builder.js?v=ai-modules-1" defer></script>
   <script src="/admin-review-migrations.js?v=review-migrations-v28" defer></script>
   <script src="/admin-help-drawer.js?v=context-help-v28" defer></script>
-  <script src="/product-creation-import.js?v=pci-v1" defer></script>
+  <script src="/product-creation-import.js?v=pci-v2" defer></script>
   <script src="/reviews-launch-checklist.js?v=launch-v28" defer></script>
   <script src="/admin-product-context.js?v=context-nav-v28" defer></script>
   <script src="/admin-loyalty-foundation.js?v=secure-24"></script>

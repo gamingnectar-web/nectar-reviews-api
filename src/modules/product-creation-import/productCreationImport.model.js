@@ -8,9 +8,14 @@ const importedLineSchema = new mongoose.Schema({
   supplierProductCode: { type: String, default: '' },
   quantity: { type: Number, default: 1 },
   unitCost: { type: String, default: '' },
+  originalUnitPrice: { type: String, default: '' },
   totalCost: { type: String, default: '' },
+  discountAmount: { type: String, default: '' },
+  discountLabel: { type: String, default: '' },
   suggestedRetailPrice: { type: String, default: '' },
   imageUrl: { type: String, default: '' },
+  imageDescription: { type: String, default: '' },
+  imageSearchQuery: { type: String, default: '' },
   sourceUrl: { type: String, default: '' },
   confidence: { type: Number, default: 0 },
   raw: { type: mongoose.Schema.Types.Mixed, default: {} },
@@ -26,6 +31,46 @@ const importedLineSchema = new mongoose.Schema({
   }
 }, { _id: false });
 
+const poLineSchema = new mongoose.Schema({
+  lineId: { type: String, default: '' },
+  title: { type: String, default: '' },
+  sku: { type: String, default: '' },
+  barcode: { type: String, default: '' },
+  quantity: { type: Number, default: 1 },
+  unitCost: { type: String, default: '' },
+  originalUnitPrice: { type: String, default: '' },
+  totalCost: { type: String, default: '' },
+  discountAmount: { type: String, default: '' },
+  discountLabel: { type: String, default: '' },
+  suggestedRetailPrice: { type: String, default: '' },
+  productId: { type: String, default: '' },
+  variantId: { type: String, default: '' },
+  productTitle: { type: String, default: '' },
+  handle: { type: String, default: '' },
+  image: { type: String, default: '' },
+  matchStatus: { type: String, default: 'unmatched' },
+  note: { type: String, default: '' },
+}, { _id: false });
+
+const purchaseOrderSchema = new mongoose.Schema({
+  status: { type: String, enum: ['none', 'draft', 'formalised'], default: 'none' },
+  poNumber: { type: String, default: '' },
+  supplierName: { type: String, default: '' },
+  supplierUrl: { type: String, default: '' },
+  currency: { type: String, default: 'GBP' },
+  invoiceNumber: { type: String, default: '' },
+  invoiceDate: { type: String, default: '' },
+  lines: { type: [poLineSchema], default: [] },
+  subtotal: { type: String, default: '' },
+  discountTotal: { type: String, default: '' },
+  shippingTotal: { type: String, default: '' },
+  taxTotal: { type: String, default: '' },
+  total: { type: String, default: '' },
+  notes: { type: String, default: '' },
+  createdAt: { type: Date },
+  updatedAt: { type: Date },
+}, { _id: false });
+
 const productCreationImportSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, index: true },
   type: { type: String, enum: ['invoice', 'url', 'manual'], required: true, index: true },
@@ -37,12 +82,16 @@ const productCreationImportSchema = new mongoose.Schema({
   invoiceDate: { type: String, default: '' },
   currency: { type: String, default: 'GBP' },
   total: { type: String, default: '' },
+  shippingTotal: { type: String, default: '' },
+  taxTotal: { type: String, default: '' },
+  discountTotal: { type: String, default: '' },
   notes: { type: String, default: '' },
   originalFilename: { type: String, default: '' },
   mimeType: { type: String, default: '' },
   confidence: { type: Number, default: 0 },
   lines: { type: [importedLineSchema], default: [] },
   draft: { type: mongoose.Schema.Types.Mixed, default: {} },
+  purchaseOrder: { type: purchaseOrderSchema, default: () => ({ status: 'none' }) },
   createdShopifyProduct: { type: mongoose.Schema.Types.Mixed, default: null },
   errors: { type: [String], default: [] },
 }, { timestamps: true, collection: 'product_creation_imports' });
@@ -51,5 +100,6 @@ productCreationImportSchema.index({ shopDomain: 1, sourceUrl: 1 });
 productCreationImportSchema.index({ shopDomain: 1, createdAt: -1 });
 productCreationImportSchema.index({ shopDomain: 1, 'lines.sku': 1 });
 productCreationImportSchema.index({ shopDomain: 1, 'lines.barcode': 1 });
+productCreationImportSchema.index({ shopDomain: 1, 'purchaseOrder.status': 1, createdAt: -1 });
 
 module.exports = mongoose.models.ProductCreationImport || mongoose.model('ProductCreationImport', productCreationImportSchema);

@@ -1,43 +1,122 @@
-# PRODUCT CREATION & PRODUCT IMPORT module
+# PRODUCT CREATION & PRODUCT IMPORT
 
-This update adds a selectable left-menu product called **Product Creation & Import**.
-
-## What changed
-
-- Added `src/modules/product-creation-import` backend module.
-- Mounted routes at `/api/admin/product-creation-import` behind the existing admin session middleware.
-- Added `public/product-creation-import.js` and `public/product-creation-import.css`.
-- Added a new admin view: `#v-product-creation-import`.
-- Updated `public/admin-product-context.js` so the Products menu contains **Product Creation & Import** and the Manage menu swaps to URL Import, Invoice Import, Manual Create and History.
-- Added `?product=product-creation-import` / `?module=product-creation-import` support so the app can open directly on this product instead of Reviews.
-- Added `productCreationImport.enabled` to the shop module defaults.
-- Updated default scopes to include `write_products`.
-- Increased the default JSON body size to `5mb` so compressed invoice images can be posted as base64.
-
-## Admin flow
-
-1. Open the app.
-2. In the left Products menu, select **Product Creation & Import**.
-3. Choose one of:
-   - URL Import: scan an external product page and create an editable Shopify draft.
-   - Invoice Import: upload an invoice picture, extract line items, auto-match Shopify products, assign manually or create drafts.
-   - Manual Create: create a product draft directly.
-   - History: view recent imports.
-
-## Direct loading
-
-Use this URL shape to open directly into the module:
+This module is mounted as a selectable product in the left-hand product menu and is available at:
 
 ```txt
-/admin?shop=your-store.myshopify.com&product=product-creation-import
+/admin?product=product-creation-import
 ```
 
-## Requirements
+API namespace:
 
-- Shopify OAuth token or `SHOPIFY_ACCESS_TOKEN`/`SHOPIFY_ADMIN_ACCESS_TOKEN` for development.
-- `write_products` scope for product creation.
-- Optional `OPENAI_API_KEY` to enable invoice picture extraction. Without it, invoice import still accepts typed fallback line notes.
+```txt
+/api/admin/product-creation-import
+```
 
-## Safety
+## What changed in v30
 
-All products created by this module are created as Shopify `draft` products. The merchant must review and publish them inside Shopify.
+- Invoice/order image import now asks the AI extractor to read product thumbnails, product image hints, quantities, paid prices, original prices, discount labels and discount values.
+- Invoice lines now expose editable quantity, price paid, original price, discount, promo label and suggested retail fields before product creation or PO drafting.
+- Suggested product matches now require merchant confirmation via the UI before they are assigned.
+- Unmatched lines now have a **Create…** menu with three paths:
+  - Use URL import.
+  - Manual create.
+  - Quick draft now.
+- Invoice imports can now create an internal **draft PO** at the bottom of the page. The draft PO includes matched/created product references, costs, quantities, discounts, shipping, tax and totals.
+- URL/manual product creation now includes an editable Shopify handle field for the optimised product URL.
+- The UI now loads previously used Shopify tags and shows clickable tag chips.
+- The UI now loads product metafield definitions from Shopify and renders them as editable boxes.
+- Core G Fuel profile fields are always available:
+  - `core.formula_version`
+  - `core.grouped_profiles`
+  - `core.sourness`
+  - `core.sweetness`
+  - `core.flavour_profile`
+- GPT enrichment can prefill product tags, product handle, product type and core profile metafields from the scanned URL/product content and similar existing products.
+- Similar existing products are used to copy common metafield values after tags are selected.
+
+## Required Shopify scopes
+
+Minimum:
+
+```txt
+read_products,write_products
+```
+
+The current repo default scope string already includes `read_products` and `write_products`.
+
+## Environment variables
+
+```txt
+OPENAI_API_KEY=...
+OPENAI_INVOICE_MODEL=gpt-4.1-mini
+OPENAI_PRODUCT_IMPORT_MODEL=gpt-4.1-mini
+```
+
+If `OPENAI_API_KEY` is missing, image extraction falls back to typed invoice notes. Shopify product search, manual creation, URL extraction and PO drafting still work.
+
+## Main endpoints
+
+```txt
+GET  /health
+GET  /metadata
+POST /profile/suggest
+POST /url/scan
+POST /invoice/analyse
+GET  /products/search?q=...
+POST /shopify/assign
+POST /shopify/create
+POST /purchase-order/draft
+POST /purchase-order/formalise
+GET  /history
+```
+
+## Purchase order behaviour
+
+The PO is stored inside the `product_creation_imports` document under `purchaseOrder`. It is intentionally an internal draft, not a Shopify-native purchase order, so the merchant can formalise it after checking all product matches and draft creations.
+
+Line fields carried into the PO:
+
+```txt
+title
+sku
+barcode
+quantity
+unitCost
+originalUnitPrice
+discountAmount
+discountLabel
+suggestedRetailPrice
+productId
+variantId
+matchStatus
+```
+
+## Product metafield behaviour
+
+The module fetches product metafield definitions from Shopify via Admin GraphQL. It renders those definitions in the URL and Manual Create forms. On creation, non-empty metafields are sent to Shopify with the draft product.
+
+The core G Fuel fields are included even if Shopify does not return definitions, because these are important to the product line/profile workflow:
+
+```txt
+core.formula_version
+core.grouped_profiles
+core.sourness
+core.sweetness
+core.flavour_profile
+```
+
+## Image handling from invoices
+
+If the invoice/order image contains a visible product thumbnail but no actual image URL, the AI extractor returns:
+
+```txt
+imageDescription
+imageSearchQuery
+```
+
+That gives the merchant a useful image hint. The app cannot turn a flat screenshot thumbnail into a high-quality Shopify product image URL automatically unless the supplier page or matched Shopify product provides an image URL. The recommended flow is:
+
+1. Analyse invoice/order screenshot.
+2. Search/assign existing product when possible, which brings in the Shopify product image.
+3. For unmatched lines, use **Create… → Use URL import** so the supplier product page can provide a proper image URL.
+4. If no URL exists, use **Manual create** and paste/upload a product image URL manually.

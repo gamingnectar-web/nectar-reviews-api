@@ -4,10 +4,14 @@ const {
   analyseInvoiceAndSave,
   assignLine,
   createDraftProduct,
+  createPurchaseOrderDraft,
+  formalisePurchaseOrderDraft,
   getImportHistory,
+  getProductImportMetadata,
   matchImportLines,
   saveManualDraft,
   scanUrlAndSave,
+  suggestProductProfile,
 } = require('./productCreationImport.service');
 const { healthCheckShopify, searchShopifyProducts } = require('./services/shopifyProduct.service');
 
@@ -27,6 +31,16 @@ router.get('/health', asyncRoute(async (req, res) => {
   res.json({ ok: true, module: 'PRODUCT CREATION & PRODUCT IMPORT', shopify, invoiceVision: Boolean(process.env.OPENAI_API_KEY) });
 }));
 
+router.get('/metadata', asyncRoute(async (req, res) => {
+  const metadata = await getProductImportMetadata({ shopDomain: shopDomainFromReq(req) });
+  res.json(metadata);
+}));
+
+router.post('/profile/suggest', asyncRoute(async (req, res) => {
+  const suggestion = await suggestProductProfile({ shopDomain: shopDomainFromReq(req), draft: req.body?.draft || {} });
+  res.json({ suggestion });
+}));
+
 router.post('/url/scan', asyncRoute(async (req, res) => {
   const shopDomain = shopDomainFromReq(req);
   const url = cleanUrl(req.body?.url || '');
@@ -43,7 +57,7 @@ router.post('/invoice/analyse', asyncRoute(async (req, res) => {
     imageDataUrl: String(body.imageDataUrl || '').slice(0, 2_500_000),
     mimeType: cleanText(body.mimeType || '', 120),
     filename: cleanText(body.filename || '', 220),
-    notes: cleanText(body.notes || '', 8000),
+    notes: cleanText(body.notes || '', 12000),
     supplierUrl: cleanUrl(body.supplierUrl || ''),
     autoMatch: body.autoMatch !== false,
   });
@@ -75,6 +89,20 @@ router.post('/shopify/assign', asyncRoute(async (req, res) => {
   const body = req.body || {};
   if (!body.importId || !body.lineId || !body.productId) return res.status(400).json({ error: 'importId, lineId and productId are required.' });
   const result = await assignLine({ shopDomain: shopDomainFromReq(req), importId: body.importId, lineId: body.lineId, productId: body.productId, variantId: body.variantId || '', productTitle: body.productTitle || '', handle: body.handle || '', image: body.image || '' });
+  res.json(result);
+}));
+
+router.post('/purchase-order/draft', asyncRoute(async (req, res) => {
+  const body = req.body || {};
+  if (!body.importId) return res.status(400).json({ error: 'importId is required.' });
+  const result = await createPurchaseOrderDraft({ shopDomain: shopDomainFromReq(req), importId: body.importId, lines: Array.isArray(body.lines) ? body.lines : [] });
+  res.json(result);
+}));
+
+router.post('/purchase-order/formalise', asyncRoute(async (req, res) => {
+  const body = req.body || {};
+  if (!body.importId) return res.status(400).json({ error: 'importId is required.' });
+  const result = await formalisePurchaseOrderDraft({ shopDomain: shopDomainFromReq(req), importId: body.importId, purchaseOrder: body.purchaseOrder || {} });
   res.json(result);
 }));
 
