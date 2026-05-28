@@ -223,6 +223,8 @@ async function sendReviewRequestJob(job) {
     email: job.customerEmail,
     customerName: job.customerName || 'Customer',
     orderId: job.orderId,
+    orderName: job.orderName || '',
+    orderDate: job.fulfilledAt || job.createdAt || '',
     products: job.products || [],
     expiresDays: 45,
     testMode: Boolean(job.testMode),

@@ -55,6 +55,9 @@
       renderJobs(data.recentJobs || []);
       const banner = document.querySelector('.launch-mode-banner');
       if (banner) banner.dataset.ready = data.summary?.ready ? 'ready' : 'blocked';
+      const dot = document.getElementById('nav-status-reviews');
+      if (dot) { dot.className = `tab-status-dot ${data.summary?.ready ? 'live' : 'warning'}`; dot.title = data.summary?.ready ? 'Reviews live-ready: launch checks passed' : 'Reviews enabled but launch checks still need attention'; }
+      window.updateProductNavStatuses?.(data);
     } catch (error) {
       renderChecks([{ status:'blocked', label:'Could not load launch checklist', detail:error.message || 'Refresh the page and try again.', action:'Check the API logs in Render.' }]);
     }

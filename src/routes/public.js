@@ -41,6 +41,18 @@ function shouldAutoApprove(config, payload) {
 }
 
 
+function publicSupportSettings(config) {
+  const s = config?.supportSettings || {};
+  return {
+    supportEmail: s.supportEmail || '',
+    supportFromName: s.supportFromName || 'Customer Support',
+    supportHeading: s.supportHeading || 'Need help with your order?',
+    supportText: s.supportText || 'If something did not go to plan, tell customer service before leaving a review.',
+    supportButtonText: s.supportButtonText || 'Contact customer service',
+    missingOrderKeywords: Array.isArray(s.missingOrderKeywords) && s.missingOrderKeywords.length ? s.missingOrderKeywords : ['missing','not arrived','not received','lost','missing item','wrong item','damaged'],
+  };
+}
+
 function publicSettings(config) {
   const widgetStyles = config?.widgetStyles || {};
   return {
@@ -53,6 +65,7 @@ function publicSettings(config) {
     attributeProfiles: config?.attributeProfiles || [],
     profiles: config?.attributeProfiles || [],
     requireDeliveredTag: config?.requireDeliveredTag !== false,
+    supportSettings: publicSupportSettings(config),
   };
 }
 
@@ -438,6 +451,66 @@ router.get('/reviews/summary', async (req, res, next) => {
 });
 
 
+router.get('/reviews/seo-page', async (req, res, next) => {
+  try {
+    const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop);
+    if (!shopDomain || !isValidShopDomain(shopDomain)) return res.status(400).json({ error: 'Valid shopDomain is required.' });
+    const limit = clampNumber(req.query.limit, 1, 250, 120);
+    const q = cleanText(req.query.q || '', 120).toLowerCase();
+    const minRating = clampNumber(req.query.minRating, 0, 5, 0);
+    const itemId = cleanText(req.query.itemId || req.query.productId, 160);
+    const match = liveReviewMatch({ shopDomain });
+    if (itemId) match.itemId = { $in: itemIdCandidates(itemId) };
+    if (minRating) match.rating = { $gte: minRating };
+    let rows = await Review.find(match).sort({ createdAt: -1 }).limit(500).lean();
+    if (q) {
+      rows = rows.filter((review) => [review.headline, review.comment, review.userId, review.itemId, review.sourceLabel, ...(review.productTags || [])].filter(Boolean).join(' ').toLowerCase().includes(q));
+    }
+    rows = rows.slice(0, limit);
+    const count = rows.length;
+    const average = count ? Number((rows.reduce((sum, review) => sum + Number(review.rating || 0), 0) / count).toFixed(1)) : 0;
+    const tags = new Map();
+    const attributes = new Map();
+    rows.forEach((review) => {
+      (review.productTags || []).forEach((tag) => { const clean = cleanText(tag, 80); if (clean) tags.set(clean, (tags.get(clean) || 0) + 1); });
+      const attrs = review.attributes && typeof review.attributes === 'object' ? (review.attributes instanceof Map ? Object.fromEntries(review.attributes) : review.attributes) : {};
+      Object.entries(attrs).forEach(([key, value]) => {
+        const label = cleanText(key, 80);
+        if (!label) return;
+        const current = attributes.get(label) || { label, count: 0, total: 0 };
+        current.count += 1;
+        current.total += Number(value || 0);
+        attributes.set(label, current);
+      });
+    });
+    return res.json({
+      ok: true,
+      count,
+      average,
+      generatedAt: new Date().toISOString(),
+      filters: { q, minRating, itemId },
+      topTags: Array.from(tags.entries()).sort((a,b)=>b[1]-a[1]).slice(0,20).map(([label,count])=>({ label, count })),
+      attributeAverages: Array.from(attributes.values()).map((item)=>({ label: item.label, count: item.count, average: item.count ? Number((item.total / item.count).toFixed(1)) : 0 })).sort((a,b)=>b.count-a.count).slice(0,20),
+      reviews: rows.map(normaliseReviewForPublic),
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'CollectionPage',
+        name: 'Customer Reviews',
+        description: 'Verified customer reviews, ratings and product feedback.',
+        review: rows.slice(0,50).map((review)=>({
+          '@type': 'Review',
+          reviewRating: { '@type': 'Rating', ratingValue: Number(review.rating || 0), bestRating: 5, worstRating: 1 },
+          author: { '@type': 'Person', name: review.isAnonymous ? 'Verified customer' : (review.userId || 'Customer') },
+          datePublished: review.createdAt,
+          name: review.headline || 'Customer review',
+          reviewBody: review.comment || '',
+        })),
+      },
+    });
+  } catch (error) { next(error); }
+});
+
+
 router.get('/reviews/:itemId', async (req, res, next) => {
   try {
     const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop);
@@ -556,12 +629,14 @@ router.get('/magic-link/order', async (req, res, next) => {
         return res.status(400).json({ error: verified.error || 'Invalid review verification link.' });
       }
     }
+    const config = await getSettings(shopDomain);
     const queryProducts = productsFromQuery(req.query);
     const tokenProducts = tokenPayload?.products?.map(normaliseProduct).filter((product) => product.id) || [];
     const products = queryProducts.length ? queryProducts : tokenProducts;
     if (!products.length) return res.status(404).json({ error: 'No review products were included in this link.' });
     return res.json({
       orderId: cleanText(tokenPayload?.orderId || req.query.orderId || req.query.order || '1001', 120),
+      orderDate: cleanText(tokenPayload?.orderDate || req.query.orderDate || req.query.createdAt || '', 80),
       customerName: cleanText(tokenPayload?.customerName || req.query.customer || req.query.name || 'Customer', 120),
       customerEmail: cleanEmail(tokenPayload?.email || req.query.email),
       products,
@@ -569,7 +644,7 @@ router.get('/magic-link/order', async (req, res, next) => {
       delivered: true,
       verifiedLink: tokenVerified && !tokenPayload?.testMode,
       preview: tokenPayload?.testMode || req.query.preview === '1' || req.query.preview === 'true' || req.query.test === '1',
-      support: {},
+      support: publicSupportSettings(config),
     });
   } catch (error) {
     next(error);
@@ -583,9 +658,13 @@ router.post('/support-requests', async (req, res, next) => {
     const orderId = cleanText(req.body.orderId, 120);
     const email = cleanEmail(req.body.email);
     const customerName = cleanText(req.body.customerName || 'Customer', 140);
+    const orderDateRaw = cleanText(req.body.orderDate || '', 80);
+    const orderDate = orderDateRaw ? new Date(orderDateRaw) : null;
+    const issueType = cleanText(req.body.issueType || '', 80);
     const subject = cleanText(req.body.subject || 'Customer service request before review', 180);
     const message = cleanText(req.body.message || '', 5000);
-    const products = Array.isArray(req.body.products) ? req.body.products.slice(0, 20).map((product) => ({ id: cleanText(product.id || product.productId, 180), title: cleanText(product.title || 'Product', 200) })) : [];
+    const products = Array.isArray(req.body.products) ? req.body.products.slice(0, 20).map((product) => ({ id: cleanText(product.id || product.productId, 180), productId: cleanText(product.productId || product.id, 180), variantId: cleanText(product.variantId || '', 180), title: cleanText(product.title || product.name || 'Product', 200), quantity: clampNumber(product.quantity, 1, 999, 1) })) : [];
+    const affectedProducts = Array.isArray(req.body.affectedProducts) ? req.body.affectedProducts.slice(0, 20).map((product) => ({ id: cleanText(product.id || product.productId, 180), productId: cleanText(product.productId || product.id, 180), title: cleanText(product.title || product.name || 'Product', 200), quantity: clampNumber(product.quantity, 1, 999, 1) })) : [];
     if (!subject || !message) return res.status(400).json({ error: 'Subject and message are required.' });
 
     const supportRequest = await SupportRequest.create({
@@ -593,9 +672,12 @@ router.post('/support-requests', async (req, res, next) => {
       orderId,
       email,
       customerName,
+      orderDate: orderDate && !Number.isNaN(orderDate.getTime()) ? orderDate : null,
       subject,
       message,
       products,
+      affectedProducts,
+      issueType,
       reviewToken: cleanText(req.body.reviewToken || '', 3000),
       userAgent: cleanText(req.headers['user-agent'], 500),
       ipHash: hashValue(getClientIp(req)),
@@ -617,13 +699,16 @@ router.post('/support-requests', async (req, res, next) => {
       ipHash: hashValue(getClientIp(req)),
     });
 
-    const provider = await EmailProviderSettings.findOne({ shopDomain, enabled: true }).lean();
-    if (provider?.smtpPassEncrypted && (provider.replyToEmail || provider.fromEmail || provider.smtpUser)) {
-      const to = provider.replyToEmail || provider.fromEmail || provider.smtpUser;
+    const [provider, config] = await Promise.all([EmailProviderSettings.findOne({ shopDomain, enabled: true }).lean(), getSettings(shopDomain)]);
+    const supportEmail = cleanEmail(config?.supportSettings?.supportEmail || '');
+    if (provider?.smtpPassEncrypted && (supportEmail || provider.replyToEmail || provider.fromEmail || provider.smtpUser)) {
+      const to = supportEmail || provider.replyToEmail || provider.fromEmail || provider.smtpUser;
       const fromEmail = provider.fromEmail || provider.smtpUser;
       const fromName = provider.fromName || 'Nectar Reviews';
-      const productLines = products.length ? products.map((product) => `<li>${product.title || product.id || 'Product'}</li>`).join('') : '<li>No product list supplied.</li>';
-      const html = `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.55;color:#111827;max-width:680px;margin:0 auto;padding:24px;"><h2>Customer service request before review</h2><p>A customer used the Nectar support modal before leaving a review.</p><p><strong>Customer:</strong> ${customerName || 'Customer'}<br><strong>Email:</strong> ${email || 'Not supplied'}<br><strong>Order:</strong> ${orderId || 'Not supplied'}</p><p><strong>Subject:</strong> ${subject}</p><p style="white-space:pre-wrap;">${message.replace(/[&<>]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</p><h3>Products</h3><ul>${productLines}</ul><p style="color:#667085;font-size:12px;">Saved in Nectar support_requests as ${supportRequest._id}.</p></div>`;
+      const productLines = products.length ? products.map((product) => `<li>${product.title || product.id || 'Product'}${product.quantity ? ` × ${product.quantity}` : ''}</li>`).join('') : '<li>No product list supplied.</li>';
+      const affectedLines = affectedProducts.length ? affectedProducts.map((product) => `<li>${product.title || product.id || 'Product'}${product.quantity ? ` × ${product.quantity}` : ''}</li>`).join('') : '<li>Customer did not select a specific product.</li>';
+      const safeMessage = message.replace(/[&<>]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+      const html = `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.55;color:#111827;max-width:720px;margin:0 auto;padding:24px;"><h2>Customer service request before review</h2><p>A customer used the Nectar support modal before leaving a review.</p><p><strong>Order ID:</strong> ${orderId || 'Not supplied'}<br><strong>Order date:</strong> ${orderDateRaw || 'Not supplied'}<br><strong>Customer name:</strong> ${customerName || 'Customer'}<br><strong>Customer email:</strong> ${email || 'Not supplied'}<br><strong>Issue type:</strong> ${issueType || 'General support'}</p><p><strong>Subject:</strong> ${subject}</p><p style="white-space:pre-wrap;">${safeMessage}</p><h3>Items in order</h3><ul>${productLines}</ul><h3>Items flagged by customer</h3><ul>${affectedLines}</ul><p style="color:#667085;font-size:12px;">Saved in Nectar support_requests as ${supportRequest._id}.</p></div>`;
       try {
         const transporter = nodemailer.createTransport({
           host: provider.smtpHost,

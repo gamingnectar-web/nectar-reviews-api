@@ -1,11 +1,14 @@
 .env.example
 FILE_TREE.txt
 README.md
+Shopify-Liquid/assets/nectar-all-reviews-page.css
+Shopify-Liquid/assets/nectar-all-reviews-page.js
 Shopify-Liquid/assets/nectar-cart-rewards.css
 Shopify-Liquid/assets/nectar-cart-rewards.js
 Shopify-Liquid/assets/nectar-review-page.css
 Shopify-Liquid/assets/nectar-review-page.js
 Shopify-Liquid/assets/widget.js
+Shopify-Liquid/blocks/all_reviews_seo_page.liquid
 Shopify-Liquid/blocks/bulk_review_page.liquid
 Shopify-Liquid/blocks/carousel.liquid
 Shopify-Liquid/blocks/cart-rewards-widget.liquid
@@ -21,6 +24,7 @@ docs/DELIVERY_GATED_REVIEWS_SUPPORT_MODULES.md
 docs/DISCOUNTS_AND_LOYALTY_UPDATE.md
 docs/FLOW_ASSISTANT_AND_DISCOUNT_CODES.md
 docs/FLOW_PROVIDER_RESPONSIVE_FIX.md
+docs/LIVE_STATUS_SUPPORT_SEO_UPDATE.md
 docs/MESSAGING_ANALYTICS_VISUAL_POLISH_UPDATE.md
 docs/MESSAGING_POLISH_UPDATE.md
 docs/MIGRATION_CENTRE_AND_WIDGET_LIBRARY.md
@@ -45,11 +49,14 @@ extensions/checkout-ui-extension/locales/en.default.json
 extensions/checkout-ui-extension/shopify.extension.toml
 extensions/checkout-ui-extension/src/Checkout.jsx
 extensions/review-widget-extension/README.md
+extensions/review-widget-extension/assets/nectar-all-reviews-page.css
+extensions/review-widget-extension/assets/nectar-all-reviews-page.js
 extensions/review-widget-extension/assets/nectar-cart-rewards.css
 extensions/review-widget-extension/assets/nectar-cart-rewards.js
 extensions/review-widget-extension/assets/nectar-review-page.css
 extensions/review-widget-extension/assets/nectar-review-page.js
 extensions/review-widget-extension/assets/widget.js
+extensions/review-widget-extension/blocks/all_reviews_seo_page.liquid
 extensions/review-widget-extension/blocks/bulk_review_page.liquid
 extensions/review-widget-extension/blocks/carousel.liquid
 extensions/review-widget-extension/blocks/cart-rewards-widget.liquid

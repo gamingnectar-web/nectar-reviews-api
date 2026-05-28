@@ -1,0 +1,33 @@
+<section class="nectar-seo-reviews-page" data-api-url="{{ block.settings.app_url | escape }}/api" data-shop-domain="{{ shop.permanent_domain }}" data-title="{{ block.settings.title | escape }}" data-intro="{{ block.settings.intro | escape }}" data-limit="{{ block.settings.limit }}">
+  <div class="nectar-seo-reviews__inner">
+    <header class="nectar-seo-reviews__header">
+      <p class="nectar-seo-reviews__eyebrow">Customer proof</p>
+      <h1>{{ block.settings.title }}</h1>
+      <p>{{ block.settings.intro }}</p>
+    </header>
+    <form class="nectar-seo-reviews__filters" data-nectar-seo-filters>
+      <input type="search" name="q" placeholder="Search reviews, flavours, products or keywords">
+      <select name="minRating"><option value="0">All ratings</option><option value="5">5 stars</option><option value="4">4 stars & up</option><option value="3">3 stars & up</option></select>
+      <button type="submit">Search reviews</button>
+    </form>
+    <div data-nectar-seo-summary class="nectar-seo-reviews__summary">Loading reviews…</div>
+    <div data-nectar-seo-tags class="nectar-seo-reviews__chips"></div>
+    <div data-nectar-seo-list class="nectar-seo-reviews__list"></div>
+  </div>
+</section>
+
+{{ 'nectar-all-reviews-page.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'nectar-all-reviews-page.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "All Reviews SEO Page",
+  "target": "section",
+  "settings": [
+    { "type": "text", "id": "app_url", "label": "Nectar app URL" },
+    { "type": "text", "id": "title", "label": "Page title", "default": "Customer Reviews" },
+    { "type": "textarea", "id": "intro", "label": "Intro", "default": "Search real customer reviews by product, rating, flavour profile and feedback." },
+    { "type": "range", "id": "limit", "min": 20, "max": 200, "step": 10, "label": "Maximum reviews", "default": 120 }
+  ]
+}
+{% endschema %}

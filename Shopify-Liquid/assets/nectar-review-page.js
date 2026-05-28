@@ -30,6 +30,7 @@
     buttonText: root.dataset.supportButton || 'Get help with this order',
     email: root.dataset.supportEmail || '',
     url: root.dataset.supportUrl || '/pages/contact',
+    missingKeywords: ['missing','not arrived','not received','lost','missing item','wrong item','damaged'],
   };
 
   function escapeHtml(value) {
@@ -96,6 +97,7 @@
       if (!res.ok) return;
       appConfig = await res.json();
       const styles = appConfig.widgetStyles || appConfig.styles || {};
+      if (appConfig.supportSettings) supportConfig = { ...supportConfig, ...appConfig.supportSettings, heading: appConfig.supportSettings.supportHeading || supportConfig.heading, text: appConfig.supportSettings.supportText || supportConfig.text, buttonText: appConfig.supportSettings.supportButtonText || supportConfig.buttonText, email: appConfig.supportSettings.supportEmail || supportConfig.email, missingKeywords: appConfig.supportSettings.missingOrderKeywords || supportConfig.missingKeywords };
       if (styles.primaryColor) root.style.setProperty('--primary', styles.primaryColor);
       if (styles.starColor) root.style.setProperty('--accent', styles.starColor);
       root.style.setProperty('--nectar-review-star-size', `${Number(styles.reviewStarSize || 52)}px`);
@@ -125,6 +127,7 @@
         orderId: previewPayload.orderId || previewPayload.order?.number || params.get('order') || '1001',
         customerName: previewPayload.customerName || previewPayload.customer?.name || params.get('customer') || 'Preview Customer',
         customerEmail: previewPayload.customerEmail || previewPayload.customer?.email || params.get('email') || 'preview@example.com',
+        orderDate: previewPayload.orderDate || previewPayload.order?.date || params.get('orderDate') || '',
         products: previewPayload.products || [],
         delivered: true,
         preview: true,
@@ -139,6 +142,7 @@
         orderId: params.get('orderId') || params.get('order') || '1001',
         customerName: params.get('customer') || params.get('name') || 'Customer',
         customerEmail: params.get('email') || '',
+        orderDate: params.get('orderDate') || params.get('createdAt') || '',
         products: queryProducts,
         delivered: true,
         preview: params.get('test') === '1',
@@ -460,7 +464,25 @@
     }
   }
 
-  function openSupportModal() { document.getElementById('nectar-support-modal-wrap')?.classList.add('open'); }
+  function supportTextCombined() { return `${document.getElementById('nectar-support-subject')?.value || ''} ${document.getElementById('nectar-support-message')?.value || ''}`.toLowerCase(); }
+  function renderSupportContext() {
+    const box = document.getElementById('nectar-support-order-context');
+    if (!box) return;
+    const orderDate = orderData?.orderDate ? `<br><strong>Order date:</strong> ${escapeHtml(orderData.orderDate)}` : '';
+    const itemList = products.length ? `<br><strong>Items:</strong> ${products.map((p)=>escapeHtml(p.title || p.name || p.id)).join(', ')}` : '';
+    box.innerHTML = `<strong>Order ID:</strong> ${escapeHtml(orderData?.orderId || params.get('order') || 'Not supplied')}${orderDate}<br><strong>Customer:</strong> ${escapeHtml(orderData?.customerName || 'Customer')}<br><strong>Email:</strong> ${escapeHtml(orderData?.customerEmail || params.get('email') || 'Not supplied')}${itemList}`;
+  }
+  function renderAffectedProducts() {
+    const box = document.getElementById('nectar-support-affected-products');
+    if (!box) return;
+    const keywords = Array.isArray(supportConfig.missingKeywords) ? supportConfig.missingKeywords : [];
+    const text = supportTextCombined();
+    const shouldShow = keywords.some((word)=> word && text.includes(String(word).toLowerCase()));
+    box.hidden = !shouldShow || !products.length;
+    if (box.hidden) return;
+    box.innerHTML = `<strong>Which item is affected?</strong>${products.map((product, index)=>`<label><input type="checkbox" data-support-product-index="${index}"> ${escapeHtml(product.title || product.name || product.id || 'Product')}</label>`).join('')}`;
+  }
+  function openSupportModal() { renderSupportContext(); renderAffectedProducts(); document.getElementById('nectar-support-modal-text').textContent = supportConfig.text || document.getElementById('nectar-support-modal-text')?.textContent || ''; document.getElementById('nectar-support-modal-wrap')?.classList.add('open'); }
   function closeSupportModal() { document.getElementById('nectar-support-modal-wrap')?.classList.remove('open'); }
 
   async function submitSupportRequest() {
@@ -471,7 +493,8 @@
     btn.disabled = true;
     btn.textContent = 'Sending…';
     try {
-      const res = await fetch(`${API}/support-requests`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shopDomain: SHOP_DOMAIN, orderId: orderData?.orderId || params.get('order') || '', email: orderData?.customerEmail || params.get('email') || '', customerName: orderData?.customerName || 'Customer', subject, message, reviewToken: params.get('token') || params.get('reviewToken') || '', products: products.map((product) => ({ id: product.id, productId: product.productId, title: product.title })).slice(0, 20) }) });
+      const affectedProducts = Array.from(document.querySelectorAll('[data-support-product-index]:checked')).map((input)=>products[Number(input.dataset.supportProductIndex)]).filter(Boolean).map((product)=>({ id: product.id, productId: product.productId, title: product.title, quantity: product.quantity })).slice(0,20);
+      const res = await fetch(`${API}/support-requests`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shopDomain: SHOP_DOMAIN, orderId: orderData?.orderId || params.get('order') || '', orderDate: orderData?.orderDate || params.get('orderDate') || '', email: orderData?.customerEmail || params.get('email') || '', customerName: orderData?.customerName || 'Customer', subject, message, issueType: affectedProducts.length ? 'missing_or_item_issue' : 'general', affectedProducts, reviewToken: params.get('token') || params.get('reviewToken') || '', products: products.map((product) => ({ id: product.id, productId: product.productId, variantId: product.variantId, title: product.title, quantity: product.quantity })).slice(0, 20) }) });
       if (!res.ok) throw new Error('Support request failed');
       closeSupportModal();
       alert('Your message has been sent to customer service.');
@@ -523,6 +546,8 @@
   ui.submit?.addEventListener('click', submitReviews);
   document.getElementById('nectar-help-button')?.addEventListener('click', openSupportModal);
   document.getElementById('nectar-support-submit')?.addEventListener('click', submitSupportRequest);
+  document.getElementById('nectar-support-subject')?.addEventListener('input', renderAffectedProducts);
+  document.getElementById('nectar-support-message')?.addEventListener('input', renderAffectedProducts);
   document.querySelectorAll('[data-nectar-close-support]').forEach((btn) => btn.addEventListener('click', closeSupportModal));
   document.getElementById('nectar-support-modal-wrap')?.addEventListener('click', function (event) { if (event.target === this) closeSupportModal(); });
   boot();

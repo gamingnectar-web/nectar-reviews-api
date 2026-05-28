@@ -322,6 +322,7 @@ window.load = async function() {
     window.loadStats();
     window.loadModules();
     window.loadMigrationHub?.();
+    window.loadReviewsLaunchChecklist?.();
     window.loadLoyaltyConfig?.();
     window.generateFlowCode();
   } catch (error) {
@@ -345,6 +346,13 @@ function hydrateSettings(config) {
   document.getElementById('set-seo').checked = config.seo?.richSnippets !== false;
   currentAttributes = Array.isArray(config.attributeProfiles) ? config.attributeProfiles : [];
 
+  if (config.supportSettings) {
+    setValueIfExists('support-email', config.supportSettings.supportEmail || '');
+    setValueIfExists('support-heading', config.supportSettings.supportHeading || 'Need help with your order?');
+    setValueIfExists('support-text', config.supportSettings.supportText || 'If something did not go to plan, tell customer service before leaving a review.');
+    setValueIfExists('support-button-text', config.supportSettings.supportButtonText || 'Contact customer service');
+    setValueIfExists('support-missing-keywords', Array.isArray(config.supportSettings.missingOrderKeywords) ? config.supportSettings.missingOrderKeywords.join(', ') : 'missing, not arrived, not received, lost, missing item, wrong item, damaged');
+  }
   if (config.widgetStyles) {
     document.getElementById('style-title').value = config.widgetStyles.widgetTitle || 'Customer Reviews';
     document.getElementById('style-primary').value = config.widgetStyles.primaryColor || '#000000';
@@ -856,6 +864,13 @@ window.saveSettings = async function() {
     autoApproveMinStars: parseInt(document.getElementById('set-min-stars').value, 10),
     attributeProfiles: currentAttributes,
     seo: { richSnippets: document.getElementById('set-seo').checked },
+    supportSettings: {
+      supportEmail: getValue('support-email', ''),
+      supportHeading: getValue('support-heading', 'Need help with your order?'),
+      supportText: getValue('support-text', 'If something did not go to plan, tell customer service before leaving a review.'),
+      supportButtonText: getValue('support-button-text', 'Contact customer service'),
+      missingOrderKeywords: getValue('support-missing-keywords', 'missing, not arrived, not received, lost, missing item, wrong item, damaged').split(',').map((item)=>item.trim()).filter(Boolean),
+    },
     widgetStyles: {
       widgetTitle: getValue('style-title', 'Customer Reviews'),
       primaryColor: getValue('style-primary', '#000000'),

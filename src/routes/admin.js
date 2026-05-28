@@ -52,8 +52,9 @@ function defaultReviewWidgets() {
     { key: 'reviews_widget', name: 'Reviews Widget', status: 'live', enabled: true, placement: 'product_page', description: 'Full customer review section for product pages.', renderSnippet: "{% render 'bulk_review_page', product: product %}" },
     { key: 'star_rating', name: 'Star Rating', status: 'live', enabled: true, placement: 'product_card', description: 'Compact rating stars for product and collection cards.', renderSnippet: "{% render 'product_card_stars', product: product %}" },
     { key: 'reviews_carousel', name: 'Reviews Carousel', status: 'live', enabled: false, placement: 'homepage', description: 'Global carousel of accepted reviews for landing pages.', renderSnippet: "{% render 'carousel' %}" },
+    { key: 'seo_reviews_page', name: 'All Reviews SEO Page', status: 'live', enabled: false, placement: 'Dedicated reviews page', description: 'Searchable approved reviews page for customers, SEO and AI discovery.', renderSnippet: "{% render 'all_reviews_seo_page' %}" },
     { key: 'reviews_tab', name: 'Reviews Tab', status: 'draft', enabled: false, placement: 'floating_tab', description: 'Floating review tab for store-wide social proof.', renderSnippet: "<div data-nectar-review-tab></div>" },
-    { key: 'seo_page', name: 'All Reviews SEO Page', status: 'draft', enabled: false, placement: 'page', description: 'Dedicated review landing page for organic search and imported review archives.', renderSnippet: "{% render 'bulk_review_page' %}" },
+    { key: 'review_highlights', name: 'Review Highlights', status: 'coming_soon', enabled: false, placement: 'product_page', description: 'AI-style summary snippets and review themes. Planned for a later release.', renderSnippet: '' },
     { key: 'qa_widget', name: 'Q&A Widget', status: 'coming_soon', enabled: false, placement: 'product_page', description: 'Product questions and answers. Planned but not active yet.', renderSnippet: '' },
   ];
 }
@@ -584,6 +585,14 @@ router.patch('/settings', async (req, res, next) => {
         }))
         : [],
       seo: { richSnippets: body.seo?.richSnippets !== false },
+      supportSettings: {
+        supportEmail: cleanEmail(body.supportSettings?.supportEmail),
+        supportFromName: cleanText(body.supportSettings?.supportFromName || 'Customer Support', 120),
+        supportHeading: cleanText(body.supportSettings?.supportHeading || 'Need help with your order?', 180),
+        supportText: cleanText(body.supportSettings?.supportText || 'If something did not go to plan, tell customer service before leaving a review.', 600),
+        supportButtonText: cleanText(body.supportSettings?.supportButtonText || 'Contact customer service', 80),
+        missingOrderKeywords: Array.isArray(body.supportSettings?.missingOrderKeywords) ? body.supportSettings.missingOrderKeywords.slice(0, 30).map((item) => cleanText(item, 80)).filter(Boolean) : ['missing','not arrived','not received','lost','missing item','wrong item','damaged'],
+      },
       widgetStyles: {
         widgetTitle: cleanText(body.widgetStyles?.widgetTitle || 'Customer Reviews', 120),
         primaryColor: cleanText(body.widgetStyles?.primaryColor || '#000000', 20),
@@ -991,7 +1000,16 @@ router.post('/campaign-reminder', async (req, res, next) => {
     const transporter = createTransporterFromSettings(settings);
     const fromName = settings.fromName || 'Store Reviews';
     const fromEmail = settings.fromEmail || settings.smtpUser;
-    const products = itemId ? [{ id: itemId, productId: itemId, title: productTitle }] : [{ id: `order-${orderId || Date.now()}`, productId: `order-${orderId || Date.now()}`, title: productTitle || 'Recent order' }];
+    let products = itemId ? [{ id: itemId, productId: itemId, title: productTitle }] : [];
+    if (!products.length) {
+      const job = await ReviewRequestJob.findOne({ shopDomain, customerEmail: email, ...(orderId ? { orderId } : {}) }).sort({ createdAt: -1 }).lean().catch(() => null);
+      if (job?.products?.length) products = job.products.map((product) => ({ id: product.productId || product.id, productId: product.productId || product.id, variantId: product.variantId || '', title: product.title || 'Purchased product' })).filter((product) => product.id);
+    }
+    if (!products.length) {
+      const review = await Review.findOne({ shopDomain, email, ...(orderId ? { orderId } : {}) }).sort({ createdAt: -1 }).lean().catch(() => null);
+      if (review?.itemId) products = [{ id: review.itemId, productId: review.itemId, title: review.headline || productTitle || 'Recent purchase' }];
+    }
+    if (!products.length) products = [{ id: `order-${orderId || Date.now()}`, productId: `order-${orderId || Date.now()}`, title: productTitle || 'Recent order' }];
     const token = createReviewToken({ shopDomain, email, customerName: '', orderId, products, expiresDays: 14, testMode: false });
     if (!token) return res.status(400).json({ error: 'Review token could not be created. Set EMAIL_CREDENTIAL_SECRET or SHOPIFY_API_SECRET.' });
     const reviewUrl = `https://${shopDomain}/pages/leave-review?shopDomain=${encodeURIComponent(shopDomain)}&mode=${itemId ? 'product' : 'order'}&order_id=${encodeURIComponent(orderId)}&email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}${itemId ? `&product_id=${encodeURIComponent(itemId)}` : ''}`;

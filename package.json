@@ -1,7 +1,7 @@
 {
   "name": "reviews-platform-api",
-  "version": "1.2.19-delivery-gated-support-modules",
-  "description": "Reviews Platform API with migration centre, native delivery-tag-gated review scheduling, support modal and removable email modules",
+  "version": "1.2.20-live-status-support-seo",
+  "description": "Reviews Platform API with live status badges, support settings, colour picker modules, fixed reminders and SEO reviews page",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

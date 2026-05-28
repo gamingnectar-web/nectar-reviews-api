@@ -75,9 +75,11 @@
     <div class="nectar-modal" role="dialog" aria-modal="true">
       <button type="button" class="nectar-modal-close" data-nectar-close-support>×</button>
       <h2>Contact Customer Service</h2>
-      <p>Use this if there’s an issue with delivery, damage, fit, or anything else you’d like help with before leaving a review.</p>
+      <p id="nectar-support-modal-text">Use this if there’s an issue with delivery, damage, fit, or anything else you’d like help with before leaving a review.</p>
+      <div id="nectar-support-order-context" class="nectar-support-context"></div>
       <label>Subject<input id="nectar-support-subject" type="text"></label>
       <label>Message<textarea id="nectar-support-message" placeholder="Tell us what happened…"></textarea></label>
+      <div id="nectar-support-affected-products" class="nectar-affected-products" hidden></div>
       <button id="nectar-support-submit" type="button" class="nectar-button">Send message to customer service</button>
     </div>
   </div>
