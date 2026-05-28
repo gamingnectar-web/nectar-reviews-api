@@ -364,6 +364,7 @@ const shopSchema = new mongoose.Schema({
     discounts: { enabled: { type: Boolean, default: false } },
     loyalty: { enabled: { type: Boolean, default: false } },
     referrals: { enabled: { type: Boolean, default: false } },
+    productCreationImport: { enabled: { type: Boolean, default: true } },
   },
 }, { timestamps: true });
 

@@ -1,7 +1,7 @@
 {
   "name": "reviews-platform-api",
-  "version": "1.2.23-v28-product-nav-migration-assistant-fix",
-  "description": "Reviews Platform API v27: v25/v26 functionality retained with stable product nav, robust migration importer, AI modules and status dots.",
+  "version": "1.2.24-v29-product-creation-import",
+  "description": "Reviews Platform API v29: v28 navigation retained with PRODUCT CREATION & PRODUCT IMPORT selectable product module.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

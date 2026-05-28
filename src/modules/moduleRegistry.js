@@ -19,6 +19,16 @@ const modules = [
     adminFolder: 'public/modules/discounts',
     apiNamespace: '/api/admin/discounts'
   },
+
+  {
+    id: 'product-creation-import',
+    productSlug: 'product-creation-import',
+    label: 'PRODUCT CREATION & PRODUCT IMPORT',
+    description: 'Create Shopify draft products from external URLs, invoice images, manual entry, or matched supplier lines.',
+    status: 'beta',
+    adminFolder: 'public/modules/product-creation-import',
+    apiNamespace: '/api/admin/product-creation-import'
+  },
   {
     id: 'cart-rewards',
     productSlug: 'cart-rewards',

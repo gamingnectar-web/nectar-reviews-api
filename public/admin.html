@@ -1437,6 +1437,91 @@
         <div id="cart-rewards-admin-mount" class="panel"><p class="muted">Cart Rewards is beta. Keep it disabled while Reviews goes live unless its tests pass.</p></div>
       </section>
 
+
+      <section id="v-product-creation-import" class="view">
+        <h2 class="page-title">PRODUCT CREATION &amp; PRODUCT IMPORT</h2>
+        <div class="pci-hero">
+          <div class="pci-card">
+            <h3>Create products from URLs, invoices or manual data</h3>
+            <p>Scan an external product page, upload an invoice image, match invoice lines to existing Shopify products, or create new Shopify draft products safely. Products are created as drafts first so they can be checked before publishing.</p>
+            <div class="pci-tabs" role="tablist">
+              <button type="button" class="pci-tab active" data-pci-tab="url" onclick="window.pciTab('url')">URL Import</button>
+              <button type="button" class="pci-tab" data-pci-tab="invoice" onclick="window.pciTab('invoice')">Invoice Import</button>
+              <button type="button" class="pci-tab" data-pci-tab="manual" onclick="window.pciTab('manual')">Manual Create</button>
+              <button type="button" class="pci-tab" data-pci-tab="history" onclick="window.pciTab('history')">History</button>
+            </div>
+          </div>
+          <div class="pci-card">
+            <h3>Connection status</h3>
+            <div id="pci-health" class="pci-status">Loading product import status…</div>
+          </div>
+        </div>
+
+        <div class="pci-card pci-pane active" id="pci-pane-url">
+          <h3>URL import</h3>
+          <p>Paste a public supplier/product page. The app extracts JSON-LD, Open Graph and page data into an editable Shopify draft.</p>
+          <label class="pci-label" for="pci-url-input">External product URL</label>
+          <input id="pci-url-input" class="pci-input" placeholder="https://supplier.example/products/example-product" />
+          <div class="pci-actions"><button id="pci-scan-url" class="primary-btn" type="button">Scan product URL</button></div>
+          <div id="pci-url-status" class="pci-status">Waiting for a product URL.</div>
+          <div class="pci-form-grid" style="margin-top:18px;">
+            <div><label class="pci-label">Title</label><input id="pci-url-title" class="pci-input"></div>
+            <div><label class="pci-label">Vendor / Brand</label><input id="pci-url-vendor" class="pci-input"></div>
+            <div><label class="pci-label">Product Type</label><input id="pci-url-type" class="pci-input"></div>
+            <div><label class="pci-label">Retail Price</label><input id="pci-url-price" class="pci-input"></div>
+            <div><label class="pci-label">Price Paid / Cost</label><input id="pci-url-cost" class="pci-input"></div>
+            <div><label class="pci-label">SKU</label><input id="pci-url-sku" class="pci-input"></div>
+            <div><label class="pci-label">Barcode</label><input id="pci-url-barcode" class="pci-input"></div>
+            <div><label class="pci-label">Image URL</label><input id="pci-url-image" class="pci-input"></div>
+            <div class="full"><label class="pci-label">Source URL</label><input id="pci-url-source" class="pci-input"></div>
+            <div class="full"><label class="pci-label">Tags</label><input id="pci-url-tags" class="pci-input" placeholder="supplier-import, url-import"></div>
+            <div class="full"><label class="pci-label">Description</label><textarea id="pci-url-description" class="pci-textarea"></textarea></div>
+          </div>
+          <div id="pci-url-draft"></div>
+        </div>
+
+        <div class="pci-card pci-pane" id="pci-pane-invoice">
+          <h3>Invoice import</h3>
+          <p>Upload a picture of a supplier invoice. The app extracts product lines, paid cost, titles and codes, then tries to match each line to existing Shopify products. Unmatched lines can be assigned manually or created as new draft products.</p>
+          <div class="pci-form-grid">
+            <div><label class="pci-label">Invoice image / picture</label><input id="pci-invoice-file" type="file" class="pci-input" accept="image/*"></div>
+            <div><label class="pci-label">Supplier URL</label><input id="pci-invoice-supplier-url" class="pci-input" placeholder="https://supplier.example"></div>
+            <div class="full"><label class="pci-label">Fallback notes / invoice lines</label><textarea id="pci-invoice-notes" class="pci-textarea" placeholder="Example: Product name SKU123 qty 2 £4.50"></textarea></div>
+          </div>
+          <div class="pci-actions"><button id="pci-analyse-invoice" class="primary-btn" type="button">Analyse invoice &amp; match products</button></div>
+          <div id="pci-invoice-status" class="pci-status">Waiting for an invoice image or notes.</div>
+          <div id="pci-invoice-lines" style="margin-top:18px;"></div>
+        </div>
+
+        <div class="pci-card pci-pane" id="pci-pane-manual">
+          <h3>Manual create</h3>
+          <p>Create a Shopify draft product directly when invoice/page extraction does not have enough information.</p>
+          <div class="pci-form-grid">
+            <div><label class="pci-label">Title</label><input id="pci-manual-title" class="pci-input"></div>
+            <div><label class="pci-label">Vendor / Brand</label><input id="pci-manual-vendor" class="pci-input"></div>
+            <div><label class="pci-label">Product Type</label><input id="pci-manual-type" class="pci-input"></div>
+            <div><label class="pci-label">Retail Price</label><input id="pci-manual-price" class="pci-input"></div>
+            <div><label class="pci-label">Price Paid / Cost</label><input id="pci-manual-cost" class="pci-input"></div>
+            <div><label class="pci-label">SKU</label><input id="pci-manual-sku" class="pci-input"></div>
+            <div><label class="pci-label">Barcode</label><input id="pci-manual-barcode" class="pci-input"></div>
+            <div><label class="pci-label">Image URL</label><input id="pci-manual-image" class="pci-input"></div>
+            <div class="full"><label class="pci-label">Source URL</label><input id="pci-manual-source" class="pci-input"></div>
+            <div class="full"><label class="pci-label">Tags</label><input id="pci-manual-tags" class="pci-input" placeholder="manual-import, supplier-name"></div>
+            <div class="full"><label class="pci-label">Description</label><textarea id="pci-manual-description" class="pci-textarea"></textarea></div>
+          </div>
+          <div class="pci-actions"><button id="pci-create-manual" class="primary-btn" type="button">Create Shopify draft product</button></div>
+          <div id="pci-manual-status" class="pci-status">Manual drafts are created unpublished in Shopify.</div>
+        </div>
+
+        <div class="pci-card pci-pane" id="pci-pane-history">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
+            <div><h3>Import history</h3><p>Recent URL, invoice and manual product creation activity for this shop.</p></div>
+            <button id="pci-history-refresh" type="button" class="secondary-btn">Refresh</button>
+          </div>
+          <div id="pci-history-box" class="pci-status">Open this tab to load history.</div>
+        </div>
+      </section>
+
       <section id="v-referrals" class="view"><h2 class="page-title">Referrals</h2><div class="panel lock-box"><h3>Referrals module placeholder</h3><p class="muted">Reserved for referral tracking, advocate links, friend offers, and attribution. The module is intentionally inactive while the foundation is secured.</p></div></section>
 
 
@@ -1501,6 +1586,7 @@
     </main>
   </div>
 
+  <link rel="stylesheet" href="/product-creation-import.css?v=pci-v1">
   <script src="/admin.js?v=secure-6"></script>
   <script src="/admin-review-manager-enhancements.js?v=secure-6"></script>
   <script src="/nectar-score-notch-fix.js?v=secure-6"></script>
@@ -1510,6 +1596,7 @@
   <script src="/admin-ai-module-builder.js?v=ai-modules-1" defer></script>
   <script src="/admin-review-migrations.js?v=review-migrations-v28" defer></script>
   <script src="/admin-help-drawer.js?v=context-help-v28" defer></script>
+  <script src="/product-creation-import.js?v=pci-v1" defer></script>
   <script src="/reviews-launch-checklist.js?v=launch-v28" defer></script>
   <script src="/admin-product-context.js?v=context-nav-v28" defer></script>
   <script src="/admin-loyalty-foundation.js?v=secure-24"></script>

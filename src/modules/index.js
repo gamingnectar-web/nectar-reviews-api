@@ -2,6 +2,7 @@ const { listModules } = require('./moduleRegistry');
 const { startReviewRequestJobs } = require('./reviews');
 const { mountCartRewardsModule, startCartRewardsJobs } = require('./cart-rewards');
 const { mountDiscountsModule, startDiscountJobs } = require('./discounts');
+const { mountProductCreationImportModule, startProductCreationImportJobs } = require('./product-creation-import');
 
 let moduleJobsStarted = false;
 
@@ -18,6 +19,7 @@ function mountPlatformModules(app, deps = {}) {
   // Discounts and Cart Rewards are folderised modules mounted here.
   mountDiscountsModule(app, deps);
   mountCartRewardsModule(app, deps);
+  mountProductCreationImportModule(app, deps);
 }
 
 function startPlatformModuleJobs() {
@@ -26,6 +28,7 @@ function startPlatformModuleJobs() {
   startReviewRequestJobs();
   startDiscountJobs();
   startCartRewardsJobs();
+  startProductCreationImportJobs();
 }
 
 module.exports = {

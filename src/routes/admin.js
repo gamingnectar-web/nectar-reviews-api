@@ -39,6 +39,7 @@ async function ensureShop(shopDomain) {
           discounts: { enabled: false },
           loyalty: { enabled: false },
           referrals: { enabled: false },
+          productCreationImport: { enabled: true },
         },
       },
     },

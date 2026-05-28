@@ -6,9 +6,10 @@
   - Configuration group stays visible so product tabs do not wipe shared settings.
 */
 (function NectarAdminProductContext() {
-  const PRODUCT_ORDER = ['reviews', 'loyalty', 'discounts', 'cart-rewards', 'referrals'];
+  const PRODUCT_ORDER = ['reviews', 'product-creation-import', 'loyalty', 'discounts', 'cart-rewards', 'referrals'];
   const PRODUCT_STATUS = {
     reviews: { label: 'Reviews', view: 'v-dash', stage: '', dot: 'warning', title: 'Reviews enabled; launch checks loading.' },
+    'product-creation-import': { label: 'Product Creation & Import', view: 'v-product-creation-import', stage: 'Beta', dot: 'warning', title: 'Create draft products from URLs, invoices and manual entry.' },
     loyalty: { label: 'Loyalty', view: 'v-loyalty', stage: 'Beta', dot: '', title: 'Loyalty is beta. Enable when configured.' },
     discounts: { label: 'Discounts', view: 'v-discounts', stage: 'Beta', dot: '', title: 'Discounts is beta. Enable when configured.' },
     'cart-rewards': { label: 'Cart Rewards', view: 'v-cart-rewards', stage: 'Beta', dot: '', title: 'Cart Rewards is beta. Enable after tests pass.' },
@@ -24,6 +25,13 @@
       { label: 'Review Importer', view: 'v-import' },
       { label: 'Messaging & Campaigns', view: 'v-msg', suffix: '✉️' },
       { label: 'Reviews Visual Customiser', view: 'v-style' }
+    ],
+    'product-creation-import': [
+      { label: 'Import Dashboard', view: 'v-product-creation-import', pciTab: 'url' },
+      { label: 'URL Import', view: 'v-product-creation-import', pciTab: 'url' },
+      { label: 'Invoice Import', view: 'v-product-creation-import', pciTab: 'invoice' },
+      { label: 'Manual Create', view: 'v-product-creation-import', pciTab: 'manual' },
+      { label: 'Import History', view: 'v-product-creation-import', pciTab: 'history' }
     ],
     loyalty: [
       { label: 'Loyalty Overview', view: 'v-loyalty', loyaltyTab: 'overview' },
@@ -65,6 +73,11 @@
       { label: 'App Settings & Render Names', view: 'v-settings' },
       { label: 'Reviews Launch Checklist', view: 'v-review-launch' },
       { label: 'Real-world Test Centre', view: 'v-test-centre' }
+    ],
+    'product-creation-import': [
+      { label: 'Connection Status', view: 'v-product-creation-import', pciTab: 'url' },
+      { label: 'Shopify Product Search', view: 'v-product-creation-import', pciTab: 'invoice' },
+      { label: 'History', view: 'v-product-creation-import', pciTab: 'history' }
     ],
     loyalty: [
       { label: 'Loyalty Settings', view: 'v-loyalty', loyaltyTab: 'settings' },
@@ -108,6 +121,7 @@
   function productGroup() { return groupByTitle(/products/i) || navGroups()[2]; }
 
   function productForView(viewId) {
+    if (viewId === 'v-product-creation-import') return 'product-creation-import';
     if (viewId === 'v-loyalty') return 'loyalty';
     if (viewId === 'v-discounts') return 'discounts';
     if (viewId === 'v-cart-rewards') return 'cart-rewards';
@@ -128,10 +142,10 @@
   }
 
   function itemButtonHtml(item, index) {
-    const key = item.key || `${item.view || 'view'}:${item.loyaltyTab || item.cartPanel || item.anchor || index}`;
+    const key = item.key || `${item.view || 'view'}:${item.loyaltyTab || item.cartPanel || item.pciTab || item.anchor || index}`;
     const suffix = item.suffix ? ` <span class="nav-soft-suffix">${esc(item.suffix)}</span>` : '';
     const pill = item.pill ? `<span class="pill">${esc(item.pill)}</span>` : '';
-    return `<button class="tab-btn context-tab-btn ${activeManageKey === key ? 'active' : ''}" type="button" data-context-nav-key="${esc(key)}" data-context-view="${esc(item.view)}" data-loyalty-target="${esc(item.loyaltyTab || '')}" data-cart-panel="${esc(item.cartPanel || '')}" data-scroll-anchor="${esc(item.anchor || '')}"><span>${esc(item.label)}${suffix}</span>${pill}</button>`;
+    return `<button class="tab-btn context-tab-btn ${activeManageKey === key ? 'active' : ''}" type="button" data-context-nav-key="${esc(key)}" data-context-view="${esc(item.view)}" data-loyalty-target="${esc(item.loyaltyTab || '')}" data-cart-panel="${esc(item.cartPanel || '')}" data-pci-tab="${esc(item.pciTab || '')}" data-scroll-anchor="${esc(item.anchor || '')}"><span>${esc(item.label)}${suffix}</span>${pill}</button>`;
   }
 
   function renderProductGroup() {
@@ -167,18 +181,20 @@
     const view = button.dataset.contextView;
     const loyaltyTab = button.dataset.loyaltyTarget;
     const cartPanel = button.dataset.cartPanel;
+    const pciTab = button.dataset.pciTab;
     const anchor = button.dataset.scrollAnchor;
     activeManageKey = button.dataset.contextNavKey || '';
     if (view && typeof window.tab === 'function') window.tab(view);
     if (loyaltyTab) setTimeout(() => document.querySelector(`#v-loyalty [data-loyalty-tab="${CSS.escape(loyaltyTab)}"]`)?.click(), 70);
     if (cartPanel) setTimeout(() => window.NectarCartRewardsAdmin?.showPanel?.(cartPanel), 90);
+    if (pciTab) setTimeout(() => window.pciTab?.(pciTab), 70);
     if (anchor) setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 120);
     qsa('[data-context-nav-key]').forEach((btn) => btn.classList.toggle('active', btn === button));
   }
 
   function refreshActiveProduct(viewId) {
     const visibleView = viewId || document.querySelector('.view.active')?.id || 'v-dash';
-    if (['v-loyalty', 'v-discounts', 'v-cart-rewards', 'v-referrals'].includes(visibleView)) {
+    if (['v-product-creation-import', 'v-loyalty', 'v-discounts', 'v-cart-rewards', 'v-referrals'].includes(visibleView)) {
       activeProduct = productForView(visibleView);
     }
     document.body.dataset.nectarProductContext = activeProduct;
@@ -195,6 +211,7 @@
     const cfg = PRODUCT_STATUS[next] || PRODUCT_STATUS.reviews;
     if (typeof window.tab === 'function') window.tab(cfg.view);
     if (next === 'cart-rewards') setTimeout(() => window.NectarCartRewardsAdmin?.showPanel?.('dashboard'), 100);
+    if (next === 'product-creation-import') setTimeout(() => window.pciTab?.('url'), 100);
     refreshActiveProduct(cfg.view);
     refreshStatuses();
   }
@@ -221,6 +238,8 @@
     const reviewDot = document.getElementById('nav-status-reviews');
     const keepReviewsLive = reviewDot?.classList.contains('live');
     setDot('reviews', modules.reviews?.enabled === false ? '' : (keepReviewsLive ? 'live' : 'warning'), modules.reviews?.enabled === false ? 'Reviews disabled.' : (keepReviewsLive ? 'Reviews live-ready: launch checks passed.' : 'Reviews enabled; launch checklist decides if this becomes green.'));
+    const pciEnabled = modules.productCreationImport?.enabled !== false && modules['product-creation-import']?.enabled !== false;
+    setDot('product-creation-import', pciEnabled ? 'warning' : '', pciEnabled ? 'Product Creation & Import beta enabled. Shopify OAuth/write_products controls whether creation works.' : 'Product Creation & Import disabled.');
     setDot('loyalty', modules.loyalty?.enabled ? 'warning' : '', modules.loyalty?.enabled ? 'Loyalty beta enabled but not fully live.' : 'Loyalty beta not enabled.');
     setDot('discounts', modules.discounts?.enabled ? 'warning' : '', modules.discounts?.enabled ? 'Discounts beta enabled but not fully live.' : 'Discounts beta not enabled.');
     const cartEnabled = Boolean(modules.cartRewards?.enabled || modules.cart_rewards?.enabled || modules['cart-rewards']?.enabled);
@@ -241,7 +260,13 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     renderProductGroup();
-    refreshActiveProduct(document.querySelector('.view.active')?.id || 'v-dash');
+    const params = new URLSearchParams(window.location.search || '');
+    const requestedProduct = params.get('product') || params.get('module') || '';
+    if (PRODUCT_STATUS[requestedProduct]) {
+      setTimeout(() => setProduct(requestedProduct), 20);
+    } else {
+      refreshActiveProduct(document.querySelector('.view.active')?.id || 'v-dash');
+    }
     setTimeout(refreshStatuses, 200);
   });
 

@@ -1,0 +1,86 @@
+const express = require('express');
+const { cleanUrl, cleanText } = require('./utils/safe');
+const {
+  analyseInvoiceAndSave,
+  assignLine,
+  createDraftProduct,
+  getImportHistory,
+  matchImportLines,
+  saveManualDraft,
+  scanUrlAndSave,
+} = require('./productCreationImport.service');
+const { healthCheckShopify, searchShopifyProducts } = require('./services/shopifyProduct.service');
+
+const router = express.Router();
+
+function shopDomainFromReq(req) {
+  return req.shopDomain || req.query.shopDomain || req.body?.shopDomain || req.headers['x-shop-domain'] || req.headers['x-shopify-shop-domain'] || '';
+}
+
+function asyncRoute(handler) {
+  return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+}
+
+router.get('/health', asyncRoute(async (req, res) => {
+  const shopDomain = shopDomainFromReq(req);
+  const shopify = await healthCheckShopify(shopDomain);
+  res.json({ ok: true, module: 'PRODUCT CREATION & PRODUCT IMPORT', shopify, invoiceVision: Boolean(process.env.OPENAI_API_KEY) });
+}));
+
+router.post('/url/scan', asyncRoute(async (req, res) => {
+  const shopDomain = shopDomainFromReq(req);
+  const url = cleanUrl(req.body?.url || '');
+  if (!url) return res.status(400).json({ error: 'A valid public product URL is required.' });
+  const result = await scanUrlAndSave({ shopDomain, url });
+  res.json(result);
+}));
+
+router.post('/invoice/analyse', asyncRoute(async (req, res) => {
+  const shopDomain = shopDomainFromReq(req);
+  const body = req.body || {};
+  const result = await analyseInvoiceAndSave({
+    shopDomain,
+    imageDataUrl: String(body.imageDataUrl || '').slice(0, 2_500_000),
+    mimeType: cleanText(body.mimeType || '', 120),
+    filename: cleanText(body.filename || '', 220),
+    notes: cleanText(body.notes || '', 8000),
+    supplierUrl: cleanUrl(body.supplierUrl || ''),
+    autoMatch: body.autoMatch !== false,
+  });
+  res.json(result);
+}));
+
+router.get('/products/search', asyncRoute(async (req, res) => {
+  const shopDomain = shopDomainFromReq(req);
+  const products = await searchShopifyProducts({ shopDomain, q: req.query.q || '', first: req.query.first || 10 });
+  res.json({ products });
+}));
+
+router.post('/match', asyncRoute(async (req, res) => {
+  const result = await matchImportLines({ shopDomain: shopDomainFromReq(req), importId: req.body?.importId || '', lines: Array.isArray(req.body?.lines) ? req.body.lines : [] });
+  res.json(result);
+}));
+
+router.post('/drafts', asyncRoute(async (req, res) => {
+  const result = await saveManualDraft({ shopDomain: shopDomainFromReq(req), draft: req.body?.draft || {} });
+  res.json(result);
+}));
+
+router.post('/shopify/create', asyncRoute(async (req, res) => {
+  const result = await createDraftProduct({ shopDomain: shopDomainFromReq(req), draft: req.body?.draft, importId: req.body?.importId || '', lineId: req.body?.lineId || '' });
+  res.json(result);
+}));
+
+router.post('/shopify/assign', asyncRoute(async (req, res) => {
+  const body = req.body || {};
+  if (!body.importId || !body.lineId || !body.productId) return res.status(400).json({ error: 'importId, lineId and productId are required.' });
+  const result = await assignLine({ shopDomain: shopDomainFromReq(req), importId: body.importId, lineId: body.lineId, productId: body.productId, variantId: body.variantId || '', productTitle: body.productTitle || '', handle: body.handle || '', image: body.image || '' });
+  res.json(result);
+}));
+
+router.get('/history', asyncRoute(async (req, res) => {
+  const result = await getImportHistory({ shopDomain: shopDomainFromReq(req), limit: req.query.limit || 25 });
+  res.json(result);
+}));
+
+module.exports = router;
