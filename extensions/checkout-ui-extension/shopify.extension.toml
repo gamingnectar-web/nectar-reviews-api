@@ -1,2 +1,9 @@
-name = "Review Checkout UI"
-type = "ui_extension"
+api_version = "2026-04"
+
+[[extensions.targeting]]
+target = "purchase.checkout.cart-line-list.render-after"
+module = "./src/Checkout.jsx"
+
+[extensions.capabilities]
+api_access = true
+network_access = true

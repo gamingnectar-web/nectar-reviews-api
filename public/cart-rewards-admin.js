@@ -1,1 +1,8 @@
-(function(){ setTimeout(()=>{ const m=document.getElementById('cartRewardsMount'); if(m) m.innerHTML='<div class="card"><h2>Cart Rewards</h2><p>Campaigns, tiers and calendar-planning scaffolds are included.</p></div>'; }, 100); })();
+// Backwards-compatible shim. New location: /modules/cart-rewards/admin.js
+(function loadCartRewardsModuleShim() {
+  if (window.NectarCartRewardsAdmin) return;
+  var script = document.createElement('script');
+  script.src = '/modules/cart-rewards/admin.js';
+  script.defer = true;
+  document.body.appendChild(script);
+})();

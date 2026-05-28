@@ -1,1 +1,297 @@
-.nectar-card{border:1px solid #e5e7eb;border-radius:16px;padding:16px}
+.nectar-cart-rewards {
+  --ncr-primary: #111827;
+  --ncr-accent: #f5b301;
+  --ncr-bg: #ffffff;
+  --ncr-card-bg: #f8fafc;
+  --ncr-border: #e5e7eb;
+  --ncr-text: #111827;
+  --ncr-muted: #6b7280;
+  --ncr-radius: 16px;
+  box-sizing: border-box;
+  inline-size: 100%;
+  background: var(--ncr-bg);
+  border: 1px solid var(--ncr-border);
+  border-radius: var(--ncr-radius);
+  color: var(--ncr-text);
+  padding: 16px;
+  margin: 12px 0;
+  font-family: inherit;
+  line-height: 1.35;
+}
+
+.nectar-cart-rewards *,
+.nectar-cart-rewards *::before,
+.nectar-cart-rewards *::after {
+  box-sizing: border-box;
+}
+
+.nectar-cart-rewards[hidden] {
+  display: none !important;
+}
+
+.nectar-cart-rewards[data-ready="false"] {
+  opacity: 0.86;
+}
+
+.nectar-cart-rewards__loading {
+  color: var(--ncr-muted);
+  font-size: 13px;
+}
+
+.nectar-cart-rewards__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-block-end: 12px;
+}
+
+.nectar-cart-rewards__title {
+  margin: 0;
+  color: var(--ncr-text);
+  font-size: clamp(15px, 1.6vw, 17px);
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.nectar-cart-rewards__subtitle {
+  margin: 4px 0 0;
+  color: var(--ncr-muted);
+  font-size: 13px;
+}
+
+.nectar-cart-rewards__progress {
+  block-size: 10px;
+  background: color-mix(in srgb, var(--ncr-border) 78%, #ffffff);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 12px 0;
+}
+
+.nectar-cart-rewards__progress span {
+  display: block;
+  block-size: 100%;
+  inline-size: 0;
+  background: var(--ncr-accent);
+  border-radius: inherit;
+  transition: inline-size 180ms ease;
+}
+
+.nectar-cart-rewards__tiers {
+  display: grid;
+  gap: 10px;
+}
+
+.nectar-cart-reward-card {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  background: var(--ncr-card-bg);
+  border: 1px solid var(--ncr-border);
+  border-radius: max(8px, calc(var(--ncr-radius) - 4px));
+  padding: 10px;
+  min-inline-size: 0;
+}
+
+.nectar-cart-reward-card--locked {
+  opacity: 0.68;
+}
+
+.nectar-cart-reward-card--claimed {
+  border-color: var(--ncr-accent);
+  box-shadow: inset 0 0 0 1px var(--ncr-accent);
+}
+
+.nectar-cart-reward-card--sold-out:not(.nectar-cart-reward-card--locked) {
+  border-style: dashed;
+}
+
+.nectar-cart-reward-card__image {
+  inline-size: 56px;
+  block-size: 56px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ncr-border) 82%, #ffffff);
+  overflow: hidden;
+}
+
+.nectar-cart-reward-card__image img {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.nectar-cart-reward-card__body {
+  min-inline-size: 0;
+}
+
+.nectar-cart-reward-card__title {
+  color: var(--ncr-text);
+  font-weight: 800;
+  margin: 0 0 2px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.nectar-cart-reward-card__text {
+  margin: 0;
+  color: var(--ncr-muted);
+  font-size: 12px;
+}
+
+.nectar-cart-rewards__button {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 12px;
+  background: var(--ncr-primary);
+  color: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+
+.nectar-cart-rewards__button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.nectar-cart-rewards__button:focus-visible {
+  outline: 2px solid var(--ncr-accent);
+  outline-offset: 2px;
+}
+
+.nectar-cart-rewards__button[disabled] {
+  background: var(--ncr-border);
+  color: var(--ncr-muted);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.nectar-cart-rewards__button--secondary {
+  background: transparent;
+  color: var(--ncr-primary);
+  border: 1px solid var(--ncr-border);
+}
+
+.nectar-cart-rewards__error {
+  padding: 10px;
+  margin-block-start: 10px;
+  background: #fee2e2;
+  color: #991b1b;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+@supports not (background: color-mix(in srgb, #000 50%, #fff)) {
+  .nectar-cart-rewards__progress,
+  .nectar-cart-reward-card__image {
+    background: #e5e7eb;
+  }
+}
+
+@media (max-width: 520px) {
+  .nectar-cart-rewards {
+    padding: 14px;
+    margin: 10px 0;
+  }
+
+  .nectar-cart-reward-card {
+    grid-template-columns: 46px minmax(0, 1fr);
+  }
+
+  .nectar-cart-reward-card__image {
+    inline-size: 46px;
+    block-size: 46px;
+  }
+
+  .nectar-cart-reward-card .nectar-cart-rewards__button {
+    grid-column: 1 / -1;
+    inline-size: 100%;
+  }
+}
+
+/* Premium appearance options driven by Cart Rewards design settings. */
+.nectar-cart-rewards[data-layout="premium_cards"] {
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.10);
+}
+
+.nectar-cart-rewards[data-layout="compact"] {
+  padding: 12px;
+}
+
+.nectar-cart-rewards[data-layout="compact"] .nectar-cart-reward-card {
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  padding: 8px;
+}
+
+.nectar-cart-rewards[data-layout="compact"] .nectar-cart-reward-card__image {
+  inline-size: 42px;
+  block-size: 42px;
+}
+
+.nectar-cart-rewards[data-layout="timeline"] .nectar-cart-rewards__tiers {
+  position: relative;
+  padding-inline-start: 14px;
+}
+
+.nectar-cart-rewards[data-layout="timeline"] .nectar-cart-rewards__tiers::before {
+  content: "";
+  position: absolute;
+  inset-block: 6px;
+  inset-inline-start: 0;
+  inline-size: 3px;
+  border-radius: 999px;
+  background: var(--ncr-accent);
+}
+
+.nectar-cart-rewards[data-density="compact"] .nectar-cart-rewards__subtitle,
+.nectar-cart-rewards[data-density="compact"] .nectar-cart-reward-card__text {
+  font-size: 11px;
+}
+
+.nectar-cart-rewards[data-density="spacious"] {
+  padding: 22px;
+}
+
+.nectar-cart-rewards[data-density="spacious"] .nectar-cart-rewards__tiers {
+  gap: 14px;
+}
+
+.nectar-cart-rewards[data-drawer-behaviour="sticky"] {
+  position: sticky;
+  top: 10px;
+  z-index: 2;
+}
+
+.nectar-cart-rewards[data-drawer-behaviour="collapsible"] .nectar-cart-rewards__tiers {
+  max-height: 420px;
+  overflow: auto;
+}
+
+.nectar-cart-reward-card[data-image-shape="circle"] .nectar-cart-reward-card__image {
+  border-radius: 999px;
+}
+
+.nectar-cart-reward-card[data-image-shape="square"] .nectar-cart-reward-card__image {
+  border-radius: 4px;
+}
+
+.nectar-cart-rewards__progress--steps {
+  height: 14px;
+  background-image: repeating-linear-gradient(90deg, transparent 0 22%, rgba(255,255,255,0.8) 22% 23%, transparent 23% 25%);
+}
+
+.nectar-cart-rewards__progress--minimal {
+  height: 4px;
+}
+
+.nectar-cart-rewards[data-placement="cart_drawer"] {
+  margin: 10px 0 14px;
+}
+
+.nectar-cart-rewards[data-placement="cart_page"] {
+  margin: 18px 0;
+}

@@ -70,7 +70,7 @@
       <h3>Robust Migration Centre</h3>
       <p>Import Yotpo, Shop/exported, Judge.me or generic reviews into Nectar with staging, product mapping, site-review support and duplicate protection. The storefront scan detects public review signals going forward, but it does not claim private Shop app review data is automatically importable.</p>
 
-      <div class="migration-grid" id="migration-overview-cards">
+      <div class="migration-grid" id="rmc-overview-cards">
         <div class="migration-card"><strong>Migration state</strong><span class="migration-muted">Loading…</span></div>
         <div class="migration-card"><strong>Imported reviews</strong><span class="migration-muted">Loading…</span></div>
         <div class="migration-card"><strong>Last scan</strong><span class="migration-muted">Loading…</span></div>
@@ -80,7 +80,7 @@
         <strong>1. Upload / preview import</strong>
         <div class="migration-row">
           <label>Source
-            <select id="migration-source-platform">
+            <select id="rmc-source-platform">
               <option value="yotpo">Yotpo CSV</option>
               <option value="shop_app">Shop App / Shop-channel export</option>
               <option value="judgeme">Judge.me CSV</option>
@@ -89,16 +89,16 @@
             </select>
           </label>
           <label>CSV file
-            <input id="migration-csv-file" type="file" accept=".csv,text/csv" />
+            <input id="rmc-csv-file" type="file" accept=".csv,text/csv" />
           </label>
-          <label class="migration-check"><input id="migration-only-published" type="checkbox" checked /> Published/approved only</label>
-          <label class="migration-check"><input id="migration-verified" type="checkbox" checked /> Keep verified badge when source provides it</label>
+          <label class="migration-check"><input id="rmc-only-published" type="checkbox" checked /> Published/approved only</label>
+          <label class="migration-check"><input id="rmc-verified" type="checkbox" checked /> Keep verified badge when source provides it</label>
         </div>
         <div class="migration-actions">
-          <button id="migration-preview-btn">Preview and stage import</button>
-          <button id="migration-refresh-btn" class="secondary">Refresh overview</button>
+          <button id="rmc-preview-btn">Preview and stage import</button>
+          <button id="rmc-refresh-btn" class="secondary">Refresh overview</button>
         </div>
-        <div id="migration-preview-result" class="migration-muted">No staged batch yet.</div>
+        <div id="rmc-preview-result" class="migration-muted">No staged batch yet.</div>
       </div>
 
       <div class="migration-card" style="margin-top:14px;">
@@ -106,27 +106,27 @@
         <p>This scans the live storefront for review widgets, Yotpo remnants, Shop-like review markup, and JSON-LD rating/review schema. It is designed to catch signs that reviews exist outside Nectar, not to scrape private third-party review databases.</p>
         <div class="migration-row">
           <label>Products to sample
-            <input id="migration-scan-limit" type="number" min="1" max="20" value="8" />
+            <input id="rmc-scan-limit" type="number" min="1" max="20" value="8" />
           </label>
         </div>
         <div class="migration-actions">
-          <button id="migration-scan-btn">Scan storefront review signals</button>
-          <button id="migration-shop-status-btn" class="secondary">Check Shop review sync status</button>
+          <button id="rmc-scan-btn">Scan storefront review signals</button>
+          <button id="rmc-shop-status-btn" class="secondary">Check Shop review sync status</button>
         </div>
-        <div id="migration-scan-result" class="migration-muted">No scan run yet.</div>
+        <div id="rmc-scan-result" class="migration-muted">No scan run yet.</div>
       </div>
 
       <div class="migration-card" style="margin-top:14px;">
         <strong>3. Recent batches</strong>
-        <div id="migration-batch-list" class="migration-muted">Loading batches…</div>
+        <div id="rmc-batch-list" class="migration-muted">Loading batches…</div>
       </div>
     `;
     host.appendChild(panel);
 
-    $('migration-preview-btn')?.addEventListener('click', previewCsv);
-    $('migration-refresh-btn')?.addEventListener('click', loadOverview);
-    $('migration-scan-btn')?.addEventListener('click', runScan);
-    $('migration-shop-status-btn')?.addEventListener('click', loadShopStatus);
+    $('rmc-preview-btn')?.addEventListener('click', previewCsv);
+    $('rmc-refresh-btn')?.addEventListener('click', loadOverview);
+    $('rmc-scan-btn')?.addEventListener('click', runScan);
+    $('rmc-shop-status-btn')?.addEventListener('click', loadShopStatus);
     loadOverview();
   }
 
@@ -143,19 +143,19 @@
       const siteImported = counts.filter((item) => item._id?.scope === 'site').reduce((sum, item) => sum + Number(item.count || 0), 0);
       const lastScan = data.scans?.[0];
       const yotpoOrShop = lastScan?.summary?.yotpoDetected || lastScan?.summary?.shopSignalsDetected;
-      $('migration-overview-cards').innerHTML = [
+      $('rmc-overview-cards').innerHTML = [
         summaryCard('Migration state', `${migration.enabled ? statusBadge('enabled') : statusBadge('disabled')}<div class="migration-muted">Source: ${escapeHtml(migration.sourcePlatform || 'not set')}</div>`),
         summaryCard('Review archive', `<strong>${totalImported}</strong><span class="migration-muted"> total current reviews, including ${siteImported} site/shop-level reviews.</span>`),
         summaryCard('Last scan', lastScan ? `${statusBadge(lastScan.status)}<div class="migration-muted">${escapeHtml(new Date(lastScan.createdAt).toLocaleString())}</div><div>External signals: ${yotpoOrShop ? 'Detected' : 'None found in sample'}</div>` : '<span class="migration-muted">No scan yet.</span>'),
       ].join('');
       renderBatches(data.batches || []);
     } catch (error) {
-      $('migration-overview-cards').innerHTML = summaryCard('Migration Centre', `<span class="migration-muted">${escapeHtml(error.message)}</span>`);
+      $('rmc-overview-cards').innerHTML = summaryCard('Migration Centre', `<span class="migration-muted">${escapeHtml(error.message)}</span>`);
     }
   }
 
   function renderBatches(batches) {
-    const host = $('migration-batch-list');
+    const host = $('rmc-batch-list');
     if (!host) return;
     if (!batches.length) {
       host.innerHTML = 'No migration batches yet.';
@@ -191,10 +191,10 @@
   }
 
   async function previewCsv() {
-    const file = $('migration-csv-file')?.files?.[0];
+    const file = $('rmc-csv-file')?.files?.[0];
     if (!file) return toast('Choose a CSV file first.');
-    const sourcePlatform = $('migration-source-platform')?.value || 'generic';
-    const result = $('migration-preview-result');
+    const sourcePlatform = $('rmc-source-platform')?.value || 'generic';
+    const result = $('rmc-preview-result');
     result.innerHTML = 'Reading and staging CSV…';
     try {
       const csvText = await readFile(file);
@@ -204,8 +204,8 @@
           sourcePlatform,
           fileName: file.name,
           csvText,
-          importOnlyPublished: $('migration-only-published')?.checked !== false,
-          importVerifiedWhenAvailable: $('migration-verified')?.checked !== false,
+          importOnlyPublished: $('rmc-only-published')?.checked !== false,
+          importVerifiedWhenAvailable: $('rmc-verified')?.checked !== false,
         }),
       });
       renderPreview(data.batch, data.rows || []);
@@ -216,20 +216,20 @@
   }
 
   function renderPreview(batch, rows) {
-    const host = $('migration-preview-result');
+    const host = $('rmc-preview-result');
     const summary = batch?.summary || {};
     host.innerHTML = `
       <div class="migration-note">
         Staged ${escapeHtml(summary.totalRows || 0)} rows. Matched ${escapeHtml(summary.matched || 0)}, site reviews ${escapeHtml(summary.siteReviews || 0)}, needs mapping ${escapeHtml(summary.needsMapping || 0)}, skipped ${escapeHtml(summary.skipped || 0)}, duplicates ${escapeHtml(summary.duplicates || 0)}.
       </div>
       <div class="migration-actions">
-        <button class="warning" id="migration-import-batch-btn">Import matched + site reviews</button>
-        <button class="secondary" id="migration-load-batch-btn">Open staged rows</button>
+        <button class="warning" id="rmc-import-batch-btn">Import matched + site reviews</button>
+        <button class="secondary" id="rmc-load-batch-btn">Open staged rows</button>
       </div>
       ${previewRowsTable(rows)}
     `;
-    $('migration-import-batch-btn')?.addEventListener('click', () => importBatch(batch._id));
-    $('migration-load-batch-btn')?.addEventListener('click', () => loadBatch(batch._id));
+    $('rmc-import-batch-btn')?.addEventListener('click', () => importBatch(batch._id));
+    $('rmc-load-batch-btn')?.addEventListener('click', () => loadBatch(batch._id));
   }
 
   function previewRowsTable(rows) {
@@ -254,7 +254,7 @@
   }
 
   async function loadBatch(batchId) {
-    const host = $('migration-preview-result');
+    const host = $('rmc-preview-result');
     host.innerHTML = 'Loading staged batch…';
     try {
       const data = await adminFetch(`/admin/review-migrations/batches/${encodeURIComponent(batchId)}?limit=200`);
@@ -266,7 +266,7 @@
 
   async function importBatch(batchId) {
     if (!batchId) return;
-    const host = $('migration-preview-result');
+    const host = $('rmc-preview-result');
     host.insertAdjacentHTML('afterbegin', '<p class="migration-muted">Importing matched rows…</p>');
     try {
       const data = await adminFetch(`/admin/review-migrations/batches/${encodeURIComponent(batchId)}/import`, {
@@ -282,12 +282,12 @@
   }
 
   async function runScan() {
-    const result = $('migration-scan-result');
+    const result = $('rmc-scan-result');
     result.innerHTML = 'Scanning storefront review signals…';
     try {
       const data = await adminFetch('/admin/review-migrations/scan/storefront', {
         method: 'POST',
-        body: JSON.stringify({ limit: Number($('migration-scan-limit')?.value || 8) }),
+        body: JSON.stringify({ limit: Number($('rmc-scan-limit')?.value || 8) }),
       });
       const scan = data.scan;
       const s = scan.summary || {};
@@ -304,7 +304,7 @@
   }
 
   async function loadShopStatus() {
-    const result = $('migration-scan-result');
+    const result = $('rmc-scan-result');
     result.innerHTML = 'Checking Shop review sync status…';
     try {
       const data = await adminFetch('/admin/review-migrations/shop-review-sync/status');

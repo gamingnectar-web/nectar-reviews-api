@@ -1,3 +1,18 @@
-const routes = require('./discounts.routes');
-function mount(app, { makeRateLimiter, requireAdminSession } = {}) { app.use('/api/admin/discounts', makeRateLimiter ? makeRateLimiter({ windowMs: 60000, max: 80, keyPrefix: 'discounts' }) : (req,res,next)=>next(), requireAdminSession || ((req,res,next)=>next()), routes); }
-module.exports = { mount };
+const discountRoutes = require('./discounts.routes');
+
+function mountDiscountsModule(app, deps = {}) {
+  const makeRateLimiter = deps.makeRateLimiter || ((_opts) => (_req, _res, next) => next());
+  const requireAdminSession = deps.requireAdminSession || ((_req, _res, next) => next());
+  app.use(
+    '/api/admin/discounts',
+    makeRateLimiter({ windowMs: 60 * 1000, max: 180, keyPrefix: 'discounts' }),
+    requireAdminSession,
+    discountRoutes
+  );
+}
+
+function startDiscountJobs() {
+  return null;
+}
+
+module.exports = { mountDiscountsModule, startDiscountJobs };

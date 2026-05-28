@@ -5,7 +5,7 @@ const fs = require('fs');
 const mongoose = require('mongoose');
 const { env } = require('./config/env');
 const { getLoyaltyConnection } = require('./config/db');
-const { Review, Settings, Shop } = require('./models');
+const { Shop, Review, Settings } = require('./models');
 const { cleanShopDomain, isValidShopDomain } = require('./utils/validation');
 const publicRoutes = require('./routes/public');
 const adminRoutes = require('./routes/admin');
@@ -22,8 +22,8 @@ const { mountPlatformModules } = require('./modules');
 
 const app = express();
 const publicDir = path.join(__dirname, '..', 'public');
-let trashCleanupStarted = false;
 
+let trashCleanupStarted = false;
 function startTrashAutoCleanup() {
   if (trashCleanupStarted) return;
   trashCleanupStarted = true;
@@ -35,30 +35,66 @@ function startTrashAutoCleanup() {
         const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
         await Review.deleteMany({ shopDomain: config.shopDomain, isDeleted: true, deletedAt: { $lte: cutoff } });
       }
-    } catch (error) { console.warn('Trash auto-cleanup skipped:', error.message); }
+    } catch (error) {
+      console.warn('Trash auto-cleanup skipped:', error.message);
+    }
   };
   setTimeout(run, 30 * 1000);
   setInterval(run, 6 * 60 * 60 * 1000);
 }
 startTrashAutoCleanup();
 
+
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
+
 app.use(securityHeaders);
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
+// Shopify webhooks must be mounted before express.json so HMAC verification uses the raw body.
 app.use('/api/webhooks', shopifyWebhookRoutes);
 app.use(express.json({ limit: env.jsonLimit }));
 app.use(express.urlencoded({ extended: true, limit: env.jsonLimit }));
 
-app.get('/', (req, res) => res.json({ ok: true, service: 'Nectar Reviews API', status: 'running', admin: '/admin', health: '/health' }));
-app.get('/health', (req, res) => res.json({ ok: true, status: 'healthy', timestamp: new Date().toISOString() }));
+app.use('/api/admin', makeRateLimiter({ windowMs: 60 * 1000, max: 120, keyPrefix: 'admin' }));
+app.use('/api/tasks', makeRateLimiter({ windowMs: 60 * 1000, max: 30, keyPrefix: 'tasks' }), taskRoutes);
+app.use('/api/reviews', makeRateLimiter({ windowMs: 60 * 1000, max: 60, keyPrefix: 'reviews' }));
+app.use('/api/admin/test-email', makeRateLimiter({ windowMs: 60 * 1000, max: 10, keyPrefix: 'test-email' }));
+app.use('/api/campaign', makeRateLimiter({ windowMs: 60 * 1000, max: 300, keyPrefix: 'campaign' }));
+
+app.get('/', (req, res) => {
+  return res.json({
+    ok: true,
+    service: 'Reviews Platform API',
+    status: 'running',
+    admin: '/admin',
+    health: '/health',
+  });
+});
+
+app.get('/health', (req, res) => {
+  return res.json({ ok: true, status: 'healthy', timestamp: new Date().toISOString() });
+});
+
 app.get('/health/db', (req, res) => {
   const loyaltyConn = getLoyaltyConnection();
-  res.json({
+  return res.json({
     ok: true,
-    coreDb: { configured: Boolean(env.mongoUri), readyState: mongoose.connection.readyState, database: mongoose.connection.name || null },
-    loyaltyDb: { configured: Boolean(env.loyaltyMongoUri), usingSeparateConnection: Boolean(env.loyaltyMongoUri), readyState: loyaltyConn?.readyState ?? null, database: loyaltyConn?.name || null },
+    coreDb: {
+      configured: Boolean(env.mongoUri),
+      readyState: mongoose.connection.readyState,
+      database: mongoose.connection.name || null,
+    },
+    loyaltyDb: {
+      configured: Boolean(env.loyaltyMongoUri),
+      usingSeparateConnection: Boolean(env.loyaltyMongoUri),
+      readyState: loyaltyConn?.readyState ?? null,
+      database: loyaltyConn?.name || null,
+    },
+    envNames: {
+      core: env.mongoUri ? 'CORE_DB_URI/MONGODB_URI' : null,
+      loyalty: env.loyaltyMongoUri ? 'LOYALTY_DB_URI/LOYALTY_MONGODB_URI' : 'fallback-to-core',
+    },
     timestamp: new Date().toISOString(),
   });
 });
@@ -68,39 +104,71 @@ app.get('/admin', async (req, res, next) => {
     const shopDomain = cleanShopDomain(req.query.shop || req.query.shopDomain || '');
     const hasDevSecret = Boolean(req.query.admin_secret);
     const justInstalled = Boolean(req.query.installed);
-    if (shopDomain && hasDevSecret && env.adminSharedSecret && String(req.query.admin_secret || '') === env.adminSharedSecret) setAdminSessionCookie(res, shopDomain);
-    if (shopDomain && isValidShopDomain(shopDomain) && !hasDevSecret && !justInstalled && env.shopifyApiKey && env.shopifyApiSecret && env.appUrl) {
-      const shop = await Shop.findOne({ shopDomain }).select('accessToken accessTokenEncrypted').lean();
-      if (!shop?.accessToken && !shop?.accessTokenEncrypted) return res.redirect(302, `/auth/shopify?shop=${encodeURIComponent(shopDomain)}`);
+    if (shopDomain && hasDevSecret && env.adminSharedSecret && String(req.query.admin_secret || '') === env.adminSharedSecret) {
+      setAdminSessionCookie(res, shopDomain);
     }
+
+    // Public/multi-merchant apps must create a per-shop token via OAuth. If the app is opened
+    // from Shopify Admin and the token is missing, start OAuth automatically instead of asking
+    // the merchant to add a global SHOPIFY_ACCESS_TOKEN in Render.
+    if (shopDomain && isValidShopDomain(shopDomain) && !hasDevSecret && !justInstalled && env.shopifyApiKey && env.shopifyApiSecret && env.appUrl) {
+      const shop = await Shop.findOne({ shopDomain }).select('accessTokenEncrypted').lean();
+      if (!shop?.accessTokenEncrypted) {
+        return res.redirect(302, `/auth/shopify?shop=${encodeURIComponent(shopDomain)}`);
+      }
+    }
+
     const filePath = path.join(publicDir, 'admin.html');
-    const html = fs.readFileSync(filePath, 'utf8').replace(/__SHOPIFY_API_KEY__/g, env.shopifyApiKey || '').replace(/__APP_URL__/g, env.appUrl || '');
-    res.type('html').send(html);
-  } catch (error) { next(error); }
+    const html = fs.readFileSync(filePath, 'utf8')
+      .replace(/__SHOPIFY_API_KEY__/g, env.shopifyApiKey || '')
+      .replace(/__APP_URL__/g, env.appUrl || '');
+    return res.type('html').send(html);
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get('/review-widget.js', (req, res) => {
-  const js = fs.readFileSync(path.join(publicDir, 'review-widget.js'), 'utf8').replace(/__APP_URL__/g, env.appUrl || '');
-  res.type('application/javascript; charset=utf-8').set('Cache-Control', env.nodeEnv === 'production' ? 'public, max-age=300' : 'no-store').send(js);
+  const filePath = path.join(publicDir, 'review-widget.js');
+  const js = fs.readFileSync(filePath, 'utf8')
+    .replace(/__APP_URL__/g, env.appUrl || '');
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', env.nodeEnv === 'production' ? 'public, max-age=300' : 'no-store');
+  return res.send(js);
 });
 
-app.use(express.static(publicDir, { etag: true, maxAge: env.nodeEnv === 'production' ? '5m' : 0, index: false }));
+app.use(express.static(publicDir, {
+  etag: true,
+  maxAge: env.nodeEnv === 'production' ? '5m' : 0,
+  index: false,
+}));
 
 app.use('/auth', authRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/api/tasks', makeRateLimiter({ windowMs: 60 * 1000, max: 30, keyPrefix: 'tasks' }), taskRoutes);
 app.use('/api/loyalty/checkout', makeRateLimiter({ windowMs: 60 * 1000, max: 60, keyPrefix: 'loyalty-checkout' }), loyaltyCheckoutRoutes);
 mountPlatformModules(app, { makeRateLimiter, requireAdminSession });
-app.use('/api/admin/email-module-library', makeRateLimiter({ windowMs: 60 * 1000, max: 80, keyPrefix: 'email-module-library' }), requireAdminSession, emailModuleLibraryRoutes);
-app.use('/api/admin/ai', makeRateLimiter({ windowMs: 60 * 1000, max: 20, keyPrefix: 'admin-ai' }), requireAdminSession, aiEmailModuleRoutes);
+app.use('/api/admin/ai', makeRateLimiter({ windowMs: 60 * 1000, max: 30, keyPrefix: 'admin-ai' }), requireAdminSession, aiEmailModuleRoutes);
+app.use('/api/admin/email-module-library', requireAdminSession, emailModuleLibraryRoutes);
 app.use('/api/admin/review-migrations', reviewMigrationRoutes);
-app.use('/api/admin/loyalty', makeRateLimiter({ windowMs: 60 * 1000, max: 120, keyPrefix: 'admin-loyalty' }), requireAdminSession, loyaltyRoutes);
-app.use('/api/admin', makeRateLimiter({ windowMs: 60 * 1000, max: 180, keyPrefix: 'admin' }), requireAdminSession, adminRoutes);
 app.use('/api', publicRoutes);
+app.use('/api/admin/loyalty', loyaltyRoutes);
+app.use('/api/admin', adminRoutes);
 
-// Backwards-compatible admin update/import paths used by older dashboard JS.
-app.patch('/api/reviews/:id', requireAdminSession, (req, res, next) => { req.url = `/reviews/${req.params.id}`; return adminRoutes(req, res, next); });
-app.post('/api/reviews/import', requireAdminSession, (req, res, next) => { req.url = '/reviews/import'; return adminRoutes(req, res, next); });
-app.use((req, res) => res.status(404).json({ error: 'Not found', path: req.path }));
+// Backwards-compatible admin update/import paths used by the older dashboard JS.
+app.patch('/api/reviews/:id', requireAdminSession, (req, res, next) => {
+  req.url = `/reviews/${req.params.id}`;
+  return adminRoutes(req, res, next);
+});
+
+app.post('/api/reviews/import', requireAdminSession, (req, res, next) => {
+  req.url = '/reviews/import';
+  return adminRoutes(req, res, next);
+});
+
+app.use((req, res) => {
+  return res.status(404).json({ error: 'Not found', path: req.path });
+});
+
 app.use(errorHandler);
+
 module.exports = app;

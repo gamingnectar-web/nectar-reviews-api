@@ -1,25 +1,19 @@
 require('dotenv').config();
-const mongoose = require('mongoose');
+
 const app = require('./src/app');
+const { connectDb } = require('./src/config/db');
 const { env } = require('./src/config/env');
-const { connectCoreDb, connectLoyaltyDb } = require('./src/config/db');
+const { startPlatformModuleJobs } = require('./src/modules');
 
 async function start() {
-  try {
-    await connectCoreDb();
-    await connectLoyaltyDb();
-    app.listen(env.port, () => {
-      console.log(`Nectar Reviews API running on port ${env.port}`);
-    });
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
-  }
+  await connectDb();
+  startPlatformModuleJobs();
+  app.listen(env.port, () => {
+    console.log(`✅ Reviews Platform API running on port ${env.port}`);
+  });
 }
 
-process.on('SIGTERM', async () => {
-  await mongoose.connection.close().catch(() => {});
-  process.exit(0);
+start().catch((error) => {
+  console.error('❌ Failed to start Reviews Platform API:', error);
+  process.exit(1);
 });
-
-start();

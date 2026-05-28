@@ -1,1 +1,69 @@
-<span class="nectar-star-badge">★★★★★</span>
+{% assign nectar_app_url = block.settings.app_url | default: 'https://nectar-reviews-api.onrender.com' %}
+{% assign nectar_shop_domain = shop.permanent_domain | default: shop.domain %}
+
+<span
+  class="nectar-star-badge"
+  data-nectar-star-badge
+  data-product-id="{{ product.id }}"
+  data-shop-domain="{{ nectar_shop_domain }}"
+  data-api-base="{{ nectar_app_url }}/api"
+  data-star-color="{{ block.settings.star_color }}"
+  data-show-empty="{{ block.settings.show_empty }}"
+  style="display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:{{ block.settings.height }}px;min-width:{{ block.settings.min_width }}px;padding:6px 12px;border-radius:{{ block.settings.radius }}px;background:{{ block.settings.background }};color:{{ block.settings.text_color }};font-weight:800;font-size:{{ block.settings.font_size }}px;line-height:1;"
+>
+  <span aria-hidden="true" style="color:{{ block.settings.star_color }};font-size:1.1em;line-height:1;">★</span>
+  {% if block.settings.show_empty %}<strong>0.0</strong><span>(0)</span>{% endif %}
+</span>
+<script>
+(function(){
+  function ready(fn){ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn); else fn(); }
+  function escapeHtml(value){ return String(value || '').replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]; }); }
+  ready(function(){
+    document.querySelectorAll('.nectar-star-badge[data-nectar-star-badge]').forEach(function(el){
+      if (el.dataset.badgeLoaded === 'true') return;
+      el.dataset.badgeLoaded = 'true';
+      var api = (el.dataset.apiBase || 'https://nectar-reviews-api.onrender.com/api').replace(/\/$/, '');
+      var shopDomain = el.dataset.shopDomain || (window.Shopify && window.Shopify.shop) || window.location.hostname;
+      var productId = el.dataset.productId;
+      var starColor = el.dataset.starColor || '#ffc700';
+      var blockBg = el.style.background || '#111827';
+      var showEmpty = el.dataset.showEmpty === 'true';
+      if (!shopDomain || !productId) return;
+      Promise.all([
+        fetch(api + '/reviews/summary?shopDomain=' + encodeURIComponent(shopDomain) + '&itemId=' + encodeURIComponent(productId) + '&t=' + Date.now(), { cache: 'no-store' }).then(function(res){ return res.ok ? res.json() : null; }).catch(function(){ return null; }),
+        fetch(api + '/widget/config?shopDomain=' + encodeURIComponent(shopDomain) + '&t=' + Date.now(), { cache: 'no-store' }).then(function(res){ return res.ok ? res.json() : null; }).catch(function(){ return null; })
+      ]).then(function(results){
+        var json = results[0] || {};
+        var config = results[1] || {};
+        var card = config.cardStyles || {};
+        el.style.setProperty('background', card.badgeBackground || blockBg, 'important');
+        if (card.badgeTextColor) el.style.setProperty('color', card.badgeTextColor, 'important');
+        if (card.badgeRadius !== undefined) el.style.setProperty('border-radius', Number(card.badgeRadius || 999) + 'px', 'important');
+        if (card.starSize) el.style.setProperty('font-size', Number(card.starSize || {{ block.settings.font_size }}) + 'px', 'important');
+        starColor = card.badgeStarColor || card.starColor || starColor || '#ffc700';
+        var count = Number(json.count || 0);
+        if (!count && !showEmpty) { el.style.display = 'none'; return; }
+        el.innerHTML = '<span aria-hidden="true" style="color:' + escapeHtml(starColor) + '!important;font-size:1.15em;line-height:1;">★</span><strong>' + Number(json.average || 0).toFixed(1) + '</strong><span>(' + escapeHtml(count) + ')</span>';
+      }).catch(function(){ if (!showEmpty) el.style.display = 'none'; });
+    });
+  });
+})();
+</script>
+
+{% schema %}
+{
+  "name": "Star Rating Badge",
+  "target": "section",
+  "settings": [
+    { "type": "text", "id": "app_url", "label": "Nectar app URL" },
+    { "type": "color", "id": "background", "label": "Background", "default": "#111827" },
+    { "type": "color", "id": "text_color", "label": "Text colour", "default": "#ffffff" },
+    { "type": "color", "id": "star_color", "label": "Star colour", "default": "#ffc700" },
+    { "type": "range", "id": "font_size", "min": 10, "max": 26, "step": 1, "unit": "px", "label": "Font size", "default": 14 },
+    { "type": "range", "id": "height", "min": 24, "max": 60, "step": 2, "unit": "px", "label": "Badge height", "default": 34 },
+    { "type": "range", "id": "min_width", "min": 40, "max": 160, "step": 4, "unit": "px", "label": "Minimum width", "default": 76 },
+    { "type": "range", "id": "radius", "min": 0, "max": 40, "step": 1, "unit": "px", "label": "Corner radius", "default": 40 },
+    { "type": "checkbox", "id": "show_empty", "label": "Show badge before first review", "default": true }
+  ]
+}
+{% endschema %}

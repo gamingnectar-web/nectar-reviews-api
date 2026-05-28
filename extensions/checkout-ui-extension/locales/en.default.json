@@ -1,1 +1,6 @@
-{"name":"Nectar Checkout"}
+{
+  "title": "Your rewards",
+  "addReward": "Add reward",
+  "locked": "Locked",
+  "unavailable": "No rewards available"
+}

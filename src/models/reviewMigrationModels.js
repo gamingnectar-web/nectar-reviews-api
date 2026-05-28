@@ -39,7 +39,7 @@ const migrationBatchSchema = new mongoose.Schema({
   importedAt: { type: Date, default: null },
   notes: { type: String, default: '' },
   errors: { type: [mongoose.Schema.Types.Mixed], default: [] },
-}, { timestamps: true });
+}, { timestamps: true, suppressReservedKeysWarning: true });
 
 migrationBatchSchema.index({ shopDomain: 1, createdAt: -1 });
 
@@ -88,7 +88,7 @@ const storefrontScanSchema = new mongoose.Schema({
   discoveries: { type: [mongoose.Schema.Types.Mixed], default: [] },
   errors: { type: [mongoose.Schema.Types.Mixed], default: [] },
   completedAt: { type: Date, default: null },
-}, { timestamps: true });
+}, { timestamps: true, suppressReservedKeysWarning: true });
 
 storefrontScanSchema.index({ shopDomain: 1, createdAt: -1 });
 
