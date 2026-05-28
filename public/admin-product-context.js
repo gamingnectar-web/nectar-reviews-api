@@ -1,9 +1,12 @@
 /*
-  v27 product navigation stabiliser.
-  The top App Product switcher is removed. All products stay visible in the bottom
-  Products nav group, while tabs remain normal static admin tabs.
+  v28 product navigation + contextual side menu.
+  - No top App Product switcher.
+  - Products always remain visible in the Products group.
+  - Manage group changes to the active product's most useful screens.
+  - Configuration group stays visible so product tabs do not wipe shared settings.
 */
 (function NectarAdminProductContext() {
+  const PRODUCT_ORDER = ['reviews', 'loyalty', 'discounts', 'cart-rewards', 'referrals'];
   const PRODUCT_STATUS = {
     reviews: { label: 'Reviews', view: 'v-dash', stage: '', dot: 'warning', title: 'Reviews enabled; launch checks loading.' },
     loyalty: { label: 'Loyalty', view: 'v-loyalty', stage: 'Beta', dot: '', title: 'Loyalty is beta. Enable when configured.' },
@@ -12,18 +15,104 @@
     referrals: { label: 'Referrals', view: 'v-referrals', stage: 'Soon', dot: '', title: 'Referrals is coming soon.' }
   };
 
+  const MANAGE_MENUS = {
+    reviews: [
+      { label: 'Dashboard', view: 'v-dash' },
+      { label: 'Reviews', view: 'v-mgr' },
+      { label: 'Reviews Widget Library', view: 'v-widget-library' },
+      { label: 'Migration Centre', view: 'v-migration' },
+      { label: 'Review Importer', view: 'v-import' },
+      { label: 'Messaging & Campaigns', view: 'v-msg', suffix: '✉️' },
+      { label: 'Reviews Visual Customiser', view: 'v-style' }
+    ],
+    loyalty: [
+      { label: 'Loyalty Overview', view: 'v-loyalty', loyaltyTab: 'overview' },
+      { label: 'Email Builder', view: 'v-loyalty', loyaltyTab: 'email' },
+      { label: 'Userboard', view: 'v-loyalty', loyaltyTab: 'members' },
+      { label: 'Points Rules', view: 'v-loyalty', loyaltyTab: 'rules' },
+      { label: 'Tiers', view: 'v-loyalty', loyaltyTab: 'tiers' },
+      { label: 'Rewards', view: 'v-loyalty', loyaltyTab: 'rewards' },
+      { label: 'Checkout Beta', view: 'v-loyalty', loyaltyTab: 'checkout', pill: 'Beta' },
+      { label: 'Settings', view: 'v-loyalty', loyaltyTab: 'settings' }
+    ],
+    discounts: [
+      { label: 'Discounts Overview', view: 'v-discounts' },
+      { label: 'Review Discounts', view: 'v-discounts', anchor: 'discount-review-templates' },
+      { label: 'Loyalty Discounts', view: 'v-discounts', anchor: 'discount-loyalty-templates' },
+      { label: 'Cart Reward Discounts', view: 'v-discounts', anchor: 'discount-cart-templates' },
+      { label: 'Issued Codes', view: 'v-discounts', anchor: 'discount-issued-codes' },
+      { label: 'Settings', view: 'v-discounts', anchor: 'discount-code-explainer' }
+    ],
+    'cart-rewards': [
+      { label: 'Cart Rewards Dashboard', view: 'v-cart-rewards', cartPanel: 'dashboard' },
+      { label: 'Campaigns', view: 'v-cart-rewards', cartPanel: 'campaigns' },
+      { label: 'Campaign Builder', view: 'v-cart-rewards', cartPanel: 'builder' },
+      { label: 'Campaign Calendar', view: 'v-cart-rewards', cartPanel: 'planner' },
+      { label: 'Templates', view: 'v-cart-rewards', cartPanel: 'templates' },
+      { label: 'Design', view: 'v-cart-rewards', cartPanel: 'design' },
+      { label: 'Analytics', view: 'v-cart-rewards', cartPanel: 'analytics' },
+      { label: 'Settings', view: 'v-cart-rewards', cartPanel: 'settings' }
+    ],
+    referrals: [
+      { label: 'Referrals Roadmap', view: 'v-referrals' },
+      { label: 'Launch Checklist', view: 'v-review-launch' },
+      { label: 'Documentation', view: 'v-docs' }
+    ]
+  };
+
+  const CONFIG_MENUS = {
+    reviews: [
+      { label: 'App Settings & Render Names', view: 'v-settings' },
+      { label: 'Reviews Launch Checklist', view: 'v-review-launch' },
+      { label: 'Real-world Test Centre', view: 'v-test-centre' }
+    ],
+    loyalty: [
+      { label: 'Loyalty Settings', view: 'v-loyalty', loyaltyTab: 'settings' },
+      { label: 'Checkout Beta Settings', view: 'v-loyalty', loyaltyTab: 'checkout' },
+      { label: 'Real-world Test Centre', view: 'v-test-centre' }
+    ],
+    discounts: [
+      { label: 'Discount Settings', view: 'v-discounts' },
+      { label: 'Real-world Test Centre', view: 'v-test-centre' },
+      { label: 'Manual Setup', view: 'v-docs' }
+    ],
+    'cart-rewards': [
+      { label: 'Cart Rewards Settings', view: 'v-cart-rewards', cartPanel: 'settings' },
+      { label: 'Cart Rewards Design', view: 'v-cart-rewards', cartPanel: 'design' },
+      { label: 'Cart Rewards Tests', view: 'v-test-centre' },
+      { label: 'Manual Setup', view: 'v-docs' }
+    ],
+    referrals: [
+      { label: 'Referral Settings', view: 'v-referrals' },
+      { label: 'Documentation', view: 'v-docs' }
+    ]
+  };
+
   let activeProduct = 'reviews';
+  let activeManageKey = '';
 
   function esc(value) {
     return String(value || '').replace(/[&<>"']/g, (m) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[m]));
   }
+
+  function qsa(selector, root = document) { return Array.from(root.querySelectorAll(selector)); }
+
+  function navGroups() { return qsa('.sidebar .nav-group'); }
+
+  function groupByTitle(pattern) {
+    return navGroups().find((group) => pattern.test(group.querySelector('.nav-title')?.textContent || '')) || null;
+  }
+
+  function manageGroup() { return groupByTitle(/manage/i) || navGroups()[0]; }
+  function configGroup() { return groupByTitle(/configuration/i) || navGroups()[1]; }
+  function productGroup() { return groupByTitle(/products/i) || navGroups()[2]; }
 
   function productForView(viewId) {
     if (viewId === 'v-loyalty') return 'loyalty';
     if (viewId === 'v-discounts') return 'discounts';
     if (viewId === 'v-cart-rewards') return 'cart-rewards';
     if (viewId === 'v-referrals') return 'referrals';
-    return 'reviews';
+    return activeProduct || 'reviews';
   }
 
   function dotHtml(id) {
@@ -34,41 +123,80 @@
 
   function productButtonHtml(id) {
     const cfg = PRODUCT_STATUS[id];
-    if (!cfg) return '';
     const stage = cfg.stage ? `<span class="pill">${esc(cfg.stage)}</span>` : '';
     return `<button class="tab-btn product-tab-btn ${activeProduct === id ? 'active' : ''}" type="button" data-product-key="${esc(id)}" data-product-view="${esc(cfg.view)}"><span>${esc(cfg.label)} ${dotHtml(id)}</span>${stage}</button>`;
   }
 
-  function productGroup() {
-    const groups = Array.from(document.querySelectorAll('.sidebar .nav-group'));
-    return groups.find((group) => /products/i.test(group.querySelector('.nav-title')?.textContent || '')) || groups[2];
+  function itemButtonHtml(item, index) {
+    const key = item.key || `${item.view || 'view'}:${item.loyaltyTab || item.cartPanel || item.anchor || index}`;
+    const suffix = item.suffix ? ` <span class="nav-soft-suffix">${esc(item.suffix)}</span>` : '';
+    const pill = item.pill ? `<span class="pill">${esc(item.pill)}</span>` : '';
+    return `<button class="tab-btn context-tab-btn ${activeManageKey === key ? 'active' : ''}" type="button" data-context-nav-key="${esc(key)}" data-context-view="${esc(item.view)}" data-loyalty-target="${esc(item.loyaltyTab || '')}" data-cart-panel="${esc(item.cartPanel || '')}" data-scroll-anchor="${esc(item.anchor || '')}"><span>${esc(item.label)}${suffix}</span>${pill}</button>`;
   }
 
-  function installProductNav() {
+  function renderProductGroup() {
     const group = productGroup();
     if (!group) return;
-    group.innerHTML = `<p class="nav-title">Products</p>${Object.keys(PRODUCT_STATUS).map(productButtonHtml).join('')}`;
+    group.dataset.nectarStaticGroup = 'products';
+    group.innerHTML = `<p class="nav-title" onclick="window.toggleNavGroup?.(this)">Products</p>${PRODUCT_ORDER.map(productButtonHtml).join('')}`;
     group.querySelectorAll('[data-product-key]').forEach((button) => {
       button.addEventListener('click', () => setProduct(button.dataset.productKey));
     });
-    refreshActiveProduct();
-    refreshStatuses();
   }
 
-  function refreshActiveProduct(viewId) {
-    activeProduct = productForView(viewId || document.querySelector('.view.active')?.id || 'v-dash');
-    document.body.dataset.nectarProductContext = activeProduct;
-    document.querySelectorAll('[data-product-key]').forEach((button) => {
-      button.classList.toggle('active', button.dataset.productKey === activeProduct);
+  function renderContextGroups() {
+    const product = activeProduct || 'reviews';
+    const manage = manageGroup();
+    const config = configGroup();
+    const manageItems = MANAGE_MENUS[product] || MANAGE_MENUS.reviews;
+    const configItems = CONFIG_MENUS[product] || CONFIG_MENUS.reviews;
+    if (manage) {
+      manage.dataset.nectarContextGroup = 'manage';
+      manage.innerHTML = `<p class="nav-title" onclick="window.toggleNavGroup?.(this)">Manage</p>${manageItems.map(itemButtonHtml).join('')}`;
+    }
+    if (config) {
+      config.dataset.nectarContextGroup = 'configuration';
+      config.innerHTML = `<p class="nav-title" onclick="window.toggleNavGroup?.(this)">Configuration</p>${configItems.map(itemButtonHtml).join('')}`;
+    }
+    qsa('[data-context-nav-key]').forEach((button) => {
+      button.addEventListener('click', () => navigateContext(button));
     });
   }
 
+  function navigateContext(button) {
+    const view = button.dataset.contextView;
+    const loyaltyTab = button.dataset.loyaltyTarget;
+    const cartPanel = button.dataset.cartPanel;
+    const anchor = button.dataset.scrollAnchor;
+    activeManageKey = button.dataset.contextNavKey || '';
+    if (view && typeof window.tab === 'function') window.tab(view);
+    if (loyaltyTab) setTimeout(() => document.querySelector(`#v-loyalty [data-loyalty-tab="${CSS.escape(loyaltyTab)}"]`)?.click(), 70);
+    if (cartPanel) setTimeout(() => window.NectarCartRewardsAdmin?.showPanel?.(cartPanel), 90);
+    if (anchor) setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 120);
+    qsa('[data-context-nav-key]').forEach((btn) => btn.classList.toggle('active', btn === button));
+  }
+
+  function refreshActiveProduct(viewId) {
+    const visibleView = viewId || document.querySelector('.view.active')?.id || 'v-dash';
+    if (['v-loyalty', 'v-discounts', 'v-cart-rewards', 'v-referrals'].includes(visibleView)) {
+      activeProduct = productForView(visibleView);
+    }
+    document.body.dataset.nectarProductContext = activeProduct;
+    qsa('[data-product-key]').forEach((button) => button.classList.toggle('active', button.dataset.productKey === activeProduct));
+    renderContextGroups();
+  }
+
   function setProduct(product) {
-    const cfg = PRODUCT_STATUS[product] || PRODUCT_STATUS.reviews;
-    activeProduct = product;
-    window.NectarModuleShell?.setActiveModule?.(product, { silent: true });
+    const next = PRODUCT_STATUS[product] ? product : 'reviews';
+    activeProduct = next;
+    activeManageKey = '';
+    document.body.dataset.nectarProductContext = next;
+    window.NectarModuleShell?.setActiveModule?.(next, { silent: true });
+    const cfg = PRODUCT_STATUS[next] || PRODUCT_STATUS.reviews;
     if (typeof window.tab === 'function') window.tab(cfg.view);
+    if (next === 'cart-rewards') setTimeout(() => window.NectarCartRewardsAdmin?.showPanel?.('dashboard'), 100);
     refreshActiveProduct(cfg.view);
+    refreshStatuses();
   }
 
   function setDot(id, state, title) {
@@ -80,7 +208,7 @@
 
   async function refreshStatuses() {
     let modules = window.nectarModules || null;
-    if (!modules && typeof window.adminFetch === 'function') {
+    if (typeof window.adminFetch === 'function') {
       try {
         const result = await window.adminFetch('/admin/modules');
         modules = result.modules || {};
@@ -92,33 +220,36 @@
     if (!modules || Array.isArray(modules)) return;
     const reviewDot = document.getElementById('nav-status-reviews');
     const keepReviewsLive = reviewDot?.classList.contains('live');
-    setDot('reviews', modules.reviews?.enabled === false ? '' : (keepReviewsLive ? 'live' : 'warning'), modules.reviews?.enabled === false ? 'Reviews disabled.' : (keepReviewsLive ? 'Reviews live-ready: launch checks passed.' : 'Reviews enabled; launch checks decide if this becomes green.'));
+    setDot('reviews', modules.reviews?.enabled === false ? '' : (keepReviewsLive ? 'live' : 'warning'), modules.reviews?.enabled === false ? 'Reviews disabled.' : (keepReviewsLive ? 'Reviews live-ready: launch checks passed.' : 'Reviews enabled; launch checklist decides if this becomes green.'));
     setDot('loyalty', modules.loyalty?.enabled ? 'warning' : '', modules.loyalty?.enabled ? 'Loyalty beta enabled but not fully live.' : 'Loyalty beta not enabled.');
     setDot('discounts', modules.discounts?.enabled ? 'warning' : '', modules.discounts?.enabled ? 'Discounts beta enabled but not fully live.' : 'Discounts beta not enabled.');
-    setDot('cart-rewards', modules.cartRewards?.enabled || modules.cart_rewards?.enabled ? 'warning' : '', modules.cartRewards?.enabled || modules.cart_rewards?.enabled ? 'Cart Rewards beta enabled but not fully live.' : 'Cart Rewards beta not enabled.');
+    const cartEnabled = Boolean(modules.cartRewards?.enabled || modules.cart_rewards?.enabled || modules['cart-rewards']?.enabled);
+    setDot('cart-rewards', cartEnabled ? 'warning' : '', cartEnabled ? 'Cart Rewards beta enabled but not fully live.' : 'Cart Rewards beta not enabled.');
     setDot('referrals', '', 'Referrals coming soon.');
   }
 
   const oldTab = window.tab;
-  if (typeof oldTab === 'function' && !oldTab.__nectarProductContextPatched) {
+  if (typeof oldTab === 'function' && !oldTab.__nectarProductContextPatchedV28) {
     const patched = function productAwareTab(id) {
       const result = oldTab.apply(this, arguments);
-      refreshActiveProduct(id);
+      setTimeout(() => refreshActiveProduct(id), 30);
       return result;
     };
-    patched.__nectarProductContextPatched = true;
+    patched.__nectarProductContextPatchedV28 = true;
     window.tab = patched;
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    installProductNav();
+    renderProductGroup();
+    refreshActiveProduct(document.querySelector('.view.active')?.id || 'v-dash');
     setTimeout(refreshStatuses, 200);
   });
 
   window.NectarAdminProductContext = {
     setProduct,
-    renderNav: installProductNav,
+    renderNav: () => { renderProductGroup(); renderContextGroups(); },
     refreshStatuses,
+    refreshActiveProduct,
     get activeProduct() { return activeProduct; }
   };
 })();

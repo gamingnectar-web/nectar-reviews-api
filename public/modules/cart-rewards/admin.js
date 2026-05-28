@@ -266,115 +266,51 @@
   }
 
   function installProductSwitcher() {
-    const sidebar = findSidebar();
-    if (!sidebar || qs('#ncr-product-switcher')) return;
-
-    const switcher = document.createElement('div');
-    switcher.id = 'ncr-product-switcher';
-    switcher.className = 'ncr-product-switcher';
-    switcher.innerHTML = `
-      <button class="ncr-product-switcher__button" type="button" aria-expanded="false">
-        <span class="ncr-product-switcher__label">
-          <span class="ncr-product-switcher__kicker">App product</span>
-          <strong data-ncr-current-product>review-widget</strong>
-        </span>
-        <span class="ncr-product-switcher__chevron" aria-hidden="true">⌄</span>
-      </button>
-      <div class="ncr-product-switcher__menu" role="listbox" aria-label="Choose app product">
-        <button class="ncr-product-switcher__item" type="button" data-ncr-product="${PRODUCT_REVIEW_WIDGET}" aria-selected="true">
-          <strong>review-widget</strong>
-          <span>Reviews, visual customiser, messaging and import tools.</span>
-        </button>
-        <button class="ncr-product-switcher__item" type="button" data-ncr-product="${PRODUCT_CART_REWARDS}" aria-selected="false">
-          <strong>Cart Milestone Rewards</strong>
-          <span>Cart drawer, cart page and checkout reward milestones.</span>
-        </button>
-      </div>
-    `;
-
-    const firstChild = sidebar.firstElementChild;
-    if (firstChild) sidebar.insertBefore(switcher, firstChild.nextSibling);
-    else sidebar.appendChild(switcher);
-
-    const trigger = qs('.ncr-product-switcher__button', switcher);
-    trigger.addEventListener('click', () => {
-      const open = !switcher.classList.contains('is-open');
-      switcher.classList.toggle('is-open', open);
-      trigger.setAttribute('aria-expanded', String(open));
-    });
-
-    qsa('[data-ncr-product]', switcher).forEach((button) => {
-      button.addEventListener('click', () => {
-        switcher.classList.remove('is-open');
-        trigger.setAttribute('aria-expanded', 'false');
-        setProductMode(button.dataset.ncrProduct);
-      });
-    });
-
-    document.addEventListener('click', (event) => {
-      if (!switcher.contains(event.target)) {
-        switcher.classList.remove('is-open');
-        trigger.setAttribute('aria-expanded', 'false');
-      }
-    });
+    // v28: disabled. Product selection now lives in the shared Products sidebar group.
+    document.getElementById('ncr-product-switcher')?.remove();
   }
 
   function installCartNavigation() {
-    const sidebar = findSidebar();
-    if (!sidebar) return null;
-    let nav = qs('#ncr-cart-nav', sidebar);
-    if (nav) return nav;
-
-    nav = document.createElement('div');
-    nav.id = 'ncr-cart-nav';
-    nav.className = 'ncr-cart-nav';
-    nav.innerHTML = `
-      <span class="ncr-cart-nav__group-title">Cart Rewards</span>
-      <button type="button" data-ncr-panel="dashboard" class="active">Dashboard</button>
-      <button type="button" data-ncr-panel="campaigns">Campaigns</button>
-      <button type="button" data-ncr-panel="builder">Builder</button>
-      <button type="button" data-ncr-panel="planner">Planner</button>
-      <button type="button" data-ncr-panel="templates">Templates</button>
-      <button type="button" data-ncr-panel="design">Design</button>
-      <button type="button" data-ncr-panel="analytics">Analytics</button>
-      <button type="button" data-ncr-panel="settings">Settings</button>
-    `;
-
-    const switcher = qs('#ncr-product-switcher', sidebar);
-    if (switcher) switcher.insertAdjacentElement('afterend', nav);
-    else sidebar.appendChild(nav);
-
-    qsa('[data-ncr-panel]', nav).forEach((button) => {
-      button.addEventListener('click', () => showPanel(button.dataset.ncrPanel));
-    });
-
-    return nav;
+    // v28: disabled. The shared Manage group plus the local tab bar control Cart Rewards.
+    document.getElementById('ncr-cart-nav')?.remove();
+    return null;
   }
 
   function ensureCartRewardsView() {
-    const { cartWorkspace } = ensureWorkspaces();
-    let view = qs('#v-cart-rewards', cartWorkspace) || qs('#v-cart-rewards');
-    if (view) {
-      if (view.parentElement !== cartWorkspace) cartWorkspace.appendChild(view);
-      return view;
+    const view = qs('#v-cart-rewards');
+    if (!view) return null;
+    let mount = qs('#cart-rewards-admin-mount', view);
+    if (!mount) {
+      mount = document.createElement('div');
+      mount.id = 'cart-rewards-admin-mount';
+      view.appendChild(mount);
     }
-
-    view = document.createElement('section');
-    view.id = 'v-cart-rewards';
-    view.className = 'nectar-cart-rewards-admin-view';
-    view.style.display = 'none';
-    view.innerHTML = `
+    if (mount.dataset.ncrHydrated === 'true') return view;
+    mount.dataset.ncrHydrated = 'true';
+    mount.classList.remove('panel');
+    mount.innerHTML = `
       <div class="ncr-shell">
         <div class="ncr-hero">
           <div>
-            <span class="ncr-eyebrow">Cart Rewards</span>
+            <span class="ncr-eyebrow">Cart Rewards · Beta</span>
             <h1>Cart Milestone Rewards</h1>
-            <p>Premium cart drawer, cart page and checkout reward campaigns. Milestones use cart data, reward inventory and signed claim tokens only.</p>
+            <p>Build cart drawer, cart page and checkout reward campaigns. This stays inside the normal admin shell so Products and Configuration tabs never disappear.</p>
           </div>
           <div class="ncr-hero__actions">
             <button class="ncr-btn" type="button" data-ncr-action="refresh">Refresh</button>
             <button class="ncr-btn ncr-btn--primary" type="button" data-ncr-action="new-campaign">New campaign</button>
           </div>
+        </div>
+
+        <div class="ncr-local-tabs" role="tablist" aria-label="Cart Rewards sections">
+          <button type="button" data-ncr-panel="dashboard" class="active">Dashboard</button>
+          <button type="button" data-ncr-panel="campaigns">Campaigns</button>
+          <button type="button" data-ncr-panel="builder">Builder</button>
+          <button type="button" data-ncr-panel="planner">Calendar</button>
+          <button type="button" data-ncr-panel="templates">Templates</button>
+          <button type="button" data-ncr-panel="design">Design</button>
+          <button type="button" data-ncr-panel="analytics">Analytics</button>
+          <button type="button" data-ncr-panel="settings">Settings</button>
         </div>
 
         <div class="ncr-panel active" data-ncr-panel-view="dashboard">
@@ -384,7 +320,7 @@
               <div class="ncr-card__header">
                 <div>
                   <h2>Campaigns</h2>
-                  <p>Live, scheduled and draft promotions live here. Reviews remain in the review-widget workspace.</p>
+                  <p>Live, scheduled and draft promotions live here. Reviews remain separate in the Reviews product workspace.</p>
                 </div>
                 <button class="ncr-btn" type="button" data-ncr-action="open-builder">Open builder</button>
               </div>
@@ -441,7 +377,7 @@
             <div class="ncr-card__header">
               <div>
                 <h2>Campaign calendar</h2>
-                <p>Move through months, create seasonal campaigns, and schedule campaign swaps without editing review-widget settings.</p>
+                <p>Move through months, create seasonal campaigns, and schedule campaign swaps.</p>
               </div>
               <div class="ncr-actions-row">
                 <button class="ncr-btn" type="button" data-ncr-action="planner-prev">Previous</button>
@@ -517,10 +453,11 @@
       </div>
     `;
 
-    cartWorkspace.appendChild(view);
-
-    qsa('[data-ncr-action]', view).forEach((button) => {
+    qsa('[data-ncr-action]', mount).forEach((button) => {
       button.addEventListener('click', () => handleAction(button.dataset.ncrAction, button));
+    });
+    qsa('.ncr-local-tabs [data-ncr-panel]', mount).forEach((button) => {
+      button.addEventListener('click', () => showPanel(button.dataset.ncrPanel));
     });
 
     renderBuilder();
@@ -541,39 +478,22 @@
   function setProductMode(product) {
     state.product = product === PRODUCT_CART_REWARDS ? PRODUCT_CART_REWARDS : PRODUCT_REVIEW_WIDGET;
     setProductSwitcherLabel(state.product);
-
-    const sidebar = findSidebar();
-    const { reviewWorkspace, cartWorkspace } = ensureWorkspaces();
-    const view = ensureCartRewardsView();
-    const cartNav = installCartNavigation();
-
-    if (state.product === PRODUCT_CART_REWARDS) {
-      rememberCurrentReviewView();
-      document.body.classList.add(ACTIVE_CLASS);
-      document.body.dataset.nectarActiveModule = PRODUCT_CART_REWARDS;
-      getSidebarChildrenToHide(sidebar).forEach((child) => child.classList.add('ncr-hidden-original-nav'));
-      if (cartNav) cartNav.style.display = '';
-      reviewWorkspace.style.display = 'none';
-      cartWorkspace.style.display = '';
-      view.style.display = '';
-      hydrateOnce();
-      showPanel(state.panel || 'dashboard');
+    if (state.product !== PRODUCT_CART_REWARDS) {
+      document.body.classList.remove(ACTIVE_CLASS);
       return;
     }
-
-    document.body.classList.remove(ACTIVE_CLASS);
-    document.body.dataset.nectarActiveModule = 'reviews';
-    getSidebarChildrenToHide(sidebar).forEach((child) => child.classList.remove('ncr-hidden-original-nav'));
-    if (cartNav) cartNav.style.display = 'none';
-    view.style.display = 'none';
-    cartWorkspace.style.display = 'none';
-    reviewWorkspace.style.display = '';
-    restoreReviewView();
+    const view = ensureCartRewardsView();
+    if (!view) return;
+    document.body.classList.add(ACTIVE_CLASS);
+    document.body.dataset.nectarActiveModule = PRODUCT_CART_REWARDS;
+    hydrateOnce();
+    showPanel(state.panel || 'dashboard');
   }
 
   function showPanel(panel) {
     state.panel = panel || 'dashboard';
-    qsa('#ncr-cart-nav [data-ncr-panel]').forEach((button) => {
+    ensureCartRewardsView();
+    qsa('#v-cart-rewards .ncr-local-tabs [data-ncr-panel], #ncr-cart-nav [data-ncr-panel]').forEach((button) => {
       button.classList.toggle('active', button.dataset.ncrPanel === state.panel);
     });
     qsa('#v-cart-rewards [data-ncr-panel-view]').forEach((panelEl) => {
@@ -1570,7 +1490,8 @@
   }
 
   function init() {
-    if (!window.NectarModuleShell) installProductSwitcher();
+    installProductSwitcher();
+    installCartNavigation();
     ensureCartRewardsView();
     injectAssetsNotice();
 
@@ -1581,6 +1502,7 @@
 
     const params = new URLSearchParams(window.location.search);
     if (params.get('product') === PRODUCT_CART_REWARDS || params.get('module') === PRODUCT_CART_REWARDS || window.location.hash === '#cart-rewards') {
+      if (typeof window.tab === 'function') window.tab('v-cart-rewards');
       setProductMode(PRODUCT_CART_REWARDS);
     }
   }

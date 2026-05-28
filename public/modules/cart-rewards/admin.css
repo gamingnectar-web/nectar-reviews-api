@@ -966,3 +966,38 @@ body.ncr-cart-product-active {
     display: none;
   }
 }
+
+/* v28 embedded admin tabs. Cart Rewards now stays inside the normal product shell. */
+.ncr-local-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 22px;
+  padding: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+}
+.ncr-local-tabs button {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #475569;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.ncr-local-tabs button:hover,
+.ncr-local-tabs button.active {
+  background: #111827;
+  color: #fff;
+}
+#cart-rewards-admin-mount {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}

@@ -81,9 +81,23 @@
         .migration-map-search { display:grid; grid-template-columns:1fr auto; gap:10px; margin-bottom:12px; }
         .migration-product-result { display:grid; grid-template-columns:56px 1fr auto; gap:12px; align-items:center; padding:12px; border:1px solid #e5e7eb; border-radius:14px; margin-top:8px; background:#fbfdff; }
         .migration-product-result img { width:56px; height:56px; border-radius:10px; object-fit:cover; background:#eef2f7; }
+        .migration-flow-steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin:16px 0 18px; }
+        .migration-step { border:1px solid #dbeafe; background:#eff6ff; border-radius:16px; padding:14px; color:#1e3a8a; }
+        .migration-step span { display:inline-grid; place-items:center; width:26px; height:26px; border-radius:999px; background:#1d4ed8; color:#fff; font-weight:950; margin-bottom:8px; }
+        .migration-step strong { display:block; color:#0f172a; margin-bottom:4px; }
+        .migration-step p { margin:0; color:#475569; font-size:13px; }
+        .migration-explain-btn { border:1px solid #c7d2fe!important; background:#eef2ff!important; color:#3730a3!important; }
       </style>
       <h3>Robust Migration Centre</h3>
       <p>Import Yotpo, Shop/exported, Judge.me or generic reviews into Nectar with staging, product mapping, site-review support and duplicate protection. The storefront scan detects public review signals going forward, but it does not claim private Shop app review data is automatically importable.</p>
+
+      <div class="migration-flow-steps">
+        <div class="migration-step"><span>1</span><strong>Keep the old app live</strong><p>Yotpo/Shop can stay visible while Nectar quietly stages the import.</p></div>
+        <div class="migration-step"><span>2</span><strong>Preview the CSV</strong><p>No reviews go live yet. Rows are staged and categorised first.</p></div>
+        <div class="migration-step"><span>3</span><strong>Map products</strong><p>Matched product reviews attach to products. Shop/site reviews attach to the store.</p></div>
+        <div class="migration-step"><span>4</span><strong>Import and check</strong><p>Duplicates are blocked, then you preview widgets before switching schema/live display.</p></div>
+      </div>
+      <div class="migration-actions"><button class="secondary migration-explain-btn" type="button" onclick="window.NectarHelpAssistant?.open('Explain the Migration Centre and what I should do next on this page.')">Ask AI to explain this page</button></div>
 
       <div class="migration-grid" id="rmc-overview-cards">
         <div class="migration-card"><strong>Migration state</strong><span class="migration-muted">Loading…</span></div>
@@ -93,6 +107,7 @@
 
       <div class="migration-card">
         <strong>1. Upload / preview import</strong>
+        <p class="migration-muted">Upload an export from Yotpo/Shop/Judge.me/etc. Nectar will stage it first. Use <strong>Preview and stage import</strong>; do not import until matched/site rows look right.</p>
         <div class="migration-row">
           <label>Source
             <select id="rmc-source-platform">
@@ -133,6 +148,7 @@
 
       <div class="migration-card" style="margin-top:14px;">
         <strong>3. Recent batches</strong>
+        <p class="migration-muted">A batch is an audit trail. Open a batch to map rows, mark shop/site reviews, skip rows, or import accepted rows.</p>
         <div id="rmc-batch-list" class="migration-muted">Loading batches…</div>
       </div>
     `;

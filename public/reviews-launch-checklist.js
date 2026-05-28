@@ -65,8 +65,24 @@
 
   window.goReviewLaunchTarget = function(view, sub){
     if (view) window.tab?.(view);
-    if (view === 'v-msg' && sub === 'delivery') setTimeout(()=>document.querySelector('[data-msg-tab="delivery"], [data-request-tab="delivery"], button[onclick*="emailDelivery"]')?.click(), 80);
-    if (view === 'v-loyalty' && sub) setTimeout(()=>document.querySelector(`#v-loyalty [data-loyalty-tab="${CSS.escape(sub)}"]`)?.click(), 80);
+    setTimeout(()=>{
+      if (view === 'v-msg' && sub === 'delivery') {
+        const btn = document.querySelector('[data-msg-tab="delivery"], [data-request-tab="delivery"], button[onclick*="emailDelivery"]');
+        btn?.click();
+        (btn || document.getElementById('nr-messaging-campaigns-mount'))?.scrollIntoView({ behavior:'smooth', block:'center' });
+      }
+      if (view === 'v-loyalty' && sub) {
+        const btn = document.querySelector(`#v-loyalty [data-loyalty-tab="${CSS.escape(sub)}"]`);
+        btn?.click();
+        btn?.scrollIntoView({ behavior:'smooth', block:'center' });
+      }
+      if (view === 'v-review-launch') {
+        const register = Array.from(document.querySelectorAll('button')).find((button)=>/register shopify fulfilled-order webhook|register shopify webhook/i.test(button.textContent || ''));
+        register?.scrollIntoView({ behavior:'smooth', block:'center' });
+      }
+      if (view === 'v-style') document.getElementById('v-style')?.scrollIntoView({ behavior:'smooth', block:'start' });
+      if (view === 'v-settings') document.getElementById('widget-render-names')?.scrollIntoView({ behavior:'smooth', block:'center' });
+    }, 120);
   };
 
   window.runReviewLaunchFakeOrder = async function(){

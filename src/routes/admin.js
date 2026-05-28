@@ -1747,4 +1747,84 @@ router.get('/review-launch-checklist', async (req, res, next) => {
   }
 });
 
+
+function fallbackContextAssistant({ message = '', activeView = '', activeProduct = '', pageTitle = '' }) {
+  const q = String(message || '').toLowerCase();
+  const view = String(activeView || '').toLowerCase();
+  const product = String(activeProduct || '').toLowerCase();
+  if (view.includes('migration') || view.includes('import') || q.includes('migration') || q.includes('import')) {
+    return 'Migration Centre is the safe migration workspace. Keep Yotpo/Shop/old reviews live first, upload the CSV into staging, review which rows are matched product reviews versus site/shop reviews, manually map unmatched products, then import accepted rows. The storefront scanner is a monitoring tool: it checks public pages for review/schema signals but does not pull private Shop/Yotpo review databases.';
+  }
+  if (view.includes('review-launch') || q.includes('webhook') || q.includes('go live')) {
+    return 'The Reviews Launch Checklist is a go/no-go screen. It checks Nectar settings and Shopify-facing setup: saved email provider, primary Reviews sender, signed-link secret, OAuth connection, registered webhook, and native scheduler. The webhook turns green when Nectar successfully registers it with Shopify and stores that success for the shop. Theme placement remains manual because Shopify cannot confirm your preferred visual placement automatically.';
+  }
+  if (view.includes('msg') || q.includes('email') || q.includes('reminder')) {
+    return 'Messaging & Campaigns manages review emails, sender setup, tracking analytics, modules and manual reminders. If reminders fail, check Email Delivery is enabled with a saved SMTP/app password and set EMAIL_CREDENTIAL_SECRET or SHOPIFY_API_SECRET so Nectar can create signed one-use review links.';
+  }
+  if (view.includes('cart-rewards') || product.includes('cart')) {
+    return 'Cart Rewards is a beta product area. Create campaigns, attach Shopify reward products to tiers, schedule campaigns in the calendar, style the cart display in Design, and keep the module amber until a real cart/storefront test succeeds.';
+  }
+  if (view.includes('loyalty') || product.includes('loyalty')) {
+    return 'Loyalty is a beta product area. Configure points rules, tiers, rewards, email copy, and checkout redemption separately. Orange means the module is enabled but not fully live-ready yet; green should only be used when its own checkout/discount/Shopify tests pass.';
+  }
+  return `You are on ${pageTitle || activeView || 'the admin page'}. Green dots mean live-ready checks passed, orange means enabled but not fully live, no dot means disabled/not enabled, and Beta/Soon pills show maturity. Ask about a specific button or error and I can explain the next step.`;
+}
+
+function callOpenAiForContextAssistant({ message, activeView, activeProduct, pageTitle, pageSummary }) {
+  const apiKey = process.env.OPENAI_API_KEY || '';
+  if (!apiKey) return Promise.resolve(null);
+  const model = process.env.OPENAI_ASSISTANT_MODEL || process.env.OPENAI_MODULE_MODEL || 'gpt-4.1-mini';
+  const https = require('https');
+  const payload = JSON.stringify({
+    model,
+    input: [
+      { role: 'system', content: 'You are the embedded Nectar Reviews admin helper. Give practical, concise guidance based only on the supplied page context. Explain what things do, what may be missing, and the next safe action. Do not invent unavailable integrations. Mention when a check is internal versus Shopify-facing.' },
+      { role: 'user', content: JSON.stringify({ message, activeView, activeProduct, pageTitle, pageSummary }).slice(0, 12000) },
+    ],
+    max_output_tokens: 450,
+  });
+  return new Promise((resolve) => {
+    const req = https.request({
+      method: 'POST',
+      hostname: 'api.openai.com',
+      path: '/v1/responses',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+      },
+      timeout: 12000,
+    }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(body || '{}');
+          const text = json.output_text || (Array.isArray(json.output) ? json.output.flatMap((item) => item.content || []).map((part) => part.text || '').join('\n') : '');
+          resolve(text || null);
+        } catch (_) {
+          resolve(null);
+        }
+      });
+    });
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+    req.on('error', () => resolve(null));
+    req.write(payload);
+    req.end();
+  });
+}
+
+router.post('/context-assistant', async (req, res) => {
+  const body = req.body || {};
+  const payload = {
+    message: cleanText(body.message || '', 1000),
+    activeView: cleanText(body.activeView || '', 80),
+    activeProduct: cleanText(body.activeProduct || '', 80),
+    pageTitle: cleanText(body.pageTitle || '', 180),
+    pageSummary: cleanText(body.pageSummary || '', 5000),
+  };
+  const aiAnswer = await callOpenAiForContextAssistant(payload).catch(() => null);
+  return res.json({ ok: true, answer: aiAnswer || fallbackContextAssistant(payload), source: aiAnswer ? 'openai' : 'fallback' });
+});
+
 module.exports = router;

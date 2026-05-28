@@ -1894,6 +1894,8 @@ Testing:
       if (result.ok) (window.showToast || console.log)('Shopify orders/fulfilled webhook is registered for native review scheduling.');
       else (window.showToast || console.log)(result.result?.reason || 'Webhook could not be registered yet. Check OAuth and app scopes.');
       await window.loadE2ETestCentre?.();
+      await window.loadReviewsLaunchChecklist?.();
+      await window.NectarAdminProductContext?.refreshStatuses?.();
     } catch (error) {
       (window.showToast || console.log)(error.message || 'Could not register Shopify webhook.');
     }

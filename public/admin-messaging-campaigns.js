@@ -861,7 +861,23 @@
     }
     box.innerHTML = rows.map((row) => `<div class="msg-analytics-row"><div><strong>${escapeHtml(row.email || 'No email')}</strong>${row.isTest ? '<span class="msg-test-pill">Test</span>' : ''}<br><small>${escapeHtml(row.campaign || 'review_request')} · Order ${escapeHtml(row.orderId || '—')}</small>${sentDetailsHtml(row)}</div><div><small>Sent</small><br>${row.sentAt ? new Date(row.sentAt).toLocaleString() : '—'}</div><div><small>${escapeHtml(currentAnalyticsList)}</small><br>${eventDateForList(row, currentAnalyticsList) ? new Date(eventDateForList(row, currentAnalyticsList)).toLocaleString() : '—'}</div><div><small>Item</small><br>${escapeHtml(row.itemId || '—')}</div><div></div></div>`).join('');
   }
-  async function sendReminder(email, orderId, itemId, productTitle) { if (!email) return; try { await securedFetch('/admin/campaign-reminder', { method: 'POST', body: JSON.stringify({ email, orderId, itemId, productTitle, campaign: 'manual_review_reminder' }) }); showToast('Reminder sent'); await loadAnalytics(); } catch (error) { showToast(error.message || 'Reminder could not be sent. Check Email Delivery has a saved provider.'); throw error; } }
+  async function sendReminder(email, orderId, itemId, productTitle) {
+    if (!email) return showToast('This recipient has no email address to remind.');
+    const cleanedOrderId = String(orderId || '').replace(/^—$/, '');
+    try {
+      const result = await securedFetch('/admin/campaign-reminder', { method: 'POST', body: JSON.stringify({ email, orderId: cleanedOrderId, itemId, productTitle, campaign: 'manual_review_reminder' }) });
+      showToast(result.message || 'Reminder sent');
+      await loadAnalytics();
+    } catch (error) {
+      const detail = error.message || 'Reminder could not be sent. Check Email Delivery has a saved provider and EMAIL_CREDENTIAL_SECRET is set.';
+      showToast(detail);
+      const box = el('msg-analytics-list');
+      if (box && !box.querySelector('.msg-reminder-error')) {
+        box.insertAdjacentHTML('afterbegin', `<div class="msg-help msg-reminder-error"><strong>Reminder failed:</strong> ${escapeHtml(detail)}</div>`);
+      }
+      throw error;
+    }
+  }
 
   async function loadAnalytics() {
     try {

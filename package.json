@@ -1,6 +1,6 @@
 {
   "name": "reviews-platform-api",
-  "version": "1.2.22-v27-admin-navigation-migration-fix",
+  "version": "1.2.23-v28-product-nav-migration-assistant-fix",
   "description": "Reviews Platform API v27: v25/v26 functionality retained with stable product nav, robust migration importer, AI modules and status dots.",
   "main": "server.js",
   "scripts": {
