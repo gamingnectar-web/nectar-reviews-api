@@ -1,37 +1,13 @@
-function publicEmailSettings(settings) {
-  if (!settings) {
-    return {
-      enabled: false,
-      provider: 'none',
-      smtpHost: '',
-      smtpPort: '',
-      secureMode: 'starttls',
-      smtpUser: '',
-      smtpPasswordSet: false,
-      fromName: '',
-      fromEmail: '',
-      replyToEmail: '',
-      lastTestedAt: null,
-      lastTestStatus: '',
-      lastTestError: '',
-    };
+const nodemailer = require('nodemailer');
+async function createTransport(settings = {}) {
+  if (settings?.smtpHost) {
+    return nodemailer.createTransport({
+      host: settings.smtpHost,
+      port: Number(settings.smtpPort || 587),
+      secure: Number(settings.smtpPort) === 465,
+      auth: settings.smtpUser ? { user: settings.smtpUser, pass: settings.smtpPass || '' } : undefined,
+    });
   }
-
-  return {
-    enabled: Boolean(settings.enabled),
-    provider: settings.provider || 'none',
-    smtpHost: settings.smtpHost || '',
-    smtpPort: settings.smtpPort || '',
-    secureMode: settings.secureMode || 'starttls',
-    smtpUser: settings.smtpUser || '',
-    smtpPasswordSet: Boolean(settings.smtpPassEncrypted),
-    fromName: settings.fromName || '',
-    fromEmail: settings.fromEmail || '',
-    replyToEmail: settings.replyToEmail || '',
-    lastTestedAt: settings.lastTestedAt || null,
-    lastTestStatus: settings.lastTestStatus || '',
-    lastTestError: settings.lastTestError || '',
-  };
+  return nodemailer.createTransport({ jsonTransport: true });
 }
-
-module.exports = { publicEmailSettings };
+module.exports = { createTransport };

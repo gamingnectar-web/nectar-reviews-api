@@ -1,52 +1,27 @@
-function cleanShopDomain(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//, '')
-    .replace(/\/$/, '');
-}
-
-function isValidShopDomain(value) {
-  const shop = cleanShopDomain(value);
-  return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop) || /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/.test(shop);
-}
-
-function cleanText(value, max = 1000) {
-  return String(value || '')
-    .replace(/[<>]/g, '')
-    .replace(/\u0000/g, '')
+function cleanText(value = '', max = 1000) {
+  return String(value ?? '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
     .trim()
     .slice(0, max);
 }
 
-function cleanEmail(value) {
-  const email = cleanText(value, 254).toLowerCase();
+function cleanEmail(value = '') {
+  const email = cleanText(value, 320).toLowerCase();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : '';
 }
 
-function clampNumber(value, min, max, fallback) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, parsed));
+function clampNumber(value, min, max, fallback = min) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
 }
 
-function cleanReviewStatus(value) {
-  const allowed = new Set(['pending', 'accepted', 'rejected', 'hold', 'spam']);
-  const status = String(value || '').toLowerCase();
-  return allowed.has(status) ? status : null;
+function cleanShopDomain(value = '') {
+  return cleanText(value, 255).toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
 }
 
-function getClientIp(req) {
-  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  return forwarded || req.socket?.remoteAddress || '';
+function isValidShopDomain(value = '') {
+  return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(cleanShopDomain(value));
 }
 
-module.exports = {
-  cleanShopDomain,
-  isValidShopDomain,
-  cleanText,
-  cleanEmail,
-  clampNumber,
-  cleanReviewStatus,
-  getClientIp,
-};
+module.exports = { cleanText, cleanEmail, clampNumber, cleanShopDomain, isValidShopDomain };

@@ -1,13 +1,2 @@
-name = "Nectar Cart Reward Discount"
+name = "Cart Reward Discount Function"
 type = "function"
-
-api_version = "2026-04"
-
-[build]
-command = "cargo build --target=wasm32-wasip1 --release"
-path = "target/wasm32-wasip1/release/cart_reward_discount_function.wasm"
-
-[[targeting]]
-target = "cart.lines.discounts.generate.run"
-input_query = "src/run.graphql"
-export = "run"

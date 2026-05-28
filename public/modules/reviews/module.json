@@ -1,7 +1,0 @@
-{
-  "id": "reviews",
-  "productSlug": "review-widget",
-  "label": "review-widget",
-  "description": "Existing Reviews Platform workspace. This remains the default Shopify app landing area while review files are gradually moved into this folder.",
-  "legacy": true
-}

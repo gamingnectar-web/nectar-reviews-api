@@ -1,7 +1,7 @@
 {
-  "name": "reviews-platform-api",
-  "version": "1.2.20-live-status-support-seo",
-  "description": "Reviews Platform API with live status badges, support settings, colour picker modules, fixed reminders and SEO reviews page",
+  "name": "nectar-reviews-api",
+  "version": "1.3.0-full-restore-ai-migration",
+  "description": "Full restore package for Nectar Reviews API: reviews, admin, persistent AI email modules, migration centre, loyalty and cart rewards scaffolds.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -9,9 +9,7 @@
     "verify:restore": "node scripts/verify-restore.js",
     "cart-rewards:smoke": "node scripts/cart-rewards-smoke-test.js"
   },
-  "engines": {
-    "node": ">=18"
-  },
+  "engines": { "node": ">=18" },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

@@ -1,73 +1,22 @@
-const crypto = require('crypto');
 const express = require('express');
+const crypto = require('crypto');
 const { env } = require('../config/env');
-const { cleanShopDomain } = require('../utils/validation');
-const { timingSafeEqualString } = require('../utils/crypto');
-const { scheduleReviewRequestFromOrder, updateReviewRequestDeliveryFromOrder } = require('../modules/reviews/reviewRequestAutomation');
-
+const { Shop } = require('../models');
 const router = express.Router();
-
-function verifyShopifyWebhook(rawBody, hmacHeader) {
-  if (!env.shopifyApiSecret) return false;
-  const digest = crypto.createHmac('sha256', env.shopifyApiSecret).update(rawBody).digest('base64');
-  return timingSafeEqualString(digest, String(hmacHeader || ''));
+router.use(express.raw({ type: '*/*', limit: '5mb' }));
+function verify(req) {
+  const hmac = req.get('X-Shopify-Hmac-Sha256');
+  if (!hmac || !env.shopifyApiSecret) return true;
+  const digest = crypto.createHmac('sha256', env.shopifyApiSecret).update(req.body).digest('base64');
+  return crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(hmac));
 }
-
-async function handleOrderFulfilled(req, res) {
-  const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || '');
-  const hmac = req.headers['x-shopify-hmac-sha256'];
-  const shopDomain = cleanShopDomain(req.headers['x-shopify-shop-domain'] || req.query.shop || '');
-  const webhookId = String(req.headers['x-shopify-webhook-id'] || req.headers['x-shopify-event-id'] || '');
-
-  if (!verifyShopifyWebhook(rawBody, hmac)) {
-    return res.status(401).json({ error: 'Invalid Shopify webhook signature.' });
-  }
-  if (!shopDomain) return res.status(400).json({ error: 'Missing Shopify shop domain.' });
-
-  let order = {};
+router.post('/', async (req, res, next) => {
   try {
-    order = JSON.parse(rawBody.toString('utf8') || '{}');
-  } catch (error) {
-    return res.status(400).json({ error: 'Invalid Shopify webhook JSON.' });
-  }
-
-  const job = await scheduleReviewRequestFromOrder({
-    shopDomain,
-    order,
-    source: 'shopify_orders_fulfilled_webhook',
-    webhookId,
-  });
-  return res.status(200).json({ ok: true, jobId: String(job._id), status: job.status, scheduledAt: job.scheduledAt });
-}
-
-async function handleOrderUpdated(req, res) {
-  const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || '');
-  const hmac = req.headers['x-shopify-hmac-sha256'];
-  const shopDomain = cleanShopDomain(req.headers['x-shopify-shop-domain'] || req.query.shop || '');
-  const webhookId = String(req.headers['x-shopify-webhook-id'] || req.headers['x-shopify-event-id'] || '');
-
-  if (!verifyShopifyWebhook(rawBody, hmac)) {
-    return res.status(401).json({ error: 'Invalid Shopify webhook signature.' });
-  }
-  if (!shopDomain) return res.status(400).json({ error: 'Missing Shopify shop domain.' });
-
-  let order = {};
-  try {
-    order = JSON.parse(rawBody.toString('utf8') || '{}');
-  } catch (error) {
-    return res.status(400).json({ error: 'Invalid Shopify webhook JSON.' });
-  }
-
-  const result = await updateReviewRequestDeliveryFromOrder({ shopDomain, order, webhookId });
-  return res.status(200).json({ ok: true, ...result });
-}
-
-router.post('/shopify/orders-fulfilled', express.raw({ type: '*/*', limit: '1mb' }), (req, res, next) => {
-  handleOrderFulfilled(req, res).catch(next);
+    if (!verify(req)) return res.status(401).send('Invalid webhook HMAC');
+    const topic = req.get('X-Shopify-Topic') || '';
+    const shopDomain = req.get('X-Shopify-Shop-Domain') || '';
+    if (topic === 'app/uninstalled' && shopDomain) await Shop.findOneAndUpdate({ shopDomain }, { $set: { uninstalledAt: new Date(), accessToken: '', accessTokenEncrypted: '' } });
+    res.status(200).send('ok');
+  } catch (e) { next(e); }
 });
-
-router.post('/shopify/orders-updated', express.raw({ type: '*/*', limit: '1mb' }), (req, res, next) => {
-  handleOrderUpdated(req, res).catch(next);
-});
-
 module.exports = router;

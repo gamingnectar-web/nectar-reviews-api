@@ -1,72 +1,11 @@
-const express = require("express");
-const controller = require("../controllers/cartRewards.controller");
-const { requireShop } = require("../middleware/shopAuth");
-
+const express = require('express');
+const Campaign = require('../models/CartRewardCampaign');
+const Tier = require('../models/CartRewardTier');
+const { planCampaign } = require('../services/cartRewardPlanner');
 const router = express.Router();
-
-function asyncRoute(handler) {
-  return async (req, res, next) => {
-    try {
-      await handler(req, res, next);
-    } catch (error) {
-      next(error);
-    }
-  };
-}
-
-router.use(requireShop);
-
-/**
- * Merchant/admin routes
- * Keep fixed paths before /campaigns/:id so Express does not treat "builder" as an id.
- */
-router.get("/campaigns", asyncRoute(controller.listCampaigns));
-router.post("/campaigns", asyncRoute(controller.createCampaign));
-router.post("/campaigns/builder", asyncRoute(controller.saveCampaignBundle));
-router.get("/campaigns/:id", asyncRoute(controller.getCampaign));
-router.put("/campaigns/:id", asyncRoute(controller.updateCampaign));
-router.put("/campaigns/:id/builder", asyncRoute(controller.saveCampaignBundle));
-router.delete("/campaigns/:id", asyncRoute(controller.archiveCampaign));
-router.post("/campaigns/:id/pause", asyncRoute(controller.pauseCampaign));
-router.post("/campaigns/:id/clone-for-future", asyncRoute(controller.cloneForFuture));
-
-router.post("/tiers", asyncRoute(controller.upsertTier));
-router.put("/tiers/:tierId", asyncRoute(controller.upsertTier));
-router.delete("/tiers/:tierId", asyncRoute(controller.deleteTier));
-
-router.post("/designs", asyncRoute(controller.upsertDesign));
-router.put("/designs/:designId", asyncRoute(controller.upsertDesign));
-
-/**
- * Planning/calendar routes
- */
-router.get("/planner/calendar", asyncRoute(controller.calendar));
-router.get("/planner/month", asyncRoute(controller.monthlyCalendar));
-router.post("/campaigns/:id/schedule", asyncRoute(controller.scheduleCampaign));
-router.post("/planner/conflicts", asyncRoute(controller.previewScheduleConflicts));
-router.post("/planner/swap", asyncRoute(controller.swapCampaigns));
-
-/**
- * Templates/listing routes
- */
-router.get("/templates", asyncRoute(controller.listTemplates));
-router.post("/templates", asyncRoute(controller.createTemplate));
-router.post("/templates/create-campaign", asyncRoute(controller.createFromTemplate));
-
-/**
- * Product picker and analytics
- */
-router.get("/products/search", asyncRoute(controller.productSearch));
-router.get("/analytics", asyncRoute(controller.analytics));
-router.get("/analytics/overview", asyncRoute(controller.analyticsOverview));
-
-/**
- * Storefront routes
- */
-router.get("/storefront/config", asyncRoute(controller.storefrontConfig));
-router.post("/storefront/evaluate", asyncRoute(controller.evaluateStorefront));
-router.post("/storefront/claim", asyncRoute(controller.claimReward));
-router.post("/storefront/confirm", asyncRoute(controller.confirmClaim));
-router.post("/storefront/remove", asyncRoute(controller.removeClaim));
-
+router.get('/campaigns', async (req,res,next)=>{ try{ res.json({ ok:true, campaigns: await Campaign.find({ shopDomain: req.shopDomain }).sort({ createdAt:-1 }).lean() }); }catch(e){ next(e); } });
+router.post('/campaigns', async (req,res,next)=>{ try{ res.json({ ok:true, campaign: await Campaign.create({ shopDomain: req.shopDomain, ...(req.body||{}) }) }); }catch(e){ next(e); } });
+router.get('/tiers', async (req,res,next)=>{ try{ res.json({ ok:true, tiers: await Tier.find({ shopDomain: req.shopDomain }).sort({ threshold:1 }).lean() }); }catch(e){ next(e); } });
+router.post('/tiers', async (req,res,next)=>{ try{ res.json({ ok:true, tier: await Tier.create({ shopDomain: req.shopDomain, ...(req.body||{}) }) }); }catch(e){ next(e); } });
+router.post('/plan', async (req,res)=>res.json({ ok:true, plan: planCampaign(req.body || {}) }));
 module.exports = router;

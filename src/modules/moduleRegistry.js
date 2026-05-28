@@ -1,46 +1,8 @@
-const modules = [
-  {
-    id: 'reviews',
-    productSlug: 'review-widget',
-    label: 'review-widget',
-    description: 'Reviews dashboard, review manager, messaging, import and visual customiser.',
-    status: 'active',
-    defaultModule: true,
-    adminFolder: 'public/modules/reviews',
-    apiNamespace: '/api/admin'
-  },
-
-  {
-    id: 'discounts',
-    productSlug: 'discounts',
-    label: 'Discounts',
-    description: 'Shared discount engine for reviews, loyalty, cart rewards and referrals.',
-    status: 'active',
-    adminFolder: 'public/modules/discounts',
-    apiNamespace: '/api/admin/discounts'
-  },
-  {
-    id: 'cart-rewards',
-    productSlug: 'cart-rewards',
-    label: 'Cart Milestone Rewards',
-    description: 'Cart drawer, cart page and checkout reward milestones.',
-    status: 'active',
-    adminFolder: 'public/modules/cart-rewards',
-    apiNamespace: '/api/cart-rewards'
-  }
+module.exports = [
+  { key: 'reviews', name: 'Reviews', status: 'live' },
+  { key: 'messaging', name: 'Messaging', status: 'beta' },
+  { key: 'loyalty', name: 'Loyalty', status: 'beta' },
+  { key: 'discounts', name: 'Discounts', status: 'coming_soon' },
+  { key: 'cart-rewards', name: 'Cart Rewards', status: 'beta' },
+  { key: 'migration-centre', name: 'Migration Centre', status: 'beta' },
 ];
-
-function listModules() {
-  return modules.map((module) => ({ ...module }));
-}
-
-function getModule(idOrSlug) {
-  const needle = String(idOrSlug || '').toLowerCase();
-  return modules.find((module) => module.id === needle || module.productSlug === needle) || null;
-}
-
-module.exports = {
-  modules,
-  listModules,
-  getModule
-};
