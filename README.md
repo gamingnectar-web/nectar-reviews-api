@@ -259,3 +259,17 @@ This extension is a beta foundation, not a merchant-live release. It requires de
 ### Loyalty privacy
 
 The loyalty database stores hashed customer references only. It does not store customer names, emails, phone numbers, addresses, or raw Shopify customer IDs. Shopify customer search in admin uses live Shopify data, then stores only a shop-scoped hash in the loyalty database.
+
+
+## v27 admin navigation + migration fixes
+
+This restore keeps the v25/v26 working logic and adds the requested admin fixes:
+
+- Removed the top product switcher/dropdown.
+- Keeps all products visible in the bottom **Products** nav group.
+- Stabilises tab switching so Loyalty, Discounts, Cart Rewards and Referrals do not require repeat clicks.
+- Restores product status behaviour: green dot for live-ready, orange dot for enabled/not-live, no dot for disabled, with Beta/Soon pills retained.
+- Keeps `/api/admin/modules` as the per-shop live/beta status endpoint and moves platform registry to `/api/admin/platform-modules`.
+- Replaces the old CSV-only importer tab with the robust Review Importer: CSV staging, duplicate checks, product vs site/shop review split, manual product mapping, skip/site-review actions and storefront review-signal scanner.
+
+Run `npm run check` after deploy to verify the full package.

@@ -150,6 +150,15 @@ router.patch('/staged/:rowId', async (req, res, next) => {
     }
     if (req.body.status && ['matched', 'needs_mapping', 'site_review', 'skipped'].includes(req.body.status)) {
       row.status = req.body.status;
+      if (req.body.status === 'site_review') {
+        row.reviewScope = 'site';
+        row.selectedProduct = null;
+        row.issue = '';
+        row.normalized = { ...(row.normalized || {}), reviewScope: 'site', itemId: '__site__' };
+      }
+      if (req.body.status === 'skipped') {
+        row.issue = cleanText(req.body.issue || 'Skipped during staging review.', 240);
+      }
     }
     await row.save();
     return res.json({ ok: true, row });

@@ -194,10 +194,13 @@ window.tab = function(id) {
     if (group) group.classList.remove('collapsed');
   }
   if (id === 'v-dash') window.loadStats();
-  if (['v-discounts', 'v-loyalty', 'v-referrals'].includes(id)) window.loadModules();
+  if (['v-discounts', 'v-loyalty', 'v-referrals', 'v-cart-rewards'].includes(id)) window.loadModules();
   if (id === 'v-loyalty') window.loadLoyaltyConfig?.();
+  if (id === 'v-cart-rewards') window.NectarModuleShell?.setActiveModule?.('cart-rewards', { silent: true });
   if (id === 'v-test-centre') window.loadE2ETestCentre?.();
   if (['v-migration','v-widget-library'].includes(id)) window.loadMigrationHub?.();
+  if (id === 'v-import') window.renderReviewMigrationImporter?.();
+  window.NectarAdminProductContext?.refreshStatuses?.();
   refreshResponsiveNavGroups();
 };
 

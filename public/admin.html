@@ -82,7 +82,7 @@
       text-align: left;
     }
     .tab-btn:hover, .tab-btn.active { background: #ffffff; }
-    .tab-status-dot{width:9px;height:9px;border-radius:999px;display:inline-block;margin-left:7px;box-shadow:0 0 0 3px rgba(0,128,96,.12);vertical-align:middle}.tab-status-dot.live{background:#008060}.tab-status-dot.warning{background:#b98900;box-shadow:0 0 0 3px rgba(185,137,0,.14)}
+    .tab-status-dot{width:9px;height:9px;border-radius:999px;display:inline-block;margin-left:7px;box-shadow:0 0 0 3px rgba(0,128,96,.12);vertical-align:middle}.tab-status-dot.live{background:#008060}.tab-status-dot.warning{background:#b98900;box-shadow:0 0 0 3px rgba(185,137,0,.14)}.tab-status-dot.hidden{display:none;box-shadow:none}.tab-btn.product-tab-btn{gap:10px}.tab-btn.product-tab-btn>span:first-child{display:flex;align-items:center;gap:2px}.tab-btn small{display:block;margin-top:3px;color:#6b7280;font-size:11px;font-weight:650;line-height:1.25}.tab-btn.active small{color:#4b5563}
     .tab-btn .pill {
       border-radius: 999px;
       background: #eef2ff;
@@ -718,7 +718,6 @@
     @media(max-width:760px){.widget-library-grid,.migration-form-grid{grid-template-columns:1fr}.migration-form-grid .wide{grid-column:auto}.widget-card-actions .secondary-btn,.widget-card-actions .primary-btn{width:100%;}}
 
   </style>
-  <link rel="stylesheet" href="/module-shell.css?v=cart-rewards-module-1">
   <link rel="stylesheet" href="/admin-responsive-polish.css?v=nav-polish-1">
 </head>
 <body>
@@ -736,10 +735,9 @@
           <button class="tab-btn" onclick="window.tab('v-mgr')">Reviews</button>
           <button class="tab-btn" onclick="window.tab('v-widget-library')">Reviews Widget Library</button>
           <button class="tab-btn" onclick="window.tab('v-migration')">Migration Centre</button>
+          <button class="tab-btn" onclick="window.tab('v-import')">Review Importer</button>
           <button class="tab-btn" onclick="window.tab('v-msg')">Messaging &amp; Campaigns ✉️</button>
           <button class="tab-btn" onclick="window.tab('v-style')">Reviews Visual Customiser</button>
-          <button class="tab-btn" onclick="window.tab('v-loyalty')">Loyalty <span class="pill">Beta</span></button>
-          <button class="tab-btn" onclick="window.tab('v-import')">Import CSV</button>
         </div>
         <div class="nav-group">
           <p class="nav-title">Configuration</p>
@@ -749,11 +747,11 @@
         </div>
         <div class="nav-group">
           <p class="nav-title">Products</p>
-          <button class="tab-btn" onclick="window.tab('v-mgr')">Reviews <span id="nav-status-reviews" class="tab-status-dot warning" title="Reviews enabled but launch checks not loaded yet"></span></button>
-          <button class="tab-btn" onclick="window.tab('v-loyalty')">Loyalty <span class="pill">Beta</span></button>
-          <button class="tab-btn" onclick="window.tab('v-discounts')">Discounts <span class="pill">Beta</span></button>
-          <button class="tab-btn" onclick="window.tab('v-cart-rewards')">Cart Rewards <span class="pill">Beta</span></button>
-          <button class="tab-btn" onclick="window.tab('v-referrals')">Referrals <span class="pill">Soon</span></button>
+          <button class="tab-btn product-tab-btn active" data-product-key="reviews" onclick="window.tab('v-dash')"><span>Reviews <span id="nav-status-reviews" class="tab-status-dot warning" title="Reviews enabled but launch checks not loaded yet"></span></span></button>
+          <button class="tab-btn product-tab-btn" data-product-key="loyalty" onclick="window.tab('v-loyalty')"><span>Loyalty <span id="nav-status-loyalty" class="tab-status-dot hidden"></span></span><span class="pill">Beta</span></button>
+          <button class="tab-btn product-tab-btn" data-product-key="discounts" onclick="window.tab('v-discounts')"><span>Discounts <span id="nav-status-discounts" class="tab-status-dot hidden"></span></span><span class="pill">Beta</span></button>
+          <button class="tab-btn product-tab-btn" data-product-key="cart-rewards" onclick="window.tab('v-cart-rewards')"><span>Cart Rewards <span id="nav-status-cart-rewards" class="tab-status-dot hidden"></span></span><span class="pill">Beta</span></button>
+          <button class="tab-btn product-tab-btn" data-product-key="referrals" onclick="window.tab('v-referrals')"><span>Referrals <span id="nav-status-referrals" class="tab-status-dot hidden"></span></span><span class="pill">Soon</span></button>
         </div>
         <div class="nav-group">
           <p class="nav-title">Developers</p>
@@ -911,18 +909,18 @@
         <div class="dash-header">
           <div>
             <h2 class="page-title">Migration Centre</h2>
-            <p class="dash-subtitle">Run Yotpo and Nectar side-by-side safely, import existing reviews, then switch the live storefront when the new review experience is ready.</p>
+            <p class="dash-subtitle">Run Yotpo, Shop/exported reviews and Nectar side-by-side safely, then switch the storefront when the imported review archive is checked.</p>
           </div>
-          <div class="dash-actions"><button class="secondary-btn" type="button" onclick="window.loadMigrationHub?.()">Refresh</button><button class="primary-btn" type="button" onclick="window.saveMigrationMode?.()">Save Migration Mode</button></div>
+          <div class="dash-actions"><button class="secondary-btn" type="button" onclick="window.loadMigrationHub?.();window.renderReviewMigrationImporter?.()">Refresh</button><button class="primary-btn" type="button" onclick="window.saveMigrationMode?.()">Save Migration Mode</button></div>
         </div>
         <div class="migration-hero">
           <div class="migration-stage">
             <h3>Coexistence controls</h3>
-            <p class="muted">Use these while Yotpo remains installed. The aim is one live review display and one live email sender at a time.</p>
+            <p class="muted">Use these while Yotpo or another review app remains installed. The aim is one live review display, one live schema source and one live review-request sender at a time.</p>
             <div class="migration-form-grid">
               <label>Current source platform<select id="migration-source-platform" class="filter-select"><option value="yotpo">Yotpo</option><option value="shop">Shop App / Shop channel</option><option value="judgeme">Judge.me</option><option value="generic">Generic CSV</option></select></label>
               <label class="nice-check"><input id="migration-enabled" type="checkbox"> Enable migration mode</label>
-              <label class="nice-check"><input id="migration-yotpo-live" type="checkbox" checked> Yotpo is still live</label>
+              <label class="nice-check"><input id="migration-yotpo-live" type="checkbox" checked> Yotpo / old review app is still live</label>
               <label class="nice-check"><input id="migration-nectar-widgets" type="checkbox"> Nectar storefront widgets are live</label>
               <label class="nice-check"><input id="migration-nectar-emails" type="checkbox"> Nectar review-request emails are live</label>
               <label class="nice-check"><input id="migration-schema-protection" type="checkbox" checked> Prevent duplicate review schema/widgets</label>
@@ -939,49 +937,25 @@
         </div>
         <div class="grid-2">
           <div class="panel settings-card">
-            <div class="settings-card-header"><div><h3>Import existing reviews</h3><p>Bring Yotpo/Shop/exported reviews into Nectar, then edit and moderate them inside Review Manager.</p></div><button class="secondary-btn" type="button" onclick="window.tab('v-import')">Open Importer</button></div>
+            <div class="settings-card-header"><div><h3>Robust importer and staging</h3><p>Use the new importer for Yotpo, Shop/exported reviews, Judge.me, Weebly/Square or generic CSV. It stages rows, separates product vs site reviews, detects duplicates and supports product mapping before anything goes live.</p></div><button class="primary-btn" type="button" onclick="window.tab('v-import')">Open Review Importer</button></div>
             <div class="settings-card-body"><div id="migration-import-summary" class="migration-checks"><p class="muted">No source summary loaded yet.</p></div></div>
           </div>
           <div class="panel settings-card">
-            <div class="settings-card-header"><div><h3>Go-live sequence</h3><p>This is the safe order for keeping two apps installed.</p></div></div>
-            <div class="settings-card-body"><ol class="launch-path-list"><li>Keep Yotpo live and Nectar hidden.</li><li>Import Yotpo/Shop CSV into Nectar.</li><li>Preview Nectar widgets on a duplicate theme.</li><li>Turn off Yotpo widgets and review-request emails.</li><li>Turn on Nectar widgets and the native 14-day scheduler.</li><li>Keep Yotpo installed briefly as a fallback, then remove it.</li></ol></div>
+            <div class="settings-card-header"><div><h3>Future Shop/native review monitoring</h3><p>The storefront scan checks visible product pages for Yotpo remnants, Shop-like review markup and JSON-LD rating/review schema so you can spot external review signals after launch.</p></div><button class="secondary-btn" type="button" onclick="window.tab('v-import');setTimeout(()=>document.getElementById('rmc-scan-btn')?.scrollIntoView({behavior:'smooth',block:'center'}),100)">Open Scanner</button></div>
+            <div class="settings-card-body"><ol class="launch-path-list"><li>Keep the old app live and Nectar hidden.</li><li>Stage CSV/API imports in Nectar.</li><li>Map products and site/shop reviews.</li><li>Import accepted rows.</li><li>Preview Nectar widgets on a duplicate theme.</li><li>Switch one schema/widget source live.</li></ol></div>
           </div>
         </div>
       </section>
 
-<section id="v-import" class="view">
-        <h2 class="page-title">Importer Tool</h2>
-        <div class="import-shell">
-          <div class="import-step">
-            <h3>1. Export from your old platform</h3>
-            <p class="muted">Choose the source format, then upload the CSV. Nothing goes live until you review the staging table.</p>
-            <div class="import-row">
-              <label for="import-platform-select" style="font-weight:900;">Platform</label>
-              <select id="import-platform-select" class="filter-select" onchange="window.toggleImportInst()">
-                <option value="generic">Generic / Other Format</option><option value="yotpo">Yotpo CSV</option><option value="shop">Shop App / Shop reviews CSV</option><option value="weebly">Weebly / Square</option><option value="judgeme">Judge.me</option>
-              </select>
-            </div>
-            <div id="inst-generic" class="import-inst-box active"><p class="import-help">Generic CSV: include Product ID where possible. If your export only has Product Name/Title, upload it and use Smart Product Mapping to select the correct Shopify product before import.</p></div>
-            <div id="inst-yotpo" class="import-inst-box"><p class="import-help">Yotpo CSV: export published reviews from Yotpo, then map product IDs/titles, rating, title, content, reviewer, date and verified buyer. Imported reviews will be labelled as Yotpo import so you can filter/edit them in Review Manager.</p></div>
-            <div id="inst-shop" class="import-inst-box"><p class="import-help">Shop reviews are not currently available as a normal public Admin API pull. Use any available Shop/Yotpo export if provided, then import it here with source label “Shop review”.</p></div>
-            <div id="inst-weebly" class="import-inst-box"><p class="import-help">Weebly / Square: upload the export, map the product title/name column, then choose the matching Shopify product in the staging step before publishing.</p></div>
-            <div id="inst-judgeme" class="import-inst-box"><p class="import-help">Judge.me: export reviews, map Product ID or Product Title, then review product matches before publishing.</p></div>
+      <section id="v-import" class="view">
+        <div class="dash-header">
+          <div>
+            <h2 class="page-title">Review Importer</h2>
+            <p class="dash-subtitle">A staged migration workspace for Yotpo, Shop/exported reviews, Judge.me, Weebly/Square and generic CSV. This replaces the old CSV-only importer.</p>
           </div>
-          <div class="import-step">
-            <h3>2. Upload and map columns</h3>
-            <div class="import-upload">
-              <input id="csv-file" type="file" accept=".csv" onchange="window.handleFileUpload()" />
-              <span id="file-name" class="muted">No CSV selected yet.</span>
-            </div>
-            <div id="mapping-ui" style="display:none; margin-top:24px;">
-              <h4 style="margin:0 0 14px;">Map your columns</h4>
-              <div id="column-mappers" class="mapper-grid"></div>
-              <label class="import-verified-toggle"><input id="import-verified-default" type="checkbox" checked> Treat imported reviews as verified purchases from the previous platform</label>
-              <p class="muted" style="margin:8px 0 0;">Only rows with a valid Shopify Product ID or a manually selected Shopify product will go live. Rows that still need mapping are saved into a completion CSV.</p>
-              <p style="margin-top:18px;"><button id="import-submit-btn" class="primary-btn" onclick="window.generateStagingArea()">Preview &amp; Map Products</button></p>
-            </div>
-          </div>
+          <div class="dash-actions"><button class="secondary-btn" type="button" onclick="window.renderReviewMigrationImporter?.()">Refresh importer</button></div>
         </div>
+        <div id="nectar-review-import-mount"><div class="panel"><p class="muted">Loading robust migration importer…</p></div></div>
       </section>
 
       <section id="v-settings" class="view">

@@ -1,7 +1,7 @@
 {
   "name": "reviews-platform-api",
-  "version": "1.2.21-v26-full-working-ai-migration",
-  "description": "Reviews Platform API v26 full working restore: v25 live status/support/SEO plus persistent AI modules and robust review migration centre",
+  "version": "1.2.22-v27-admin-navigation-migration-fix",
+  "description": "Reviews Platform API v27: v25/v26 functionality retained with stable product nav, robust migration importer, AI modules and status dots.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

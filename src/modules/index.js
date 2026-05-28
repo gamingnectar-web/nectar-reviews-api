@@ -8,7 +8,9 @@ let moduleJobsStarted = false;
 function mountPlatformModules(app, deps = {}) {
   const requireAdminSession = deps.requireAdminSession || ((_req, _res, next) => next());
 
-  app.get('/api/admin/modules', requireAdminSession, (_req, res) => {
+  // Product registry is exposed separately so /api/admin/modules can keep returning
+  // per-shop live/beta enabled states from src/routes/admin.js.
+  app.get('/api/admin/platform-modules', requireAdminSession, (_req, res) => {
     res.json({ modules: listModules() });
   });
 

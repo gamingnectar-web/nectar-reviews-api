@@ -10,6 +10,9 @@
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
+  let currentBatchId = '';
+  let currentMapRowId = '';
+
   function adminFetch(path, options) {
     if (typeof window.adminFetch !== 'function') throw new Error('Admin API helper is not ready yet.');
     return window.adminFetch(path, options);
@@ -21,10 +24,12 @@
   }
 
   function findMigrationContainer() {
-    return $('v-migration')
+    return $('nectar-review-import-mount')
+      || $('v-import')
+      || $('v-migration')
       || $('v-migrations')
       || $('migration-centre')
-      || Array.from(document.querySelectorAll('.view, section, main > div')).find((node) => /migration centre/i.test(node.textContent || ''))
+      || Array.from(document.querySelectorAll('.view, section, main > div')).find((node) => /migration centre|review importer/i.test(node.textContent || ''))
       || document.querySelector('main')
       || document.body;
   }
@@ -37,6 +42,7 @@
   function renderPanel() {
     const host = findMigrationContainer();
     if (!host || $('nectar-review-migration-panel')) return;
+    if (host.id === 'nectar-review-import-mount') host.innerHTML = '';
     const panel = document.createElement('div');
     panel.id = 'nectar-review-migration-panel';
     panel.className = 'migration-panel';
@@ -66,6 +72,15 @@
         .migration-badge-skipped, .migration-badge-duplicate, .migration-badge-failed { background: #fee2e2; color: #991b1b; }
         .migration-muted { color: #64748b; font-size: 13px; }
         .migration-note { padding: 12px; border-radius: 12px; background: #eff6ff; color: #1e3a8a; }
+        .migration-mini-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+        .migration-mini-actions button { padding:7px 10px; font-size:12px; }
+        .migration-map-modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(15,23,42,.46); z-index:999999; padding:18px; }
+        .migration-map-modal.active { display:flex; }
+        .migration-map-card { width:min(760px,100%); max-height:82vh; overflow:auto; background:#fff; border-radius:20px; border:1px solid #e5e7eb; box-shadow:0 30px 90px rgba(15,23,42,.28); padding:20px; }
+        .migration-map-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:14px; }
+        .migration-map-search { display:grid; grid-template-columns:1fr auto; gap:10px; margin-bottom:12px; }
+        .migration-product-result { display:grid; grid-template-columns:56px 1fr auto; gap:12px; align-items:center; padding:12px; border:1px solid #e5e7eb; border-radius:14px; margin-top:8px; background:#fbfdff; }
+        .migration-product-result img { width:56px; height:56px; border-radius:10px; object-fit:cover; background:#eef2f7; }
       </style>
       <h3>Robust Migration Centre</h3>
       <p>Import Yotpo, Shop/exported, Judge.me or generic reviews into Nectar with staging, product mapping, site-review support and duplicate protection. The storefront scan detects public review signals going forward, but it does not claim private Shop app review data is automatically importable.</p>
@@ -218,6 +233,7 @@
   function renderPreview(batch, rows) {
     const host = $('rmc-preview-result');
     const summary = batch?.summary || {};
+    currentBatchId = batch?._id || '';
     host.innerHTML = `
       <div class="migration-note">
         Staged ${escapeHtml(summary.totalRows || 0)} rows. Matched ${escapeHtml(summary.matched || 0)}, site reviews ${escapeHtml(summary.siteReviews || 0)}, needs mapping ${escapeHtml(summary.needsMapping || 0)}, skipped ${escapeHtml(summary.skipped || 0)}, duplicates ${escapeHtml(summary.duplicates || 0)}.
@@ -230,15 +246,24 @@
     `;
     $('rmc-import-batch-btn')?.addEventListener('click', () => importBatch(batch._id));
     $('rmc-load-batch-btn')?.addEventListener('click', () => loadBatch(batch._id));
+    bindRowActions(host);
   }
 
   function previewRowsTable(rows) {
     if (!rows.length) return '<p class="migration-muted">No rows to show.</p>';
     return `<div class="migration-table-wrap"><table class="migration-table">
-      <thead><tr><th>Row</th><th>Status</th><th>Scope</th><th>Rating</th><th>Title</th><th>Review</th><th>Product match</th><th>Issue</th></tr></thead>
+      <thead><tr><th>Row</th><th>Status</th><th>Scope</th><th>Rating</th><th>Title</th><th>Review</th><th>Product match</th><th>Actions / Issue</th></tr></thead>
       <tbody>${rows.map((row) => {
         const normalized = row.normalized || {};
         const selected = row.selectedProduct;
+        const rowId = row._id || row.id || '';
+        const canMap = !['imported', 'duplicate', 'skipped'].includes(String(row.status || ''));
+        const suggestedQuery = normalized.productTitle || normalized.externalProductId || normalized.productHandle || '';
+        const actions = canMap ? `<div class="migration-mini-actions">
+          <button class="secondary" type="button" data-rmc-map-row="${escapeHtml(rowId)}" data-rmc-query="${escapeHtml(suggestedQuery)}">Choose product</button>
+          <button class="secondary" type="button" data-rmc-site-row="${escapeHtml(rowId)}">Mark as site/shop review</button>
+          <button class="secondary" type="button" data-rmc-skip-row="${escapeHtml(rowId)}">Skip row</button>
+        </div>` : '';
         return `<tr>
           <td>${escapeHtml(row.rowIndex)}</td>
           <td>${statusBadge(row.status)}</td>
@@ -247,10 +272,107 @@
           <td>${escapeHtml(normalized.headline || normalized.productTitle)}</td>
           <td>${escapeHtml(String(normalized.comment || '').slice(0, 140))}</td>
           <td>${selected ? `${escapeHtml(selected.title)}<div class="migration-muted">${escapeHtml(selected.gid || selected.id)}</div>` : escapeHtml(normalized.productTitle || normalized.externalProductId || '—')}</td>
-          <td>${escapeHtml(row.issue || '')}</td>
+          <td>${actions}<div class="migration-muted">${escapeHtml(row.issue || '')}</div></td>
         </tr>`;
       }).join('')}</tbody>
     </table></div>`;
+  }
+
+  function bindRowActions(root) {
+    root.querySelectorAll('[data-rmc-map-row]').forEach((button) => {
+      button.addEventListener('click', () => openProductMapModal(button.dataset.rmcMapRow, button.dataset.rmcQuery || ''));
+    });
+    root.querySelectorAll('[data-rmc-site-row]').forEach((button) => {
+      button.addEventListener('click', () => updateStagedRow(button.dataset.rmcSiteRow, { status: 'site_review' }));
+    });
+    root.querySelectorAll('[data-rmc-skip-row]').forEach((button) => {
+      button.addEventListener('click', () => updateStagedRow(button.dataset.rmcSkipRow, { status: 'skipped' }));
+    });
+  }
+
+  async function updateStagedRow(rowId, payload) {
+    if (!rowId) return;
+    try {
+      await adminFetch(`/admin/review-migrations/staged/${encodeURIComponent(rowId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+      if (currentBatchId) await loadBatch(currentBatchId);
+      await loadOverview();
+    } catch (error) {
+      toast(error.message || 'Could not update staged row.');
+    }
+  }
+
+  function ensureMapModal() {
+    let modal = $('rmc-product-map-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.id = 'rmc-product-map-modal';
+    modal.className = 'migration-map-modal';
+    modal.innerHTML = `<div class="migration-map-card">
+      <div class="migration-map-head"><div><h3>Choose Shopify product</h3><p class="migration-muted">Search by product title, handle or ID. The selected product is saved to this staged import row before import.</p></div><button class="secondary" type="button" id="rmc-map-close">Close</button></div>
+      <div class="migration-map-search"><input id="rmc-product-search" class="premium-input" placeholder="Search product title, handle or ID"><button id="rmc-product-search-btn" type="button">Search</button></div>
+      <div id="rmc-product-search-results" class="migration-muted">Search for a product to map this row.</div>
+    </div>`;
+    document.body.appendChild(modal);
+    $('rmc-map-close')?.addEventListener('click', () => modal.classList.remove('active'));
+    $('rmc-product-search-btn')?.addEventListener('click', runProductSearch);
+    $('rmc-product-search')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); runProductSearch(); } });
+    modal.addEventListener('click', (event) => { if (event.target === modal) modal.classList.remove('active'); });
+    return modal;
+  }
+
+  async function openProductMapModal(rowId, query) {
+    currentMapRowId = rowId || '';
+    const modal = ensureMapModal();
+    modal.classList.add('active');
+    const input = $('rmc-product-search');
+    if (input) input.value = query || '';
+    if (query) await runProductSearch();
+  }
+
+  async function runProductSearch() {
+    const box = $('rmc-product-search-results');
+    const query = String($('rmc-product-search')?.value || '').trim();
+    if (!query) { box.innerHTML = 'Enter a product title, handle or ID.'; return; }
+    box.innerHTML = 'Searching Shopify products…';
+    try {
+      const data = await adminFetch(`/admin/products/search?q=${encodeURIComponent(query)}`);
+      const products = data.products || [];
+      if (data.requiresOauth) {
+        box.innerHTML = `<div class="migration-note">${escapeHtml(data.message || 'Product search needs Shopify OAuth.')} ${data.installUrl ? `<br><a href="${escapeHtml(data.installUrl)}">Reconnect Shopify</a>` : ''}</div>`;
+        return;
+      }
+      box.innerHTML = products.length ? products.map((p) => `<div class="migration-product-result">
+        <img src="${escapeHtml(p.image || '')}" alt="">
+        <div><strong>${escapeHtml(p.title)}</strong><div class="migration-muted">${escapeHtml(p.handle || '')} · ${escapeHtml(p.id || '')}</div></div>
+        <button type="button" data-rmc-select-product='${escapeHtml(JSON.stringify(p))}'>Select</button>
+      </div>`).join('') : '<div class="migration-muted">No Shopify products matched that search.</div>';
+      box.querySelectorAll('[data-rmc-select-product]').forEach((button) => {
+        button.addEventListener('click', () => {
+          try {
+            const p = JSON.parse(button.dataset.rmcSelectProduct || '{}');
+            selectMappedProduct(p);
+          } catch (error) { toast('Could not select product.'); }
+        });
+      });
+    } catch (error) {
+      box.innerHTML = `<span class="migration-badge migration-badge-failed">${escapeHtml(error.message)}</span>`;
+    }
+  }
+
+  async function selectMappedProduct(product) {
+    if (!currentMapRowId || !product?.id) return;
+    await updateStagedRow(currentMapRowId, {
+      selectedProduct: {
+        id: product.id,
+        gid: `gid://shopify/Product/${product.id}`,
+        title: product.title,
+        handle: product.handle || '',
+      },
+    });
+    $('rmc-product-map-modal')?.classList.remove('active');
   }
 
   async function loadBatch(batchId) {
@@ -320,13 +442,17 @@
     }
   }
 
+  window.renderReviewMigrationImporter = renderPanel;
+
   const oldTab = window.tab;
-  if (typeof oldTab === 'function') {
-    window.tab = function patchedTab(id) {
+  if (typeof oldTab === 'function' && !oldTab.__reviewMigrationPatched) {
+    const patched = function patchedTab(id) {
       const result = oldTab.apply(this, arguments);
-      if (/migration/i.test(String(id || ''))) setTimeout(renderPanel, 50);
+      if (/migration|import/i.test(String(id || ''))) setTimeout(renderPanel, 50);
       return result;
     };
+    patched.__reviewMigrationPatched = true;
+    window.tab = patched;
   }
 
   if (document.readyState === 'loading') {
