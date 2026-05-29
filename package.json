@@ -1,7 +1,7 @@
 {
   "name": "reviews-platform-api",
-  "version": "1.2.24-v29-product-creation-import",
-  "description": "Reviews Platform API v29: v28 navigation retained with PRODUCT CREATION & PRODUCT IMPORT selectable product module.",
+  "version": "1.2.26-v32-product-import-completion-check",
+  "description": "Reviews Platform API v32: completes PRODUCT CREATION & PRODUCT IMPORT checks, Shopify scope reporting, GraphQL product search, inventory cost updates and PO discount safeguards.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

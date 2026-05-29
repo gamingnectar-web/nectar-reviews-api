@@ -10,12 +10,28 @@ function decodeEntities(value = '') {
     .replace(/&gt;/g, '>');
 }
 
-function metaContent(html, selector) {
-  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`<meta[^>]+(?:property|name)=["']${escaped}["'][^>]+content=["']([^"']+)["'][^>]*>`, 'i');
-  const alt = new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${escaped}["'][^>]*>`, 'i');
-  return decodeEntities((html.match(re) || html.match(alt) || [])[1] || '');
+function absolutizeUrl(url = '', base = '') {
+  const cleaned = cleanUrl(url);
+  if (cleaned) return cleaned;
+  try { return new URL(String(url || '').trim(), base).toString(); }
+  catch (_) { return ''; }
 }
+
+function metaContents(html, selector) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const results = [];
+  const patterns = [
+    new RegExp(`<meta[^>]+(?:property|name)=["']${escaped}["'][^>]+content=["']([^"']+)["'][^>]*>`, 'ig'),
+    new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${escaped}["'][^>]*>`, 'ig'),
+  ];
+  patterns.forEach((re) => {
+    let match;
+    while ((match = re.exec(String(html || '')))) results.push(decodeEntities(match[1] || ''));
+  });
+  return results.filter(Boolean);
+}
+
+function metaContent(html, selector) { return metaContents(html, selector)[0] || ''; }
 
 function tagText(html, tag) {
   const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\/${tag}>`, 'i');
@@ -57,6 +73,43 @@ function firstOffer(offers) {
   return offers;
 }
 
+function imageFromJsonLd(value, baseUrl) {
+  if (!value) return [];
+  if (typeof value === 'string') return [absolutizeUrl(value, baseUrl)].filter(Boolean);
+  if (Array.isArray(value)) return value.flatMap((item) => imageFromJsonLd(item, baseUrl));
+  if (typeof value === 'object') return [value.url, value.contentUrl, value.src].map((item) => absolutizeUrl(item, baseUrl)).filter(Boolean);
+  return [];
+}
+
+function extractHtmlImageCandidates(html, baseUrl) {
+  const images = [];
+  const metaSelectors = ['og:image', 'og:image:secure_url', 'twitter:image', 'twitter:image:src', 'product:image'];
+  metaSelectors.forEach((selector) => metaContents(html, selector).forEach((url) => images.push(absolutizeUrl(url, baseUrl))));
+
+  const imgRe = /<img\b[^>]*(?:src|data-src|data-original|data-zoom-image|data-image)=["']([^"']+)["'][^>]*>/gi;
+  let match;
+  while ((match = imgRe.exec(String(html || '')))) {
+    const tag = match[0] || '';
+    const src = absolutizeUrl(match[1], baseUrl);
+    const alt = (tag.match(/alt=["']([^"']*)["']/i) || [])[1] || '';
+    const cls = (tag.match(/class=["']([^"']*)["']/i) || [])[1] || '';
+    const scoreText = `${src} ${alt} ${cls}`.toLowerCase();
+    const isLikelyProduct = /(product|gallery|media|main|zoom|packshot|thumbnail|image)/i.test(scoreText);
+    if (src && isLikelyProduct && !/logo|icon|sprite|avatar|payment|trust|badge/i.test(scoreText)) images.push(src);
+  }
+
+  const srcsetRe = /(?:srcset|data-srcset)=["']([^"']+)["']/gi;
+  while ((match = srcsetRe.exec(String(html || '')))) {
+    String(match[1] || '').split(',').forEach((part) => {
+      const url = part.trim().split(/\s+/)[0];
+      const absolute = absolutizeUrl(url, baseUrl);
+      if (absolute) images.push(absolute);
+    });
+  }
+
+  return Array.from(new Set(images.filter(Boolean))).slice(0, 60);
+}
+
 async function extractProductFromUrl(url) {
   const sourceUrl = cleanUrl(url);
   if (!sourceUrl) {
@@ -82,10 +135,12 @@ async function extractProductFromUrl(url) {
   const product = findProductJsonLd(html) || {};
   const offer = firstOffer(product.offers);
   const brand = typeof product.brand === 'object' ? product.brand?.name : product.brand;
-  const image = Array.isArray(product.image) ? product.image[0] : product.image;
   const title = cleanText(product.name || metaContent(html, 'og:title') || tagText(html, 'title'), 220);
   const description = cleanText(product.description || metaContent(html, 'og:description') || metaContent(html, 'description'), 5000);
-  const ogImage = metaContent(html, 'og:image');
+  const imageUrls = Array.from(new Set([
+    ...imageFromJsonLd(product.image, sourceUrl),
+    ...extractHtmlImageCandidates(html, sourceUrl),
+  ])).slice(0, 50);
 
   const draft = normaliseDraftProduct({
     source: 'url',
@@ -94,9 +149,10 @@ async function extractProductFromUrl(url) {
     description,
     vendor: brand,
     price: toMoney(offer.price || metaContent(html, 'product:price:amount')),
+    compareAtPrice: toMoney(offer.highPrice || offer.compareAtPrice || metaContent(html, 'product:price:compare_at_amount')),
     sku: product.sku || product.mpn || '',
     barcode: product.gtin13 || product.gtin || product.gtin12 || '',
-    images: [image || ogImage].filter(Boolean),
+    images: imageUrls,
     tags: ['url-import'],
     seo: { title, description },
   });
@@ -104,7 +160,7 @@ async function extractProductFromUrl(url) {
   return {
     ...draft,
     confidence: product.name ? 0.86 : (title ? 0.55 : 0.25),
-    rawExtract: { jsonLdProductFound: Boolean(product.name), sourceUrl },
+    rawExtract: { jsonLdProductFound: Boolean(product.name), sourceUrl, imageCount: draft.images.length },
   };
 }
 

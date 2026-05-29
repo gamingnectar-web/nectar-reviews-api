@@ -6,6 +6,8 @@ const {
   createDraftProduct,
   createPurchaseOrderDraft,
   formalisePurchaseOrderDraft,
+  getProductImportSettings,
+  saveProductImportSettings,
   getImportHistory,
   getProductImportMetadata,
   matchImportLines,
@@ -36,6 +38,17 @@ router.get('/metadata', asyncRoute(async (req, res) => {
   res.json(metadata);
 }));
 
+
+router.get('/settings', asyncRoute(async (req, res) => {
+  const settings = await getProductImportSettings({ shopDomain: shopDomainFromReq(req) });
+  res.json({ settings });
+}));
+
+router.post('/settings', asyncRoute(async (req, res) => {
+  const settings = await saveProductImportSettings({ shopDomain: shopDomainFromReq(req), settings: req.body?.settings || {} });
+  res.json({ settings });
+}));
+
 router.post('/profile/suggest', asyncRoute(async (req, res) => {
   const suggestion = await suggestProductProfile({ shopDomain: shopDomainFromReq(req), draft: req.body?.draft || {} });
   res.json({ suggestion });
@@ -52,13 +65,21 @@ router.post('/url/scan', asyncRoute(async (req, res) => {
 router.post('/invoice/analyse', asyncRoute(async (req, res) => {
   const shopDomain = shopDomainFromReq(req);
   const body = req.body || {};
+  const imageDataUrl = String(body.imageDataUrl || '');
+  if (imageDataUrl.length > 4_500_000) return res.status(413).json({ error: 'Invoice image is too large after compression. Please crop it or upload a smaller screenshot.' });
   const result = await analyseInvoiceAndSave({
     shopDomain,
-    imageDataUrl: String(body.imageDataUrl || '').slice(0, 2_500_000),
+    imageDataUrl,
     mimeType: cleanText(body.mimeType || '', 120),
     filename: cleanText(body.filename || '', 220),
     notes: cleanText(body.notes || '', 12000),
     supplierUrl: cleanUrl(body.supplierUrl || ''),
+    supplierName: cleanText(body.supplierName || '', 180),
+    currency: cleanText(body.currency || '', 10),
+    discountTotal: cleanText(body.discountTotal || '', 40),
+    shippingTotal: cleanText(body.shippingTotal || '', 40),
+    taxTotal: cleanText(body.taxTotal || '', 40),
+    total: cleanText(body.total || '', 40),
     autoMatch: body.autoMatch !== false,
   });
   res.json(result);
@@ -95,7 +116,7 @@ router.post('/shopify/assign', asyncRoute(async (req, res) => {
 router.post('/purchase-order/draft', asyncRoute(async (req, res) => {
   const body = req.body || {};
   if (!body.importId) return res.status(400).json({ error: 'importId is required.' });
-  const result = await createPurchaseOrderDraft({ shopDomain: shopDomainFromReq(req), importId: body.importId, lines: Array.isArray(body.lines) ? body.lines : [] });
+  const result = await createPurchaseOrderDraft({ shopDomain: shopDomainFromReq(req), importId: body.importId, lines: Array.isArray(body.lines) ? body.lines : [], purchaseOrder: body.purchaseOrder || {} });
   res.json(result);
 }));
 

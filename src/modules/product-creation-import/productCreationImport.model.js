@@ -58,6 +58,7 @@ const purchaseOrderSchema = new mongoose.Schema({
   supplierName: { type: String, default: '' },
   supplierUrl: { type: String, default: '' },
   currency: { type: String, default: 'GBP' },
+  poLevelDiscount: { type: String, default: '' },
   invoiceNumber: { type: String, default: '' },
   invoiceDate: { type: String, default: '' },
   lines: { type: [poLineSchema], default: [] },
@@ -85,6 +86,7 @@ const productCreationImportSchema = new mongoose.Schema({
   shippingTotal: { type: String, default: '' },
   taxTotal: { type: String, default: '' },
   discountTotal: { type: String, default: '' },
+  poLevelDiscount: { type: String, default: '' },
   notes: { type: String, default: '' },
   originalFilename: { type: String, default: '' },
   mimeType: { type: String, default: '' },
@@ -102,4 +104,49 @@ productCreationImportSchema.index({ shopDomain: 1, 'lines.sku': 1 });
 productCreationImportSchema.index({ shopDomain: 1, 'lines.barcode': 1 });
 productCreationImportSchema.index({ shopDomain: 1, 'purchaseOrder.status': 1, createdAt: -1 });
 
-module.exports = mongoose.models.ProductCreationImport || mongoose.model('ProductCreationImport', productCreationImportSchema);
+
+const skuRuleSchema = new mongoose.Schema({
+  enabled: { type: Boolean, default: true },
+  name: { type: String, default: '' },
+  vendorContains: { type: String, default: '' },
+  vendorCode: { type: String, default: '' },
+  productLineContains: { type: String, default: '' },
+  lineCode: { type: String, default: '' },
+  tagContains: { type: String, default: '' },
+  metafieldNamespace: { type: String, default: 'core' },
+  metafieldKey: { type: String, default: 'formula_version' },
+  template: { type: String, default: '{vendorCode}-{lineCode}-{titleCode}' },
+  overwriteExistingSku: { type: Boolean, default: false },
+}, { _id: false });
+
+const conditionalRuleSchema = new mongoose.Schema({
+  enabled: { type: Boolean, default: true },
+  name: { type: String, default: '' },
+  whenField: { type: String, default: 'title' },
+  operator: { type: String, enum: ['contains', 'equals', 'starts_with', 'ends_with', 'exists'], default: 'contains' },
+  value: { type: String, default: '' },
+  actionType: { type: String, enum: ['add_tag', 'set_product_type', 'set_vendor', 'set_metafield', 'title_prefix', 'title_suffix'], default: 'add_tag' },
+  actionTarget: { type: String, default: '' },
+  actionValue: { type: String, default: '' },
+}, { _id: false });
+
+const productCreationImportSettingsSchema = new mongoose.Schema({
+  shopDomain: { type: String, required: true, unique: true, index: true },
+  handleRules: {
+    prefix: { type: String, default: '' },
+    suffix: { type: String, default: '' },
+    maxLength: { type: Number, default: 180 },
+    separator: { type: String, default: '-' },
+    overwriteExistingHandle: { type: Boolean, default: false },
+  },
+  skuRules: { type: [skuRuleSchema], default: [] },
+  conditionalRules: { type: [conditionalRuleSchema], default: [] },
+  defaultCurrency: { type: String, default: 'GBP' },
+  vendorPresets: { type: [String], default: [] },
+}, { timestamps: true, collection: 'product_creation_import_settings' });
+
+const ProductCreationImport = mongoose.models.ProductCreationImport || mongoose.model('ProductCreationImport', productCreationImportSchema);
+const ProductCreationImportSettings = mongoose.models.ProductCreationImportSettings || mongoose.model('ProductCreationImportSettings', productCreationImportSettingsSchema);
+
+module.exports = ProductCreationImport;
+module.exports.ProductCreationImportSettings = ProductCreationImportSettings;

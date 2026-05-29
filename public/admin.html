@@ -1448,12 +1448,13 @@
               <button type="button" class="pci-tab active" data-pci-tab="url" onclick="window.pciTab('url')">URL Import</button>
               <button type="button" class="pci-tab" data-pci-tab="invoice" onclick="window.pciTab('invoice')">Invoice Import</button>
               <button type="button" class="pci-tab" data-pci-tab="manual" onclick="window.pciTab('manual')">Manual Create</button>
+              <button type="button" class="pci-tab" data-pci-tab="settings" onclick="window.pciTab('settings')">Settings</button>
               <button type="button" class="pci-tab" data-pci-tab="history" onclick="window.pciTab('history')">History</button>
             </div>
           </div>
           <div class="pci-card">
             <h3>Connection status</h3>
-            <div id="pci-health" class="pci-status">Loading product import status…</div><datalist id="pci-tag-list"></datalist>
+            <div id="pci-health" class="pci-status">Loading product import status…</div><datalist id="pci-tag-list"></datalist><datalist id="pci-vendor-list"></datalist>
           </div>
         </div>
 
@@ -1470,10 +1471,12 @@
             <div><label class="pci-label">Optimised URL / Handle</label><input id="pci-url-handle" class="pci-input" placeholder="sonics-peach-rings"></div>
             <div><label class="pci-label">Product Type</label><input id="pci-url-type" class="pci-input"></div>
             <div><label class="pci-label">Retail Price</label><input id="pci-url-price" class="pci-input"></div>
+            <div><label class="pci-label">Compare-at Price</label><input id="pci-url-compare" class="pci-input"></div>
             <div><label class="pci-label">Price Paid / Cost</label><input id="pci-url-cost" class="pci-input"></div>
             <div><label class="pci-label">SKU</label><input id="pci-url-sku" class="pci-input"></div>
             <div><label class="pci-label">Barcode</label><input id="pci-url-barcode" class="pci-input"></div>
-            <div><label class="pci-label">Image URL</label><input id="pci-url-image" class="pci-input"></div>
+            <div><label class="pci-label">Featured Image URL</label><input id="pci-url-image" class="pci-input"></div>
+            <div class="full"><label class="pci-label">All image URLs</label><textarea id="pci-url-images" class="pci-textarea" placeholder="One image URL per line. URL import fills this with every product/gallery image it can find."></textarea><p class="pci-form-help">All listed images are sent to Shopify, not only the first/featured image.</p></div>
             <div class="full"><label class="pci-label">Source URL</label><input id="pci-url-source" class="pci-input"></div>
             <div class="full"><label class="pci-label">Tags</label><input id="pci-url-tags" class="pci-input" list="pci-tag-list" placeholder="supplier-import, url-import"><div id="pci-url-tag-suggestions" class="pci-tag-suggestions"></div><p class="pci-form-help">Click previously used tags to keep this product aligned with existing collections and product-line logic.</p></div>
             <div class="full"><label class="pci-label">Description</label><textarea id="pci-url-description" class="pci-textarea"></textarea></div>
@@ -1487,7 +1490,12 @@
           <p>Upload a picture of a supplier invoice, PO, receipt or order confirmation. The app extracts product lines, thumbnails/image hints, quantities, price paid, original prices, discounts and promo labels, then matches each line to Shopify products. Unmatched lines can be assigned, created from a URL, or created manually.</p>
           <div class="pci-form-grid">
             <div><label class="pci-label">Invoice image / picture</label><input id="pci-invoice-file" type="file" class="pci-input" accept="image/*"></div>
+            <div><label class="pci-label">Supplier / Vendor</label><input id="pci-invoice-supplier-name" class="pci-input" list="pci-vendor-list" placeholder="AdvancedGG"></div>
+            <div><label class="pci-label">Currency</label><select id="pci-invoice-currency" class="pci-input"><option>GBP</option><option>USD</option><option>EUR</option><option>AUD</option><option>CAD</option></select></div>
             <div><label class="pci-label">Supplier URL</label><input id="pci-invoice-supplier-url" class="pci-input" placeholder="https://supplier.example"></div>
+            <div><label class="pci-label">PO-level discount</label><input id="pci-invoice-discount-total" class="pci-input" placeholder="0.00"></div>
+            <div><label class="pci-label">Shipping</label><input id="pci-invoice-shipping-total" class="pci-input" placeholder="0.00"></div>
+            <div><label class="pci-label">Tax</label><input id="pci-invoice-tax-total" class="pci-input" placeholder="0.00"></div>
             <div class="full"><label class="pci-label">Fallback notes / invoice lines</label><textarea id="pci-invoice-notes" class="pci-textarea" placeholder="Example: Product name SKU123 qty 2 £4.50"></textarea></div>
           </div>
           <div class="pci-actions"><button id="pci-analyse-invoice" class="primary-btn" type="button">Analyse invoice &amp; match products</button></div>
@@ -1504,10 +1512,12 @@
             <div><label class="pci-label">Optimised URL / Handle</label><input id="pci-manual-handle" class="pci-input" placeholder="sonics-peach-rings"></div>
             <div><label class="pci-label">Product Type</label><input id="pci-manual-type" class="pci-input"></div>
             <div><label class="pci-label">Retail Price</label><input id="pci-manual-price" class="pci-input"></div>
+            <div><label class="pci-label">Compare-at Price</label><input id="pci-manual-compare" class="pci-input"></div>
             <div><label class="pci-label">Price Paid / Cost</label><input id="pci-manual-cost" class="pci-input"></div>
             <div><label class="pci-label">SKU</label><input id="pci-manual-sku" class="pci-input"></div>
             <div><label class="pci-label">Barcode</label><input id="pci-manual-barcode" class="pci-input"></div>
-            <div><label class="pci-label">Image URL</label><input id="pci-manual-image" class="pci-input"></div>
+            <div><label class="pci-label">Featured Image URL</label><input id="pci-manual-image" class="pci-input"></div>
+            <div class="full"><label class="pci-label">All image URLs</label><textarea id="pci-manual-images" class="pci-textarea" placeholder="One image URL per line"></textarea></div>
             <div class="full"><label class="pci-label">Source URL</label><input id="pci-manual-source" class="pci-input"></div>
             <div class="full"><label class="pci-label">Tags</label><input id="pci-manual-tags" class="pci-input" list="pci-tag-list" placeholder="manual-import, supplier-name"><div id="pci-manual-tag-suggestions" class="pci-tag-suggestions"></div><p class="pci-form-help">Use existing tags to trigger the right product-line metafield defaults.</p></div>
             <div class="full"><label class="pci-label">Description</label><textarea id="pci-manual-description" class="pci-textarea"></textarea></div>
@@ -1515,6 +1525,28 @@
           </div>
           <div class="pci-actions"><button id="pci-manual-suggest-profile" class="secondary-btn" type="button">Generate tags &amp; metafields</button><button id="pci-create-manual" class="primary-btn" type="button">Create Shopify draft product</button></div>
           <div id="pci-manual-status" class="pci-status">Manual drafts are created unpublished in Shopify.</div>
+        </div>
+
+
+        <div class="pci-card pci-pane" id="pci-pane-settings">
+          <h3>Product import settings</h3>
+          <p>Set the rules this page uses for Shopify handles, SKU formats, vendor/product-line logic, and conditional defaults. These rules are applied after a URL scan, manual draft, or invoice line create.</p>
+          <div id="pci-settings-status" class="pci-status">Loading settings…</div>
+          <div class="pci-form-grid" style="margin-top:18px;">
+            <div><label class="pci-label">Handle prefix</label><input id="pci-settings-handle-prefix" class="pci-input" placeholder="buy"></div>
+            <div><label class="pci-label">Handle suffix</label><input id="pci-settings-handle-suffix" class="pci-input" placeholder="uk"></div>
+            <div><label class="pci-label">Max handle length</label><input id="pci-settings-handle-max" class="pci-input" value="180"></div>
+            <div><label class="pci-label">Default PO currency</label><input id="pci-settings-default-currency" class="pci-input" value="GBP"></div>
+            <div class="full"><label class="pci-label">Vendor presets</label><textarea id="pci-settings-vendors" class="pci-textarea" placeholder="One vendor per line. These also appear in the invoice vendor selector."></textarea></div>
+          </div>
+          <div class="pci-section-subtitle">SKU rules</div>
+          <p class="pci-form-help">Use vendor + product line/metafield rules to create consistent SKUs. Formula Version can be EN, EN2, tub type, or any product-line value you use.</p>
+          <div id="pci-sku-rules"></div>
+          <div class="pci-actions"><button id="pci-add-sku-rule" class="secondary-btn" type="button">Add SKU rule</button></div>
+          <div class="pci-section-subtitle">Conditional defaults</div>
+          <p class="pci-form-help">Examples: when title contains "G Fuel", add a tag; when core.formula_version equals EN, set a metafield; when vendor contains AdvancedGG, set vendor to AdvancedGG.</p>
+          <div id="pci-conditional-rules"></div>
+          <div class="pci-actions"><button id="pci-add-conditional-rule" class="secondary-btn" type="button">Add conditional rule</button><button id="pci-save-settings" class="primary-btn" type="button">Save product import settings</button></div>
         </div>
 
         <div class="pci-card pci-pane" id="pci-pane-history">
@@ -1525,6 +1557,7 @@
           <div id="pci-history-box" class="pci-status">Open this tab to load history.</div>
         </div>
       </section>
+      <div id="pci-product-search-modal" class="pci-modal" aria-hidden="true"></div>
 
       <section id="v-referrals" class="view"><h2 class="page-title">Referrals</h2><div class="panel lock-box"><h3>Referrals module placeholder</h3><p class="muted">Reserved for referral tracking, advocate links, friend offers, and attribution. The module is intentionally inactive while the foundation is secured.</p></div></section>
 

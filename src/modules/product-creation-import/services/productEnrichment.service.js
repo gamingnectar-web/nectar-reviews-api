@@ -1,6 +1,7 @@
 const { cleanText, slugify, normaliseMetafields, parseTags } = require('../utils/safe');
 const { normaliseDraftProduct } = require('./normaliseProduct.service');
-const { listRecentlyUsedProductTags, getProductMetafieldDefinitions, getProfileValuesFromExistingProducts } = require('./shopifyProduct.service');
+const { listRecentlyUsedProductTags, listRecentlyUsedProductVendors, getProductMetafieldDefinitions, getProfileValuesFromExistingProducts } = require('./shopifyProduct.service');
+const { getProductImportSettings, applySettingsToDraft } = require('./productImportSettings.service');
 
 const CORE_PROFILE_METAFIELDS = [
   { namespace: 'core', key: 'formula_version', name: 'Formula Version', type: 'single_line_text_field', help: 'Used to decide which product-line/formula profile this product belongs to.' },
@@ -66,9 +67,11 @@ Product draft: ${JSON.stringify({ title: draft.title, vendor: draft.vendor, prod
 }
 
 async function getProductImportMetadata({ shopDomain }) {
-  const [tags, metafieldDefinitions] = await Promise.all([
+  const [tags, vendors, metafieldDefinitions, settings] = await Promise.all([
     listRecentlyUsedProductTags({ shopDomain }),
+    listRecentlyUsedProductVendors({ shopDomain }),
     getProductMetafieldDefinitions({ shopDomain }),
+    getProductImportSettings({ shopDomain }),
   ]);
   const byKey = new Map();
   [...CORE_PROFILE_METAFIELDS, ...(metafieldDefinitions || [])].forEach((item) => {
@@ -76,6 +79,8 @@ async function getProductImportMetadata({ shopDomain }) {
   });
   return {
     tags,
+    vendors,
+    settings,
     metafieldDefinitions: Array.from(byKey.values()),
     coreProfileMetafields: CORE_PROFILE_METAFIELDS,
   };
@@ -103,11 +108,22 @@ async function suggestProductProfile({ shopDomain, draft }) {
     ai?.metafields || []
   ));
 
-  return {
+  const settingsApplied = applySettingsToDraft({
+    ...normalised,
     handle: cleanText(ai?.handle || normalised.handle || slugify(normalised.title), 180),
     productType: cleanText(ai?.productType || normalised.productType || '', 120),
     tags: suggestedTags,
     metafields: suggestedMetafields,
+  }, metadata.settings || {});
+
+  return {
+    handle: settingsApplied.handle,
+    productType: settingsApplied.productType,
+    vendor: settingsApplied.vendor,
+    sku: settingsApplied.sku,
+    title: settingsApplied.title,
+    tags: settingsApplied.tags,
+    metafields: settingsApplied.metafields,
     existingProfileMatchedProducts: existing.matchedProductCount || 0,
     aiNotes: cleanText(ai?.notes || ai?.error || '', 500),
   };
@@ -118,8 +134,11 @@ async function enrichProductDraft({ shopDomain, draft }) {
   const suggestion = await suggestProductProfile({ shopDomain, draft: normalised });
   return normaliseDraftProduct({
     ...normalised,
+    title: suggestion.title || normalised.title,
     handle: suggestion.handle || normalised.handle,
+    vendor: suggestion.vendor || normalised.vendor,
     productType: suggestion.productType || normalised.productType,
+    sku: suggestion.sku || normalised.sku,
     tags: suggestion.tags?.length ? suggestion.tags : normalised.tags,
     metafields: mergeMetafields(normalised.metafields || [], suggestion.metafields || []),
     enrichment: suggestion,

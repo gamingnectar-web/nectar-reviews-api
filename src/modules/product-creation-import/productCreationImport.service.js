@@ -6,6 +6,7 @@ const { createShopifyProductFromDraft, assignImportLineToProduct } = require('./
 const { normaliseDraftProduct } = require('./services/normaliseProduct.service');
 const { enrichProductDraft, getProductImportMetadata, suggestProductProfile } = require('./services/productEnrichment.service');
 const { suggestedRetailFromCost, toMoney, cleanText } = require('./utils/safe');
+const { getProductImportSettings, saveProductImportSettings } = require('./services/productImportSettings.service');
 
 function calculateLineTotal(line = {}) {
   const qty = Number(line.quantity || 1) || 1;
@@ -27,21 +28,21 @@ async function scanUrlAndSave({ shopDomain, url }) {
   return { import: doc, draft };
 }
 
-async function analyseInvoiceAndSave({ shopDomain, imageDataUrl, mimeType, filename, notes, supplierUrl, autoMatch = true }) {
+async function analyseInvoiceAndSave({ shopDomain, imageDataUrl, mimeType, filename, notes, supplierUrl, supplierName = '', currency = '', discountTotal = '', shippingTotal = '', taxTotal = '', total = '', autoMatch = true }) {
   const extracted = await extractInvoiceProducts({ imageDataUrl, mimeType, filename, notes, supplierUrl });
   const doc = await ProductCreationImport.create({
     shopDomain,
     type: 'invoice',
     status: 'analysed',
     supplierUrl: extracted.supplierUrl || supplierUrl,
-    supplierName: extracted.supplierName,
+    supplierName: cleanText(supplierName || extracted.supplierName || '', 180),
     invoiceNumber: extracted.invoiceNumber,
     invoiceDate: extracted.invoiceDate,
-    currency: extracted.currency,
-    total: extracted.total,
-    shippingTotal: extracted.shippingTotal,
-    taxTotal: extracted.taxTotal,
-    discountTotal: extracted.discountTotal,
+    currency: cleanText(currency || extracted.currency || 'GBP', 10).toUpperCase(),
+    total: toMoney(total || extracted.total),
+    shippingTotal: toMoney(shippingTotal || extracted.shippingTotal),
+    taxTotal: toMoney(taxTotal || extracted.taxTotal),
+    discountTotal: toMoney(discountTotal || extracted.discountTotal),
     notes,
     originalFilename: filename || '',
     mimeType: mimeType || '',
@@ -185,7 +186,10 @@ function buildPurchaseOrderDraft(doc, overrideLines = []) {
     };
   });
   const subtotal = sumMoney(lines.map((line) => line.totalCost));
-  const discountTotal = doc.discountTotal || sumMoney(lines.map((line) => line.discountAmount));
+  // PO-level discount is the source of truth for purchase-order totals. Line discounts are
+  // retained on each row as context, but are not auto-subtracted because invoice/order line
+  // totals are usually already final paid totals and subtracting both would double-discount.
+  const discountTotal = doc.poLevelDiscount || doc.discountTotal || '';
   const shippingTotal = doc.shippingTotal || '';
   const taxTotal = doc.taxTotal || '';
   const totalNumber = [subtotal, shippingTotal, taxTotal].reduce((sum, value) => sum + (Number(toMoney(value)) || 0), 0) - (Number(toMoney(discountTotal)) || 0);
@@ -196,6 +200,7 @@ function buildPurchaseOrderDraft(doc, overrideLines = []) {
     supplierName: doc.supplierName || '',
     supplierUrl: doc.supplierUrl || '',
     currency: doc.currency || 'GBP',
+    poLevelDiscount: doc.poLevelDiscount || doc.discountTotal || '',
     invoiceNumber: doc.invoiceNumber || '',
     invoiceDate: doc.invoiceDate || '',
     lines,
@@ -210,13 +215,22 @@ function buildPurchaseOrderDraft(doc, overrideLines = []) {
   };
 }
 
-async function createPurchaseOrderDraft({ shopDomain, importId, lines = [] }) {
+async function createPurchaseOrderDraft({ shopDomain, importId, lines = [], purchaseOrder = {} }) {
   const doc = await ProductCreationImport.findOne({ _id: importId, shopDomain });
   if (!doc) {
     const error = new Error('Import not found.');
     error.status = 404;
     throw error;
   }
+  if (purchaseOrder.supplierName !== undefined) doc.supplierName = cleanText(purchaseOrder.supplierName || '', 180);
+  if (purchaseOrder.supplierUrl !== undefined) doc.supplierUrl = cleanText(purchaseOrder.supplierUrl || '', 500);
+  if (purchaseOrder.currency !== undefined) doc.currency = cleanText(purchaseOrder.currency || 'GBP', 10).toUpperCase();
+  if (purchaseOrder.discountTotal !== undefined) doc.discountTotal = toMoney(purchaseOrder.discountTotal || '');
+  if (purchaseOrder.poLevelDiscount !== undefined) doc.poLevelDiscount = toMoney(purchaseOrder.poLevelDiscount || '');
+  if (purchaseOrder.shippingTotal !== undefined) doc.shippingTotal = toMoney(purchaseOrder.shippingTotal || '');
+  if (purchaseOrder.taxTotal !== undefined) doc.taxTotal = toMoney(purchaseOrder.taxTotal || '');
+  if (purchaseOrder.total !== undefined) doc.total = toMoney(purchaseOrder.total || '');
+
   const mergedLines = Array.isArray(lines) && lines.length ? doc.lines.map((line) => {
     const edited = lines.find((candidate) => candidate.lineId === line.lineId);
     return edited ? { ...line.toObject?.() || line, ...edited } : line;
@@ -255,6 +269,8 @@ module.exports = {
   saveManualDraft,
   createDraftProduct,
   assignLine,
+  getProductImportSettings,
+  saveProductImportSettings,
   getImportHistory,
   getProductImportMetadata,
   suggestProductProfile,

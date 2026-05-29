@@ -39,7 +39,7 @@ function normaliseDraftProduct(raw = {}) {
   const images = (Array.isArray(raw.images) ? raw.images : [raw.imageUrl || raw.image || raw.featuredImage])
     .map((image) => normaliseImage(image, title))
     .filter(Boolean)
-    .slice(0, 12);
+    .slice(0, 50);
   const tags = Array.from(new Set(parseTags(raw.tags)
     .concat(raw.source === 'url' ? ['url-import'] : [])
     .concat(raw.source === 'invoice' ? ['invoice-import'] : [])

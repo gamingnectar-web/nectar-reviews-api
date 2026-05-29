@@ -31,6 +31,7 @@
       { label: 'URL Import', view: 'v-product-creation-import', pciTab: 'url' },
       { label: 'Invoice Import', view: 'v-product-creation-import', pciTab: 'invoice' },
       { label: 'Manual Create', view: 'v-product-creation-import', pciTab: 'manual' },
+      { label: 'Settings', view: 'v-product-creation-import', pciTab: 'settings' },
       { label: 'Import History', view: 'v-product-creation-import', pciTab: 'history' }
     ],
     loyalty: [
@@ -77,6 +78,7 @@
     'product-creation-import': [
       { label: 'Connection Status', view: 'v-product-creation-import', pciTab: 'url' },
       { label: 'Shopify Product Search', view: 'v-product-creation-import', pciTab: 'invoice' },
+      { label: 'Import Rules', view: 'v-product-creation-import', pciTab: 'settings' },
       { label: 'History', view: 'v-product-creation-import', pciTab: 'history' }
     ],
     loyalty: [

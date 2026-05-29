@@ -1,7 +1,11 @@
 const { env } = require('../../../config/env');
+const { Shop } = require('../../../models');
 const { shopifyFetch, shopifyFetchOptional, getAccessTokenForShop, buildInstallUrl, getShopifyStoreUrl } = require('../../../utils/shopify');
 const { cleanText, normaliseTitle, toMoney, normaliseMetafields } = require('../utils/safe');
 const { normaliseDraftProduct } = require('./normaliseProduct.service');
+
+const REQUIRED_PRODUCT_IMPORT_SCOPES = ['read_products', 'write_products', 'read_inventory', 'write_inventory'];
+const OPTIONAL_NATIVE_SHOPIFY_RECORD_SCOPES = ['read_draft_orders', 'write_draft_orders', 'write_inventory_transfers', 'write_inventory_shipments'];
 
 function numericId(gidOrId = '') {
   const raw = String(gidOrId || '');
@@ -21,7 +25,22 @@ function variantGid(id = '') {
   return raw.startsWith('gid://') ? raw : `gid://shopify/ProductVariant/${raw}`;
 }
 
-function restProductToCard(product = {}) {
+function inventoryItemGid(id = '') {
+  const raw = String(id || '').trim();
+  if (!raw) return '';
+  return raw.startsWith('gid://') ? raw : `gid://shopify/InventoryItem/${raw}`;
+}
+
+function scopeSet(scopeString = '') {
+  return new Set(String(scopeString || '').split(',').map((scope) => scope.trim()).filter(Boolean));
+}
+
+function missingScopes(scopeString = '', required = REQUIRED_PRODUCT_IMPORT_SCOPES) {
+  const scopes = scopeSet(scopeString || env.shopifyScopes || '');
+  return required.filter((scope) => !scopes.has(scope));
+}
+
+function restProductToCard(product = {}, extra = {}) {
   const firstVariant = product.variants?.[0] || {};
   return {
     id: productGid(product.id),
@@ -32,12 +51,42 @@ function restProductToCard(product = {}) {
     productType: product.product_type || '',
     tags: Array.isArray(product.tags) ? product.tags : String(product.tags || '').split(',').map((x) => x.trim()).filter(Boolean),
     image: product.image?.src || product.images?.[0]?.src || '',
+    images: (product.images || []).map((image) => image.src).filter(Boolean),
     variantId: firstVariant.id ? variantGid(firstVariant.id) : '',
     legacyVariantId: firstVariant.id ? String(firstVariant.id) : '',
+    inventoryItemId: firstVariant.inventory_item_id ? inventoryItemGid(firstVariant.inventory_item_id) : '',
+    legacyInventoryItemId: firstVariant.inventory_item_id ? String(firstVariant.inventory_item_id) : '',
     sku: firstVariant.sku || '',
     barcode: firstVariant.barcode || '',
     price: firstVariant.price || '',
+    compareAtPrice: firstVariant.compare_at_price || '',
     inventoryQuantity: Number(firstVariant.inventory_quantity || 0),
+    ...extra,
+  };
+}
+
+function graphProductToCard(product = {}) {
+  const firstVariant = product.variants?.nodes?.[0] || {};
+  const productImage = product.featuredMedia?.preview?.image?.url || firstVariant.image?.url || '';
+  return {
+    id: product.id || '',
+    legacyResourceId: String(product.legacyResourceId || numericId(product.id) || ''),
+    title: product.title || 'Product',
+    handle: product.handle || '',
+    vendor: product.vendor || '',
+    productType: product.productType || '',
+    tags: Array.isArray(product.tags) ? product.tags : [],
+    image: productImage,
+    images: [productImage].filter(Boolean),
+    variantId: firstVariant.id || '',
+    legacyVariantId: String(firstVariant.legacyResourceId || numericId(firstVariant.id) || ''),
+    inventoryItemId: firstVariant.inventoryItem?.id || '',
+    legacyInventoryItemId: String(firstVariant.inventoryItem?.legacyResourceId || numericId(firstVariant.inventoryItem?.id) || ''),
+    sku: firstVariant.sku || '',
+    barcode: firstVariant.barcode || '',
+    price: firstVariant.price || '',
+    compareAtPrice: firstVariant.compareAtPrice || '',
+    inventoryQuantity: Number(firstVariant.inventoryQuantity || 0),
   };
 }
 
@@ -77,28 +126,93 @@ async function shopifyGraphqlOptional(args) {
   }
 }
 
+async function getStoredScopes(shopDomain) {
+  const normalizedShop = getShopifyStoreUrl(shopDomain);
+  if (!normalizedShop) return '';
+  try {
+    const shop = await Shop.findOne({ shopDomain: normalizedShop }).select('scopes').lean();
+    return shop?.scopes || env.shopifyScopes || '';
+  } catch (_) {
+    return env.shopifyScopes || '';
+  }
+}
+
 async function healthCheckShopify(shopDomain) {
-  const token = await getAccessTokenForShop(shopDomain);
+  const normalizedShop = getShopifyStoreUrl(shopDomain);
+  const token = await getAccessTokenForShop(normalizedShop);
+  const scopes = await getStoredScopes(normalizedShop);
+  const missingRequiredScopes = token ? missingScopes(scopes) : REQUIRED_PRODUCT_IMPORT_SCOPES;
+  const missingOptionalNativeScopes = token ? missingScopes(scopes, OPTIONAL_NATIVE_SHOPIFY_RECORD_SCOPES) : OPTIONAL_NATIVE_SHOPIFY_RECORD_SCOPES;
   return {
     connected: Boolean(token),
-    installUrl: buildInstallUrl(shopDomain),
+    installUrl: buildInstallUrl(normalizedShop),
     apiVersion: env.shopifyApiVersion,
-    requiredScopes: ['read_products', 'write_products'],
-    message: token ? 'Shopify Admin API token is available for product search, product creation, tags and product metafields.' : 'Reconnect/install the app through Shopify OAuth so product import can search and create products.',
+    requiredScopes: REQUIRED_PRODUCT_IMPORT_SCOPES,
+    missingRequiredScopes,
+    optionalNativeShopifyRecordScopes: OPTIONAL_NATIVE_SHOPIFY_RECORD_SCOPES,
+    missingOptionalNativeScopes,
+    message: token
+      ? (missingRequiredScopes.length
+        ? `Shopify is connected, but this install is missing scopes needed for the full product import flow: ${missingRequiredScopes.join(', ')}. Reinstall the app after updating SHOPIFY_SCOPES.`
+        : 'Shopify Admin API token is available for product search, product creation, images, product metafields and inventory cost updates.')
+      : 'Reconnect/install the app through Shopify OAuth so product import can search and create products.',
   };
 }
 
-async function searchShopifyProducts({ shopDomain, q = '', first = 10 }) {
+function shopifyProductSearchQuery(raw = '') {
+  const cleaned = cleanText(raw, 160).replace(/["\\]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!cleaned) return '';
+  const compact = cleaned.replace(/[^a-zA-Z0-9_-]/g, '');
+  const terms = cleaned.split(/\s+/).filter(Boolean).slice(0, 6).map((term) => term.replace(/[^a-zA-Z0-9_-]/g, '')).filter(Boolean);
+  const parts = [];
+  if (compact) {
+    parts.push(`sku:${compact}`);
+    parts.push(`barcode:${compact}`);
+    parts.push(`handle:${compact.toLowerCase()}`);
+  }
+  terms.forEach((term) => parts.push(`title:*${term}*`));
+  if (!parts.length) return cleaned;
+  return parts.join(' OR ');
+}
+
+async function searchShopifyProductsWithGraphql({ shopDomain, q = '', first = 10 }) {
+  const query = `query ProductImportSearch($first: Int!, $query: String!) {
+    products(first: $first, query: $query) {
+      nodes {
+        id
+        legacyResourceId
+        title
+        handle
+        vendor
+        productType
+        tags
+        featuredMedia { preview { image { url } } }
+        variants(first: 10) {
+          nodes {
+            id
+            legacyResourceId
+            sku
+            barcode
+            price
+            compareAtPrice
+            inventoryQuantity
+            image { url }
+            inventoryItem { id legacyResourceId }
+          }
+        }
+      }
+    }
+  }`;
+  const searchQuery = shopifyProductSearchQuery(q);
+  const data = await shopifyGraphqlOptional({ shopDomain, query, variables: { first: Math.min(Number(first) || 10, 25), query: searchQuery } });
+  return (data?.products?.nodes || []).map(graphProductToCard);
+}
+
+async function searchShopifyProductsWithRest({ shopDomain, q = '', first = 10 }) {
   const queryText = cleanText(q, 160).toLowerCase();
   if (!queryText) return [];
   const data = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products.json?limit=250&fields=id,title,handle,image,images,variants,tags,vendor,product_type`, { shopDomain });
-  if (!data) {
-    const error = new Error('Shopify product search needs OAuth or a Shopify Admin token.');
-    error.status = 412;
-    error.requiresOauth = true;
-    error.installUrl = buildInstallUrl(shopDomain);
-    throw error;
-  }
+  if (!data) return null;
   const normalisedQuery = normaliseTitle(queryText);
   return (data.products || [])
     .filter((product) => {
@@ -110,6 +224,27 @@ async function searchShopifyProducts({ shopDomain, q = '', first = 10 }) {
     })
     .slice(0, Math.min(Number(first) || 10, 25))
     .map(restProductToCard);
+}
+
+async function searchShopifyProducts({ shopDomain, q = '', first = 10 }) {
+  const queryText = cleanText(q, 160);
+  if (!queryText) return [];
+  let products = [];
+  try {
+    products = await searchShopifyProductsWithGraphql({ shopDomain, q: queryText, first });
+  } catch (error) {
+    // Some stores/API versions can reject complex search syntax. Fall back to REST filtering.
+    products = [];
+  }
+  if (!products.length) products = await searchShopifyProductsWithRest({ shopDomain, q: queryText, first });
+  if (!products) {
+    const error = new Error('Shopify product search needs OAuth or a Shopify Admin token.');
+    error.status = 412;
+    error.requiresOauth = true;
+    error.installUrl = buildInstallUrl(shopDomain);
+    throw error;
+  }
+  return products;
 }
 
 function makeRestMetafield(item = {}) {
@@ -125,17 +260,28 @@ function makeRestMetafield(item = {}) {
   };
 }
 
+async function updateInventoryItemCost({ shopDomain, inventoryItemId, cost }) {
+  const id = numericId(inventoryItemId);
+  const unitCost = toMoney(cost);
+  if (!id || !unitCost) return null;
+  return shopifyFetch(`/admin/api/${env.shopifyApiVersion}/inventory_items/${id}.json`, {
+    shopDomain,
+    method: 'PUT',
+    body: JSON.stringify({ inventory_item: { id: Number(id), cost: unitCost } }),
+  });
+}
+
 async function createShopifyProductFromDraft({ shopDomain, draft }) {
   const normalised = normaliseDraftProduct(draft || {});
   const tags = Array.isArray(normalised.tags) ? normalised.tags.join(', ') : String(normalised.tags || '');
   const variant = {
     price: toMoney(normalised.price) || '0.00',
+    compare_at_price: toMoney(normalised.compareAtPrice) || undefined,
     sku: normalised.sku || undefined,
     barcode: normalised.barcode || undefined,
     inventory_management: 'shopify',
     option1: 'Default Title',
   };
-  if (normalised.cost) variant.cost = normalised.cost;
 
   const metafields = normaliseMetafields([
     ...(normalised.sourceUrl ? [{ namespace: 'external_import', key: 'source_url', type: 'url', value: normalised.sourceUrl }] : []),
@@ -153,7 +299,7 @@ async function createShopifyProductFromDraft({ shopDomain, draft }) {
     status: 'draft',
     tags,
     variants: [variant],
-    images: normalised.images.map((image) => ({ src: image.src, alt: image.alt || normalised.title })).slice(0, 12),
+    images: normalised.images.map((image) => ({ src: image.src, alt: image.alt || normalised.title })).slice(0, 50),
     metafields,
   };
 
@@ -163,7 +309,19 @@ async function createShopifyProductFromDraft({ shopDomain, draft }) {
     body: JSON.stringify({ product }),
   });
 
-  return restProductToCard(result.product || {});
+  let inventoryCostWarning = '';
+  if (normalised.cost && result.product?.variants?.[0]?.inventory_item_id) {
+    try {
+      await updateInventoryItemCost({ shopDomain, inventoryItemId: result.product.variants[0].inventory_item_id, cost: normalised.cost });
+    } catch (error) {
+      inventoryCostWarning = `Product was created, but Shopify inventory cost could not be saved. Reinstall with read_inventory/write_inventory and try again. ${error.message || ''}`.trim();
+    }
+  }
+
+  return restProductToCard(result.product || {}, {
+    imageCount: product.images.length,
+    inventoryCostWarning,
+  });
 }
 
 async function assignImportLineToProduct({ importDoc, lineId, productId, variantId = '', productTitle = '', handle = '', image = '' }) {
@@ -187,6 +345,17 @@ async function listRecentlyUsedProductTags({ shopDomain, limit = 250 }) {
     String(product.tags || '').split(',').map((x) => x.trim()).filter(Boolean).forEach((tag) => counts.set(tag, (counts.get(tag) || 0) + 1));
   });
   return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).map(([tag, count]) => ({ tag, count })).slice(0, 120);
+}
+
+async function listRecentlyUsedProductVendors({ shopDomain, limit = 250 }) {
+  const data = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products.json?limit=${Math.min(Number(limit) || 250, 250)}&fields=id,vendor`, { shopDomain });
+  if (!data) return [];
+  const counts = new Map();
+  (data.products || []).forEach((product) => {
+    const vendor = cleanText(product.vendor || '', 120);
+    if (vendor) counts.set(vendor, (counts.get(vendor) || 0) + 1);
+  });
+  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).map(([vendor, count]) => ({ vendor, count })).slice(0, 120);
 }
 
 async function getProductMetafieldDefinitions({ shopDomain }) {
@@ -280,6 +449,9 @@ module.exports = {
   numericId,
   shopifyGraphql,
   listRecentlyUsedProductTags,
+  listRecentlyUsedProductVendors,
   getProductMetafieldDefinitions,
   getProfileValuesFromExistingProducts,
+  REQUIRED_PRODUCT_IMPORT_SCOPES,
+  OPTIONAL_NATIVE_SHOPIFY_RECORD_SCOPES,
 };
