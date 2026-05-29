@@ -1,17 +1,19 @@
 {
   "name": "reviews-platform-api",
-  "version": "1.2.27-v33-validation-startup-fix",
-  "description": "Reviews Platform API v33: fixes Render startup by restoring and verifying core validation utility plus Product Creation & Import checks.",
+  "version": "1.2.42-v42-deploy-preflight-node22",
+  "description": "Reviews Platform API v42: pins Render/Node runtime to Node 22 LTS and adds deploy preflight checks for local require files while preserving Product Creation & Import editor.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check src/app.js && find src public Shopify-Liquid/assets extensions/review-widget-extension/assets -name '*.js' -print0 | xargs -0 -n1 node --check && node scripts/verify-restore.js && node scripts/verify-relative-requires.js && node scripts/cart-rewards-smoke-test.js",
+    "check": "npm run deploy:preflight && node scripts/verify-restore.js && node scripts/cart-rewards-smoke-test.js",
     "verify:restore": "node scripts/verify-restore.js",
     "cart-rewards:smoke": "node scripts/cart-rewards-smoke-test.js",
-    "verify:requires": "node scripts/verify-relative-requires.js"
+    "verify:requires": "node scripts/verify-relative-requires.js",
+    "deploy:preflight": "node scripts/verify-relative-requires.js && node --check server.js && node --check src/app.js && find src public Shopify-Liquid/assets extensions/review-widget-extension/assets -name '*.js' -print0 | xargs -0 -n1 node --check"
   },
   "engines": {
-    "node": ">=18"
+    "node": "22.x",
+    "npm": ">=10"
   },
   "dependencies": {
     "cors": "^2.8.5",
