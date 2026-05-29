@@ -164,6 +164,11 @@ const productCreationImportSettingsSchema = new mongoose.Schema({
   metafieldMappingRules: { type: [metafieldMappingRuleSchema], default: [] },
   defaultCurrency: { type: String, default: 'GBP' },
   vendorPresets: { type: [String], default: [] },
+  imageRules: {
+    saveSelectedImagesToFiles: { type: Boolean, default: false },
+    generateSeoAltText: { type: Boolean, default: true },
+    dedupeByCanonicalUrl: { type: Boolean, default: true },
+  },
 }, { timestamps: true, collection: 'product_creation_import_settings' });
 
 const ProductCreationImport = mongoose.models.ProductCreationImport || mongoose.model('ProductCreationImport', productCreationImportSchema);

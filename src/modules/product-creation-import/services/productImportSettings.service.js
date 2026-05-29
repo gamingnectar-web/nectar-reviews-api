@@ -14,6 +14,11 @@ const DEFAULT_SETTINGS = {
   },
   defaultCurrency: 'GBP',
   vendorPresets: [],
+  imageRules: {
+    saveSelectedImagesToFiles: false,
+    generateSeoAltText: true,
+    dedupeByCanonicalUrl: true,
+  },
   skuRules: [
     {
       enabled: true,
@@ -49,6 +54,7 @@ function mergeDefaults(settings = {}) {
     ...DEFAULT_SETTINGS,
     ...settings,
     handleRules: { ...DEFAULT_SETTINGS.handleRules, ...(settings.handleRules || {}) },
+    imageRules: { ...DEFAULT_SETTINGS.imageRules, ...(settings.imageRules || {}) },
     skuRules: Array.isArray(settings.skuRules) ? settings.skuRules : DEFAULT_SETTINGS.skuRules,
     conditionalRules: Array.isArray(settings.conditionalRules) ? settings.conditionalRules : DEFAULT_SETTINGS.conditionalRules,
     metafieldMappingRules: Array.isArray(settings.metafieldMappingRules) ? settings.metafieldMappingRules : DEFAULT_SETTINGS.metafieldMappingRules,
@@ -123,6 +129,11 @@ async function saveProductImportSettings({ shopDomain, settings = {} }) {
       overwriteExistingHandle: Boolean(payload.handleRules.overwriteExistingHandle),
     },
     defaultCurrency: cleanText(payload.defaultCurrency || 'GBP', 10).toUpperCase(),
+    imageRules: {
+      saveSelectedImagesToFiles: Boolean(payload.imageRules?.saveSelectedImagesToFiles),
+      generateSeoAltText: payload.imageRules?.generateSeoAltText !== false,
+      dedupeByCanonicalUrl: payload.imageRules?.dedupeByCanonicalUrl !== false,
+    },
     vendorPresets: Array.from(new Set((payload.vendorPresets || []).map((item) => cleanText(item, 120)).filter(Boolean))).slice(0, 200),
     skuRules: cleanRuleList(payload.skuRules),
     conditionalRules: cleanConditionalRules(payload.conditionalRules),

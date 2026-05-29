@@ -5,7 +5,7 @@ const { cleanText, normaliseTitle, toMoney, normaliseMetafields } = require('../
 const { normaliseDraftProduct } = require('./normaliseProduct.service');
 
 const REQUIRED_PRODUCT_IMPORT_SCOPES = ['read_products', 'write_products', 'read_inventory', 'write_inventory'];
-const OPTIONAL_NATIVE_SHOPIFY_RECORD_SCOPES = ['read_draft_orders', 'write_draft_orders', 'write_inventory_transfers', 'write_inventory_shipments'];
+const OPTIONAL_NATIVE_SHOPIFY_RECORD_SCOPES = ['read_draft_orders', 'write_draft_orders', 'write_inventory_transfers', 'write_inventory_shipments', 'write_files'];
 
 function numericId(gidOrId = '') {
   const raw = String(gidOrId || '');
@@ -154,7 +154,7 @@ async function healthCheckShopify(shopDomain) {
     message: token
       ? (missingRequiredScopes.length
         ? `Shopify is connected, but this install is missing scopes needed for the full product import flow: ${missingRequiredScopes.join(', ')}. Reinstall the app after updating SHOPIFY_SCOPES.`
-        : 'Shopify Admin API token is available for product search, product creation, images, product metafields and inventory cost updates.')
+        : 'Shopify Admin API token is available for product search, product creation, selected product images, product metafields, optional Shopify Files copy, and inventory cost updates.')
       : 'Reconnect/install the app through Shopify OAuth so product import can search and create products.',
   };
 }
@@ -226,6 +226,19 @@ async function searchShopifyProductsWithRest({ shopDomain, q = '', first = 10 })
     .map(restProductToCard);
 }
 
+
+function dedupeProductCards(products = [], first = 10) {
+  const byKey = new Map();
+  for (const product of products || []) {
+    const key = product.id || product.legacyResourceId || product.handle || `${product.title}-${product.sku}`;
+    if (!key) continue;
+    const score = (item) => (item.image ? 10 : 0) + (item.sku ? 3 : 0) + (item.barcode ? 3 : 0) + (item.inventoryItemId ? 2 : 0);
+    const existing = byKey.get(key);
+    if (!existing || score(product) > score(existing)) byKey.set(key, product);
+  }
+  return Array.from(byKey.values()).slice(0, Math.min(Number(first) || 10, 25));
+}
+
 async function searchShopifyProducts({ shopDomain, q = '', first = 10 }) {
   const queryText = cleanText(q, 160);
   if (!queryText) return [];
@@ -244,7 +257,7 @@ async function searchShopifyProducts({ shopDomain, q = '', first = 10 }) {
     error.installUrl = buildInstallUrl(shopDomain);
     throw error;
   }
-  return products;
+  return dedupeProductCards(products, first);
 }
 
 function makeRestMetafield(item = {}) {
@@ -269,6 +282,35 @@ async function updateInventoryItemCost({ shopDomain, inventoryItemId, cost }) {
     method: 'PUT',
     body: JSON.stringify({ inventory_item: { id: Number(id), cost: unitCost } }),
   });
+}
+
+async function createShopifyFilesFromImages({ shopDomain, images = [], title = '' }) {
+  const files = (images || []).slice(0, 50).map((image, index) => ({
+    originalSource: image.src,
+    contentType: 'IMAGE',
+    alt: cleanText(image.alt || (index === 0 ? title : `${title} product image ${index + 1}`), 500),
+  })).filter((file) => file.originalSource);
+  if (!files.length) return { files: [], userErrors: [] };
+  const query = `mutation ProductImportFileCreate($files: [FileCreateInput!]!) {
+    fileCreate(files: $files) {
+      files {
+        id
+        fileStatus
+        alt
+        createdAt
+        ... on MediaImage { image { url width height } }
+      }
+      userErrors { field message code }
+    }
+  }`;
+  const data = await shopifyGraphql({ shopDomain, query, variables: { files } });
+  const errors = data?.fileCreate?.userErrors || [];
+  if (errors.length) {
+    const err = new Error(errors.map((item) => item.message).join('; '));
+    err.userErrors = errors;
+    throw err;
+  }
+  return data?.fileCreate || { files: [], userErrors: [] };
 }
 
 async function createShopifyProductFromDraft({ shopDomain, draft }) {
@@ -313,6 +355,8 @@ async function createShopifyProductFromDraft({ shopDomain, draft }) {
   });
 
   let inventoryCostWarning = '';
+  let fileCreateWarning = '';
+  let createdFiles = [];
   if (normalised.cost && result.product?.variants?.[0]?.inventory_item_id) {
     try {
       await updateInventoryItemCost({ shopDomain, inventoryItemId: result.product.variants[0].inventory_item_id, cost: normalised.cost });
@@ -321,11 +365,23 @@ async function createShopifyProductFromDraft({ shopDomain, draft }) {
     }
   }
 
+  if (normalised.saveImagesToFiles && product.images.length) {
+    try {
+      const fileResult = await createShopifyFilesFromImages({ shopDomain, images: product.images, title: normalised.title });
+      createdFiles = fileResult.files || [];
+    } catch (error) {
+      fileCreateWarning = `Product was created, but selected images could not be copied to Shopify Files. Add write_files scope and reinstall if you want images under Content > Files. ${error.message || ''}`.trim();
+    }
+  }
+
   return restProductToCard(result.product || {}, {
     imageCount: product.images.length,
     inventoryCostWarning,
+    fileCreateWarning,
+    filesCreatedCount: createdFiles.length,
   });
 }
+
 
 async function assignImportLineToProduct({ importDoc, lineId, productId, variantId = '', productTitle = '', handle = '', image = '' }) {
   const line = importDoc.lines.find((item) => item.lineId === lineId);

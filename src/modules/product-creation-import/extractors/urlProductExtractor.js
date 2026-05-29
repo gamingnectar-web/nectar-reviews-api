@@ -75,10 +75,60 @@ function firstOffer(offers) {
 
 function imageFromJsonLd(value, baseUrl) {
   if (!value) return [];
-  if (typeof value === 'string') return [absolutizeUrl(value, baseUrl)].filter(Boolean);
+  if (typeof value === 'string') {
+    const src = absolutizeUrl(value, baseUrl);
+    return src ? [{ src, alt: '' }] : [];
+  }
   if (Array.isArray(value)) return value.flatMap((item) => imageFromJsonLd(item, baseUrl));
-  if (typeof value === 'object') return [value.url, value.contentUrl, value.src].map((item) => absolutizeUrl(item, baseUrl)).filter(Boolean);
+  if (typeof value === 'object') {
+    return [value.url, value.contentUrl, value.src].map((item) => absolutizeUrl(item, baseUrl)).filter(Boolean).map((src) => ({ src, alt: cleanText(value.caption || value.name || value.alt || '', 180) }));
+  }
   return [];
+}
+
+function isProbablyImageUrl(url = '') {
+  const raw = String(url || '').trim();
+  if (!/^https?:\/\//i.test(raw)) return false;
+  const lower = raw.toLowerCase();
+  if (/\.(png|jpe?g|webp|gif|avif)(?:[?#]|$)/i.test(lower)) return true;
+  if (/cdn\/shop\/products|cdn\/shop\/files|cdn\.shopify\.com|images?|media/i.test(lower) && !/\/products\/[^/?#]+(?:[?#]|$)/i.test(lower)) return true;
+  return false;
+}
+
+function canonicalImageKey(url = '') {
+  try {
+    const parsed = new URL(url);
+    const pathname = parsed.pathname.replace(/_(\d+x\d+|small|medium|large|master)(?=\.)/i, '');
+    return `${parsed.hostname.toLowerCase()}${pathname.toLowerCase()}`;
+  } catch (_) {
+    return String(url || '').split('?')[0].toLowerCase();
+  }
+}
+
+function imageQualityScore(item = {}) {
+  const src = typeof item === 'string' ? item : item.src;
+  let score = 0;
+  try {
+    const parsed = new URL(src);
+    ['width','w'].forEach((key) => { const n = Number(parsed.searchParams.get(key) || 0); if (n) score += n; });
+    ['height','h'].forEach((key) => { const n = Number(parsed.searchParams.get(key) || 0); if (n) score += Math.round(n / 2); });
+    if (!parsed.searchParams.has('width') && !parsed.searchParams.has('w')) score += 5000;
+  } catch (_) {}
+  if (/cdn\/shop\/products|product|gallery|media/i.test(src || '')) score += 1000;
+  if (/logo|icon|sprite|avatar|payment|trust|badge/i.test(src || '')) score -= 10000;
+  return score;
+}
+
+function dedupeImageCandidates(items = []) {
+  const best = new Map();
+  for (const raw of items || []) {
+    const item = typeof raw === 'string' ? { src: raw, alt: '' } : { src: raw.src || raw.url || '', alt: raw.alt || '' };
+    if (!isProbablyImageUrl(item.src)) continue;
+    const key = canonicalImageKey(item.src);
+    const current = best.get(key);
+    if (!current || imageQualityScore(item) > imageQualityScore(current)) best.set(key, item);
+  }
+  return Array.from(best.values()).sort((a, b) => imageQualityScore(b) - imageQualityScore(a)).slice(0, 50);
 }
 
 
@@ -131,7 +181,10 @@ function extractWeightFromAny(product = {}, text = '') {
 function extractHtmlImageCandidates(html, baseUrl) {
   const images = [];
   const metaSelectors = ['og:image', 'og:image:secure_url', 'twitter:image', 'twitter:image:src', 'product:image'];
-  metaSelectors.forEach((selector) => metaContents(html, selector).forEach((url) => images.push(absolutizeUrl(url, baseUrl))));
+  metaSelectors.forEach((selector) => metaContents(html, selector).forEach((url) => {
+    const src = absolutizeUrl(url, baseUrl);
+    if (src) images.push({ src, alt: '' });
+  }));
 
   const imgRe = /<img\b[^>]*(?:src|data-src|data-original|data-zoom-image|data-image)=["']([^"']+)["'][^>]*>/gi;
   let match;
@@ -142,7 +195,7 @@ function extractHtmlImageCandidates(html, baseUrl) {
     const cls = (tag.match(/class=["']([^"']*)["']/i) || [])[1] || '';
     const scoreText = `${src} ${alt} ${cls}`.toLowerCase();
     const isLikelyProduct = /(product|gallery|media|main|zoom|packshot|thumbnail|image)/i.test(scoreText);
-    if (src && isLikelyProduct && !/logo|icon|sprite|avatar|payment|trust|badge/i.test(scoreText)) images.push(src);
+    if (src && isLikelyProduct && !/logo|icon|sprite|avatar|payment|trust|badge/i.test(scoreText)) images.push({ src, alt: cleanText(alt, 180) });
   }
 
   const srcsetRe = /(?:srcset|data-srcset)=["']([^"']+)["']/gi;
@@ -150,11 +203,11 @@ function extractHtmlImageCandidates(html, baseUrl) {
     String(match[1] || '').split(',').forEach((part) => {
       const url = part.trim().split(/\s+/)[0];
       const absolute = absolutizeUrl(url, baseUrl);
-      if (absolute) images.push(absolute);
+      if (absolute) images.push({ src: absolute, alt: '' });
     });
   }
 
-  return Array.from(new Set(images.filter(Boolean))).slice(0, 60);
+  return dedupeImageCandidates(images).slice(0, 60);
 }
 
 async function extractProductFromUrl(url) {
@@ -185,10 +238,13 @@ async function extractProductFromUrl(url) {
   const brand = typeof product.brand === 'object' ? product.brand?.name : product.brand;
   const title = cleanText(product.name || metaContent(html, 'og:title') || tagText(html, 'title'), 220);
   const description = cleanText(product.description || metaContent(html, 'og:description') || metaContent(html, 'description'), 5000);
-  const imageUrls = Array.from(new Set([
+  const imageCandidates = dedupeImageCandidates([
     ...imageFromJsonLd(product.image, sourceUrl),
     ...extractHtmlImageCandidates(html, sourceUrl),
-  ])).slice(0, 50);
+  ]).map((image, index) => ({
+    src: image.src,
+    alt: cleanText(image.alt || `${title || 'Product'} image ${index + 1}`, 180),
+  }));
   const weightInfo = extractWeightFromAny(product, pageText);
   const extractedBarcode = product.gtin13 || product.gtin14 || product.gtin12 || product.gtin8 || product.gtin || extractBarcodeFromText(pageText) || '';
 
@@ -204,7 +260,7 @@ async function extractProductFromUrl(url) {
     barcode: extractedBarcode,
     weight: weightInfo.weight,
     weightUnit: weightInfo.weightUnit,
-    images: imageUrls,
+    images: imageCandidates,
     tags: ['url-import'],
     seo: { title, description },
   });
@@ -212,7 +268,7 @@ async function extractProductFromUrl(url) {
   return {
     ...draft,
     confidence: product.name ? 0.86 : (title ? 0.55 : 0.25),
-    rawExtract: { jsonLdProductFound: Boolean(product.name), sourceUrl, imageCount: draft.images.length, barcodeSource: extractedBarcode ? (product.gtin || product.gtin13 || product.gtin12 ? 'json-ld' : 'page-text') : '', weightSource: weightInfo.source },
+    rawExtract: { jsonLdProductFound: Boolean(product.name), sourceUrl, imageCount: draft.images.length, imageDedupe: 'canonical-url-highest-quality', barcodeSource: extractedBarcode ? (product.gtin || product.gtin13 || product.gtin12 ? 'json-ld' : 'page-text') : '', weightSource: weightInfo.source },
   };
 }
 

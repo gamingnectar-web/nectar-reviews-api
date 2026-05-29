@@ -257,3 +257,91 @@ A dedicated **Metafield Mapper** tab lets you create rules that align Shopify pr
 The invoice flow creates internal supplier PO draft records in MongoDB. They now appear in the new **PO Drafts** tab as well as in History. These are not Shopify customer draft orders.
 
 For customer-facing invoices, Shopify uses Draft Orders and invoice sending. That is a different flow and needs `read_draft_orders,write_draft_orders`. For inbound stock/receiving, use Shopify Inventory Transfers when you want to progress beyond internal PO drafts; that needs `write_inventory_transfers` and related inventory permissions.
+
+## V35 updates: image selection, SEO alt text, PO clarity
+
+### Product image import
+- URL scans now dedupe product/gallery images by canonical CDN path and keep the highest quality/original candidate where the same image appears with different `width` parameters.
+- Only selected images are sent to Shopify for product creation.
+- Selected product images are attached to the Shopify product with generated alt text based on the product title.
+- Settings now includes **Image / SEO Conditions**. When enabled, selected images are also copied into Shopify **Content > Files** via Shopify `fileCreate`; this requires the `write_files` scope and app reinstall.
+
+### Product search results
+- Shopify product search results are deduped by Shopify product id/handle so the invoice matching modal does not show repeated variants/product cards.
+
+### Sweetness and sourness
+- `core.sweetness` and `core.sourness` are now treated as 1-5 gauge values:
+  - 1 = very low
+  - 3 = medium
+  - 5 = very high
+- AI enrichment is instructed to return numeric string values only for those two fields.
+
+### Purchase order behaviour
+- The PO created by this module is an internal supplier PO record inside Nectar.
+- It is not a native Shopify Admin Purchase Order because Shopify does not currently expose a public create/update API for the Shopify Admin Purchase Orders screen.
+- The UI now says **Internal Draft PO** and **Formalise internal PO** to avoid suggesting that a native Shopify PO is created.
+- Formalising is now blocked unless every line is assigned to an existing Shopify product or created as a new Shopify draft product.
+- For a future Shopify-native stock movement record, the closest public API surface is Shopify Inventory Transfers, which needs `write_inventory_transfers` and destination/origin location setup.
+
+## V36 updates: PO prompt workaround
+
+Because Shopify does not expose a public API to create the native **Products > Purchase orders** records, the module now supports a prompt-based handoff after an internal PO is formalised.
+
+### New flow
+
+1. Analyse invoice/order screenshot.
+2. Match or create every product line.
+3. Create the internal draft PO.
+4. Formalise the internal PO.
+5. Click **Create prompt**.
+6. Copy the generated prompt into Shopify/Sidekick or the merchant's purchasing workflow.
+
+The generated prompt includes:
+
+- PO number
+- supplier/vendor
+- supplier URL
+- currency
+- invoice/order number and date where available
+- every product line
+- matched Shopify product title
+- Shopify product ID / variant ID where available
+- handle, SKU and barcode where available
+- quantity
+- unit cost
+- line total
+- line discount context / promo label
+- subtotal
+- PO-level discount
+- shipping
+- tax
+- final total
+- notes
+
+The prompt explicitly tells Shopify not to create a customer draft order or customer invoice, and to keep the PO as a draft unless stock receipt is confirmed.
+
+### Endpoint
+
+```txt
+POST /api/admin/product-creation-import/purchase-order/prompt
+```
+
+Body:
+
+```json
+{
+  "importId": "product_creation_import_id"
+}
+```
+
+Response:
+
+```json
+{
+  "prompt": "Can you create a purchase order draft...",
+  "purchaseOrder": {},
+  "importId": "..."
+}
+```
+
+The PO Drafts tab also shows a **Create prompt** action for formalised internal POs.

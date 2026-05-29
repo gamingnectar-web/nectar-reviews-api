@@ -9,14 +9,43 @@ function htmlFromPlainText(value) {
   return text ? `<p>${escapeHtml(text)}</p>` : '';
 }
 
-function normaliseImage(image, title) {
+function normaliseImage(image, title, index = 0) {
   if (!image) return null;
+  const fallbackAlt = index === 0 ? (title || 'Imported product') : `${title || 'Imported product'} product image ${index + 1}`;
   if (typeof image === 'string') {
     const url = cleanUrl(image);
-    return url ? { src: url, alt: title || 'Imported product' } : null;
+    return url ? { src: url, alt: fallbackAlt } : null;
   }
   const src = cleanUrl(image.src || image.url || image.originalSource || '');
-  return src ? { src, alt: cleanText(image.alt || title || 'Imported product', 180) } : null;
+  return src ? { src, alt: cleanText(image.alt || image.description || fallbackAlt, 180) } : null;
+}
+
+function dedupeImagesByCanonicalUrl(images = []) {
+  const best = new Map();
+  const score = (item) => {
+    let n = 0;
+    try {
+      const parsed = new URL(item.src);
+      const width = Number(parsed.searchParams.get('width') || parsed.searchParams.get('w') || 0);
+      if (width) n += width; else n += 5000;
+      if (/cdn\/shop\/products|product|gallery|media/i.test(item.src)) n += 1000;
+    } catch (_) {}
+    return n;
+  };
+  const keyFor = (src = '') => {
+    try {
+      const parsed = new URL(src);
+      return `${parsed.hostname.toLowerCase()}${parsed.pathname.toLowerCase().replace(/_(\d+x\d+|small|medium|large|master)(?=\.)/i, '')}`;
+    } catch (_) {
+      return String(src || '').split('?')[0].toLowerCase();
+    }
+  };
+  images.filter(Boolean).forEach((item) => {
+    const key = keyFor(item.src);
+    const existing = best.get(key);
+    if (!existing || score(item) > score(existing)) best.set(key, item);
+  });
+  return Array.from(best.values());
 }
 
 function coreMetafieldDefaults(raw = {}) {
@@ -54,9 +83,9 @@ function normaliseDraftProduct(raw = {}) {
   const weight = toWeight(raw.weight || raw.productWeight || raw.shippingWeight || '');
   const weightUnit = normaliseWeightUnit(raw.weightUnit || raw.productWeightUnit || raw.shippingWeightUnit || 'g');
   const images = (Array.isArray(raw.images) ? raw.images : [raw.imageUrl || raw.image || raw.featuredImage])
-    .map((image) => normaliseImage(image, title))
-    .filter(Boolean)
-    .slice(0, 50);
+    .map((image, index) => normaliseImage(image, title, index))
+    .filter(Boolean);
+  const dedupedImages = dedupeImagesByCanonicalUrl(images).slice(0, 50);
   const tags = Array.from(new Set(parseTags(raw.tags)
     .concat(raw.source === 'url' ? ['url-import'] : [])
     .concat(raw.source === 'invoice' ? ['invoice-import'] : [])
@@ -88,7 +117,8 @@ function normaliseDraftProduct(raw = {}) {
     handleFormat: cleanText(raw.handleFormat || raw.format || '', 80),
     handleLocation: cleanText(raw.handleLocation || raw.location || '', 80),
     quantity: Number(raw.quantity || 1) || 1,
-    images,
+    images: dedupedImages,
+    saveImagesToFiles: Boolean(raw.saveImagesToFiles),
     metafields,
     seo: {
       title: cleanText(raw.seo?.title || title, 70),

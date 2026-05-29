@@ -106,6 +106,7 @@ function lineToDraft(line, importDoc) {
     quantity: line.quantity || 1,
     images: line.imageUrl ? [{ src: line.imageUrl, alt: line.title }] : [],
     seo: { title: line.title, description: line.title },
+    saveImagesToFiles: false,
   });
 }
 
@@ -132,6 +133,8 @@ async function createDraftProduct({ shopDomain, draft, importId, lineId }) {
     if (!sourceDraft) sourceDraft = doc.draft;
   }
 
+  const importSettings = await getProductImportSettings({ shopDomain });
+  sourceDraft = { ...sourceDraft, saveImagesToFiles: sourceDraft?.saveImagesToFiles !== undefined ? sourceDraft.saveImagesToFiles : Boolean(importSettings?.imageRules?.saveSelectedImagesToFiles) };
   sourceDraft = await enrichProductDraft({ shopDomain, draft: sourceDraft });
   const created = await createShopifyProductFromDraft({ shopDomain, draft: sourceDraft });
 
@@ -251,6 +254,13 @@ async function formalisePurchaseOrderDraft({ shopDomain, importId, purchaseOrder
     error.status = 404;
     throw error;
   }
+  const poLines = Array.isArray(doc.purchaseOrder?.lines) ? doc.purchaseOrder.lines : [];
+  const unmatched = poLines.filter((line) => !['assigned', 'created'].includes(line.matchStatus));
+  if (unmatched.length) {
+    const error = new Error(`Cannot formalise yet. ${unmatched.length} PO line(s) are still unmatched. Assign an existing Shopify product or create a draft product first.`);
+    error.status = 400;
+    throw error;
+  }
   doc.purchaseOrder = {
     ...doc.purchaseOrder,
     ...purchaseOrder,
@@ -259,6 +269,88 @@ async function formalisePurchaseOrderDraft({ shopDomain, importId, purchaseOrder
   };
   await doc.save();
   return { import: doc, purchaseOrder: doc.purchaseOrder };
+}
+
+function formatPoMoney(currency, value) {
+  const clean = toMoney(value || '');
+  return clean ? `${currency || 'GBP'} ${clean}` : 'not set';
+}
+
+function buildPurchaseOrderPrompt({ doc, purchaseOrder }) {
+  const po = purchaseOrder || doc.purchaseOrder || {};
+  const currency = po.currency || doc.currency || 'GBP';
+  const lines = Array.isArray(po.lines) ? po.lines : [];
+  const lineText = lines.length ? lines.map((line, index) => {
+    const productBits = [
+      line.productTitle ? `Matched Shopify product: ${line.productTitle}` : '',
+      line.handle ? `Shopify handle: ${line.handle}` : '',
+      line.sku ? `SKU: ${line.sku}` : '',
+      line.barcode ? `Barcode: ${line.barcode}` : '',
+      line.productId ? `Shopify product ID: ${line.productId}` : '',
+      line.variantId ? `Shopify variant ID: ${line.variantId}` : '',
+    ].filter(Boolean).join('; ');
+    const costBits = [
+      `Quantity: ${line.quantity || 1}`,
+      `Cost per unit: ${formatPoMoney(currency, line.unitCost)}`,
+      line.totalCost ? `Line total: ${formatPoMoney(currency, line.totalCost)}` : '',
+      line.originalUnitPrice ? `Original/compare-at unit price: ${formatPoMoney(currency, line.originalUnitPrice)}` : '',
+      line.discountAmount ? `Line discount context: ${formatPoMoney(currency, line.discountAmount)}` : '',
+      line.discountLabel ? `Promotion/discount label: ${line.discountLabel}` : '',
+    ].filter(Boolean).join('; ');
+    return `${index + 1}. ${line.title || line.productTitle || 'Product'}\n   ${productBits || 'No Shopify product match recorded'}\n   ${costBits}`;
+  }).join('\n') : 'No PO lines were found.';
+
+  const unmatchedCount = lines.filter((line) => !['assigned', 'created'].includes(line.matchStatus)).length;
+  const prompt = [
+    'Can you create a purchase order draft in Shopify using the details below?',
+    '',
+    'Important instructions:',
+    '- Use Shopify native Purchase Orders / inventory purchasing if available in this admin session.',
+    '- Do not create a customer draft order or customer invoice.',
+    '- Keep it as a draft purchase order unless I explicitly confirm receiving stock.',
+    '- Use the matched Shopify products where product IDs, handles or SKUs are provided.',
+    '- Treat the PO-level discount as the order discount. Line-level discounts are included as context only and should not be double-counted unless Shopify requires line-level allocation.',
+    unmatchedCount ? `- ${unmatchedCount} line(s) may still need manual confirmation because they are not marked assigned/created.` : '- All lines are marked assigned or created in Nectar.',
+    '',
+    'Purchase order details:',
+    `PO number: ${po.poNumber || 'not set'}`,
+    `Supplier/vendor: ${po.supplierName || doc.supplierName || 'not set'}`,
+    `Supplier URL: ${po.supplierUrl || doc.supplierUrl || 'not set'}`,
+    `Currency: ${currency}`,
+    `Invoice/order number: ${po.invoiceNumber || doc.invoiceNumber || 'not set'}`,
+    `Invoice/order date: ${po.invoiceDate || doc.invoiceDate || 'not set'}`,
+    '',
+    'Products coming into stock:',
+    lineText,
+    '',
+    'Order totals:',
+    `Subtotal: ${formatPoMoney(currency, po.subtotal)}`,
+    `PO/order discount: ${formatPoMoney(currency, po.discountTotal || po.poLevelDiscount)}`,
+    `Shipping: ${formatPoMoney(currency, po.shippingTotal)}`,
+    `Tax: ${formatPoMoney(currency, po.taxTotal)}`,
+    `Final total: ${formatPoMoney(currency, po.total)}`,
+    '',
+    po.notes ? `Notes:\n${po.notes}` : 'Notes: none',
+    '',
+    'Please ask me to confirm any missing supplier, cost, quantity, product match or receiving-location information before finalising.'
+  ].join('\n');
+  return prompt;
+}
+
+async function createPurchaseOrderPrompt({ shopDomain, importId }) {
+  const doc = await ProductCreationImport.findOne({ _id: importId, shopDomain }).lean();
+  if (!doc) {
+    const error = new Error('Import not found.');
+    error.status = 404;
+    throw error;
+  }
+  if (!doc.purchaseOrder || !['draft', 'formalised'].includes(doc.purchaseOrder.status)) {
+    const error = new Error('Create a draft PO before generating a Shopify prompt.');
+    error.status = 400;
+    throw error;
+  }
+  const prompt = buildPurchaseOrderPrompt({ doc, purchaseOrder: doc.purchaseOrder });
+  return { prompt, purchaseOrder: doc.purchaseOrder, importId: String(doc._id) };
 }
 
 
@@ -321,4 +413,5 @@ module.exports = {
   suggestProductProfile,
   createPurchaseOrderDraft,
   formalisePurchaseOrderDraft,
+  createPurchaseOrderPrompt,
 };

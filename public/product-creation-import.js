@@ -6,6 +6,37 @@
   const money = (value) => value !== undefined && value !== null && String(value) !== '' ? `${esc(state.latestImport?.currency || byId('pci-invoice-currency')?.value || state.settings?.defaultCurrency || 'GBP')} ${esc(value)}` : '—';
   const compoundId = (prefix, namespace, key) => `${prefix}-mf-${String(namespace).replace(/[^a-z0-9_-]/gi,'_')}-${String(key).replace(/[^a-z0-9_-]/gi,'_')}`;
 
+  function canonicalImageKey(src = '') {
+    try {
+      const url = new URL(src);
+      return `${url.hostname.toLowerCase()}${url.pathname.toLowerCase().replace(/_(\d+x\d+|small|medium|large|master)(?=\.)/i, '')}`;
+    } catch (_) {
+      return String(src || '').split('?')[0].toLowerCase();
+    }
+  }
+
+  function imageQualityScore(src = '') {
+    let score = 0;
+    try {
+      const url = new URL(src);
+      const width = Number(url.searchParams.get('width') || url.searchParams.get('w') || 0);
+      if (width) score += width; else score += 5000;
+    } catch (_) {}
+    if (/cdn\/shop\/products|product|gallery|media/i.test(src)) score += 1000;
+    if (/logo|icon|sprite|avatar|payment|trust|badge/i.test(src)) score -= 10000;
+    return score;
+  }
+
+  function dedupeImageUrls(urls = []) {
+    const best = new Map();
+    urls.map((x) => String(x || '').trim()).filter(Boolean).forEach((src) => {
+      const key = canonicalImageKey(src);
+      const current = best.get(key);
+      if (!current || imageQualityScore(src) > imageQualityScore(current)) best.set(key, src);
+    });
+    return Array.from(best.values());
+  }
+
   function setStatus(id, message, kind = '') {
     const el = byId(id);
     if (!el) return;
@@ -15,7 +46,7 @@
 
 
   function imageSrcList(draft = {}) {
-    return (draft.images || []).map((img) => typeof img === 'string' ? img : img.src).filter(Boolean);
+    return dedupeImageUrls((draft.images || []).map((img) => typeof img === 'string' ? img : img.src).filter(Boolean));
   }
 
   function imageIsSelected(prefix, src) {
@@ -36,7 +67,7 @@
   }
 
   function setSelectedImageUrls(prefix, urls = []) {
-    const clean = Array.from(new Set((urls || []).map((x) => String(x || '').trim()).filter(Boolean)));
+    const clean = dedupeImageUrls((urls || []).map((x) => String(x || '').trim()).filter(Boolean));
     const textarea = byId(`${prefix}-images`);
     if (textarea) textarea.value = clean.join('\n');
     const first = byId(`${prefix}-image`);
@@ -47,7 +78,7 @@
   function renderImagePicker(prefix, allImages = []) {
     const picker = byId(`${prefix}-image-picker`);
     if (!picker) return;
-    const urls = Array.from(new Set((allImages || []).map((x) => typeof x === 'string' ? x : x.src).filter(Boolean))).slice(0, 80);
+    const urls = dedupeImageUrls((allImages || []).map((x) => typeof x === 'string' ? x : x.src).filter(Boolean)).slice(0, 80);
     if (!urls.length) {
       picker.innerHTML = '<div class="pci-status warn">No product images found yet. Add image URLs manually above.</div>';
       return;
@@ -74,7 +105,8 @@
     const first = byId(`${prefix}-image`)?.value.trim() || '';
     const raw = byId(`${prefix}-images`)?.value || '';
     const urls = raw.split(/[\n,]+/).map((x) => x.trim()).filter(Boolean);
-    return Array.from(new Set([first, ...urls].filter(Boolean))).map((src, idx) => ({ src, alt: byId(`${prefix}-title`)?.value.trim() || `Imported product ${idx + 1}` }));
+    const title = byId(`${prefix}-title`)?.value.trim() || 'Imported product';
+    return dedupeImageUrls([first, ...urls].filter(Boolean)).map((src, idx) => ({ src, alt: idx === 0 ? title : `${title} product image ${idx + 1}` }));
   }
 
   function getVisibleMetafieldDefinitions() {
@@ -115,6 +147,7 @@
       description: byId(`${prefix}-description`)?.value.trim() || '',
       tags: (byId(`${prefix}-tags`)?.value || '').split(',').map((x) => x.trim()).filter(Boolean),
       images: parseImageUrls(prefix),
+      saveImagesToFiles: Boolean(state.settings?.imageRules?.saveSelectedImagesToFiles),
       metafields: readMetafields(prefix),
     };
   }
@@ -161,7 +194,7 @@
       const compound = `${definition.namespace}.${definition.key}`;
       const current = values.get(compound) || {};
       const isCore = ['core.formula_version','core.grouped_profiles','core.sourness','core.sweetness','core.flavour_profile'].includes(compound);
-      const formulaHelp = compound === 'core.formula_version' ? '<small class="pci-muted">This field is used by SKU/settings rules for product-line logic such as EN / EN2.</small>' : '';
+      const formulaHelp = compound === 'core.formula_version' ? '<small class="pci-muted">This field is used by SKU/settings rules for product-line logic such as EN / EN2.</small>' : (['core.sourness','core.sweetness'].includes(compound) ? '<small class="pci-muted">Use a 1-5 gauge. 1 = very low, 3 = medium, 5 = very high.</small>' : '');
       return `<div class="pci-mf-field ${isCore ? 'core' : ''}">
         <label class="pci-label" for="${compoundId(prefix, definition.namespace, definition.key)}">${esc(definition.name || compound)} <span>${esc(compound)}</span></label>
         <input id="${compoundId(prefix, definition.namespace, definition.key)}" class="pci-input" data-pci-mf-prefix="${prefix}" data-namespace="${esc(definition.namespace)}" data-key="${esc(definition.key)}" data-type="${esc(definition.type || 'single_line_text_field')}" data-label="${esc(definition.name || '')}" value="${esc(current.value || '')}" placeholder="${esc(definition.description || definition.help || '')}">
@@ -273,7 +306,7 @@
     const target = byId('pci-po-draft');
     if (!target || !po) return;
     const rows = po.lines || [];
-    target.innerHTML = `<div class="pci-po-card"><div class="pci-po-head"><div><h3>Draft PO: ${esc(po.poNumber || 'Purchase Order')}</h3><p class="pci-muted">Formalise this once every product line has the right Shopify product, quantity and cost. PO-level discount is the main discount box; line discounts are only kept when extraction clearly found product-specific offers.</p></div><span class="pci-pill ${po.status === 'formalised' ? 'ok' : 'warn'}">${esc(po.status || 'draft')}</span></div><div class="pci-form-grid"><div><label class="pci-label">Supplier / Vendor</label><input id="pci-po-supplier-name" class="pci-input" value="${esc(po.supplierName || '')}"></div><div><label class="pci-label">Currency</label><input id="pci-po-currency" class="pci-input" value="${esc(po.currency || 'GBP')}"></div></div><table class="pci-history"><thead><tr><th>Product</th><th>Qty</th><th>Unit cost</th><th>Line discount</th><th>Line total</th><th>Match</th></tr></thead><tbody>${rows.map((line) => `<tr><td><strong>${esc(line.title)}</strong><br><small>${esc(line.sku || line.productTitle || '')}</small></td><td>${esc(line.quantity)}</td><td>${money(line.unitCost)}</td><td>${line.discountAmount ? money(line.discountAmount) : '—'}<br><small>${esc(line.discountLabel || '')}</small></td><td>${money(line.totalCost)}</td><td><span class="pci-pill ${['assigned','created'].includes(line.matchStatus) ? 'ok' : 'warn'}">${esc(line.matchStatus)}</span></td></tr>`).join('')}</tbody></table><div class="pci-po-totals"><span>Subtotal <strong>${money(po.subtotal)}</strong></span><span>PO discount <strong>${money(po.discountTotal)}</strong></span><span>Shipping <strong>${money(po.shippingTotal)}</strong></span><span>Tax <strong>${money(po.taxTotal)}</strong></span><span>Total <strong>${money(po.total)}</strong></span></div><label class="pci-label">PO notes</label><textarea id="pci-po-notes" class="pci-textarea">${esc(po.notes || '')}</textarea><div class="pci-actions"><button type="button" class="primary-btn" onclick="window.ProductCreationImportAdmin.formalisePurchaseOrderDraft()">Formalise PO</button></div></div>`;
+    target.innerHTML = `<div class="pci-po-card"><div class="pci-po-head"><div><h3>Internal Draft PO: ${esc(po.poNumber || 'Purchase Order')}</h3><p class="pci-muted">This is an internal supplier PO record inside the app. Shopify's visible Purchase Orders screen cannot currently be created through the public Admin API, so formalising here does not push a native Shopify PO. PO-level discount is the main discount box; line discounts are kept as row context.</p></div><span class="pci-pill ${po.status === 'formalised' ? 'ok' : 'warn'}">${esc(po.status || 'draft')}</span></div><div class="pci-form-grid"><div><label class="pci-label">Supplier / Vendor</label><input id="pci-po-supplier-name" class="pci-input" value="${esc(po.supplierName || '')}"></div><div><label class="pci-label">Currency</label><input id="pci-po-currency" class="pci-input" value="${esc(po.currency || 'GBP')}"></div></div><table class="pci-history"><thead><tr><th>Product</th><th>Qty</th><th>Unit cost</th><th>Line discount</th><th>Line total</th><th>Match</th></tr></thead><tbody>${rows.map((line) => `<tr><td><strong>${esc(line.title)}</strong><br><small>${esc(line.sku || line.productTitle || '')}</small></td><td>${esc(line.quantity)}</td><td>${money(line.unitCost)}</td><td>${line.discountAmount ? money(line.discountAmount) : '—'}<br><small>${esc(line.discountLabel || '')}</small></td><td>${money(line.totalCost)}</td><td><span class="pci-pill ${['assigned','created'].includes(line.matchStatus) ? 'ok' : 'warn'}">${esc(line.matchStatus)}</span></td></tr>`).join('')}</tbody></table><div class="pci-po-totals"><span>Subtotal <strong>${money(po.subtotal)}</strong></span><span>PO discount <strong>${money(po.discountTotal)}</strong></span><span>Shipping <strong>${money(po.shippingTotal)}</strong></span><span>Tax <strong>${money(po.taxTotal)}</strong></span><span>Total <strong>${money(po.total)}</strong></span></div><label class="pci-label">PO notes</label><textarea id="pci-po-notes" class="pci-textarea">${esc(po.notes || '')}</textarea><div class="pci-actions">${po.status === 'formalised' ? `<button type="button" class="primary-btn" onclick="window.ProductCreationImportAdmin.createPurchaseOrderPrompt()">Create prompt</button><span class="pci-muted">Copies all formalised PO details into a prompt you can paste into Shopify.</span>` : `<button type="button" class="primary-btn" onclick="window.ProductCreationImportAdmin.formalisePurchaseOrderDraft()">Formalise internal PO</button>`}</div></div>`;
   }
 
   window.pciTab = function(name) {
@@ -384,6 +417,8 @@
     if (byId('pci-settings-handle-overwrite')) byId('pci-settings-handle-overwrite').checked = Boolean(settings.handleRules?.overwriteExistingHandle);
     if (byId('pci-settings-default-currency')) byId('pci-settings-default-currency').value = settings.defaultCurrency || 'GBP';
     if (byId('pci-settings-vendors')) byId('pci-settings-vendors').value = (settings.vendorPresets || []).join('\n');
+    if (byId('pci-settings-save-images-files')) byId('pci-settings-save-images-files').checked = Boolean(settings.imageRules?.saveSelectedImagesToFiles);
+    if (byId('pci-settings-generate-alt')) byId('pci-settings-generate-alt').checked = settings.imageRules?.generateSeoAltText !== false;
     const skuBox = byId('pci-sku-rules');
     if (skuBox) skuBox.innerHTML = (settings.skuRules || []).map(skuRuleRow).join('') || '<div class="pci-status warn">No SKU rules yet.</div>';
     const condBox = byId('pci-conditional-rules');
@@ -420,6 +455,11 @@
       },
       defaultCurrency: byId('pci-settings-default-currency')?.value || 'GBP',
       vendorPresets: (byId('pci-settings-vendors')?.value || '').split(/\n+/).map((x) => x.trim()).filter(Boolean),
+      imageRules: {
+        saveSelectedImagesToFiles: Boolean(byId('pci-settings-save-images-files')?.checked),
+        generateSeoAltText: byId('pci-settings-generate-alt') ? Boolean(byId('pci-settings-generate-alt')?.checked) : true,
+        dedupeByCanonicalUrl: true,
+      },
       skuRules,
       conditionalRules,
       metafieldMappingRules,
@@ -519,7 +559,7 @@
       if (state.latestImport?._id && prefix === 'pci-url') payload.importId = state.latestImport._id;
       const data = await api('/shopify/create', { method: 'POST', body: JSON.stringify(payload) });
       const link = shopifyProductUrl(data.product?.id);
-      setStatus(statusId, `Created draft product: <strong>${esc(data.product?.title || draft.title)}</strong>${link ? ` · <a href="${esc(link)}" target="_blank">Open in Shopify ↗</a>` : ''}${data.product?.inventoryCostWarning ? `<br>${esc(data.product.inventoryCostWarning)}` : ''}`, data.product?.inventoryCostWarning ? 'warn' : 'ok');
+      setStatus(statusId, `Created draft product: <strong>${esc(data.product?.title || draft.title)}</strong>${link ? ` · <a href="${esc(link)}" target="_blank">Open in Shopify ↗</a>` : ''}${data.product?.inventoryCostWarning ? `<br>${esc(data.product.inventoryCostWarning)}` : ''}${data.product?.fileCreateWarning ? `<br>${esc(data.product.fileCreateWarning)}` : ''}${data.product?.filesCreatedCount ? `<br>Copied ${esc(data.product.filesCreatedCount)} image(s) to Shopify Files.` : ''}`, data.product?.inventoryCostWarning ? 'warn' : 'ok');
       state.historyLoaded = false;
     } catch (error) { setStatus(statusId, esc(error.message || 'Product creation failed.'), 'err'); }
   }
@@ -553,7 +593,8 @@
     box.innerHTML = '<div class="pci-status">Searching Shopify…</div>';
     try {
       const data = await api(`/products/search?q=${encodeURIComponent(q)}&first=12`);
-      const products = data.products || [];
+      const seenProducts = new Set();
+      const products = (data.products || []).filter((p) => { const key = p.id || p.legacyResourceId || p.handle || `${p.title}-${p.sku}`; if (seenProducts.has(key)) return false; seenProducts.add(key); return true; });
       if (!products.length) { box.innerHTML = '<div class="pci-status warn">No matching products found. Close this and use Create… to create manually or from a URL.</div>'; return; }
       box.innerHTML = products.map((p) => `<div class="pci-result"><div>${p.image ? `<img src="${esc(p.image)}" alt="">` : ''}</div><div><strong>${esc(p.title)}</strong><small>Vendor: ${esc(p.vendor || '—')} · SKU: ${esc(p.sku || '—')} · ${esc(p.handle || '')}</small></div><button class="primary-btn" type="button" onclick="window.ProductCreationImportAdmin.assignLineFromModal(${JSON.stringify(p).replace(/"/g,'&quot;')})">Select & assign</button></div>`).join('');
     } catch (error) { box.innerHTML = `<div class="pci-status err">${esc(error.message || 'Search failed.')}</div>`; }
@@ -643,7 +684,7 @@
       const data = await api('/shopify/create', { method: 'POST', body: JSON.stringify({ importId: state.latestImport._id, lineId: line.lineId }) });
       state.latestImport = data.import;
       renderLines(data.import);
-      setStatus('pci-invoice-status', `Created Shopify draft product: <strong>${esc(data.product?.title || line.title)}</strong>${data.product?.inventoryCostWarning ? `<br>${esc(data.product.inventoryCostWarning)}` : ''}`, data.product?.inventoryCostWarning ? 'warn' : 'ok');
+      setStatus('pci-invoice-status', `Created Shopify draft product: <strong>${esc(data.product?.title || line.title)}</strong>${data.product?.inventoryCostWarning ? `<br>${esc(data.product.inventoryCostWarning)}` : ''}${data.product?.fileCreateWarning ? `<br>${esc(data.product.fileCreateWarning)}` : ''}${data.product?.filesCreatedCount ? `<br>Copied ${esc(data.product.filesCreatedCount)} image(s) to Shopify Files.` : ''}`, data.product?.inventoryCostWarning ? 'warn' : 'ok');
       state.historyLoaded = false;
     } catch (error) { setStatus('pci-invoice-status', esc(error.message || 'Create failed.'), 'err'); }
   }
@@ -682,10 +723,52 @@
       const data = await api('/purchase-order/formalise', { method: 'POST', body: JSON.stringify({ importId: state.latestImport._id, purchaseOrder: { ...(state.latestImport.purchaseOrder || {}), notes, supplierName, currency } }) });
       state.latestImport = data.import;
       renderPoDraft(data.purchaseOrder);
-      setStatus('pci-invoice-status', `PO ${esc(data.purchaseOrder?.poNumber || '')} formalised.`, 'ok');
+      setStatus('pci-invoice-status', `Internal PO ${esc(data.purchaseOrder?.poNumber || '')} formalised. Use Create prompt to copy all PO details into Shopify/Sidekick as a workaround.`, 'ok');
       state.historyLoaded = false;
     } catch (error) { setStatus('pci-invoice-status', esc(error.message || 'Formalise failed.'), 'err'); }
   }
+
+  function closePromptModal() {
+    const modal = byId('pci-product-search-modal');
+    if (!modal) return;
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    modal.innerHTML = '';
+  }
+
+  async function copyPurchaseOrderPrompt() {
+    const text = byId('pci-po-prompt-text')?.value || '';
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      const note = byId('pci-po-prompt-copy-status');
+      if (note) note.textContent = 'Copied to clipboard.';
+    } catch (_) {
+      const textarea = byId('pci-po-prompt-text');
+      textarea?.focus();
+      textarea?.select();
+      const note = byId('pci-po-prompt-copy-status');
+      if (note) note.textContent = 'Select the prompt text and copy it manually.';
+    }
+  }
+
+  async function createPurchaseOrderPrompt(importId = '') {
+    const targetImportId = importId || state.latestImport?._id;
+    if (!targetImportId) return setStatus('pci-invoice-status', 'Create or select a PO first.', 'warn');
+    const modal = byId('pci-product-search-modal');
+    if (!modal) return;
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    modal.innerHTML = `<div class="pci-modal-backdrop" onclick="window.ProductCreationImportAdmin.closePromptModal()"></div><div class="pci-modal-panel"><div class="pci-modal-head"><div><h3>Create Shopify PO prompt</h3><p class="pci-muted">Copy this prompt into Shopify/Sidekick or your internal purchasing workflow. It includes the supplier, products, quantities, costs, discounts and totals from the internal PO.</p></div><button class="secondary-btn" type="button" onclick="window.ProductCreationImportAdmin.closePromptModal()">Close</button></div><div class="pci-status">Generating prompt…</div></div>`;
+    try {
+      const data = await api('/purchase-order/prompt', { method: 'POST', body: JSON.stringify({ importId: targetImportId }) });
+      modal.innerHTML = `<div class="pci-modal-backdrop" onclick="window.ProductCreationImportAdmin.closePromptModal()"></div><div class="pci-modal-panel"><div class="pci-modal-head"><div><h3>Create Shopify PO prompt</h3><p class="pci-muted">This is a workaround for Shopify's missing public PO-create API. Paste it into Shopify's assistant/PO flow and it has all the information from the Nectar PO.</p></div><button class="secondary-btn" type="button" onclick="window.ProductCreationImportAdmin.closePromptModal()">Close</button></div><label class="pci-label">Prompt</label><textarea id="pci-po-prompt-text" class="pci-textarea pci-prompt-textarea" readonly>${esc(data.prompt || '')}</textarea><div class="pci-actions"><button type="button" class="primary-btn" onclick="window.ProductCreationImportAdmin.copyPurchaseOrderPrompt()">Copy prompt</button><span id="pci-po-prompt-copy-status" class="pci-muted">Ready to copy.</span></div></div>`;
+      setTimeout(() => byId('pci-po-prompt-text')?.select(), 50);
+    } catch (error) {
+      modal.innerHTML = `<div class="pci-modal-backdrop" onclick="window.ProductCreationImportAdmin.closePromptModal()"></div><div class="pci-modal-panel"><div class="pci-modal-head"><h3>Create Shopify PO prompt</h3><button class="secondary-btn" type="button" onclick="window.ProductCreationImportAdmin.closePromptModal()">Close</button></div><div class="pci-status err">${esc(error.message || 'Prompt generation failed.')}</div></div>`;
+    }
+  }
+
 
   async function loadHistory(force = false) {
     if (state.historyLoaded && !force) return;
@@ -710,7 +793,7 @@
       const data = await api('/purchase-orders?limit=40');
       const items = data.items || [];
       state.poLoaded = true;
-      box.innerHTML = items.length ? `<table class="pci-history"><thead><tr><th>PO</th><th>Supplier</th><th>Status</th><th>Lines</th><th>Total</th><th>Created</th></tr></thead><tbody>${items.map((item) => `<tr><td><strong>${esc(item.purchaseOrder?.poNumber || 'PO')}</strong><br><small>${esc(item.invoiceNumber || item.originalFilename || '')}</small></td><td>${esc(item.purchaseOrder?.supplierName || item.supplierName || '')}</td><td><span class="pci-pill ${item.purchaseOrder?.status === 'formalised' ? 'ok' : 'warn'}">${esc(item.purchaseOrder?.status || '')}</span></td><td>${esc(item.purchaseOrder?.lines?.length || 0)}</td><td>${esc(item.purchaseOrder?.currency || item.currency || 'GBP')} ${esc(item.purchaseOrder?.total || '')}</td><td>${esc(new Date(item.createdAt).toLocaleString())}</td></tr>`).join('')}</tbody></table>` : '<div class="pci-status warn">No draft POs yet. Create one from Invoice Import after product lines are extracted.</div>';
+      box.innerHTML = items.length ? `<table class="pci-history"><thead><tr><th>PO</th><th>Supplier</th><th>Status</th><th>Lines</th><th>Total</th><th>Created</th><th>Action</th></tr></thead><tbody>${items.map((item) => `<tr><td><strong>${esc(item.purchaseOrder?.poNumber || 'PO')}</strong><br><small>${esc(item.invoiceNumber || item.originalFilename || '')}</small></td><td>${esc(item.purchaseOrder?.supplierName || item.supplierName || '')}</td><td><span class="pci-pill ${item.purchaseOrder?.status === 'formalised' ? 'ok' : 'warn'}">${esc(item.purchaseOrder?.status || '')}</span></td><td>${esc(item.purchaseOrder?.lines?.length || 0)}</td><td>${esc(item.purchaseOrder?.currency || item.currency || 'GBP')} ${esc(item.purchaseOrder?.total || '')}</td><td>${esc(new Date(item.createdAt).toLocaleString())}</td><td>${item.purchaseOrder?.status === 'formalised' ? `<button type="button" class="secondary-btn" onclick="window.ProductCreationImportAdmin.createPurchaseOrderPrompt('${esc(String(item._id || ''))}')">Create prompt</button>` : '<span class="pci-muted">Formalise first</span>'}</td></tr>`).join('')}</tbody></table>` : '<div class="pci-status warn">No draft POs yet. Create one from Invoice Import after product lines are extracted.</div>';
     } catch (error) { box.innerHTML = `<div class="pci-status err">${esc(error.message || 'Could not load POs.')}</div>`; }
   }
 
@@ -738,6 +821,6 @@
     });
   }
 
-  window.ProductCreationImportAdmin = { init, scanUrl, analyseInvoice, createCurrentDraft, createManualDraft, searchForLine, confirmSuggestedLine, assignLine, assignLineFromModal, openLineCreateMenu, prefillUrlFromLine, prefillManualFromLine, createLine, createPurchaseOrderDraft, formalisePurchaseOrderDraft, loadHistory, loadPurchaseOrders, addTag, suggestProfile, loadSettings, saveSettings, addSkuRule, removeSkuRule, addConditionalRule, removeConditionalRule, addMetafieldRule, removeMetafieldRule, closeSearchModal, runModalProductSearch, toggleImageSelection, toggleImageSelectionFromCard, selectAllImages, clearImages, findBarcode };
+  window.ProductCreationImportAdmin = { init, scanUrl, analyseInvoice, createCurrentDraft, createManualDraft, searchForLine, confirmSuggestedLine, assignLine, assignLineFromModal, openLineCreateMenu, prefillUrlFromLine, prefillManualFromLine, createLine, createPurchaseOrderDraft, formalisePurchaseOrderDraft, loadHistory, loadPurchaseOrders, addTag, suggestProfile, loadSettings, saveSettings, addSkuRule, removeSkuRule, addConditionalRule, removeConditionalRule, addMetafieldRule, removeMetafieldRule, closeSearchModal, closePromptModal, runModalProductSearch, createPurchaseOrderPrompt, copyPurchaseOrderPrompt, toggleImageSelection, toggleImageSelectionFromCard, selectAllImages, clearImages, findBarcode };
   document.addEventListener('DOMContentLoaded', init);
 })();

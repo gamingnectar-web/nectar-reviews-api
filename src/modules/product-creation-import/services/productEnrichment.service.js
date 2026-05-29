@@ -6,8 +6,8 @@ const { getProductImportSettings, applySettingsToDraft } = require('./productImp
 const CORE_PROFILE_METAFIELDS = [
   { namespace: 'core', key: 'formula_version', name: 'Formula Version', type: 'single_line_text_field', help: 'Used to decide which product-line/formula profile this product belongs to.' },
   { namespace: 'core', key: 'grouped_profiles', name: 'Grouped Profiles', type: 'single_line_text_field', help: 'Reusable grouped flavour/profile labels.' },
-  { namespace: 'core', key: 'sourness', name: 'Sourness', type: 'single_line_text_field', help: 'Estimated sourness level, for example low, medium or high.' },
-  { namespace: 'core', key: 'sweetness', name: 'Sweetness', type: 'single_line_text_field', help: 'Estimated sweetness level, for example low, medium or high.' },
+  { namespace: 'core', key: 'sourness', name: 'Sourness', type: 'single_line_text_field', help: '1 to 5 gauge where 1 is not sour and 5 is very sour.' },
+  { namespace: 'core', key: 'sweetness', name: 'Sweetness', type: 'single_line_text_field', help: '1 to 5 gauge where 1 is not sweet and 5 is very sweet.' },
   { namespace: 'core', key: 'flavour_profile', name: 'Flavour Profile', type: 'single_line_text_field', help: 'Plain-English flavour description.' },
 ];
 
@@ -28,6 +28,27 @@ function stripJsonFence(value = '') {
   return String(value || '').replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
 }
 
+function normaliseGaugeValue(value = '') {
+  const raw = String(value || '').trim().toLowerCase();
+  const numeric = Number((raw.match(/\d+(?:\.\d+)?/) || [])[0]);
+  if (Number.isFinite(numeric) && numeric > 0) return String(Math.max(1, Math.min(5, Math.round(numeric))));
+  if (/very\s*high|strong|intense|extreme/.test(raw)) return '5';
+  if (/high|sweet|sour/.test(raw)) return '4';
+  if (/medium|moderate|balanced/.test(raw)) return '3';
+  if (/low|mild|light/.test(raw)) return '2';
+  if (/none|not|very\s*low/.test(raw)) return '1';
+  return raw ? '3' : '';
+}
+
+function normaliseCoreGaugeMetafields(items = []) {
+  return (items || []).map((item) => {
+    if (item?.namespace === 'core' && ['sourness', 'sweetness'].includes(item.key)) {
+      return { ...item, value: normaliseGaugeValue(item.value), type: item.type || 'single_line_text_field' };
+    }
+    return item;
+  });
+}
+
 async function aiSuggestProductProfile({ draft, metadata }) {
   const apiKey = process.env.OPENAI_API_KEY || '';
   if (!apiKey) return null;
@@ -38,7 +59,8 @@ metafields must be an array of {namespace,key,type,value,confidence,source}. Inc
 
 Rules:
 - Preserve merchant terminology from existing tags/metafield names.
-- For G Fuel drinks/tubs, estimate Formula Version, sweetness, sourness and flavour profile from the product title, description and URL content. Use concise values that a merchant can edit.
+- For G Fuel drinks/tubs, estimate Formula Version, sweetness, sourness and flavour profile from the product title, description and URL content.
+- core.sourness and core.sweetness must be string numbers from "1" to "5" only: 1 = very low, 3 = medium, 5 = very high. Do not use words like low/medium/high for these two fields.
 - Do not invent SKU, barcode or paid price. Only suggest weight if it is explicit in the page/title/description or clearly visible in provided content.
 - Suggest an SEO-safe handle matching the title.
 - Keep confidence below 0.75 when the answer is inferred from flavour names rather than explicit content.
@@ -103,11 +125,11 @@ async function suggestProductProfile({ shopDomain, draft }) {
     ...parseTags(ai?.tags || []),
   ])).slice(0, 40);
 
-  const suggestedMetafields = normaliseMetafields(mergeMetafields(
+  const suggestedMetafields = normaliseMetafields(normaliseCoreGaugeMetafields(mergeMetafields(
     existing.metafields || [],
     normalised.metafields || [],
     ai?.metafields || []
-  ));
+  )));
 
   const settingsApplied = applySettingsToDraft({
     ...normalised,
@@ -145,7 +167,7 @@ async function enrichProductDraft({ shopDomain, draft }) {
     weightUnit: suggestion.weightUnit || normalised.weightUnit,
     sku: suggestion.sku || normalised.sku,
     tags: suggestion.tags?.length ? suggestion.tags : normalised.tags,
-    metafields: mergeMetafields(normalised.metafields || [], suggestion.metafields || []),
+    metafields: normaliseCoreGaugeMetafields(mergeMetafields(normalised.metafields || [], suggestion.metafields || [])),
     enrichment: suggestion,
   });
 }

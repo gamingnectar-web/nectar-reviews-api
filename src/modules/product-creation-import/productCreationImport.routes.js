@@ -6,6 +6,7 @@ const {
   createDraftProduct,
   createPurchaseOrderDraft,
   formalisePurchaseOrderDraft,
+  createPurchaseOrderPrompt,
   getProductImportSettings,
   saveProductImportSettings,
   getImportHistory,
@@ -135,6 +136,14 @@ router.post('/purchase-order/formalise', asyncRoute(async (req, res) => {
   res.json(result);
 }));
 
+
+
+router.post('/purchase-order/prompt', asyncRoute(async (req, res) => {
+  const body = req.body || {};
+  if (!body.importId) return res.status(400).json({ error: 'importId is required.' });
+  const result = await createPurchaseOrderPrompt({ shopDomain: shopDomainFromReq(req), importId: body.importId });
+  res.json(result);
+}));
 
 router.get('/purchase-orders', asyncRoute(async (req, res) => {
   const result = await listPurchaseOrderDrafts({ shopDomain: shopDomainFromReq(req), limit: req.query.limit || 40 });
