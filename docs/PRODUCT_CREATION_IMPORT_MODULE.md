@@ -400,3 +400,11 @@ Additional guardrails:
 - Metafield mapping rules must have at least one condition before they apply.
 - Core drink metafield rules are skipped for clear non-drink products.
 - OpenAI enrichment is explicitly instructed not to add flavour/sweetness/sourness/formula fields for non-consumable products.
+
+## v40 SEO and URL import guardrails
+
+URL import now scores Product JSON-LD blocks against the actual source URL, page title and H1 before using them. This prevents supplier pages with multiple related Product JSON-LD objects from importing the title/SEO for a different product.
+
+SEO title and meta description are now editable on URL Import and Manual Create. The backend also validates SEO relevance against the current product title and replaces unrelated SEO text before creating the Shopify draft product.
+
+Shopify draft product creation now explicitly sets the product search engine listing fields from the current draft rather than relying on copied profile data or Shopify defaults.

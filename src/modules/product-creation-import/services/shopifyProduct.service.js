@@ -404,6 +404,10 @@ async function createShopifyProductFromDraft({ shopDomain, draft }) {
     status: 'draft',
     tags,
     variants: [variant],
+    // Shopify's product SEO fields are stored through the legacy global SEO fields.
+    // Set them explicitly so URL imports cannot inherit unrelated SEO from copied profiles.
+    metafields_global_title_tag: normalised.seo?.title || normalised.title,
+    metafields_global_description_tag: normalised.seo?.description || normalised.title,
   };
 
   let result;

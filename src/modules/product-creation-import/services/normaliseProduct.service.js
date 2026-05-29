@@ -9,6 +9,37 @@ function htmlFromPlainText(value) {
   return text ? `<p>${escapeHtml(text)}</p>` : '';
 }
 
+function tokenSet(value = '') {
+  return new Set(cleanText(value, 300).toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(/\s+/).filter((word) => word.length > 2 && !['the','and','for','with','from','product','shop','gaming','nectar'].includes(word)));
+}
+
+function isSeoTextRelevant(seoText = '', title = '') {
+  const seoTokens = tokenSet(seoText);
+  const titleTokens = Array.from(tokenSet(title));
+  if (!seoTokens.size || !titleTokens.length) return false;
+  const overlap = titleTokens.filter((token) => seoTokens.has(token)).length;
+  return overlap >= Math.min(2, titleTokens.length);
+}
+
+function makeSafeSeoTitle(rawSeoTitle = '', title = '', vendor = '') {
+  const safeTitle = cleanText(title || 'Imported product', 70);
+  const candidate = cleanText(rawSeoTitle || '', 70);
+  if (candidate && isSeoTextRelevant(candidate, safeTitle)) return candidate;
+  const branded = cleanText([safeTitle, vendor && !safeTitle.toLowerCase().includes(String(vendor).toLowerCase()) ? vendor : '', 'Gaming Nectar'].filter(Boolean).join(' • '), 70);
+  return branded || safeTitle;
+}
+
+function makeSafeSeoDescription(rawDescription = '', title = '', vendor = '', productType = '') {
+  const titleText = cleanText(title || 'Imported product', 120);
+  const candidate = cleanText(rawDescription || '', 160);
+  if (candidate && isSeoTextRelevant(candidate, titleText)) return candidate;
+  const parts = [titleText];
+  if (vendor && !titleText.toLowerCase().includes(String(vendor).toLowerCase())) parts.push(`from ${cleanText(vendor, 80)}`);
+  if (productType) parts.push(cleanText(productType, 80));
+  parts.push('available from Gaming Nectar.');
+  return cleanText(parts.join(' '), 160);
+}
+
 function normaliseImage(image, title, index = 0) {
   if (!image) return null;
   const fallbackAlt = index === 0 ? (title || 'Imported product') : `${title || 'Imported product'} product image ${index + 1}`;
@@ -121,8 +152,8 @@ function normaliseDraftProduct(raw = {}) {
     saveImagesToFiles: Boolean(raw.saveImagesToFiles),
     metafields,
     seo: {
-      title: cleanText(raw.seo?.title || title, 70),
-      description: cleanText(raw.seo?.description || raw.description || title, 160),
+      title: makeSafeSeoTitle(raw.seo?.title || '', title, raw.vendor || raw.brand || raw.supplierName || ''),
+      description: makeSafeSeoDescription(raw.seo?.description || raw.description || '', title, raw.vendor || raw.brand || raw.supplierName || '', raw.productType || raw.category || ''),
     },
     enrichment: raw.enrichment || {},
     raw,

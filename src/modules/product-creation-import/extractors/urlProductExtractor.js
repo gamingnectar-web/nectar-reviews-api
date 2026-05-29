@@ -52,18 +52,91 @@ function flattenJsonLd(value, out = []) {
   return out;
 }
 
-function findProductJsonLd(html) {
+function getJsonLdProductCandidates(html) {
   const blocks = String(html || '').match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi) || [];
+  const products = [];
   for (const block of blocks) {
     const raw = block.replace(/^<script[^>]*>/i, '').replace(/<\/script>$/i, '').trim();
     const parsed = safeJsonParse(raw);
-    const candidates = flattenJsonLd(parsed).filter((item) => {
-      const type = Array.isArray(item['@type']) ? item['@type'].join(' ') : String(item['@type'] || '');
-      return /product/i.test(type);
+    flattenJsonLd(parsed).forEach((item) => {
+      const type = Array.isArray(item?.['@type']) ? item['@type'].join(' ') : String(item?.['@type'] || '');
+      if (/product/i.test(type)) products.push(item);
     });
-    if (candidates[0]) return candidates[0];
   }
-  return null;
+  return products;
+}
+
+function tokenizeProductText(value = '') {
+  return cleanText(value, 400)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length > 2 && !['the','and','for','with','from','product','products','shop','gamer','drink','official'].includes(word));
+}
+
+function urlSlugText(sourceUrl = '') {
+  try {
+    const parsed = new URL(sourceUrl);
+    const bits = parsed.pathname.split('/').filter(Boolean);
+    return bits[bits.length - 1] || '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function titleSimilarityScore(candidateTitle = '', hints = []) {
+  const candidateTokens = new Set(tokenizeProductText(candidateTitle));
+  if (!candidateTokens.size) return 0;
+  let best = 0;
+  hints.forEach((hint) => {
+    const hintTokens = tokenizeProductText(hint);
+    if (!hintTokens.length) return;
+    const overlap = hintTokens.filter((token) => candidateTokens.has(token)).length;
+    best = Math.max(best, overlap / Math.max(hintTokens.length, 1));
+  });
+  return best;
+}
+
+function productUrlMatchesSource(product = {}, sourceUrl = '') {
+  const productUrls = [product.url, product['@id'], product.offers?.url]
+    .concat(Array.isArray(product.offers) ? product.offers.map((offer) => offer?.url) : [])
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase());
+  if (!productUrls.length || !sourceUrl) return false;
+  const source = String(sourceUrl).toLowerCase().split('?')[0].replace(/\/$/, '');
+  const slug = urlSlugText(sourceUrl).toLowerCase();
+  return productUrls.some((url) => {
+    const clean = url.split('?')[0].replace(/\/$/, '');
+    return clean === source || clean.includes(slug) || source.includes(clean);
+  });
+}
+
+function findBestProductJsonLd(html, sourceUrl = '') {
+  const candidates = getJsonLdProductCandidates(html);
+  if (!candidates.length) return { product: {}, score: 0, candidates: 0 };
+  const pageHints = [
+    urlSlugText(sourceUrl),
+    metaContent(html, 'og:title'),
+    metaContent(html, 'twitter:title'),
+    tagText(html, 'h1'),
+    tagText(html, 'title'),
+  ].filter(Boolean);
+
+  const scored = candidates.map((product, index) => {
+    const name = cleanText(product.name || product.headline || '', 220);
+    let score = titleSimilarityScore(name, pageHints);
+    if (productUrlMatchesSource(product, sourceUrl)) score += 2;
+    if (imageFromJsonLd(product.image, sourceUrl).length) score += 0.15;
+    if (product.offers) score += 0.1;
+    return { product, score, index };
+  }).sort((a, b) => b.score - a.score || a.index - b.index);
+
+  const best = scored[0] || { product: {}, score: 0 };
+  // Avoid taking SEO/title/description from unrelated related-product JSON-LD blocks.
+  // Some supplier pages include many Product objects for recommendations; using the first
+  // one caused lunch boxes to inherit unrelated tub SEO.
+  if (best.score < 0.35 && candidates.length > 1) return { product: {}, score: best.score, candidates: candidates.length };
+  return { product: best.product || {}, score: best.score, candidates: candidates.length };
 }
 
 function firstOffer(offers) {
@@ -232,12 +305,15 @@ async function extractProductFromUrl(url) {
   }
 
   const html = await response.text();
-  const product = findProductJsonLd(html) || {};
+  const productMatch = findBestProductJsonLd(html, sourceUrl);
+  const product = productMatch.product || {};
   const pageText = htmlToText(html);
   const offer = firstOffer(product.offers);
   const brand = typeof product.brand === 'object' ? product.brand?.name : product.brand;
-  const title = cleanText(product.name || metaContent(html, 'og:title') || tagText(html, 'title'), 220);
-  const description = cleanText(product.description || metaContent(html, 'og:description') || metaContent(html, 'description'), 5000);
+  const pageTitle = cleanText(metaContent(html, 'og:title') || metaContent(html, 'twitter:title') || tagText(html, 'h1') || tagText(html, 'title'), 220);
+  const productTitle = cleanText(product.name || '', 220);
+  const title = cleanText(productTitle || pageTitle || urlSlugText(sourceUrl).replace(/-/g, ' '), 220);
+  const description = cleanText(product.description || metaContent(html, 'og:description') || metaContent(html, 'description') || '', 5000);
   const imageCandidates = dedupeImageCandidates([
     ...imageFromJsonLd(product.image, sourceUrl),
     ...extractHtmlImageCandidates(html, sourceUrl),
@@ -268,7 +344,7 @@ async function extractProductFromUrl(url) {
   return {
     ...draft,
     confidence: product.name ? 0.86 : (title ? 0.55 : 0.25),
-    rawExtract: { jsonLdProductFound: Boolean(product.name), sourceUrl, imageCount: draft.images.length, imageDedupe: 'canonical-url-highest-quality', barcodeSource: extractedBarcode ? (product.gtin || product.gtin13 || product.gtin12 ? 'json-ld' : 'page-text') : '', weightSource: weightInfo.source },
+    rawExtract: { jsonLdProductFound: Boolean(product.name), jsonLdCandidateCount: productMatch.candidates || 0, jsonLdMatchScore: Number(productMatch.score || 0).toFixed(2), sourceUrl, imageCount: draft.images.length, imageDedupe: 'canonical-url-highest-quality', barcodeSource: extractedBarcode ? (product.gtin || product.gtin13 || product.gtin12 ? 'json-ld' : 'page-text') : '', weightSource: weightInfo.source },
   };
 }
 

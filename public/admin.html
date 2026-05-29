@@ -1485,6 +1485,9 @@
             <div class="full"><label class="pci-label">Source URL</label><input id="pci-url-source" class="pci-input"></div>
             <div class="full"><label class="pci-label">Tags</label><input id="pci-url-tags" class="pci-input" list="pci-tag-list" placeholder="supplier-import, url-import"><div id="pci-url-tag-suggestions" class="pci-tag-suggestions"></div><p class="pci-form-help">Click previously used tags to keep this product aligned with existing collections and product-line logic.</p></div>
             <div class="full"><label class="pci-label">Description</label><textarea id="pci-url-description" class="pci-textarea"></textarea></div>
+            <div class="full"><div class="pci-section-subtitle">Search engine listing</div><p class="pci-form-help">SEO is generated from the current product title/type only. It will not copy unrelated SEO from similar products.</p></div>
+            <div><label class="pci-label">SEO page title</label><input id="pci-url-seo-title" class="pci-input" maxlength="70"></div>
+            <div><label class="pci-label">SEO meta description</label><textarea id="pci-url-seo-description" class="pci-textarea" maxlength="160"></textarea></div>
             <div class="full"><div class="pci-section-subtitle">Product metafields</div><p class="pci-form-help">All product metafield definitions are shown here when Shopify exposes them. Core G Fuel profile fields are always included.</p><div id="pci-url-metafields" class="pci-metafields"></div></div>
           </div>
           <div class="pci-actions"><button id="pci-url-suggest-profile" class="secondary-btn" type="button">Generate tags &amp; metafields</button></div><div id="pci-url-draft"></div>
@@ -1529,6 +1532,9 @@
             <div class="full"><label class="pci-label">Source URL</label><input id="pci-manual-source" class="pci-input"></div>
             <div class="full"><label class="pci-label">Tags</label><input id="pci-manual-tags" class="pci-input" list="pci-tag-list" placeholder="manual-import, supplier-name"><div id="pci-manual-tag-suggestions" class="pci-tag-suggestions"></div><p class="pci-form-help">Use existing tags to trigger the right product-line metafield defaults.</p></div>
             <div class="full"><label class="pci-label">Description</label><textarea id="pci-manual-description" class="pci-textarea"></textarea></div>
+            <div class="full"><div class="pci-section-subtitle">Search engine listing</div><p class="pci-form-help">SEO is generated from the current product title/type only. Check this before creating the draft product.</p></div>
+            <div><label class="pci-label">SEO page title</label><input id="pci-manual-seo-title" class="pci-input" maxlength="70"></div>
+            <div><label class="pci-label">SEO meta description</label><textarea id="pci-manual-seo-description" class="pci-textarea" maxlength="160"></textarea></div>
             <div class="full"><div class="pci-section-subtitle">Product metafields</div><p class="pci-form-help">Core profile fields can be filled by GPT or copied from matching existing products after tags are selected.</p><div id="pci-manual-metafields" class="pci-metafields"></div></div>
           </div>
           <div class="pci-actions"><button id="pci-manual-suggest-profile" class="secondary-btn" type="button">Generate tags &amp; metafields</button><button id="pci-create-manual" class="primary-btn" type="button">Create Shopify draft product</button></div>

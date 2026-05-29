@@ -5,6 +5,8 @@
   const esc = (value) => String(value || '').replace(/[&<>"']/g, (m) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[m]));
   const money = (value) => value !== undefined && value !== null && String(value) !== '' ? `${esc(state.latestImport?.currency || byId('pci-invoice-currency')?.value || state.settings?.defaultCurrency || 'GBP')} ${esc(value)}` : '—';
   const compoundId = (prefix, namespace, key) => `${prefix}-mf-${String(namespace).replace(/[^a-z0-9_-]/gi,'_')}-${String(key).replace(/[^a-z0-9_-]/gi,'_')}`;
+  const seoTitleFromDraft = (draft = {}) => (draft.seo?.title || [draft.title, draft.vendor && !String(draft.title || '').toLowerCase().includes(String(draft.vendor).toLowerCase()) ? draft.vendor : '', 'Gaming Nectar'].filter(Boolean).join(' • ')).slice(0, 70);
+  const seoDescriptionFromDraft = (draft = {}) => (draft.seo?.description || [draft.title, draft.vendor ? `from ${draft.vendor}` : '', draft.productType || '', 'available from Gaming Nectar.'].filter(Boolean).join(' ')).slice(0, 160);
 
   function canonicalImageKey(src = '') {
     try {
@@ -145,6 +147,10 @@
       weightUnit: byId(`${prefix}-weight-unit`)?.value.trim() || 'g',
       sourceUrl: byId(`${prefix}-source`)?.value.trim() || '',
       description: byId(`${prefix}-description`)?.value.trim() || '',
+      seo: {
+        title: byId(`${prefix}-seo-title`)?.value.trim() || '',
+        description: byId(`${prefix}-seo-description`)?.value.trim() || '',
+      },
       tags: (byId(`${prefix}-tags`)?.value || '').split(',').map((x) => x.trim()).filter(Boolean),
       images: parseImageUrls(prefix),
       saveImagesToFiles: Boolean(state.settings?.imageRules?.saveSelectedImagesToFiles),
@@ -206,7 +212,7 @@
   function fillDraftForm(prefix, draft = {}) {
     const images = imageSrcList(draft);
     const firstImage = images[0] || draft.imageUrl || '';
-    [['title', draft.title], ['handle', draft.handle], ['vendor', draft.vendor], ['type', draft.productType], ['handle-format', draft.handleFormat || state.settings?.handleRules?.format || ''], ['handle-location', draft.handleLocation || state.settings?.handleRules?.location || ''], ['price', draft.price], ['compare', draft.compareAtPrice], ['cost', draft.cost], ['sku', draft.sku], ['barcode', draft.barcode], ['weight', draft.weight], ['weight-unit', draft.weightUnit || 'g'], ['source', draft.sourceUrl], ['description', (draft.description || draft.descriptionHtml || '').replace(/<[^>]+>/g, '')], ['tags', Array.isArray(draft.tags) ? draft.tags.join(', ') : draft.tags], ['image', firstImage], ['images', images.join('\n')]].forEach(([key, value]) => {
+    [['title', draft.title], ['handle', draft.handle], ['vendor', draft.vendor], ['type', draft.productType], ['handle-format', draft.handleFormat || state.settings?.handleRules?.format || ''], ['handle-location', draft.handleLocation || state.settings?.handleRules?.location || ''], ['price', draft.price], ['compare', draft.compareAtPrice], ['cost', draft.cost], ['sku', draft.sku], ['barcode', draft.barcode], ['weight', draft.weight], ['weight-unit', draft.weightUnit || 'g'], ['source', draft.sourceUrl], ['description', (draft.description || draft.descriptionHtml || '').replace(/<[^>]+>/g, '')], ['seo-title', seoTitleFromDraft(draft)], ['seo-description', seoDescriptionFromDraft(draft)], ['tags', Array.isArray(draft.tags) ? draft.tags.join(', ') : draft.tags], ['image', firstImage], ['images', images.join('\n')]].forEach(([key, value]) => {
       const el = byId(`${prefix}-${key}`);
       if (el) el.value = value || '';
     });
@@ -549,7 +555,7 @@
     try {
       const data = await api('/profile/suggest', { method: 'POST', body: JSON.stringify({ draft }) });
       const suggestion = data.suggestion || {};
-      fillDraftForm(prefix, { ...draft, title: suggestion.title || draft.title, handle: suggestion.handle || draft.handle, vendor: suggestion.vendor || draft.vendor, productType: suggestion.productType || draft.productType, sku: suggestion.sku || draft.sku, barcode: suggestion.barcode || draft.barcode, weight: suggestion.weight || draft.weight, weightUnit: suggestion.weightUnit || draft.weightUnit, tags: suggestion.tags || draft.tags, metafields: suggestion.metafields || draft.metafields });
+      fillDraftForm(prefix, { ...draft, title: suggestion.title || draft.title, handle: suggestion.handle || draft.handle, vendor: suggestion.vendor || draft.vendor, productType: suggestion.productType || draft.productType, sku: suggestion.sku || draft.sku, barcode: suggestion.barcode || draft.barcode, weight: suggestion.weight || draft.weight, weightUnit: suggestion.weightUnit || draft.weightUnit, seo: suggestion.seo || draft.seo, tags: suggestion.tags || draft.tags, metafields: suggestion.metafields || draft.metafields });
       if (!opts.quiet) setStatus(statusId, `Profile suggestions applied.${suggestion.existingProfileMatchedProducts ? ` Based on ${suggestion.existingProfileMatchedProducts} similar product(s).` : ''}${suggestion.aiNotes ? `<br>${esc(suggestion.aiNotes)}` : ''}`, 'ok');
     } catch (error) {
       if (!opts.quiet) setStatus(statusId, esc(error.message || 'Profile suggestion failed.'), 'err');
