@@ -279,6 +279,8 @@ async function createShopifyProductFromDraft({ shopDomain, draft }) {
     compare_at_price: toMoney(normalised.compareAtPrice) || undefined,
     sku: normalised.sku || undefined,
     barcode: normalised.barcode || undefined,
+    weight: normalised.weight ? Number(normalised.weight) : undefined,
+    weight_unit: normalised.weight ? (normalised.weightUnit || 'g') : undefined,
     inventory_management: 'shopify',
     option1: 'Default Title',
   };
@@ -286,6 +288,7 @@ async function createShopifyProductFromDraft({ shopDomain, draft }) {
   const metafields = normaliseMetafields([
     ...(normalised.sourceUrl ? [{ namespace: 'external_import', key: 'source_url', type: 'url', value: normalised.sourceUrl }] : []),
     ...(normalised.cost ? [{ namespace: 'external_import', key: 'price_paid', type: 'single_line_text_field', value: String(normalised.cost) }] : []),
+    ...(normalised.weight ? [{ namespace: 'external_import', key: 'imported_weight', type: 'single_line_text_field', value: `${normalised.weight}${normalised.weightUnit || 'g'}` }] : []),
     ...(normalised.quantity ? [{ namespace: 'external_import', key: 'invoice_quantity', type: 'number_integer', value: String(Math.round(Number(normalised.quantity) || 1)) }] : []),
     ...(normalised.metafields || []),
   ]).map(makeRestMetafield).filter(Boolean);

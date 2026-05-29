@@ -8,6 +8,9 @@ const DEFAULT_SETTINGS = {
     maxLength: 180,
     separator: '-',
     overwriteExistingHandle: false,
+    pattern: '{vendor}-{title}-{format}-{location}',
+    format: 'tub',
+    location: 'uk',
   },
   defaultCurrency: 'GBP',
   vendorPresets: [],
@@ -26,6 +29,7 @@ const DEFAULT_SETTINGS = {
       overwriteExistingSku: false,
     },
   ],
+  metafieldMappingRules: [],
   conditionalRules: [
     {
       enabled: true,
@@ -47,6 +51,7 @@ function mergeDefaults(settings = {}) {
     handleRules: { ...DEFAULT_SETTINGS.handleRules, ...(settings.handleRules || {}) },
     skuRules: Array.isArray(settings.skuRules) ? settings.skuRules : DEFAULT_SETTINGS.skuRules,
     conditionalRules: Array.isArray(settings.conditionalRules) ? settings.conditionalRules : DEFAULT_SETTINGS.conditionalRules,
+    metafieldMappingRules: Array.isArray(settings.metafieldMappingRules) ? settings.metafieldMappingRules : DEFAULT_SETTINGS.metafieldMappingRules,
     vendorPresets: Array.isArray(settings.vendorPresets) ? settings.vendorPresets : [],
     defaultCurrency: settings.defaultCurrency || DEFAULT_SETTINGS.defaultCurrency,
   };
@@ -88,6 +93,21 @@ function cleanConditionalRules(list = []) {
   }));
 }
 
+
+function cleanMetafieldMappingRules(list = []) {
+  return (Array.isArray(list) ? list : []).slice(0, 150).map((rule) => ({
+    enabled: rule.enabled !== false,
+    name: cleanText(rule.name || '', 120),
+    vendorContains: cleanText(rule.vendorContains || '', 120),
+    productTypeContains: cleanText(rule.productTypeContains || '', 120),
+    tagContains: cleanText(rule.tagContains || '', 120),
+    titleContains: cleanText(rule.titleContains || '', 120),
+    target: cleanText(rule.target || '', 180),
+    mode: ['fixed', 'ai', 'copy_from_similar'].includes(rule.mode) ? rule.mode : 'fixed',
+    value: cleanText(rule.value || '', 800),
+  })).filter((rule) => rule.target || rule.mode === 'ai' || rule.value);
+}
+
 async function saveProductImportSettings({ shopDomain, settings = {} }) {
   const payload = mergeDefaults(settings);
   const clean = {
@@ -95,6 +115,9 @@ async function saveProductImportSettings({ shopDomain, settings = {} }) {
     handleRules: {
       prefix: cleanText(payload.handleRules.prefix || '', 80),
       suffix: cleanText(payload.handleRules.suffix || '', 80),
+      pattern: cleanText(payload.handleRules.pattern || '{vendor}-{title}-{format}-{location}', 180),
+      format: cleanText(payload.handleRules.format || '', 80),
+      location: cleanText(payload.handleRules.location || '', 80),
       maxLength: Math.max(40, Math.min(Number(payload.handleRules.maxLength) || 180, 240)),
       separator: cleanText(payload.handleRules.separator || '-', 4) || '-',
       overwriteExistingHandle: Boolean(payload.handleRules.overwriteExistingHandle),
@@ -103,6 +126,7 @@ async function saveProductImportSettings({ shopDomain, settings = {} }) {
     vendorPresets: Array.from(new Set((payload.vendorPresets || []).map((item) => cleanText(item, 120)).filter(Boolean))).slice(0, 200),
     skuRules: cleanRuleList(payload.skuRules),
     conditionalRules: cleanConditionalRules(payload.conditionalRules),
+    metafieldMappingRules: cleanMetafieldMappingRules(payload.metafieldMappingRules),
   };
   const doc = await ProductCreationImportSettings.findOneAndUpdate({ shopDomain }, { $set: clean }, { upsert: true, new: true, setDefaultsOnInsert: true }).lean();
   return mergeDefaults(doc);
@@ -149,11 +173,20 @@ function codeFrom(value = '', length = 6) {
 function applyHandleRules(draft = {}, settings = {}) {
   const rules = settings.handleRules || DEFAULT_SETTINGS.handleRules;
   if (draft.handle && !rules.overwriteExistingHandle) return draft.handle;
-  const prefix = rules.prefix || '';
-  const suffix = rules.suffix || '';
   const separator = rules.separator || '-';
   const maxLength = Math.max(40, Math.min(Number(rules.maxLength) || 180, 240));
-  const raw = [prefix, draft.title || '', suffix].filter(Boolean).join(' ');
+  const tokens = {
+    prefix: rules.prefix || '',
+    suffix: rules.suffix || '',
+    vendor: draft.vendor || '',
+    title: draft.title || '',
+    name: draft.title || '',
+    format: draft.handleFormat || rules.format || '',
+    location: draft.handleLocation || rules.location || '',
+    productType: draft.productType || '',
+  };
+  const pattern = rules.pattern || '{vendor}-{title}-{format}-{location}';
+  const raw = pattern.replace(/\{(prefix|suffix|vendor|title|name|format|location|productType)\}/g, (_, key) => tokens[key] || '').replace(/[-_\s]+/g, ' ');
   let handle = slugify(raw).replace(/-/g, separator === '-' ? '-' : separator);
   if (handle.length > maxLength) handle = handle.slice(0, maxLength).replace(new RegExp(`${separator}+$`), '');
   return handle || draft.handle || slugify(draft.title || 'imported-product');
@@ -216,8 +249,32 @@ function applySkuRules(draft = {}, settings = {}) {
   return sku;
 }
 
+
+function ruleMatchesDraft(rule = {}, draft = {}) {
+  const tags = parseTags(draft.tags).join(', ').toLowerCase();
+  const checks = [
+    [rule.vendorContains, draft.vendor],
+    [rule.productTypeContains, draft.productType],
+    [rule.tagContains, tags],
+    [rule.titleContains, draft.title],
+  ];
+  return checks.every(([needle, haystack]) => !needle || String(haystack || '').toLowerCase().includes(String(needle).toLowerCase()));
+}
+
+function applyMetafieldMappingRules(draft = {}, settings = {}) {
+  const next = { ...draft, metafields: normaliseMetafields(draft.metafields || []) };
+  for (const rule of settings.metafieldMappingRules || []) {
+    if (rule.enabled === false || !ruleMatchesDraft(rule, next)) continue;
+    if (rule.mode !== 'fixed' || !rule.target || !rule.value) continue;
+    const [namespace, key] = String(rule.target || '').split('.');
+    if (namespace && key) next.metafields = normaliseMetafields([...next.metafields, { namespace, key, value: rule.value, type: 'single_line_text_field', source: 'metafield-mapping-rule', confidence: 1 }]);
+  }
+  return next;
+}
+
 function applySettingsToDraft(draft = {}, settings = {}) {
   let next = applyConditionalRules({ ...draft }, mergeDefaults(settings));
+  next = applyMetafieldMappingRules(next, mergeDefaults(settings));
   next.handle = applyHandleRules(next, settings);
   next.sku = applySkuRules(next, settings);
   return next;

@@ -9,6 +9,8 @@ const {
   getProductImportSettings,
   saveProductImportSettings,
   getImportHistory,
+  listPurchaseOrderDrafts,
+  suggestBarcodeForDraft,
   getProductImportMetadata,
   matchImportLines,
   saveManualDraft,
@@ -52,6 +54,12 @@ router.post('/settings', asyncRoute(async (req, res) => {
 router.post('/profile/suggest', asyncRoute(async (req, res) => {
   const suggestion = await suggestProductProfile({ shopDomain: shopDomainFromReq(req), draft: req.body?.draft || {} });
   res.json({ suggestion });
+}));
+
+
+router.post('/barcode/suggest', asyncRoute(async (req, res) => {
+  const suggestion = await suggestBarcodeForDraft({ shopDomain: shopDomainFromReq(req), draft: req.body?.draft || {} });
+  res.json(suggestion);
 }));
 
 router.post('/url/scan', asyncRoute(async (req, res) => {
@@ -124,6 +132,12 @@ router.post('/purchase-order/formalise', asyncRoute(async (req, res) => {
   const body = req.body || {};
   if (!body.importId) return res.status(400).json({ error: 'importId is required.' });
   const result = await formalisePurchaseOrderDraft({ shopDomain: shopDomainFromReq(req), importId: body.importId, purchaseOrder: body.purchaseOrder || {} });
+  res.json(result);
+}));
+
+
+router.get('/purchase-orders', asyncRoute(async (req, res) => {
+  const result = await listPurchaseOrderDrafts({ shopDomain: shopDomainFromReq(req), limit: req.query.limit || 40 });
   res.json(result);
 }));
 

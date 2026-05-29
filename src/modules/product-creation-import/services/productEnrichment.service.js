@@ -32,20 +32,21 @@ async function aiSuggestProductProfile({ draft, metadata }) {
   const apiKey = process.env.OPENAI_API_KEY || '';
   if (!apiKey) return null;
   const model = process.env.OPENAI_PRODUCT_IMPORT_MODEL || process.env.OPENAI_MODULE_MODEL || 'gpt-4.1-mini';
-  const prompt = `You are enriching a Shopify product draft. Return ONLY valid JSON with keys: handle, productType, tags, metafields, notes.
+  const prompt = `You are enriching a Shopify product draft. Return ONLY valid JSON with keys: handle, productType, tags, metafields, weight, weightUnit, notes.
 
 metafields must be an array of {namespace,key,type,value,confidence,source}. Include these core metafields when relevant: core.formula_version, core.grouped_profiles, core.sourness, core.sweetness, core.flavour_profile.
 
 Rules:
 - Preserve merchant terminology from existing tags/metafield names.
 - For G Fuel drinks/tubs, estimate Formula Version, sweetness, sourness and flavour profile from the product title, description and URL content. Use concise values that a merchant can edit.
-- Do not invent SKU, barcode or paid price.
+- Do not invent SKU, barcode or paid price. Only suggest weight if it is explicit in the page/title/description or clearly visible in provided content.
 - Suggest an SEO-safe handle matching the title.
 - Keep confidence below 0.75 when the answer is inferred from flavour names rather than explicit content.
 
 Existing tag examples: ${(metadata.tags || []).slice(0, 80).map((item) => item.tag || item).join(', ')}
 Metafield definitions: ${(metadata.metafieldDefinitions || []).slice(0, 80).map((item) => `${item.namespace}.${item.key} (${item.name || item.type})`).join(', ')}
-Product draft: ${JSON.stringify({ title: draft.title, vendor: draft.vendor, productType: draft.productType, tags: draft.tags, sourceUrl: draft.sourceUrl, descriptionHtml: draft.descriptionHtml, handle: draft.handle }).slice(0, 7000)}`;
+Metafield mapping rules: ${JSON.stringify((metadata.settings?.metafieldMappingRules || []).filter((rule) => rule.enabled !== false).slice(0, 80)).slice(0, 4000)}
+Product draft: ${JSON.stringify({ title: draft.title, vendor: draft.vendor, productType: draft.productType, tags: draft.tags, sourceUrl: draft.sourceUrl, descriptionHtml: draft.descriptionHtml, handle: draft.handle, weight: draft.weight, weightUnit: draft.weightUnit }).slice(0, 7000)}`;
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -119,6 +120,8 @@ async function suggestProductProfile({ shopDomain, draft }) {
   return {
     handle: settingsApplied.handle,
     productType: settingsApplied.productType,
+    weight: cleanText(ai?.weight || normalised.weight || '', 40),
+    weightUnit: cleanText(ai?.weightUnit || normalised.weightUnit || 'g', 10),
     vendor: settingsApplied.vendor,
     sku: settingsApplied.sku,
     title: settingsApplied.title,
@@ -138,6 +141,8 @@ async function enrichProductDraft({ shopDomain, draft }) {
     handle: suggestion.handle || normalised.handle,
     vendor: suggestion.vendor || normalised.vendor,
     productType: suggestion.productType || normalised.productType,
+    weight: suggestion.weight || normalised.weight,
+    weightUnit: suggestion.weightUnit || normalised.weightUnit,
     sku: suggestion.sku || normalised.sku,
     tags: suggestion.tags?.length ? suggestion.tags : normalised.tags,
     metafields: mergeMetafields(normalised.metafields || [], suggestion.metafields || []),

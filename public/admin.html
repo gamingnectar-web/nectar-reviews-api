@@ -1448,13 +1448,15 @@
               <button type="button" class="pci-tab active" data-pci-tab="url" onclick="window.pciTab('url')">URL Import</button>
               <button type="button" class="pci-tab" data-pci-tab="invoice" onclick="window.pciTab('invoice')">Invoice Import</button>
               <button type="button" class="pci-tab" data-pci-tab="manual" onclick="window.pciTab('manual')">Manual Create</button>
+              <button type="button" class="pci-tab" data-pci-tab="metafields" onclick="window.pciTab('metafields')">Metafield Mapper</button>
               <button type="button" class="pci-tab" data-pci-tab="settings" onclick="window.pciTab('settings')">Settings</button>
+              <button type="button" class="pci-tab" data-pci-tab="po" onclick="window.pciTab('po')">PO Drafts</button>
               <button type="button" class="pci-tab" data-pci-tab="history" onclick="window.pciTab('history')">History</button>
             </div>
           </div>
           <div class="pci-card">
             <h3>Connection status</h3>
-            <div id="pci-health" class="pci-status">Loading product import status…</div><datalist id="pci-tag-list"></datalist><datalist id="pci-vendor-list"></datalist>
+            <div id="pci-health" class="pci-status">Loading product import status…</div><datalist id="pci-tag-list"></datalist><datalist id="pci-vendor-list"></datalist><datalist id="pci-metafield-list"></datalist>
           </div>
         </div>
 
@@ -1469,14 +1471,17 @@
             <div><label class="pci-label">Title</label><input id="pci-url-title" class="pci-input"></div>
             <div><label class="pci-label">Vendor / Brand</label><input id="pci-url-vendor" class="pci-input"></div>
             <div><label class="pci-label">Optimised URL / Handle</label><input id="pci-url-handle" class="pci-input" placeholder="sonics-peach-rings"></div>
-            <div><label class="pci-label">Product Type</label><input id="pci-url-type" class="pci-input"></div>
+            <div><label class="pci-label">Product Type / Category</label><input id="pci-url-type" class="pci-input"></div>
+            <div><label class="pci-label">URL format token</label><input id="pci-url-handle-format" class="pci-input" placeholder="tub"></div>
+            <div><label class="pci-label">URL location token</label><input id="pci-url-handle-location" class="pci-input" placeholder="uk"></div>
             <div><label class="pci-label">Retail Price</label><input id="pci-url-price" class="pci-input"></div>
             <div><label class="pci-label">Compare-at Price</label><input id="pci-url-compare" class="pci-input"></div>
             <div><label class="pci-label">Price Paid / Cost</label><input id="pci-url-cost" class="pci-input"></div>
             <div><label class="pci-label">SKU</label><input id="pci-url-sku" class="pci-input"></div>
-            <div><label class="pci-label">Barcode</label><input id="pci-url-barcode" class="pci-input"></div>
+            <div><label class="pci-label">Barcode / GTIN</label><div class="pci-inline-action"><input id="pci-url-barcode" class="pci-input"><button id="pci-url-find-barcode" class="secondary-btn" type="button">Find barcode</button></div></div>
+            <div><label class="pci-label">Product weight</label><div class="pci-weight-row"><input id="pci-url-weight" class="pci-input" placeholder="280"><select id="pci-url-weight-unit" class="pci-input"><option>g</option><option>kg</option><option>oz</option><option>lb</option></select></div></div>
             <div><label class="pci-label">Featured Image URL</label><input id="pci-url-image" class="pci-input"></div>
-            <div class="full"><label class="pci-label">All image URLs</label><textarea id="pci-url-images" class="pci-textarea" placeholder="One image URL per line. URL import fills this with every product/gallery image it can find."></textarea><p class="pci-form-help">All listed images are sent to Shopify, not only the first/featured image.</p></div>
+            <div class="full"><label class="pci-label">Selected image URLs</label><textarea id="pci-url-images" class="pci-textarea" placeholder="Only these selected image URLs will be imported."></textarea><p class="pci-form-help">The scan may find site logos/variant images. Select the product images you actually want below.</p><div id="pci-url-image-picker" class="pci-image-picker"></div></div>
             <div class="full"><label class="pci-label">Source URL</label><input id="pci-url-source" class="pci-input"></div>
             <div class="full"><label class="pci-label">Tags</label><input id="pci-url-tags" class="pci-input" list="pci-tag-list" placeholder="supplier-import, url-import"><div id="pci-url-tag-suggestions" class="pci-tag-suggestions"></div><p class="pci-form-help">Click previously used tags to keep this product aligned with existing collections and product-line logic.</p></div>
             <div class="full"><label class="pci-label">Description</label><textarea id="pci-url-description" class="pci-textarea"></textarea></div>
@@ -1510,14 +1515,17 @@
             <div><label class="pci-label">Title</label><input id="pci-manual-title" class="pci-input"></div>
             <div><label class="pci-label">Vendor / Brand</label><input id="pci-manual-vendor" class="pci-input"></div>
             <div><label class="pci-label">Optimised URL / Handle</label><input id="pci-manual-handle" class="pci-input" placeholder="sonics-peach-rings"></div>
-            <div><label class="pci-label">Product Type</label><input id="pci-manual-type" class="pci-input"></div>
+            <div><label class="pci-label">Product Type / Category</label><input id="pci-manual-type" class="pci-input"></div>
+            <div><label class="pci-label">URL format token</label><input id="pci-manual-handle-format" class="pci-input" placeholder="tub"></div>
+            <div><label class="pci-label">URL location token</label><input id="pci-manual-handle-location" class="pci-input" placeholder="uk"></div>
             <div><label class="pci-label">Retail Price</label><input id="pci-manual-price" class="pci-input"></div>
             <div><label class="pci-label">Compare-at Price</label><input id="pci-manual-compare" class="pci-input"></div>
             <div><label class="pci-label">Price Paid / Cost</label><input id="pci-manual-cost" class="pci-input"></div>
             <div><label class="pci-label">SKU</label><input id="pci-manual-sku" class="pci-input"></div>
-            <div><label class="pci-label">Barcode</label><input id="pci-manual-barcode" class="pci-input"></div>
+            <div><label class="pci-label">Barcode / GTIN</label><div class="pci-inline-action"><input id="pci-manual-barcode" class="pci-input"><button id="pci-manual-find-barcode" class="secondary-btn" type="button">Find barcode</button></div></div>
+            <div><label class="pci-label">Product weight</label><div class="pci-weight-row"><input id="pci-manual-weight" class="pci-input" placeholder="280"><select id="pci-manual-weight-unit" class="pci-input"><option>g</option><option>kg</option><option>oz</option><option>lb</option></select></div></div>
             <div><label class="pci-label">Featured Image URL</label><input id="pci-manual-image" class="pci-input"></div>
-            <div class="full"><label class="pci-label">All image URLs</label><textarea id="pci-manual-images" class="pci-textarea" placeholder="One image URL per line"></textarea></div>
+            <div class="full"><label class="pci-label">Selected image URLs</label><textarea id="pci-manual-images" class="pci-textarea" placeholder="One selected image URL per line"></textarea><div id="pci-manual-image-picker" class="pci-image-picker"></div></div>
             <div class="full"><label class="pci-label">Source URL</label><input id="pci-manual-source" class="pci-input"></div>
             <div class="full"><label class="pci-label">Tags</label><input id="pci-manual-tags" class="pci-input" list="pci-tag-list" placeholder="manual-import, supplier-name"><div id="pci-manual-tag-suggestions" class="pci-tag-suggestions"></div><p class="pci-form-help">Use existing tags to trigger the right product-line metafield defaults.</p></div>
             <div class="full"><label class="pci-label">Description</label><textarea id="pci-manual-description" class="pci-textarea"></textarea></div>
@@ -1532,21 +1540,34 @@
           <h3>Product import settings</h3>
           <p>Set the rules this page uses for Shopify handles, SKU formats, vendor/product-line logic, and conditional defaults. These rules are applied after a URL scan, manual draft, or invoice line create.</p>
           <div id="pci-settings-status" class="pci-status">Loading settings…</div>
-          <div class="pci-form-grid" style="margin-top:18px;">
-            <div><label class="pci-label">Handle prefix</label><input id="pci-settings-handle-prefix" class="pci-input" placeholder="buy"></div>
-            <div><label class="pci-label">Handle suffix</label><input id="pci-settings-handle-suffix" class="pci-input" placeholder="uk"></div>
+          <div class="pci-settings-section"><h4>URL / Handle Conditions</h4><p class="pci-form-help">Use a token pattern for handles. Example: <strong>{vendor}-{title}-{format}-{location}</strong> becomes <strong>gfuel-unc-2-0-tub-uk</strong>.</p><div class="pci-form-grid">
+            <div class="full"><label class="pci-label">Handle pattern</label><input id="pci-settings-handle-pattern" class="pci-input" placeholder="{vendor}-{title}-{format}-{location}"></div>
+            <div><label class="pci-label">Default format token</label><input id="pci-settings-handle-format" class="pci-input" placeholder="tub"></div>
+            <div><label class="pci-label">Default location token</label><input id="pci-settings-handle-location" class="pci-input" placeholder="uk"></div>
+            <div><label class="pci-label">Legacy prefix</label><input id="pci-settings-handle-prefix" class="pci-input" placeholder="optional"></div>
+            <div><label class="pci-label">Legacy suffix</label><input id="pci-settings-handle-suffix" class="pci-input" placeholder="optional"></div>
             <div><label class="pci-label">Max handle length</label><input id="pci-settings-handle-max" class="pci-input" value="180"></div>
-            <div><label class="pci-label">Default PO currency</label><input id="pci-settings-default-currency" class="pci-input" value="GBP"></div>
-            <div class="full"><label class="pci-label">Vendor presets</label><textarea id="pci-settings-vendors" class="pci-textarea" placeholder="One vendor per line. These also appear in the invoice vendor selector."></textarea></div>
+            <label class="pci-check"><input id="pci-settings-handle-overwrite" type="checkbox"> Always rebuild handle from rules</label>
+          </div></div>
+          <div class="pci-settings-section"><h4>PO / Vendor Conditions</h4><div class="pci-form-grid"><div><label class="pci-label">Default PO currency</label><input id="pci-settings-default-currency" class="pci-input" value="GBP"></div><div class="full"><label class="pci-label">Vendor presets</label><textarea id="pci-settings-vendors" class="pci-textarea" placeholder="One vendor per line. These also appear in the invoice vendor selector."></textarea></div></div></div>
+          <div class="pci-settings-section"><h4>SKU Conditions</h4><p class="pci-form-help">Use vendor + product line/metafield rules to create consistent SKUs. Formula Version can be EN, EN2, tub type, or any product-line value you use.</p><div id="pci-sku-rules"></div><div class="pci-actions"><button id="pci-add-sku-rule" class="secondary-btn" type="button">Add SKU rule</button></div></div>
+          <div class="pci-settings-section"><h4>General Conditional Rules</h4><p class="pci-form-help">Examples: when title contains "G Fuel", add a tag; when core.formula_version equals EN, set a metafield; when vendor contains AdvancedGG, set vendor to AdvancedGG.</p><div id="pci-conditional-rules"></div><div class="pci-actions"><button id="pci-add-conditional-rule" class="secondary-btn" type="button">Add conditional rule</button><button id="pci-save-settings" class="primary-btn" type="button">Save product import settings</button></div></div>
+        </div>
+
+        <div class="pci-card pci-pane" id="pci-pane-metafields">
+          <h3>Metafield mapper</h3>
+          <p>Map Shopify product metafields to product categories, tags, vendors and titles so URL imports need fewer edits. Fixed rules auto-fill known values; AI rules ask GPT to read the page/description and infer fields like calories, flavour profile, sweetness or sourness.</p>
+          <div class="pci-status">Loaded product metafields appear in each rule's target picker. Use tags/product type on the URL page to trigger these rules automatically.</div>
+          <div id="pci-metafield-mapping-rules" style="margin-top:14px;"></div>
+          <div class="pci-actions"><button id="pci-add-metafield-rule" class="secondary-btn" type="button">Add metafield mapping rule</button><button id="pci-save-metafield-settings" class="primary-btn" type="button">Save metafield rules</button></div>
+        </div>
+
+        <div class="pci-card pci-pane" id="pci-pane-po">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
+            <div><h3>PO Drafts</h3><p>Supplier purchase order drafts created from Invoice Import. These are internal Nectar records for buying/receiving stock, not customer-facing Shopify draft orders.</p></div>
+            <button id="pci-po-refresh" type="button" class="secondary-btn">Refresh</button>
           </div>
-          <div class="pci-section-subtitle">SKU rules</div>
-          <p class="pci-form-help">Use vendor + product line/metafield rules to create consistent SKUs. Formula Version can be EN, EN2, tub type, or any product-line value you use.</p>
-          <div id="pci-sku-rules"></div>
-          <div class="pci-actions"><button id="pci-add-sku-rule" class="secondary-btn" type="button">Add SKU rule</button></div>
-          <div class="pci-section-subtitle">Conditional defaults</div>
-          <p class="pci-form-help">Examples: when title contains "G Fuel", add a tag; when core.formula_version equals EN, set a metafield; when vendor contains AdvancedGG, set vendor to AdvancedGG.</p>
-          <div id="pci-conditional-rules"></div>
-          <div class="pci-actions"><button id="pci-add-conditional-rule" class="secondary-btn" type="button">Add conditional rule</button><button id="pci-save-settings" class="primary-btn" type="button">Save product import settings</button></div>
+          <div id="pci-po-list-box" class="pci-status">Open this tab to load PO drafts.</div>
         </div>
 
         <div class="pci-card pci-pane" id="pci-pane-history">

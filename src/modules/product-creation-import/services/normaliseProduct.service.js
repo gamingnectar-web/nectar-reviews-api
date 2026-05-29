@@ -31,11 +31,28 @@ function coreMetafieldDefaults(raw = {}) {
   return defaults.filter((item) => item.value !== '' && item.value !== undefined && item.value !== null).map((item) => ({ ...item, type: 'single_line_text_field', source: 'normalised' }));
 }
 
+
+function normaliseWeightUnit(value = '') {
+  const unit = String(value || '').trim().toLowerCase();
+  if (['kg', 'kilogram', 'kilograms'].includes(unit)) return 'kg';
+  if (['lb', 'lbs', 'pound', 'pounds'].includes(unit)) return 'lb';
+  if (['oz', 'ounce', 'ounces'].includes(unit)) return 'oz';
+  return 'g';
+}
+
+function toWeight(value) {
+  const raw = String(value || '').replace(/,/g, '').trim();
+  const match = raw.match(/\d+(?:\.\d{1,3})?/);
+  return match ? String(Number(match[0])) : '';
+}
+
 function normaliseDraftProduct(raw = {}) {
   const title = cleanText(raw.title || raw.name || 'Imported product', 220) || 'Imported product';
   const cost = toMoney(raw.cost || raw.unitCost || raw.pricePaid || '');
   const price = toMoney(raw.price || raw.retailPrice || raw.suggestedRetailPrice || suggestedRetailFromCost(cost));
   const handle = slugify(raw.handle || raw.slug || title);
+  const weight = toWeight(raw.weight || raw.productWeight || raw.shippingWeight || '');
+  const weightUnit = normaliseWeightUnit(raw.weightUnit || raw.productWeightUnit || raw.shippingWeightUnit || 'g');
   const images = (Array.isArray(raw.images) ? raw.images : [raw.imageUrl || raw.image || raw.featuredImage])
     .map((image) => normaliseImage(image, title))
     .filter(Boolean)
@@ -66,6 +83,10 @@ function normaliseDraftProduct(raw = {}) {
     compareAtPrice: toMoney(raw.compareAtPrice || raw.originalPrice || ''),
     sku: cleanText(raw.sku || raw.supplierProductCode || '', 120),
     barcode: cleanText(raw.barcode || raw.gtin || raw.gtin13 || '', 120),
+    weight,
+    weightUnit,
+    handleFormat: cleanText(raw.handleFormat || raw.format || '', 80),
+    handleLocation: cleanText(raw.handleLocation || raw.location || '', 80),
     quantity: Number(raw.quantity || 1) || 1,
     images,
     metafields,
@@ -78,4 +99,4 @@ function normaliseDraftProduct(raw = {}) {
   };
 }
 
-module.exports = { normaliseDraftProduct, htmlFromPlainText, coreMetafieldDefaults };
+module.exports = { normaliseDraftProduct, htmlFromPlainText, coreMetafieldDefaults, toWeight, normaliseWeightUnit };

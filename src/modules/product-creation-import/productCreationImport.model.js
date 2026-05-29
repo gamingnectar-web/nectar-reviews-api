@@ -13,6 +13,8 @@ const importedLineSchema = new mongoose.Schema({
   discountAmount: { type: String, default: '' },
   discountLabel: { type: String, default: '' },
   suggestedRetailPrice: { type: String, default: '' },
+  weight: { type: String, default: '' },
+  weightUnit: { type: String, default: 'g' },
   imageUrl: { type: String, default: '' },
   imageDescription: { type: String, default: '' },
   imageSearchQuery: { type: String, default: '' },
@@ -43,6 +45,8 @@ const poLineSchema = new mongoose.Schema({
   discountAmount: { type: String, default: '' },
   discountLabel: { type: String, default: '' },
   suggestedRetailPrice: { type: String, default: '' },
+  weight: { type: String, default: '' },
+  weightUnit: { type: String, default: 'g' },
   productId: { type: String, default: '' },
   variantId: { type: String, default: '' },
   productTitle: { type: String, default: '' },
@@ -130,17 +134,34 @@ const conditionalRuleSchema = new mongoose.Schema({
   actionValue: { type: String, default: '' },
 }, { _id: false });
 
+
+const metafieldMappingRuleSchema = new mongoose.Schema({
+  enabled: { type: Boolean, default: true },
+  name: { type: String, default: '' },
+  vendorContains: { type: String, default: '' },
+  productTypeContains: { type: String, default: '' },
+  tagContains: { type: String, default: '' },
+  titleContains: { type: String, default: '' },
+  target: { type: String, default: '' },
+  mode: { type: String, enum: ['fixed', 'ai', 'copy_from_similar'], default: 'fixed' },
+  value: { type: String, default: '' },
+}, { _id: false });
+
 const productCreationImportSettingsSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, unique: true, index: true },
   handleRules: {
     prefix: { type: String, default: '' },
     suffix: { type: String, default: '' },
+    pattern: { type: String, default: '{vendor}-{title}-{format}-{location}' },
+    format: { type: String, default: 'tub' },
+    location: { type: String, default: 'uk' },
     maxLength: { type: Number, default: 180 },
     separator: { type: String, default: '-' },
     overwriteExistingHandle: { type: Boolean, default: false },
   },
   skuRules: { type: [skuRuleSchema], default: [] },
   conditionalRules: { type: [conditionalRuleSchema], default: [] },
+  metafieldMappingRules: { type: [metafieldMappingRuleSchema], default: [] },
   defaultCurrency: { type: String, default: 'GBP' },
   vendorPresets: { type: [String], default: [] },
 }, { timestamps: true, collection: 'product_creation_import_settings' });

@@ -1,5 +1,5 @@
 const ProductCreationImport = require('./productCreationImport.model');
-const { extractProductFromUrl } = require('./extractors/urlProductExtractor');
+const { extractProductFromUrl, extractBarcodeFromText } = require('./extractors/urlProductExtractor');
 const { extractInvoiceProducts } = require('./extractors/invoiceExtractor');
 const { matchInvoiceLinesToShopify, applyMatchesToImportDoc } = require('./services/productMatcher.service');
 const { createShopifyProductFromDraft, assignImportLineToProduct } = require('./services/shopifyProduct.service');
@@ -101,6 +101,8 @@ function lineToDraft(line, importDoc) {
     compareAtPrice: line.originalUnitPrice || '',
     sku: line.sku || line.supplierProductCode,
     barcode: line.barcode,
+    weight: line.weight || '',
+    weightUnit: line.weightUnit || 'g',
     quantity: line.quantity || 1,
     images: line.imageUrl ? [{ src: line.imageUrl, alt: line.title }] : [],
     seo: { title: line.title, description: line.title },
@@ -176,6 +178,8 @@ function buildPurchaseOrderDraft(doc, overrideLines = []) {
       discountAmount: toMoney(line.discountAmount || ''),
       discountLabel: cleanText(line.discountLabel || '', 220),
       suggestedRetailPrice: toMoney(line.suggestedRetailPrice || ''),
+      weight: line.weight || '',
+      weightUnit: line.weightUnit || 'g',
       productId: match.productId || '',
       variantId: match.variantId || '',
       productTitle: match.productTitle || '',
@@ -257,6 +261,45 @@ async function formalisePurchaseOrderDraft({ shopDomain, importId, purchaseOrder
   return { import: doc, purchaseOrder: doc.purchaseOrder };
 }
 
+
+async function suggestBarcodeForDraft({ shopDomain, draft = {} }) {
+  const title = cleanText(draft.title || '', 220);
+  const sourceUrl = draft.sourceUrl || draft.url || '';
+  if (sourceUrl) {
+    try {
+      const extracted = await extractProductFromUrl(sourceUrl);
+      if (extracted.barcode) return { barcode: extracted.barcode, source: 'source page/schema' };
+      const text = [extracted.title, extracted.descriptionHtml, extracted.sourceUrl].join(' ');
+      const barcode = extractBarcodeFromText(text);
+      if (barcode) return { barcode, source: 'source page text' };
+    } catch (_) {}
+  }
+
+  const providerUrl = process.env.BARCODE_LOOKUP_API_URL || '';
+  if (providerUrl && title) {
+    try {
+      const url = new URL(providerUrl);
+      url.searchParams.set('q', title);
+      if (draft.vendor) url.searchParams.set('vendor', draft.vendor);
+      const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+      const json = await response.json().catch(() => ({}));
+      const barcode = cleanText(json.barcode || json.gtin || json.ean || json.upc || '', 40).replace(/\D/g, '');
+      if (barcode) return { barcode, source: 'configured barcode lookup provider' };
+    } catch (error) {
+      return { barcode: '', source: 'configured barcode lookup provider', message: `Barcode provider failed: ${error.message || 'unknown error'}` };
+    }
+  }
+  return { barcode: '', message: 'No barcode found on the source page. Add BARCODE_LOOKUP_API_URL if you want web-wide barcode lookup from a dedicated provider.' };
+}
+
+async function listPurchaseOrderDrafts({ shopDomain, limit = 40 }) {
+  const items = await ProductCreationImport.find({ shopDomain, 'purchaseOrder.status': { $in: ['draft', 'formalised'] } })
+    .sort({ 'purchaseOrder.updatedAt': -1, createdAt: -1 })
+    .limit(Math.min(Number(limit) || 40, 100))
+    .lean();
+  return { items };
+}
+
 async function getImportHistory({ shopDomain, limit = 25 }) {
   const items = await ProductCreationImport.find({ shopDomain }).sort({ createdAt: -1 }).limit(Math.min(Number(limit) || 25, 100)).lean();
   return { items };
@@ -272,6 +315,8 @@ module.exports = {
   getProductImportSettings,
   saveProductImportSettings,
   getImportHistory,
+  listPurchaseOrderDrafts,
+  suggestBarcodeForDraft,
   getProductImportMetadata,
   suggestProductProfile,
   createPurchaseOrderDraft,

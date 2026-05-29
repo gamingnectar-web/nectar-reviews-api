@@ -213,3 +213,47 @@ That gives the merchant a useful image hint. The app cannot turn a flat screensh
 2. Search/assign existing product when possible, which brings in the Shopify product image.
 3. For unmatched lines, use **Create… → Use URL import** so the supplier product page can provide proper product image URLs.
 4. If no URL exists, use **Manual create** and paste product image URLs manually.
+
+## v34 additions
+
+### URL image selection
+URL import still collects every likely product/gallery image it can find, but the admin UI now renders them as selectable thumbnails. Only selected image URLs are sent to Shopify when creating the draft product. The textarea remains as the source of truth so a merchant can paste/remove image URLs manually.
+
+### Handle / URL rules
+Settings now has a clear **URL / Handle Conditions** area. The main field is a token pattern, for example:
+
+```txt
+{vendor}-{title}-{format}-{location}
+```
+
+With vendor `G Fuel`, title `UNC 2.0`, format `tub`, and location `uk`, this becomes:
+
+```txt
+gfuel-unc-2-0-tub-uk
+```
+
+The URL and Manual Create tabs include `URL format token` and `URL location token` fields so each product can override the defaults.
+
+### Product weight
+URL scanning now tries to extract weight from JSON-LD, product-page text and common labels such as `Net Wt`, `Product weight`, `280g`, `16oz`, etc. The create flow sends weight and weight unit to Shopify on the initial variant when found or manually entered.
+
+### Barcode lookup
+The importer now has a **Find barcode** action. It checks the source page/schema first. For wider barcode lookup, set:
+
+```txt
+BARCODE_LOOKUP_API_URL=https://your-provider.example/search
+```
+
+The app sends `q=<title>` and `vendor=<vendor>` and accepts JSON keys such as `barcode`, `gtin`, `ean` or `upc`.
+
+### Metafield mapper
+A dedicated **Metafield Mapper** tab lets you create rules that align Shopify product metafields to vendor/category/tag/title conditions. Modes:
+
+- `fixed/manual value` fills a known value automatically.
+- `ask AI from page/images` gives GPT an instruction for that metafield.
+- `copy common value from similar products` is intended for profile reuse and works alongside the existing similar-product metafield copy logic.
+
+### PO visibility
+The invoice flow creates internal supplier PO draft records in MongoDB. They now appear in the new **PO Drafts** tab as well as in History. These are not Shopify customer draft orders.
+
+For customer-facing invoices, Shopify uses Draft Orders and invoice sending. That is a different flow and needs `read_draft_orders,write_draft_orders`. For inbound stock/receiving, use Shopify Inventory Transfers when you want to progress beyond internal PO drafts; that needs `write_inventory_transfers` and related inventory permissions.

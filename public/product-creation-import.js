@@ -1,5 +1,5 @@
 (function ProductCreationImportAdmin(){
-  const state = { latestImport: null, latestDraft: null, historyLoaded: false, metadata: null, settings: null, modalLineIndex: null };
+  const state = { latestImport: null, latestDraft: null, historyLoaded: false, poLoaded: false, metadata: null, settings: null, modalLineIndex: null };
   const api = (path, options = {}) => window.adminFetch(`/admin/product-creation-import${path}`, options);
   const byId = (id) => document.getElementById(id);
   const esc = (value) => String(value || '').replace(/[&<>"']/g, (m) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[m]));
@@ -12,6 +12,63 @@
     el.className = `pci-status ${kind}`.trim();
     el.innerHTML = message;
   }
+
+
+  function imageSrcList(draft = {}) {
+    return (draft.images || []).map((img) => typeof img === 'string' ? img : img.src).filter(Boolean);
+  }
+
+  function imageIsSelected(prefix, src) {
+    const selected = new Set((byId(`${prefix}-images`)?.value || '').split(/[\n,]+/).map((x) => x.trim()).filter(Boolean));
+    return selected.has(src);
+  }
+
+  function syncImagePickerFromTextarea(prefix) {
+    const picker = byId(`${prefix}-image-picker`);
+    if (!picker) return;
+    picker.querySelectorAll('[data-pci-image-src]').forEach((card) => {
+      const src = card.dataset.pciImageSrc || '';
+      const selected = imageIsSelected(prefix, src);
+      card.classList.toggle('selected', selected);
+      const input = card.querySelector('input[type="checkbox"]');
+      if (input) input.checked = selected;
+    });
+  }
+
+  function setSelectedImageUrls(prefix, urls = []) {
+    const clean = Array.from(new Set((urls || []).map((x) => String(x || '').trim()).filter(Boolean)));
+    const textarea = byId(`${prefix}-images`);
+    if (textarea) textarea.value = clean.join('\n');
+    const first = byId(`${prefix}-image`);
+    if (first) first.value = clean[0] || first.value || '';
+    syncImagePickerFromTextarea(prefix);
+  }
+
+  function renderImagePicker(prefix, allImages = []) {
+    const picker = byId(`${prefix}-image-picker`);
+    if (!picker) return;
+    const urls = Array.from(new Set((allImages || []).map((x) => typeof x === 'string' ? x : x.src).filter(Boolean))).slice(0, 80);
+    if (!urls.length) {
+      picker.innerHTML = '<div class="pci-status warn">No product images found yet. Add image URLs manually above.</div>';
+      return;
+    }
+    picker.innerHTML = `<div class="pci-image-picker-head"><strong>Select images to import</strong><span class="pci-muted">Click images to include/exclude them. Only selected images are sent to Shopify.</span><button type="button" class="secondary-btn" onclick="window.ProductCreationImportAdmin.selectAllImages('${prefix}')">Select all</button><button type="button" class="secondary-btn" onclick="window.ProductCreationImportAdmin.clearImages('${prefix}')">Clear</button></div><div class="pci-image-picker-grid">${urls.map((src, idx) => `<button type="button" class="pci-image-choice ${imageIsSelected(prefix, src) ? 'selected' : ''}" data-pci-image-src="${esc(src)}" onclick="window.ProductCreationImportAdmin.toggleImageSelectionFromCard('${prefix}', this)"><input type="checkbox" ${imageIsSelected(prefix, src) ? 'checked' : ''} tabindex="-1"><img src="${esc(src)}" alt="Product image ${idx + 1}"><span>${idx + 1}</span></button>`).join('')}</div>`;
+  }
+
+  function toggleImageSelection(prefix, src) {
+    const current = new Set((byId(`${prefix}-images`)?.value || '').split(/[\n,]+/).map((x) => x.trim()).filter(Boolean));
+    if (current.has(src)) current.delete(src); else current.add(src);
+    setSelectedImageUrls(prefix, Array.from(current));
+  }
+
+  function toggleImageSelectionFromCard(prefix, el) { toggleImageSelection(prefix, el?.dataset?.pciImageSrc || ''); }
+
+  function selectAllImages(prefix) {
+    const urls = Array.from(document.querySelectorAll(`#${prefix}-image-picker [data-pci-image-src]`)).map((el) => el.dataset.pciImageSrc).filter(Boolean);
+    setSelectedImageUrls(prefix, urls);
+  }
+
+  function clearImages(prefix) { setSelectedImageUrls(prefix, []); }
 
   function parseImageUrls(prefix) {
     const first = byId(`${prefix}-image`)?.value.trim() || '';
@@ -45,11 +102,15 @@
       handle: byId(`${prefix}-handle`)?.value.trim() || '',
       vendor: byId(`${prefix}-vendor`)?.value.trim() || '',
       productType: byId(`${prefix}-type`)?.value.trim() || '',
+      handleFormat: byId(`${prefix}-handle-format`)?.value.trim() || '',
+      handleLocation: byId(`${prefix}-handle-location`)?.value.trim() || '',
       price: byId(`${prefix}-price`)?.value.trim() || '',
       compareAtPrice: byId(`${prefix}-compare`)?.value.trim() || '',
       cost: byId(`${prefix}-cost`)?.value.trim() || '',
       sku: byId(`${prefix}-sku`)?.value.trim() || '',
       barcode: byId(`${prefix}-barcode`)?.value.trim() || '',
+      weight: byId(`${prefix}-weight`)?.value.trim() || '',
+      weightUnit: byId(`${prefix}-weight-unit`)?.value.trim() || 'g',
       sourceUrl: byId(`${prefix}-source`)?.value.trim() || '',
       description: byId(`${prefix}-description`)?.value.trim() || '',
       tags: (byId(`${prefix}-tags`)?.value || '').split(',').map((x) => x.trim()).filter(Boolean),
@@ -65,6 +126,8 @@
     const vendors = [...(state.metadata?.vendors || []).map((v) => v.vendor || v), ...(state.settings?.vendorPresets || [])];
     const vendorList = byId('pci-vendor-list');
     if (vendorList) vendorList.innerHTML = Array.from(new Set(vendors.filter(Boolean))).slice(0, 250).map((vendor) => `<option value="${esc(vendor)}"></option>`).join('');
+    const mfList = byId('pci-metafield-list');
+    if (mfList) mfList.innerHTML = (state.metadata?.metafieldDefinitions || []).slice(0, 250).map((mf) => `<option value="${esc(mf.namespace + '.' + mf.key)}">${esc(mf.name || '')}</option>`).join('');
   }
 
   function renderTagChips(prefix) {
@@ -108,24 +171,25 @@
   }
 
   function fillDraftForm(prefix, draft = {}) {
-    const images = (draft.images || []).map((img) => typeof img === 'string' ? img : img.src).filter(Boolean);
+    const images = imageSrcList(draft);
     const firstImage = images[0] || draft.imageUrl || '';
-    [['title', draft.title], ['handle', draft.handle], ['vendor', draft.vendor], ['type', draft.productType], ['price', draft.price], ['compare', draft.compareAtPrice], ['cost', draft.cost], ['sku', draft.sku], ['barcode', draft.barcode], ['source', draft.sourceUrl], ['description', (draft.description || draft.descriptionHtml || '').replace(/<[^>]+>/g, '')], ['tags', Array.isArray(draft.tags) ? draft.tags.join(', ') : draft.tags], ['image', firstImage], ['images', images.join('\n')]].forEach(([key, value]) => {
+    [['title', draft.title], ['handle', draft.handle], ['vendor', draft.vendor], ['type', draft.productType], ['handle-format', draft.handleFormat || state.settings?.handleRules?.format || ''], ['handle-location', draft.handleLocation || state.settings?.handleRules?.location || ''], ['price', draft.price], ['compare', draft.compareAtPrice], ['cost', draft.cost], ['sku', draft.sku], ['barcode', draft.barcode], ['weight', draft.weight], ['weight-unit', draft.weightUnit || 'g'], ['source', draft.sourceUrl], ['description', (draft.description || draft.descriptionHtml || '').replace(/<[^>]+>/g, '')], ['tags', Array.isArray(draft.tags) ? draft.tags.join(', ') : draft.tags], ['image', firstImage], ['images', images.join('\n')]].forEach(([key, value]) => {
       const el = byId(`${prefix}-${key}`);
       if (el) el.value = value || '';
     });
     renderTagChips(prefix);
     renderMetafieldFields(prefix, draft);
+    renderImagePicker(prefix, images);
   }
 
   function renderDraft(prefix, draft, targetId) {
     state.latestDraft = draft;
     fillDraftForm(prefix, draft);
-    const images = (draft.images || []).map((img) => typeof img === 'string' ? img : img.src).filter(Boolean);
+    const images = imageSrcList(draft);
     const target = byId(targetId);
     if (!target) return;
     const thumbs = images.length ? `<div class="pci-thumb-row">${images.slice(0, 12).map((src) => `<img src="${esc(src)}" alt="">`).join('')}${images.length > 12 ? `<span class="pci-pill">+${images.length - 12} more</span>` : ''}</div>` : '<div class="pci-line-img"></div>';
-    target.innerHTML = `<div class="pci-draft"><div>${thumbs}</div><div><h3>${esc(draft.title || 'Product draft')}</h3><p class="pci-muted">Review price, compare-at price, handle, SKU, tags, images and metafields, then create as a Shopify draft product. Nothing is published automatically.</p><p class="pci-muted"><strong>Images:</strong> ${images.length || 0} image(s) will be sent to Shopify.</p>${draft.enrichment?.aiNotes ? `<p class="pci-muted"><strong>AI note:</strong> ${esc(draft.enrichment.aiNotes)}</p>` : ''}<div class="pci-actions"><button class="secondary-btn" type="button" onclick="window.ProductCreationImportAdmin.suggestProfile('${prefix}')">Generate tags, SKU & metafields</button><button class="primary-btn" type="button" onclick="window.ProductCreationImportAdmin.createCurrentDraft('${prefix}')">Create Shopify draft product</button></div></div></div>`;
+    target.innerHTML = `<div class="pci-draft"><div>${thumbs}</div><div><h3>${esc(draft.title || 'Product draft')}</h3><p class="pci-muted">Review price, compare-at price, handle, SKU, tags, images and metafields, then create as a Shopify draft product. Nothing is published automatically.</p><p class="pci-muted"><strong>Images:</strong> ${parseImageUrls(prefix).length || 0} selected of ${images.length || 0} found. Only selected images will be sent to Shopify.</p>${draft.enrichment?.aiNotes ? `<p class="pci-muted"><strong>AI note:</strong> ${esc(draft.enrichment.aiNotes)}</p>` : ''}<div class="pci-actions"><button class="secondary-btn" type="button" onclick="window.ProductCreationImportAdmin.suggestProfile('${prefix}')">Generate tags, SKU & metafields</button><button class="primary-btn" type="button" onclick="window.ProductCreationImportAdmin.createCurrentDraft('${prefix}')">Create Shopify draft product</button></div></div></div>`;
   }
 
   async function fileToCompressedDataUrl(file) {
@@ -216,6 +280,8 @@
     document.querySelectorAll('#v-product-creation-import .pci-tab').forEach((btn) => btn.classList.toggle('active', btn.dataset.pciTab === name));
     document.querySelectorAll('#v-product-creation-import .pci-pane').forEach((pane) => pane.classList.toggle('active', pane.id === `pci-pane-${name}`));
     if (name === 'history') window.ProductCreationImportAdmin.loadHistory();
+    if (name === 'po') window.ProductCreationImportAdmin.loadPurchaseOrders(true);
+    if (name === 'metafields') window.ProductCreationImportAdmin.loadSettings(true);
     if (name === 'settings') window.ProductCreationImportAdmin.loadSettings(true);
   };
 
@@ -291,17 +357,39 @@
     </div>`;
   }
 
+
+  function metafieldMappingRuleRow(rule = {}, index) {
+    return `<div class="pci-rule-row pci-mf-map-row" data-metafield-rule-index="${index}">
+      <label>Name<input class="pci-input pci-metafield-rule" data-field="name" value="${esc(rule.name || '')}"></label>
+      <label>Vendor contains<input class="pci-input pci-metafield-rule" data-field="vendorContains" value="${esc(rule.vendorContains || '')}" list="pci-vendor-list"></label>
+      <label>Product category/type contains<input class="pci-input pci-metafield-rule" data-field="productTypeContains" value="${esc(rule.productTypeContains || '')}"></label>
+      <label>Tag contains<input class="pci-input pci-metafield-rule" data-field="tagContains" value="${esc(rule.tagContains || '')}" list="pci-tag-list"></label>
+      <label>Title contains<input class="pci-input pci-metafield-rule" data-field="titleContains" value="${esc(rule.titleContains || '')}"></label>
+      <label>Metafield<input class="pci-input pci-metafield-rule" data-field="target" value="${esc(rule.target || '')}" list="pci-metafield-list" placeholder="core.flavour_profile"></label>
+      <label>Mode<select class="pci-input pci-metafield-rule" data-field="mode"><option value="fixed" ${rule.mode === 'fixed' ? 'selected' : ''}>fixed/manual value</option><option value="ai" ${rule.mode === 'ai' ? 'selected' : ''}>ask AI from page/images</option><option value="copy_from_similar" ${rule.mode === 'copy_from_similar' ? 'selected' : ''}>copy common value from similar products</option></select></label>
+      <label>Value / AI instruction<input class="pci-input pci-metafield-rule" data-field="value" value="${esc(rule.value || '')}" placeholder="e.g. Find calories from label image"></label>
+      <label class="pci-check"><input type="checkbox" class="pci-metafield-rule" data-field="enabled" ${rule.enabled === false ? '' : 'checked'}> Enabled</label>
+      <button class="secondary-btn" type="button" onclick="window.ProductCreationImportAdmin.removeMetafieldRule(${index})">Remove</button>
+    </div>`;
+  }
+
   function renderSettings() {
     const settings = state.settings || {};
+    if (byId('pci-settings-handle-pattern')) byId('pci-settings-handle-pattern').value = settings.handleRules?.pattern || '{vendor}-{title}-{format}-{location}';
+    if (byId('pci-settings-handle-format')) byId('pci-settings-handle-format').value = settings.handleRules?.format || 'tub';
+    if (byId('pci-settings-handle-location')) byId('pci-settings-handle-location').value = settings.handleRules?.location || 'uk';
     if (byId('pci-settings-handle-prefix')) byId('pci-settings-handle-prefix').value = settings.handleRules?.prefix || '';
     if (byId('pci-settings-handle-suffix')) byId('pci-settings-handle-suffix').value = settings.handleRules?.suffix || '';
     if (byId('pci-settings-handle-max')) byId('pci-settings-handle-max').value = settings.handleRules?.maxLength || 180;
+    if (byId('pci-settings-handle-overwrite')) byId('pci-settings-handle-overwrite').checked = Boolean(settings.handleRules?.overwriteExistingHandle);
     if (byId('pci-settings-default-currency')) byId('pci-settings-default-currency').value = settings.defaultCurrency || 'GBP';
     if (byId('pci-settings-vendors')) byId('pci-settings-vendors').value = (settings.vendorPresets || []).join('\n');
     const skuBox = byId('pci-sku-rules');
     if (skuBox) skuBox.innerHTML = (settings.skuRules || []).map(skuRuleRow).join('') || '<div class="pci-status warn">No SKU rules yet.</div>';
     const condBox = byId('pci-conditional-rules');
     if (condBox) condBox.innerHTML = (settings.conditionalRules || []).map(conditionalRuleRow).join('') || '<div class="pci-status warn">No conditional rules yet.</div>';
+    const mfBox = byId('pci-metafield-mapping-rules');
+    if (mfBox) mfBox.innerHTML = (settings.metafieldMappingRules || []).map(metafieldMappingRuleRow).join('') || '<div class="pci-status warn">No metafield mapping rules yet. Add rules that map categories/tags to Shopify product metafields.</div>';
   }
 
   function collectSettings() {
@@ -315,16 +403,26 @@
       row.querySelectorAll('.pci-conditional-rule').forEach((input) => { rule[input.dataset.field] = input.type === 'checkbox' ? input.checked : input.value; });
       return rule;
     });
+    const metafieldMappingRules = Array.from(document.querySelectorAll('[data-metafield-rule-index]')).map((row) => {
+      const rule = {};
+      row.querySelectorAll('.pci-metafield-rule').forEach((input) => { rule[input.dataset.field] = input.type === 'checkbox' ? input.checked : input.value; });
+      return rule;
+    });
     return {
       handleRules: {
+        pattern: byId('pci-settings-handle-pattern')?.value || '{vendor}-{title}-{format}-{location}',
+        format: byId('pci-settings-handle-format')?.value || '',
+        location: byId('pci-settings-handle-location')?.value || '',
         prefix: byId('pci-settings-handle-prefix')?.value || '',
         suffix: byId('pci-settings-handle-suffix')?.value || '',
         maxLength: byId('pci-settings-handle-max')?.value || 180,
+        overwriteExistingHandle: Boolean(byId('pci-settings-handle-overwrite')?.checked),
       },
       defaultCurrency: byId('pci-settings-default-currency')?.value || 'GBP',
       vendorPresets: (byId('pci-settings-vendors')?.value || '').split(/\n+/).map((x) => x.trim()).filter(Boolean),
       skuRules,
       conditionalRules,
+      metafieldMappingRules,
     };
   }
 
@@ -332,6 +430,8 @@
   function removeSkuRule(index) { state.settings = collectSettings(); state.settings.skuRules.splice(index, 1); renderSettings(); }
   function addConditionalRule() { state.settings = { ...(state.settings || {}), conditionalRules: [...(state.settings?.conditionalRules || []), { enabled: true, whenField: 'title', operator: 'contains', actionType: 'add_tag' }] }; renderSettings(); }
   function removeConditionalRule(index) { state.settings = collectSettings(); state.settings.conditionalRules.splice(index, 1); renderSettings(); }
+  function addMetafieldRule() { state.settings = { ...(state.settings || {}), metafieldMappingRules: [...(state.settings?.metafieldMappingRules || []), { enabled: true, mode: 'fixed', target: 'core.flavour_profile' }] }; renderSettings(); }
+  function removeMetafieldRule(index) { state.settings = collectSettings(); state.settings.metafieldMappingRules.splice(index, 1); renderSettings(); }
 
   async function saveSettings() {
     const settings = collectSettings();
@@ -352,7 +452,7 @@
     try {
       const data = await api('/profile/suggest', { method: 'POST', body: JSON.stringify({ draft }) });
       const suggestion = data.suggestion || {};
-      fillDraftForm(prefix, { ...draft, title: suggestion.title || draft.title, handle: suggestion.handle || draft.handle, vendor: suggestion.vendor || draft.vendor, productType: suggestion.productType || draft.productType, sku: suggestion.sku || draft.sku, tags: suggestion.tags || draft.tags, metafields: suggestion.metafields || draft.metafields });
+      fillDraftForm(prefix, { ...draft, title: suggestion.title || draft.title, handle: suggestion.handle || draft.handle, vendor: suggestion.vendor || draft.vendor, productType: suggestion.productType || draft.productType, sku: suggestion.sku || draft.sku, barcode: suggestion.barcode || draft.barcode, weight: suggestion.weight || draft.weight, weightUnit: suggestion.weightUnit || draft.weightUnit, tags: suggestion.tags || draft.tags, metafields: suggestion.metafields || draft.metafields });
       if (!opts.quiet) setStatus(statusId, `Profile suggestions applied.${suggestion.existingProfileMatchedProducts ? ` Based on ${suggestion.existingProfileMatchedProducts} similar product(s).` : ''}${suggestion.aiNotes ? `<br>${esc(suggestion.aiNotes)}` : ''}`, 'ok');
     } catch (error) {
       if (!opts.quiet) setStatus(statusId, esc(error.message || 'Profile suggestion failed.'), 'err');
@@ -389,6 +489,24 @@
       renderLines(data.import);
       setStatus('pci-invoice-status', `${data.import?.lines?.length || 0} product line(s) found.${data.warning ? `<br>${esc(data.warning)}` : ''}`, data.warning ? 'warn' : 'ok');
     } catch (error) { setStatus('pci-invoice-status', esc(error.message || 'Invoice analysis failed.'), 'err'); }
+  }
+
+
+  async function findBarcode(prefix) {
+    const draft = draftFromForm(prefix);
+    const statusId = prefix === 'pci-url' ? 'pci-url-status' : 'pci-manual-status';
+    if (!draft.title && !draft.sourceUrl) return setStatus(statusId, 'Add a title or source URL first, then search barcode.', 'warn');
+    setStatus(statusId, 'Searching source page / configured barcode provider for GTIN/EAN/UPC…');
+    try {
+      const data = await api('/barcode/suggest', { method: 'POST', body: JSON.stringify({ draft }) });
+      if (data.barcode) {
+        const field = byId(`${prefix}-barcode`);
+        if (field) field.value = data.barcode;
+        setStatus(statusId, `Barcode found: <strong>${esc(data.barcode)}</strong>${data.source ? ` · ${esc(data.source)}` : ''}`, 'ok');
+      } else {
+        setStatus(statusId, data.message || 'No barcode found. For full web lookup, add BARCODE_LOOKUP_API_URL to your environment.', 'warn');
+      }
+    } catch (error) { setStatus(statusId, esc(error.message || 'Barcode lookup failed.'), 'err'); }
   }
 
   async function createCurrentDraft(prefix) {
@@ -489,6 +607,8 @@
       cost: line.unitCost || '',
       sku: line.sku || line.supplierProductCode || '',
       barcode: line.barcode || '',
+      weight: line.weight || '',
+      weightUnit: line.weightUnit || 'g',
       sourceUrl: line.sourceUrl || '',
       description: `${line.discountLabel ? `Promotion: ${line.discountLabel}. ` : ''}${line.imageDescription ? `Image note: ${line.imageDescription}.` : ''}`,
       tags: ['invoice-import', state.latestImport?.supplierName ? `supplier-${state.latestImport.supplierName}` : ''].filter(Boolean),
@@ -535,9 +655,9 @@
     setStatus('pci-invoice-status', 'Creating purchase order draft…');
     try {
       const purchaseOrder = {
-        supplierName: state.latestImport.supplierName || '',
-        supplierUrl: state.latestImport.supplierUrl || '',
-        currency: state.latestImport.currency || 'GBP',
+        supplierName: byId('pci-invoice-supplier-name')?.value || state.latestImport.supplierName || '',
+        supplierUrl: byId('pci-invoice-supplier-url')?.value || state.latestImport.supplierUrl || '',
+        currency: byId('pci-invoice-currency')?.value || state.latestImport.currency || 'GBP',
         poLevelDiscount: byId('pci-invoice-discount-total')?.value || state.latestImport.discountTotal || '',
         discountTotal: byId('pci-invoice-discount-total')?.value || state.latestImport.discountTotal || '',
         shippingTotal: byId('pci-invoice-shipping-total')?.value || state.latestImport.shippingTotal || '',
@@ -580,6 +700,20 @@
     } catch (error) { box.innerHTML = `<div class="pci-status err">${esc(error.message || 'History failed.')}</div>`; }
   }
 
+
+  async function loadPurchaseOrders(force = false) {
+    if (state.poLoaded && !force) return;
+    const box = byId('pci-po-list-box');
+    if (!box) return;
+    box.innerHTML = '<div class="pci-status">Loading draft/formalised POs…</div>';
+    try {
+      const data = await api('/purchase-orders?limit=40');
+      const items = data.items || [];
+      state.poLoaded = true;
+      box.innerHTML = items.length ? `<table class="pci-history"><thead><tr><th>PO</th><th>Supplier</th><th>Status</th><th>Lines</th><th>Total</th><th>Created</th></tr></thead><tbody>${items.map((item) => `<tr><td><strong>${esc(item.purchaseOrder?.poNumber || 'PO')}</strong><br><small>${esc(item.invoiceNumber || item.originalFilename || '')}</small></td><td>${esc(item.purchaseOrder?.supplierName || item.supplierName || '')}</td><td><span class="pci-pill ${item.purchaseOrder?.status === 'formalised' ? 'ok' : 'warn'}">${esc(item.purchaseOrder?.status || '')}</span></td><td>${esc(item.purchaseOrder?.lines?.length || 0)}</td><td>${esc(item.purchaseOrder?.currency || item.currency || 'GBP')} ${esc(item.purchaseOrder?.total || '')}</td><td>${esc(new Date(item.createdAt).toLocaleString())}</td></tr>`).join('')}</tbody></table>` : '<div class="pci-status warn">No draft POs yet. Create one from Invoice Import after product lines are extracted.</div>';
+    } catch (error) { box.innerHTML = `<div class="pci-status err">${esc(error.message || 'Could not load POs.')}</div>`; }
+  }
+
   function init() {
     loadHealth();
     loadMetadata();
@@ -594,9 +728,16 @@
     byId('pci-history-refresh')?.addEventListener('click', () => loadHistory(true));
     byId('pci-add-sku-rule')?.addEventListener('click', addSkuRule);
     byId('pci-add-conditional-rule')?.addEventListener('click', addConditionalRule);
+    byId('pci-add-metafield-rule')?.addEventListener('click', addMetafieldRule);
+    byId('pci-save-metafield-settings')?.addEventListener('click', saveSettings);
     byId('pci-save-settings')?.addEventListener('click', saveSettings);
+    byId('pci-po-refresh')?.addEventListener('click', () => loadPurchaseOrders(true));
+    ['pci-url','pci-manual'].forEach((prefix) => {
+      byId(`${prefix}-images`)?.addEventListener('input', () => syncImagePickerFromTextarea(prefix));
+      byId(`${prefix}-find-barcode`)?.addEventListener('click', () => findBarcode(prefix));
+    });
   }
 
-  window.ProductCreationImportAdmin = { init, scanUrl, analyseInvoice, createCurrentDraft, createManualDraft, searchForLine, confirmSuggestedLine, assignLine, assignLineFromModal, openLineCreateMenu, prefillUrlFromLine, prefillManualFromLine, createLine, createPurchaseOrderDraft, formalisePurchaseOrderDraft, loadHistory, addTag, suggestProfile, loadSettings, saveSettings, addSkuRule, removeSkuRule, addConditionalRule, removeConditionalRule, closeSearchModal, runModalProductSearch };
+  window.ProductCreationImportAdmin = { init, scanUrl, analyseInvoice, createCurrentDraft, createManualDraft, searchForLine, confirmSuggestedLine, assignLine, assignLineFromModal, openLineCreateMenu, prefillUrlFromLine, prefillManualFromLine, createLine, createPurchaseOrderDraft, formalisePurchaseOrderDraft, loadHistory, loadPurchaseOrders, addTag, suggestProfile, loadSettings, saveSettings, addSkuRule, removeSkuRule, addConditionalRule, removeConditionalRule, addMetafieldRule, removeMetafieldRule, closeSearchModal, runModalProductSearch, toggleImageSelection, toggleImageSelectionFromCard, selectAllImages, clearImages, findBarcode };
   document.addEventListener('DOMContentLoaded', init);
 })();

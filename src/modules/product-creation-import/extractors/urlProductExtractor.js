@@ -81,6 +81,53 @@ function imageFromJsonLd(value, baseUrl) {
   return [];
 }
 
+
+function htmlToText(html = '') {
+  return decodeEntities(String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim());
+}
+
+function extractBarcodeFromText(text = '') {
+  const source = String(text || '');
+  const labelled = source.match(/(?:barcode|bar code|ean|gtin|upc)\D{0,30}(\d{8,14})/i);
+  if (labelled) return labelled[1];
+  return '';
+}
+
+function extractWeightFromAny(product = {}, text = '') {
+  const candidates = [];
+  const add = (weight, unit, source) => {
+    const raw = String(weight || '').trim();
+    const num = (raw.match(/\d+(?:\.\d{1,3})?/) || [])[0];
+    if (!num) return;
+    const normalUnit = String(unit || '').toLowerCase().replace(/grams?/, 'g').replace(/kilograms?/, 'kg').replace(/ounces?/, 'oz').replace(/pounds?|lbs?/, 'lb');
+    candidates.push({ weight: String(Number(num)), weightUnit: ['g','kg','oz','lb'].includes(normalUnit) ? normalUnit : 'g', source });
+  };
+  if (product.weight) {
+    if (typeof product.weight === 'object') add(product.weight.value || product.weight.amount, product.weight.unitCode || product.weight.unitText || product.weight.unit, 'json-ld-weight');
+    else {
+      const m = String(product.weight).match(/(\d+(?:\.\d{1,3})?)\s*(kg|g|grams?|oz|ounces?|lb|lbs|pounds?)/i);
+      if (m) add(m[1], m[2], 'json-ld-weight');
+    }
+  }
+  const props = Array.isArray(product.additionalProperty) ? product.additionalProperty : [];
+  props.forEach((prop) => {
+    const name = String(prop.name || prop.propertyID || '').toLowerCase();
+    if (name.includes('weight') || name.includes('net wt')) {
+      const m = String(prop.value || '').match(/(\d+(?:\.\d{1,3})?)\s*(kg|g|grams?|oz|ounces?|lb|lbs|pounds?)/i);
+      if (m) add(m[1], m[2], 'json-ld-additional-property');
+    }
+  });
+  const m = String(text || '').match(/(?:net\s*wt\.?|net\s*weight|weight|product\s*weight|shipping\s*weight)\D{0,35}(\d+(?:\.\d{1,3})?)\s*(kg|g|grams?|oz|ounces?|lb|lbs|pounds?)/i)
+    || String(text || '').match(/(\d+(?:\.\d{1,3})?)\s*(kg|g|grams?|oz|ounces?|lb|lbs|pounds?)\s*(?:net\s*wt\.?|net\s*weight|tub|powder|drink|product)/i);
+  if (m) add(m[1], m[2], 'page-text');
+  return candidates[0] || { weight: '', weightUnit: 'g', source: '' };
+}
+
 function extractHtmlImageCandidates(html, baseUrl) {
   const images = [];
   const metaSelectors = ['og:image', 'og:image:secure_url', 'twitter:image', 'twitter:image:src', 'product:image'];
@@ -133,6 +180,7 @@ async function extractProductFromUrl(url) {
 
   const html = await response.text();
   const product = findProductJsonLd(html) || {};
+  const pageText = htmlToText(html);
   const offer = firstOffer(product.offers);
   const brand = typeof product.brand === 'object' ? product.brand?.name : product.brand;
   const title = cleanText(product.name || metaContent(html, 'og:title') || tagText(html, 'title'), 220);
@@ -141,6 +189,8 @@ async function extractProductFromUrl(url) {
     ...imageFromJsonLd(product.image, sourceUrl),
     ...extractHtmlImageCandidates(html, sourceUrl),
   ])).slice(0, 50);
+  const weightInfo = extractWeightFromAny(product, pageText);
+  const extractedBarcode = product.gtin13 || product.gtin14 || product.gtin12 || product.gtin8 || product.gtin || extractBarcodeFromText(pageText) || '';
 
   const draft = normaliseDraftProduct({
     source: 'url',
@@ -151,7 +201,9 @@ async function extractProductFromUrl(url) {
     price: toMoney(offer.price || metaContent(html, 'product:price:amount')),
     compareAtPrice: toMoney(offer.highPrice || offer.compareAtPrice || metaContent(html, 'product:price:compare_at_amount')),
     sku: product.sku || product.mpn || '',
-    barcode: product.gtin13 || product.gtin || product.gtin12 || '',
+    barcode: extractedBarcode,
+    weight: weightInfo.weight,
+    weightUnit: weightInfo.weightUnit,
     images: imageUrls,
     tags: ['url-import'],
     seo: { title, description },
@@ -160,8 +212,8 @@ async function extractProductFromUrl(url) {
   return {
     ...draft,
     confidence: product.name ? 0.86 : (title ? 0.55 : 0.25),
-    rawExtract: { jsonLdProductFound: Boolean(product.name), sourceUrl, imageCount: draft.images.length },
+    rawExtract: { jsonLdProductFound: Boolean(product.name), sourceUrl, imageCount: draft.images.length, barcodeSource: extractedBarcode ? (product.gtin || product.gtin13 || product.gtin12 ? 'json-ld' : 'page-text') : '', weightSource: weightInfo.source },
   };
 }
 
-module.exports = { extractProductFromUrl };
+module.exports = { extractProductFromUrl, extractBarcodeFromText, extractWeightFromAny };
