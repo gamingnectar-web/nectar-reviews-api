@@ -7,6 +7,28 @@
   const compoundId = (prefix, namespace, key) => `${prefix}-mf-${String(namespace).replace(/[^a-z0-9_-]/gi,'_')}-${String(key).replace(/[^a-z0-9_-]/gi,'_')}`;
   const seoTitleFromDraft = (draft = {}) => (draft.seo?.title || [draft.title, draft.vendor && !String(draft.title || '').toLowerCase().includes(String(draft.vendor).toLowerCase()) ? draft.vendor : '', 'Gaming Nectar'].filter(Boolean).join(' • ')).slice(0, 70);
   const seoDescriptionFromDraft = (draft = {}) => (draft.seo?.description || [draft.title, draft.vendor ? `from ${draft.vendor}` : '', draft.productType || '', 'available from Gaming Nectar.'].filter(Boolean).join(' ')).slice(0, 160);
+  const currentStorefrontBase = () => `https://www.gamingnectar.com/products/`;
+  const stripProductsPrefix = (handle = '') => String(handle || '').replace(/^\/?products\//i, '').replace(/^\/+/, '').trim();
+  const readableMetafieldType = (type = '') => String(type || 'single_line_text_field').replace(/_/g, ' ');
+  const compactText = (value = '', max = 120) => String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
+
+  function safeHandlePreview(prefix) {
+    const handle = stripProductsPrefix(byId(`${prefix}-handle`)?.value || 'new-product-handle');
+    return handle || 'new-product-handle';
+  }
+
+  function getSelectedTags(prefix) {
+    return (byId(`${prefix}-tags`)?.value || '').split(',').map((x) => x.trim()).filter(Boolean);
+  }
+
+  function addCollection(prefix, collection) {
+    const input = byId(`${prefix}-collections`);
+    if (!input || !collection) return;
+    const existing = new Set((input.value || '').split(',').map((x) => x.trim()).filter(Boolean));
+    existing.add(collection);
+    input.value = Array.from(existing).join(', ');
+  }
+
 
   function canonicalImageKey(src = '') {
     try {
@@ -136,6 +158,9 @@
       handle: byId(`${prefix}-handle`)?.value.trim() || '',
       vendor: byId(`${prefix}-vendor`)?.value.trim() || '',
       productType: byId(`${prefix}-type`)?.value.trim() || '',
+      productCategory: byId(`${prefix}-category`)?.value.trim() || '',
+      themeTemplate: byId(`${prefix}-theme-template`)?.value.trim() || '',
+      collections: (byId(`${prefix}-collections`)?.value || '').split(',').map((x) => x.trim()).filter(Boolean),
       handleFormat: byId(`${prefix}-handle-format`)?.value.trim() || '',
       handleLocation: byId(`${prefix}-handle-location`)?.value.trim() || '',
       price: byId(`${prefix}-price`)?.value.trim() || '',
@@ -167,15 +192,23 @@
     if (vendorList) vendorList.innerHTML = Array.from(new Set(vendors.filter(Boolean))).slice(0, 250).map((vendor) => `<option value="${esc(vendor)}"></option>`).join('');
     const mfList = byId('pci-metafield-list');
     if (mfList) mfList.innerHTML = (state.metadata?.metafieldDefinitions || []).slice(0, 250).map((mf) => `<option value="${esc(mf.namespace + '.' + mf.key)}">${esc(mf.name || '')}</option>`).join('');
+    const collectionList = byId('pci-collection-list');
+    if (collectionList) collectionList.innerHTML = (state.metadata?.collections || []).slice(0, 250).map((collection) => `<option value="${esc(collection.handle || collection.title || collection.id)}">${esc(collection.title || '')}</option>`).join('');
+    const templateList = byId('pci-template-list');
+    if (templateList) templateList.innerHTML = (state.metadata?.themeTemplates || []).slice(0, 250).map((template) => `<option value="${esc(template)}"></option>`).join('');
   }
 
-  function renderTagChips(prefix) {
+  function renderTagChips(prefix, draft = {}) {
     const target = byId(`${prefix}-tag-suggestions`);
     if (!target) return;
     renderDataLists();
-    const tags = state.metadata?.tags || [];
-    if (!tags.length) { target.innerHTML = '<small class="pci-muted">No previous tags loaded yet.</small>'; return; }
-    target.innerHTML = tags.slice(0, 28).map((item) => `<button type="button" class="pci-chip" onclick="window.ProductCreationImportAdmin.addTag('${prefix}', '${esc(String(item.tag || item).replace(/'/g, "\\'"))}')">${esc(item.tag || item)}</button>`).join('');
+    const previous = (state.metadata?.tags || []).map((item) => item.tag || item).filter(Boolean);
+    const suggested = Array.from(new Set([...(draft.recommendedTags || []), ...(draft.enrichment?.recommendedTags || []), ...(draft.enrichment?.tags || [])].filter(Boolean)));
+    const selected = new Set(getSelectedTags(prefix).map((tag) => tag.toLowerCase()));
+    const chip = (tag, label = '') => `<button type="button" class="pci-chip ${selected.has(String(tag).toLowerCase()) ? 'selected' : ''}" onclick="window.ProductCreationImportAdmin.addTag('${prefix}', '${esc(String(tag).replace(/'/g, "\'"))}')">${label ? `<span>${esc(label)}</span> ` : ''}${esc(tag)}</button>`;
+    const suggestedHtml = suggested.length ? `<div class="pci-chip-row"><strong>Suggested tags</strong>${suggested.slice(0, 20).map((tag) => chip(tag, 'Add')).join('')}</div>` : '';
+    const previousHtml = previous.length ? `<div class="pci-chip-row"><strong>Previous tags</strong>${previous.slice(0, 32).map((tag) => chip(tag)).join('')}</div>` : '<small class="pci-muted">No previous tags loaded yet.</small>';
+    target.innerHTML = `<p class="pci-form-help">Tags are never applied automatically. Click a chip to add it to the draft.</p>${suggestedHtml}${previousHtml}`;
   }
 
   function addTag(prefix, tag) {
@@ -184,7 +217,81 @@
     const tags = new Set((input.value || '').split(',').map((x) => x.trim()).filter(Boolean));
     tags.add(tag);
     input.value = Array.from(tags).join(', ');
-    suggestProfile(prefix, { quiet: true });
+    renderTagChips(prefix);
+    renderSeoPreview(prefix);
+  }
+
+  function inputForMetafield(prefix, definition, current, compound) {
+    const id = compoundId(prefix, definition.namespace, definition.key);
+    const type = definition.type || 'single_line_text_field';
+    const common = `data-pci-mf-prefix="${prefix}" data-namespace="${esc(definition.namespace)}" data-key="${esc(definition.key)}" data-type="${esc(type)}" data-label="${esc(definition.name || '')}"`;
+    const placeholder = esc(definition.description || definition.help || '');
+    const value = current.value || '';
+    if (type === 'rich_text_field') {
+      return `<div class="pci-richtext-wrap"><div class="pci-richtext-toolbar"><button type="button" class="secondary-btn mini" onclick="window.ProductCreationImportAdmin.richTextCommand('${id}','bold')">Bold</button><button type="button" class="secondary-btn mini" onclick="window.ProductCreationImportAdmin.richTextCommand('${id}','italic')">Italic</button><button type="button" class="secondary-btn mini" onclick="window.ProductCreationImportAdmin.richTextCommand('${id}','insertUnorderedList')">Bullets</button></div><div id="${id}-editor" class="pci-richtext-editor" contenteditable="true" data-richtext-hidden="${id}" oninput="window.ProductCreationImportAdmin.syncRichTextMetafield('${id}')">${esc(richTextDisplayValue(value))}</div><textarea id="${id}" class="pci-input pci-richtext-hidden" ${common} placeholder="${placeholder}">${esc(value)}</textarea><small class="pci-muted">Rich text field. Formatting is converted into Shopify rich-text JSON when saved.</small></div>`;
+    }
+    if (/multi_line_text_field|json/.test(type)) {
+      return `<textarea id="${id}" class="pci-input pci-textarea" ${common} placeholder="${placeholder}">${esc(value)}</textarea>`;
+    }
+    if (compound === 'core.sourness' || compound === 'core.sweetness') {
+      return `<select id="${id}" class="pci-input" ${common}><option value=""></option>${[1,2,3,4,5].map((n)=>`<option value="${n}" ${String(value)===String(n)?'selected':''}>${n}</option>`).join('')}</select>`;
+    }
+    return `<input id="${id}" class="pci-input" ${common} value="${esc(value)}" placeholder="${placeholder}">`;
+  }
+
+  function richTextDisplayValue(value = '') {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+      const parsed = JSON.parse(raw);
+      const parts = [];
+      const walk = (node) => {
+        if (!node) return;
+        if (node.type === 'text' && node.value) parts.push(node.value);
+        (node.children || []).forEach(walk);
+      };
+      walk(parsed);
+      return parts.join('\n');
+    } catch (_) {
+      return raw.replace(/<[^>]+>/g, '').trim();
+    }
+  }
+
+  function plainTextToShopifyRichText(value = '') {
+    const lines = String(value || '').split(/\n{2,}/).map((line) => line.trim()).filter(Boolean);
+    return JSON.stringify({ type: 'root', children: (lines.length ? lines : ['']).map((line) => ({ type: 'paragraph', children: [{ type: 'text', value: line }] })) });
+  }
+
+  function syncRichTextMetafield(id) {
+    const hidden = byId(id);
+    const editor = byId(`${id}-editor`);
+    if (!hidden || !editor) return;
+    hidden.value = plainTextToShopifyRichText(editor.innerText || editor.textContent || '');
+  }
+
+  function richTextCommand(id, command) {
+    const editor = byId(`${id}-editor`);
+    if (!editor) return;
+    editor.focus();
+    try { document.execCommand(command, false, null); } catch (_) {}
+    syncRichTextMetafield(id);
+  }
+
+  function groupMetafieldDefinitions(definitions = []) {
+    const groups = [
+      { key: 'core', label: 'Core drink profile', match: (d) => d.namespace === 'core' },
+      { key: 'product', label: 'Product details', match: (d) => /product|custom|details|spec|brand|design|material|serv|caffeine|sugar|calorie|ingredient|shipping/i.test(`${d.namespace}.${d.key}.${d.name}`) && d.namespace !== 'core' },
+      { key: 'marketing', label: 'Marketing / Google / SEO', match: (d) => /google|seo|offer|badge|headline|featured|collection|collab/i.test(`${d.namespace}.${d.key}.${d.name}`) && d.namespace !== 'core' },
+    ];
+    const used = new Set();
+    const result = groups.map((group) => {
+      const items = definitions.filter((d) => group.match(d));
+      items.forEach((d) => used.add(`${d.namespace}.${d.key}`));
+      return { ...group, items };
+    }).filter((group) => group.items.length);
+    const other = definitions.filter((d) => !used.has(`${d.namespace}.${d.key}`));
+    if (other.length) result.push({ key: 'other', label: 'Other metafields', items: other });
+    return result;
   }
 
   function renderMetafieldFields(prefix, draft = {}) {
@@ -196,29 +303,28 @@
       target.innerHTML = '<div class="pci-status warn">No product metafield definitions could be loaded yet. Core G Fuel profile fields are still supported server-side.</div>';
       return;
     }
-    target.innerHTML = definitions.map((definition) => {
+    const groups = groupMetafieldDefinitions(definitions);
+    target.innerHTML = groups.map((group, idx) => `<details class="pci-mf-group" ${idx < 2 ? 'open' : ''}><summary>${esc(group.label)} <span>${group.items.length}</span></summary><div class="pci-metafield-grid">${group.items.map((definition) => {
       const compound = `${definition.namespace}.${definition.key}`;
       const current = values.get(compound) || {};
       const isCore = ['core.formula_version','core.grouped_profiles','core.sourness','core.sweetness','core.flavour_profile'].includes(compound);
-      const formulaHelp = compound === 'core.formula_version' ? '<small class="pci-muted">This field is used by SKU/settings rules for product-line logic such as EN / EN2.</small>' : (['core.sourness','core.sweetness'].includes(compound) ? '<small class="pci-muted">Use a 1-5 gauge. 1 = very low, 3 = medium, 5 = very high.</small>' : '');
-      return `<div class="pci-mf-field ${isCore ? 'core' : ''}">
-        <label class="pci-label" for="${compoundId(prefix, definition.namespace, definition.key)}">${esc(definition.name || compound)} <span>${esc(compound)}</span></label>
-        <input id="${compoundId(prefix, definition.namespace, definition.key)}" class="pci-input" data-pci-mf-prefix="${prefix}" data-namespace="${esc(definition.namespace)}" data-key="${esc(definition.key)}" data-type="${esc(definition.type || 'single_line_text_field')}" data-label="${esc(definition.name || '')}" value="${esc(current.value || '')}" placeholder="${esc(definition.description || definition.help || '')}">
-        ${formulaHelp}
-      </div>`;
-    }).join('');
+      const formulaHelp = compound === 'core.formula_version' ? '<small class="pci-muted">Used by SKU/settings rules for product-line logic such as EN / EN2.</small>' : (['core.sourness','core.sweetness'].includes(compound) ? '<small class="pci-muted">1-5 gauge. 1 = very low, 3 = medium, 5 = very high.</small>' : '');
+      return `<div class="pci-mf-field ${isCore ? 'core' : ''}"><label class="pci-label" for="${compoundId(prefix, definition.namespace, definition.key)}">${esc(definition.name || compound)} <span>${esc(compound)} · ${esc(readableMetafieldType(definition.type))}</span></label>${inputForMetafield(prefix, definition, current, compound)}${formulaHelp}</div>`;
+    }).join('')}</div></details>`).join('');
   }
 
   function fillDraftForm(prefix, draft = {}) {
     const images = imageSrcList(draft);
     const firstImage = images[0] || draft.imageUrl || '';
-    [['title', draft.title], ['handle', draft.handle], ['vendor', draft.vendor], ['type', draft.productType], ['handle-format', draft.handleFormat || state.settings?.handleRules?.format || ''], ['handle-location', draft.handleLocation || state.settings?.handleRules?.location || ''], ['price', draft.price], ['compare', draft.compareAtPrice], ['cost', draft.cost], ['sku', draft.sku], ['barcode', draft.barcode], ['weight', draft.weight], ['weight-unit', draft.weightUnit || 'g'], ['source', draft.sourceUrl], ['description', (draft.description || draft.descriptionHtml || '').replace(/<[^>]+>/g, '')], ['seo-title', seoTitleFromDraft(draft)], ['seo-description', seoDescriptionFromDraft(draft)], ['tags', Array.isArray(draft.tags) ? draft.tags.join(', ') : draft.tags], ['image', firstImage], ['images', images.join('\n')]].forEach(([key, value]) => {
+    [['title', draft.title], ['handle', stripProductsPrefix(draft.handle)], ['vendor', draft.vendor], ['type', draft.productType], ['category', draft.productCategory || draft.category || ''], ['theme-template', draft.themeTemplate || draft.templateSuffix || ''], ['collections', Array.isArray(draft.collections) ? draft.collections.join(', ') : (draft.collections || draft.collectionHandles || '')], ['handle-format', draft.handleFormat || state.settings?.handleRules?.format || ''], ['handle-location', draft.handleLocation || state.settings?.handleRules?.location || ''], ['price', draft.price], ['compare', draft.compareAtPrice], ['cost', draft.cost], ['sku', draft.sku], ['barcode', draft.barcode], ['weight', draft.weight], ['weight-unit', draft.weightUnit || 'g'], ['source', draft.sourceUrl], ['description', (draft.description || draft.descriptionHtml || '').replace(/<[^>]+>/g, '')], ['seo-title', seoTitleFromDraft(draft)], ['seo-description', seoDescriptionFromDraft(draft)], ['tags', Array.isArray(draft.tags) ? draft.tags.join(', ') : draft.tags], ['image', firstImage], ['images', images.join('\n')]].forEach(([key, value]) => {
       const el = byId(`${prefix}-${key}`);
       if (el) el.value = value || '';
     });
-    renderTagChips(prefix);
+    renderTagChips(prefix, draft);
     renderMetafieldFields(prefix, draft);
     renderImagePicker(prefix, images);
+    renderSeoPreview(prefix);
+    renderCollectionChips(prefix);
   }
 
   function renderDraft(prefix, draft, targetId) {
@@ -228,7 +334,50 @@
     const target = byId(targetId);
     if (!target) return;
     const thumbs = images.length ? `<div class="pci-thumb-row">${images.slice(0, 12).map((src) => `<img src="${esc(src)}" alt="">`).join('')}${images.length > 12 ? `<span class="pci-pill">+${images.length - 12} more</span>` : ''}</div>` : '<div class="pci-line-img"></div>';
-    target.innerHTML = `<div class="pci-draft"><div>${thumbs}</div><div><h3>${esc(draft.title || 'Product draft')}</h3><p class="pci-muted">Review price, compare-at price, handle, SKU, tags, images and metafields, then create as a Shopify draft product. Nothing is published automatically.</p><p class="pci-muted"><strong>Images:</strong> ${parseImageUrls(prefix).length || 0} selected of ${images.length || 0} found. Only selected images will be sent to Shopify.</p>${draft.enrichment?.aiNotes ? `<p class="pci-muted"><strong>AI note:</strong> ${esc(draft.enrichment.aiNotes)}</p>` : ''}<div class="pci-actions"><button class="secondary-btn" type="button" onclick="window.ProductCreationImportAdmin.suggestProfile('${prefix}')">Generate tags, SKU & metafields</button><button class="primary-btn" type="button" onclick="window.ProductCreationImportAdmin.createCurrentDraft('${prefix}')">Create Shopify draft product</button></div></div></div>`;
+    target.innerHTML = `<div class="pci-draft"><div>${thumbs}</div><div><h3>${esc(draft.title || 'Product draft')}</h3><p class="pci-muted">Review the Shopify-style draft below. Tags are not applied unless you click them. Vendor, product type, template and collections can be prefilled by rules.</p><p class="pci-muted"><strong>Images:</strong> ${parseImageUrls(prefix).length || 0} selected of ${images.length || 0} found. Only selected images will be sent to Shopify.</p>${draft.enrichment?.aiNotes ? `<p class="pci-muted"><strong>AI note:</strong> ${esc(draft.enrichment.aiNotes)}</p>` : ''}<div class="pci-actions"><button class="secondary-btn" type="button" onclick="window.ProductCreationImportAdmin.suggestProfile('${prefix}')">Suggest SKU, organisation & metafields</button><button class="primary-btn" type="button" onclick="window.ProductCreationImportAdmin.createCurrentDraft('${prefix}')">Create Shopify draft product</button></div></div></div>`;
+  }
+
+  function seoExamplesForPrefix(prefix) {
+    const type = String(byId(`${prefix}-type`)?.value || '').toLowerCase();
+    const vendor = String(byId(`${prefix}-vendor`)?.value || '').toLowerCase();
+    const title = String(byId(`${prefix}-title`)?.value || '').toLowerCase();
+    const examples = state.metadata?.seoExamples || [];
+    return examples.filter((item) => {
+      const typeHit = type && String(item.productType || '').toLowerCase() === type;
+      const vendorHit = vendor && String(item.vendor || '').toLowerCase() === vendor;
+      const titleTokens = title.split(/\s+/).filter((word) => word.length > 4);
+      const titleHit = titleTokens.some((word) => String(item.title || '').toLowerCase().includes(word));
+      return typeHit || titleHit || (vendorHit && type);
+    }).slice(0, 5).concat(examples.slice(0, 3)).filter((item, index, arr) => arr.findIndex((x) => x.handle === item.handle) === index).slice(0, 5);
+  }
+
+  function renderSeoPreview(prefix) {
+    const target = byId(`${prefix}-seo-preview`);
+    if (!target) return;
+    const title = byId(`${prefix}-seo-title`)?.value || seoTitleFromDraft(draftFromForm(prefix));
+    const description = byId(`${prefix}-seo-description`)?.value || seoDescriptionFromDraft(draftFromForm(prefix));
+    const handle = safeHandlePreview(prefix);
+    const pattern = state.settings?.handleRules?.pattern || '{vendor}-{title}-{format}-{location}';
+    const examples = seoExamplesForPrefix(prefix);
+    target.innerHTML = `<div class="pci-seo-preview"><small>Gaming Nectar</small><div class="pci-seo-url">${esc(currentStorefrontBase())}${esc(handle)}</div><h4>${esc(title || 'Page title')}</h4><p>${esc(description || 'Meta description')}</p></div><div class="pci-seo-guidance"><strong>Handle format rule</strong><code>${esc(pattern)}</code>${examples.length ? `<strong>Similar live product formats</strong><div class="pci-seo-examples">${examples.map((item)=>`<div><span>${esc(item.title)}</span><small>/products/${esc(item.handle || '')}${item.seoTitle ? ` · ${esc(item.seoTitle)}` : ''}</small></div>`).join('')}</div>` : '<small class="pci-muted">No similar product examples loaded yet.</small>'}</div>`;
+  }
+
+  function renderCollectionChips(prefix) {
+    const target = byId(`${prefix}-collection-suggestions`);
+    if (!target) return;
+    const collections = state.metadata?.collections || [];
+    if (!collections.length) { target.innerHTML = '<small class="pci-muted">No collections loaded yet.</small>'; return; }
+    const title = String(byId(`${prefix}-title`)?.value || '').toLowerCase();
+    const type = String(byId(`${prefix}-type`)?.value || '').toLowerCase();
+    const ranked = collections.map((collection) => {
+      const text = `${collection.title || ''} ${collection.handle || ''}`.toLowerCase();
+      let score = 0;
+      if (type && text.includes(type)) score += 4;
+      title.split(/\s+/).filter((w)=>w.length>3).forEach((w)=>{ if(text.includes(w)) score += 1; });
+      if (/g\s*fuel|gfuel/i.test(`${byId(`${prefix}-vendor`)?.value || ''}`) && /g\s*fuel|gfuel/i.test(text)) score += 3;
+      return { collection, score };
+    }).sort((a,b)=>b.score-a.score).slice(0, 16);
+    target.innerHTML = `<p class="pci-form-help">Collections can be prefilled by rules, or click to add one. Smart collections may auto-include products based on their own Shopify rules.</p><div class="pci-chip-row">${ranked.map(({collection}) => `<button type="button" class="pci-chip" onclick="window.ProductCreationImportAdmin.addCollection('${prefix}', '${esc(String(collection.handle || collection.title || collection.id).replace(/'/g, "\\'"))}')">${esc(collection.title || collection.handle || collection.id)}</button>`).join('')}</div>`;
   }
 
   async function fileToCompressedDataUrl(file) {
@@ -402,7 +551,7 @@
       state.settings = state.metadata.settings || state.settings;
       renderDataLists();
       if (byId('pci-invoice-currency') && state.settings?.defaultCurrency) byId('pci-invoice-currency').value = state.settings.defaultCurrency;
-      ['pci-url','pci-manual'].forEach((prefix) => { renderTagChips(prefix); renderMetafieldFields(prefix, draftFromForm(prefix)); });
+      ['pci-url','pci-manual'].forEach((prefix) => { renderTagChips(prefix); renderMetafieldFields(prefix, draftFromForm(prefix)); renderSeoPreview(prefix); renderCollectionChips(prefix); });
       renderSettings();
     } catch (error) {
       state.metadata = { tags: [], vendors: [], metafieldDefinitions: [] };
@@ -445,7 +594,7 @@
       <label>When field<input class="pci-input pci-conditional-rule" data-field="whenField" value="${esc(rule.whenField || 'title')}" placeholder="title, vendor, tags, metafield:core.formula_version"></label>
       <label>Operator<select class="pci-input pci-conditional-rule" data-field="operator"><option ${rule.operator === 'contains' ? 'selected' : ''}>contains</option><option ${rule.operator === 'equals' ? 'selected' : ''}>equals</option><option ${rule.operator === 'starts_with' ? 'selected' : ''}>starts_with</option><option ${rule.operator === 'ends_with' ? 'selected' : ''}>ends_with</option><option ${rule.operator === 'exists' ? 'selected' : ''}>exists</option></select></label>
       <label>Value<input class="pci-input pci-conditional-rule" data-field="value" value="${esc(rule.value || '')}"></label>
-      <label>Action<select class="pci-input pci-conditional-rule" data-field="actionType"><option value="add_tag" ${rule.actionType === 'add_tag' ? 'selected' : ''}>add_tag</option><option value="set_product_type" ${rule.actionType === 'set_product_type' ? 'selected' : ''}>set_product_type</option><option value="set_vendor" ${rule.actionType === 'set_vendor' ? 'selected' : ''}>set_vendor</option><option value="set_metafield" ${rule.actionType === 'set_metafield' ? 'selected' : ''}>set_metafield</option><option value="title_prefix" ${rule.actionType === 'title_prefix' ? 'selected' : ''}>title_prefix</option><option value="title_suffix" ${rule.actionType === 'title_suffix' ? 'selected' : ''}>title_suffix</option></select></label>
+      <label>Action<select class="pci-input pci-conditional-rule" data-field="actionType"><option value="recommend_tag" ${rule.actionType === 'recommend_tag' || rule.actionType === 'add_tag' ? 'selected' : ''}>recommend tag for click-approval</option><option value="set_product_type" ${rule.actionType === 'set_product_type' ? 'selected' : ''}>set product type</option><option value="set_vendor" ${rule.actionType === 'set_vendor' ? 'selected' : ''}>set vendor</option><option value="set_theme_template" ${rule.actionType === 'set_theme_template' ? 'selected' : ''}>set theme template</option><option value="add_collection" ${rule.actionType === 'add_collection' ? 'selected' : ''}>add collection</option><option value="set_metafield" ${rule.actionType === 'set_metafield' ? 'selected' : ''}>set metafield</option><option value="title_prefix" ${rule.actionType === 'title_prefix' ? 'selected' : ''}>title prefix</option><option value="title_suffix" ${rule.actionType === 'title_suffix' ? 'selected' : ''}>title suffix</option></select></label>
       <label>Action target<input class="pci-input pci-conditional-rule" data-field="actionTarget" value="${esc(rule.actionTarget || '')}" placeholder="core.formula_version"></label>
       <label>Action value<input class="pci-input pci-conditional-rule" data-field="actionValue" value="${esc(rule.actionValue || '')}"></label>
       <label class="pci-check"><input type="checkbox" class="pci-conditional-rule" data-field="enabled" ${rule.enabled === false ? '' : 'checked'}> Enabled</label>
@@ -531,7 +680,7 @@
 
   function addSkuRule() { state.settings = { ...(state.settings || {}), skuRules: [...(state.settings?.skuRules || []), { enabled: true, template: '{vendorCode}-{lineCode}-{titleCode}' }] }; renderSettings(); }
   function removeSkuRule(index) { state.settings = collectSettings(); state.settings.skuRules.splice(index, 1); renderSettings(); }
-  function addConditionalRule() { state.settings = { ...(state.settings || {}), conditionalRules: [...(state.settings?.conditionalRules || []), { enabled: true, whenField: 'title', operator: 'contains', actionType: 'add_tag' }] }; renderSettings(); }
+  function addConditionalRule() { state.settings = { ...(state.settings || {}), conditionalRules: [...(state.settings?.conditionalRules || []), { enabled: true, whenField: 'title', operator: 'contains', actionType: 'recommend_tag' }] }; renderSettings(); }
   function removeConditionalRule(index) { state.settings = collectSettings(); state.settings.conditionalRules.splice(index, 1); renderSettings(); }
   function addMetafieldRule() { state.settings = { ...(state.settings || {}), metafieldMappingRules: [...(state.settings?.metafieldMappingRules || []), { enabled: true, mode: 'fixed', target: 'core.flavour_profile' }] }; renderSettings(); }
   function removeMetafieldRule(index) { state.settings = collectSettings(); state.settings.metafieldMappingRules.splice(index, 1); renderSettings(); }
@@ -555,8 +704,8 @@
     try {
       const data = await api('/profile/suggest', { method: 'POST', body: JSON.stringify({ draft }) });
       const suggestion = data.suggestion || {};
-      fillDraftForm(prefix, { ...draft, title: suggestion.title || draft.title, handle: suggestion.handle || draft.handle, vendor: suggestion.vendor || draft.vendor, productType: suggestion.productType || draft.productType, sku: suggestion.sku || draft.sku, barcode: suggestion.barcode || draft.barcode, weight: suggestion.weight || draft.weight, weightUnit: suggestion.weightUnit || draft.weightUnit, seo: suggestion.seo || draft.seo, tags: suggestion.tags || draft.tags, metafields: suggestion.metafields || draft.metafields });
-      if (!opts.quiet) setStatus(statusId, `Profile suggestions applied.${suggestion.existingProfileMatchedProducts ? ` Based on ${suggestion.existingProfileMatchedProducts} similar product(s).` : ''}${suggestion.aiNotes ? `<br>${esc(suggestion.aiNotes)}` : ''}`, 'ok');
+      fillDraftForm(prefix, { ...draft, title: suggestion.title || draft.title, handle: suggestion.handle || draft.handle, vendor: suggestion.vendor || draft.vendor, productType: suggestion.productType || draft.productType, productCategory: suggestion.productCategory || draft.productCategory, themeTemplate: suggestion.themeTemplate || draft.themeTemplate, collections: suggestion.collections || draft.collections, sku: suggestion.sku || draft.sku, barcode: suggestion.barcode || draft.barcode, weight: suggestion.weight || draft.weight, weightUnit: suggestion.weightUnit || draft.weightUnit, seo: suggestion.seo || draft.seo, tags: draft.tags || [], recommendedTags: suggestion.recommendedTags || suggestion.tags || [], metafields: suggestion.metafields || draft.metafields, enrichment: { ...(suggestion || {}), recommendedTags: suggestion.recommendedTags || suggestion.tags || [] } });
+      if (!opts.quiet) setStatus(statusId, `Suggestions applied. Tags were only suggested — click the tag chips to add them.${suggestion.existingProfileMatchedProducts ? ` Based on ${suggestion.existingProfileMatchedProducts} similar product(s).` : ''}${suggestion.aiNotes ? `<br>${esc(suggestion.aiNotes)}` : ''}`, 'ok');
     } catch (error) {
       if (!opts.quiet) setStatus(statusId, esc(error.message || 'Profile suggestion failed.'), 'err');
     }
@@ -614,6 +763,7 @@
 
   async function createCurrentDraft(prefix) {
     const draft = draftFromForm(prefix);
+    draft.handle = stripProductsPrefix(draft.handle);
     if (!draft.title) return setStatus(prefix === 'pci-url' ? 'pci-url-status' : 'pci-manual-status', 'Title is required.', 'warn');
     const statusId = prefix === 'pci-url' ? 'pci-url-status' : 'pci-manual-status';
     setStatus(statusId, `Creating Shopify draft product with ${draft.images.length} image(s)…`);
@@ -622,8 +772,8 @@
       if (state.latestImport?._id && prefix === 'pci-url') payload.importId = state.latestImport._id;
       const data = await api('/shopify/create', { method: 'POST', body: JSON.stringify(payload) });
       const link = shopifyProductUrl(data.product?.id);
-      const warnings = [data.product?.imageCreateWarning, data.product?.metafieldCreateWarning, data.product?.inventoryCostWarning, data.product?.fileCreateWarning].filter(Boolean).map((msg) => `<br>${esc(msg)}`).join('');
-      setStatus(statusId, `Created draft product: <strong>${esc(data.product?.title || draft.title)}</strong>${link ? ` · <a href="${esc(link)}" target="_blank">Open in Shopify ↗</a>` : ''}${warnings}${data.product?.attachedImageCount !== undefined ? `<br>Attached ${esc(data.product.attachedImageCount || 0)} of ${esc(data.product.imageCount || 0)} selected image(s).` : ''}${data.product?.filesCreatedCount ? `<br>Copied ${esc(data.product.filesCreatedCount)} image(s) to Shopify Files.` : ''}`, warnings ? 'warn' : 'ok');
+      const warnings = [data.product?.imageCreateWarning, data.product?.metafieldCreateWarning, data.product?.collectionAttachWarning, data.product?.inventoryCostWarning, data.product?.fileCreateWarning].filter(Boolean).map((msg) => `<br>${esc(msg)}`).join('');
+      setStatus(statusId, `Created draft product: <strong>${esc(data.product?.title || draft.title)}</strong>${link ? ` · <a href="${esc(link)}" target="_blank">Open in Shopify ↗</a>` : ''}${warnings}${data.product?.attachedImageCount !== undefined ? `<br>Attached ${esc(data.product.attachedImageCount || 0)} of ${esc(data.product.imageCount || 0)} selected image(s).` : ''}${data.product?.filesCreatedCount ? `<br>Copied ${esc(data.product.filesCreatedCount)} image(s) to Shopify Files.` : ''}${data.product?.attachedCollectionCount ? `<br>Attached to ${esc(data.product.attachedCollectionCount)} collection(s).` : ''}`,  warnings ? 'warn' : 'ok');
       state.historyLoaded = false;
     } catch (error) { setStatus(statusId, esc(error.message || 'Product creation failed.'), 'err'); }
   }
@@ -748,8 +898,8 @@
       const data = await api('/shopify/create', { method: 'POST', body: JSON.stringify({ importId: state.latestImport._id, lineId: line.lineId }) });
       state.latestImport = data.import;
       renderLines(data.import);
-      const warnings = [data.product?.imageCreateWarning, data.product?.metafieldCreateWarning, data.product?.inventoryCostWarning, data.product?.fileCreateWarning].filter(Boolean).map((msg) => `<br>${esc(msg)}`).join('');
-      setStatus('pci-invoice-status', `Created Shopify draft product: <strong>${esc(data.product?.title || line.title)}</strong>${warnings}${data.product?.attachedImageCount !== undefined ? `<br>Attached ${esc(data.product.attachedImageCount || 0)} of ${esc(data.product.imageCount || 0)} selected image(s).` : ''}${data.product?.filesCreatedCount ? `<br>Copied ${esc(data.product.filesCreatedCount)} image(s) to Shopify Files.` : ''}`, warnings ? 'warn' : 'ok');
+      const warnings = [data.product?.imageCreateWarning, data.product?.metafieldCreateWarning, data.product?.collectionAttachWarning, data.product?.inventoryCostWarning, data.product?.fileCreateWarning].filter(Boolean).map((msg) => `<br>${esc(msg)}`).join('');
+      setStatus('pci-invoice-status', `Created Shopify draft product: <strong>${esc(data.product?.title || line.title)}</strong>${warnings}${data.product?.attachedImageCount !== undefined ? `<br>Attached ${esc(data.product.attachedImageCount || 0)} of ${esc(data.product.imageCount || 0)} selected image(s).` : ''}${data.product?.filesCreatedCount ? `<br>Copied ${esc(data.product.filesCreatedCount)} image(s) to Shopify Files.` : ''}${data.product?.attachedCollectionCount ? `<br>Attached to ${esc(data.product.attachedCollectionCount)} collection(s).` : ''}`,  warnings ? 'warn' : 'ok');
       state.historyLoaded = false;
     } catch (error) { setStatus('pci-invoice-status', esc(error.message || 'Create failed.'), 'err'); }
   }
@@ -871,8 +1021,8 @@
     byId('pci-create-manual')?.addEventListener('click', createManualDraft);
     byId('pci-url-suggest-profile')?.addEventListener('click', () => suggestProfile('pci-url'));
     byId('pci-manual-suggest-profile')?.addEventListener('click', () => suggestProfile('pci-manual'));
-    byId('pci-url-tags')?.addEventListener('change', () => suggestProfile('pci-url', { quiet: true }));
-    byId('pci-manual-tags')?.addEventListener('change', () => suggestProfile('pci-manual', { quiet: true }));
+    byId('pci-url-tags')?.addEventListener('change', () => { renderTagChips('pci-url'); renderSeoPreview('pci-url'); });
+    byId('pci-manual-tags')?.addEventListener('change', () => { renderTagChips('pci-manual'); renderSeoPreview('pci-manual'); });
     byId('pci-history-refresh')?.addEventListener('click', () => loadHistory(true));
     byId('pci-add-sku-rule')?.addEventListener('click', addSkuRule);
     byId('pci-add-conditional-rule')?.addEventListener('click', addConditionalRule);
@@ -883,9 +1033,12 @@
     ['pci-url','pci-manual'].forEach((prefix) => {
       byId(`${prefix}-images`)?.addEventListener('input', () => syncImagePickerFromTextarea(prefix));
       byId(`${prefix}-find-barcode`)?.addEventListener('click', () => findBarcode(prefix));
+      ['title','vendor','type','handle','handle-format','handle-location','seo-title','seo-description','collections'].forEach((key) => {
+        byId(`${prefix}-${key}`)?.addEventListener('input', () => { renderSeoPreview(prefix); renderCollectionChips(prefix); });
+      });
     });
   }
 
-  window.ProductCreationImportAdmin = { init, scanUrl, analyseInvoice, createCurrentDraft, createManualDraft, searchForLine, confirmSuggestedLine, assignLine, assignLineFromModal, openLineCreateMenu, prefillUrlFromLine, prefillManualFromLine, createLine, setLinePoTreatment, setLinePoTreatmentById, createPurchaseOrderDraft, formalisePurchaseOrderDraft, loadHistory, loadPurchaseOrders, addTag, suggestProfile, loadSettings, saveSettings, addSkuRule, removeSkuRule, addConditionalRule, removeConditionalRule, addMetafieldRule, removeMetafieldRule, closeSearchModal, closePromptModal, runModalProductSearch, createPurchaseOrderPrompt, copyPurchaseOrderPrompt, toggleImageSelection, toggleImageSelectionFromCard, selectAllImages, clearImages, findBarcode };
+  window.ProductCreationImportAdmin = { init, scanUrl, analyseInvoice, createCurrentDraft, createManualDraft, searchForLine, confirmSuggestedLine, assignLine, assignLineFromModal, openLineCreateMenu, prefillUrlFromLine, prefillManualFromLine, createLine, setLinePoTreatment, setLinePoTreatmentById, createPurchaseOrderDraft, formalisePurchaseOrderDraft, loadHistory, loadPurchaseOrders, addTag, suggestProfile, loadSettings, saveSettings, addSkuRule, removeSkuRule, addConditionalRule, removeConditionalRule, addMetafieldRule, removeMetafieldRule, closeSearchModal, closePromptModal, runModalProductSearch, createPurchaseOrderPrompt, copyPurchaseOrderPrompt, toggleImageSelection, toggleImageSelectionFromCard, selectAllImages, clearImages, findBarcode, addCollection, renderSeoPreview, syncRichTextMetafield, richTextCommand };
   document.addEventListener('DOMContentLoaded', init);
 })();

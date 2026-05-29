@@ -408,3 +408,16 @@ URL import now scores Product JSON-LD blocks against the actual source URL, page
 SEO title and meta description are now editable on URL Import and Manual Create. The backend also validates SEO relevance against the current product title and replaces unrelated SEO text before creating the Shopify draft product.
 
 Shopify draft product creation now explicitly sets the product search engine listing fields from the current draft rather than relying on copied profile data or Shopify defaults.
+
+## v41 product editor layout and approval guardrails
+
+- URL Import and Manual Create now use a Shopify-style full-width product editor: title, description, media, pricing, inventory/shipping, product organisation, metafields, and search engine listing.
+- Tags are no longer applied automatically by extraction, AI, or conditional rules. Suggested tags are shown as click-to-add chips and only selected tags are sent to Shopify.
+- Vendor, product type, theme template, and collections can still be filled by rules. Collections are attached after product creation where Shopify allows manual custom-collection assignment.
+- Search engine listing now includes a live preview, current handle pattern, and examples from existing Shopify products so the merchant can compare URL/title format before creating the draft.
+- Product metafields are grouped into expandable sections. `rich_text_field` metafields use an editor and are converted to Shopify rich-text JSON before saving.
+- Image selection remains click-based; only selected images are attached to the Shopify draft product.
+
+Notes:
+- Shopify smart collections are rule-based and cannot be manually joined through the Collects API. If a selected collection is smart, the draft product will still be created and the app will show a warning.
+- Shopify native product category/taxonomy assignment is not handled through the current REST create flow; the importer stores the category value for mapping logic and uses product type/template/collections for creation.

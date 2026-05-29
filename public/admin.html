@@ -1456,41 +1456,40 @@
           </div>
           <div class="pci-card">
             <h3>Connection status</h3>
-            <div id="pci-health" class="pci-status">Loading product import status…</div><datalist id="pci-tag-list"></datalist><datalist id="pci-vendor-list"></datalist><datalist id="pci-metafield-list"></datalist>
+            <div id="pci-health" class="pci-status">Loading product import status…</div><datalist id="pci-tag-list"></datalist><datalist id="pci-vendor-list"></datalist><datalist id="pci-metafield-list"></datalist><datalist id="pci-collection-list"></datalist><datalist id="pci-template-list"></datalist>
           </div>
         </div>
 
-        <div class="pci-card pci-pane active" id="pci-pane-url">
-          <h3>URL import</h3>
-          <p>Paste a public supplier/product page. The app extracts page data, suggests an optimised Shopify handle, lets you reuse previous tags, and pre-fills product metafields before draft creation.</p>
-          <label class="pci-label" for="pci-url-input">External product URL</label>
-          <input id="pci-url-input" class="pci-input" placeholder="https://supplier.example/products/example-product" />
-          <div class="pci-actions"><button id="pci-scan-url" class="primary-btn" type="button">Scan product URL</button></div>
-          <div id="pci-url-status" class="pci-status">Waiting for a product URL.</div>
-          <div class="pci-form-grid" style="margin-top:18px;">
-            <div><label class="pci-label">Title</label><input id="pci-url-title" class="pci-input"></div>
-            <div><label class="pci-label">Vendor / Brand</label><input id="pci-url-vendor" class="pci-input"></div>
-            <div><label class="pci-label">Optimised URL / Handle</label><input id="pci-url-handle" class="pci-input" placeholder="sonics-peach-rings"></div>
-            <div><label class="pci-label">Product Type / Category</label><input id="pci-url-type" class="pci-input"></div>
-            <div><label class="pci-label">URL format token</label><input id="pci-url-handle-format" class="pci-input" placeholder="tub"></div>
-            <div><label class="pci-label">URL location token</label><input id="pci-url-handle-location" class="pci-input" placeholder="uk"></div>
-            <div><label class="pci-label">Retail Price</label><input id="pci-url-price" class="pci-input"></div>
-            <div><label class="pci-label">Compare-at Price</label><input id="pci-url-compare" class="pci-input"></div>
-            <div><label class="pci-label">Price Paid / Cost</label><input id="pci-url-cost" class="pci-input"></div>
-            <div><label class="pci-label">SKU</label><input id="pci-url-sku" class="pci-input"></div>
-            <div><label class="pci-label">Barcode / GTIN</label><div class="pci-inline-action"><input id="pci-url-barcode" class="pci-input"><button id="pci-url-find-barcode" class="secondary-btn" type="button">Find barcode</button></div></div>
-            <div><label class="pci-label">Product weight</label><div class="pci-weight-row"><input id="pci-url-weight" class="pci-input" placeholder="280"><select id="pci-url-weight-unit" class="pci-input"><option>g</option><option>kg</option><option>oz</option><option>lb</option></select></div></div>
-            <div><label class="pci-label">Featured Image URL</label><input id="pci-url-image" class="pci-input"></div>
-            <div class="full"><label class="pci-label">Selected image URLs</label><textarea id="pci-url-images" class="pci-textarea" placeholder="Only these selected image URLs will be imported."></textarea><p class="pci-form-help">The scan may find site logos/variant images. Select the product images you actually want below.</p><div id="pci-url-image-picker" class="pci-image-picker"></div></div>
-            <div class="full"><label class="pci-label">Source URL</label><input id="pci-url-source" class="pci-input"></div>
-            <div class="full"><label class="pci-label">Tags</label><input id="pci-url-tags" class="pci-input" list="pci-tag-list" placeholder="supplier-import, url-import"><div id="pci-url-tag-suggestions" class="pci-tag-suggestions"></div><p class="pci-form-help">Click previously used tags to keep this product aligned with existing collections and product-line logic.</p></div>
-            <div class="full"><label class="pci-label">Description</label><textarea id="pci-url-description" class="pci-textarea"></textarea></div>
-            <div class="full"><div class="pci-section-subtitle">Search engine listing</div><p class="pci-form-help">SEO is generated from the current product title/type only. It will not copy unrelated SEO from similar products.</p></div>
-            <div><label class="pci-label">SEO page title</label><input id="pci-url-seo-title" class="pci-input" maxlength="70"></div>
-            <div><label class="pci-label">SEO meta description</label><textarea id="pci-url-seo-description" class="pci-textarea" maxlength="160"></textarea></div>
-            <div class="full"><div class="pci-section-subtitle">Product metafields</div><p class="pci-form-help">All product metafield definitions are shown here when Shopify exposes them. Core G Fuel profile fields are always included.</p><div id="pci-url-metafields" class="pci-metafields"></div></div>
+        <div class="pci-card pci-pane active pci-full-product-pane" id="pci-pane-url">
+          <div class="pci-pane-head">
+            <div>
+              <h3>URL import</h3>
+              <p>Paste a public supplier/product page. The app extracts page data, lets you pick media, previews SEO/URL format, and creates an unpublished Shopify draft product.</p>
+            </div>
+            <div class="pci-actions compact"><button id="pci-url-suggest-profile" class="secondary-btn" type="button">Suggest SKU, organisation &amp; metafields</button><button class="primary-btn" type="button" onclick="window.ProductCreationImportAdmin.createCurrentDraft('pci-url')">Create Shopify draft product</button></div>
           </div>
-          <div class="pci-actions"><button id="pci-url-suggest-profile" class="secondary-btn" type="button">Generate tags &amp; metafields</button></div><div id="pci-url-draft"></div>
+          <div class="pci-url-scan-bar">
+            <label class="pci-label" for="pci-url-input">External product URL</label>
+            <div class="pci-inline-action"><input id="pci-url-input" class="pci-input" placeholder="https://supplier.example/products/example-product" /><button id="pci-scan-url" class="primary-btn" type="button">Scan product URL</button></div>
+          </div>
+          <div id="pci-url-status" class="pci-status">Waiting for a product URL.</div>
+          <div id="pci-url-draft"></div>
+          <div class="pci-product-editor">
+            <main class="pci-product-main">
+              <section class="pci-editor-card"><h4>Title</h4><input id="pci-url-title" class="pci-input pci-title-input" placeholder="Product title"></section>
+              <section class="pci-editor-card"><h4>Description</h4><textarea id="pci-url-description" class="pci-textarea pci-description-editor" placeholder="Product description"></textarea></section>
+              <section class="pci-editor-card"><div class="pci-editor-card-head"><h4>Media</h4><span class="pci-muted">Click images to include/exclude them. Only selected images are sent to Shopify.</span></div><input id="pci-url-image" class="pci-input pci-hidden-input" aria-hidden="true"><textarea id="pci-url-images" class="pci-textarea pci-hidden-input" aria-hidden="true"></textarea><div id="pci-url-image-picker" class="pci-image-picker"></div></section>
+              <section class="pci-editor-card"><h4>Pricing</h4><div class="pci-form-grid"><div><label class="pci-label">Price</label><input id="pci-url-price" class="pci-input"></div><div><label class="pci-label">Compare-at price</label><input id="pci-url-compare" class="pci-input"></div><div><label class="pci-label">Cost per item / price paid</label><input id="pci-url-cost" class="pci-input"></div></div></section>
+              <section class="pci-editor-card"><h4>Inventory &amp; shipping</h4><div class="pci-form-grid"><div><label class="pci-label">SKU</label><input id="pci-url-sku" class="pci-input"></div><div><label class="pci-label">Barcode / GTIN</label><div class="pci-inline-action"><input id="pci-url-barcode" class="pci-input"><button id="pci-url-find-barcode" class="secondary-btn" type="button">Find barcode</button></div></div><div><label class="pci-label">Product weight</label><div class="pci-weight-row"><input id="pci-url-weight" class="pci-input" placeholder="400"><select id="pci-url-weight-unit" class="pci-input"><option>g</option><option>kg</option><option>oz</option><option>lb</option></select></div></div></div></section>
+              <section class="pci-editor-card"><div class="pci-editor-card-head"><h4>Product metafields</h4><span class="pci-muted">Expandable Shopify metafield groups. Rich text fields use a formatting editor.</span></div><div id="pci-url-metafields" class="pci-metafields"></div></section>
+              <section class="pci-editor-card"><div class="pci-editor-card-head"><h4>Search engine listing</h4><span class="pci-muted">Edit the listing and compare it with the handle format and similar products.</span></div><div id="pci-url-seo-preview"></div><div class="pci-form-grid"><div><label class="pci-label">Page title</label><input id="pci-url-seo-title" class="pci-input" maxlength="70"></div><div><label class="pci-label">URL handle</label><input id="pci-url-handle" class="pci-input" placeholder="my-product-handle"></div><div class="full"><label class="pci-label">Meta description</label><textarea id="pci-url-seo-description" class="pci-textarea" maxlength="160"></textarea></div><div><label class="pci-label">URL format token</label><input id="pci-url-handle-format" class="pci-input" placeholder="tub"></div><div><label class="pci-label">URL location token</label><input id="pci-url-handle-location" class="pci-input" placeholder="uk"></div></div></section>
+            </main>
+            <aside class="pci-product-side">
+              <section class="pci-editor-card"><h4>Product organisation</h4><div class="pci-stack"><div><label class="pci-label">Vendor / Brand</label><input id="pci-url-vendor" class="pci-input" list="pci-vendor-list"></div><div><label class="pci-label">Product type</label><input id="pci-url-type" class="pci-input" placeholder="Lunch Box"></div><div><label class="pci-label">Product category</label><input id="pci-url-category" class="pci-input" placeholder="Shopify category / internal category"></div><div><label class="pci-label">Collections</label><input id="pci-url-collections" class="pci-input" list="pci-collection-list" placeholder="Comma-separated handles or names"><div id="pci-url-collection-suggestions"></div></div><div><label class="pci-label">Theme template</label><input id="pci-url-theme-template" class="pci-input" list="pci-template-list" placeholder="gfuel"></div></div></section>
+              <section class="pci-editor-card"><h4>Tags</h4><input id="pci-url-tags" class="pci-input" list="pci-tag-list" placeholder="Click chips below to add tags"><div id="pci-url-tag-suggestions" class="pci-tag-suggestions"></div></section>
+              <section class="pci-editor-card"><h4>Source</h4><label class="pci-label">Source URL</label><input id="pci-url-source" class="pci-input"></section>
+            </aside>
+          </div>
         </div>
 
         <div class="pci-card pci-pane" id="pci-pane-invoice">
@@ -1511,36 +1510,32 @@
           <div id="pci-invoice-lines" style="margin-top:18px;"></div>
         </div>
 
-        <div class="pci-card pci-pane" id="pci-pane-manual">
-          <h3>Manual create</h3>
-          <p>Create a Shopify draft product directly when invoice/page extraction does not have enough information.</p>
-          <div class="pci-form-grid">
-            <div><label class="pci-label">Title</label><input id="pci-manual-title" class="pci-input"></div>
-            <div><label class="pci-label">Vendor / Brand</label><input id="pci-manual-vendor" class="pci-input"></div>
-            <div><label class="pci-label">Optimised URL / Handle</label><input id="pci-manual-handle" class="pci-input" placeholder="sonics-peach-rings"></div>
-            <div><label class="pci-label">Product Type / Category</label><input id="pci-manual-type" class="pci-input"></div>
-            <div><label class="pci-label">URL format token</label><input id="pci-manual-handle-format" class="pci-input" placeholder="tub"></div>
-            <div><label class="pci-label">URL location token</label><input id="pci-manual-handle-location" class="pci-input" placeholder="uk"></div>
-            <div><label class="pci-label">Retail Price</label><input id="pci-manual-price" class="pci-input"></div>
-            <div><label class="pci-label">Compare-at Price</label><input id="pci-manual-compare" class="pci-input"></div>
-            <div><label class="pci-label">Price Paid / Cost</label><input id="pci-manual-cost" class="pci-input"></div>
-            <div><label class="pci-label">SKU</label><input id="pci-manual-sku" class="pci-input"></div>
-            <div><label class="pci-label">Barcode / GTIN</label><div class="pci-inline-action"><input id="pci-manual-barcode" class="pci-input"><button id="pci-manual-find-barcode" class="secondary-btn" type="button">Find barcode</button></div></div>
-            <div><label class="pci-label">Product weight</label><div class="pci-weight-row"><input id="pci-manual-weight" class="pci-input" placeholder="280"><select id="pci-manual-weight-unit" class="pci-input"><option>g</option><option>kg</option><option>oz</option><option>lb</option></select></div></div>
-            <div><label class="pci-label">Featured Image URL</label><input id="pci-manual-image" class="pci-input"></div>
-            <div class="full"><label class="pci-label">Selected image URLs</label><textarea id="pci-manual-images" class="pci-textarea" placeholder="One selected image URL per line"></textarea><div id="pci-manual-image-picker" class="pci-image-picker"></div></div>
-            <div class="full"><label class="pci-label">Source URL</label><input id="pci-manual-source" class="pci-input"></div>
-            <div class="full"><label class="pci-label">Tags</label><input id="pci-manual-tags" class="pci-input" list="pci-tag-list" placeholder="manual-import, supplier-name"><div id="pci-manual-tag-suggestions" class="pci-tag-suggestions"></div><p class="pci-form-help">Use existing tags to trigger the right product-line metafield defaults.</p></div>
-            <div class="full"><label class="pci-label">Description</label><textarea id="pci-manual-description" class="pci-textarea"></textarea></div>
-            <div class="full"><div class="pci-section-subtitle">Search engine listing</div><p class="pci-form-help">SEO is generated from the current product title/type only. Check this before creating the draft product.</p></div>
-            <div><label class="pci-label">SEO page title</label><input id="pci-manual-seo-title" class="pci-input" maxlength="70"></div>
-            <div><label class="pci-label">SEO meta description</label><textarea id="pci-manual-seo-description" class="pci-textarea" maxlength="160"></textarea></div>
-            <div class="full"><div class="pci-section-subtitle">Product metafields</div><p class="pci-form-help">Core profile fields can be filled by GPT or copied from matching existing products after tags are selected.</p><div id="pci-manual-metafields" class="pci-metafields"></div></div>
+        <div class="pci-card pci-pane pci-full-product-pane" id="pci-pane-manual">
+          <div class="pci-pane-head">
+            <div>
+              <h3>Manual create</h3>
+              <p>Create a Shopify draft product from manually entered details. Layout mirrors Shopify's product editor so the draft is easy to check before creation.</p>
+            </div>
+            <div class="pci-actions compact"><button id="pci-manual-suggest-profile" class="secondary-btn" type="button">Suggest SKU, organisation &amp; metafields</button><button id="pci-create-manual" class="primary-btn" type="button">Create Shopify draft product</button></div>
           </div>
-          <div class="pci-actions"><button id="pci-manual-suggest-profile" class="secondary-btn" type="button">Generate tags &amp; metafields</button><button id="pci-create-manual" class="primary-btn" type="button">Create Shopify draft product</button></div>
           <div id="pci-manual-status" class="pci-status">Manual drafts are created unpublished in Shopify.</div>
+          <div class="pci-product-editor">
+            <main class="pci-product-main">
+              <section class="pci-editor-card"><h4>Title</h4><input id="pci-manual-title" class="pci-input pci-title-input" placeholder="Product title"></section>
+              <section class="pci-editor-card"><h4>Description</h4><textarea id="pci-manual-description" class="pci-textarea pci-description-editor" placeholder="Product description"></textarea></section>
+              <section class="pci-editor-card"><div class="pci-editor-card-head"><h4>Media</h4><span class="pci-muted">Paste selected image URLs below or prefill from an invoice line.</span></div><input id="pci-manual-image" class="pci-input" placeholder="Featured image URL"><textarea id="pci-manual-images" class="pci-textarea" placeholder="One selected image URL per line"></textarea><div id="pci-manual-image-picker" class="pci-image-picker"></div></section>
+              <section class="pci-editor-card"><h4>Pricing</h4><div class="pci-form-grid"><div><label class="pci-label">Price</label><input id="pci-manual-price" class="pci-input"></div><div><label class="pci-label">Compare-at price</label><input id="pci-manual-compare" class="pci-input"></div><div><label class="pci-label">Cost per item / price paid</label><input id="pci-manual-cost" class="pci-input"></div></div></section>
+              <section class="pci-editor-card"><h4>Inventory &amp; shipping</h4><div class="pci-form-grid"><div><label class="pci-label">SKU</label><input id="pci-manual-sku" class="pci-input"></div><div><label class="pci-label">Barcode / GTIN</label><div class="pci-inline-action"><input id="pci-manual-barcode" class="pci-input"><button id="pci-manual-find-barcode" class="secondary-btn" type="button">Find barcode</button></div></div><div><label class="pci-label">Product weight</label><div class="pci-weight-row"><input id="pci-manual-weight" class="pci-input" placeholder="400"><select id="pci-manual-weight-unit" class="pci-input"><option>g</option><option>kg</option><option>oz</option><option>lb</option></select></div></div></div></section>
+              <section class="pci-editor-card"><div class="pci-editor-card-head"><h4>Product metafields</h4><span class="pci-muted">Expandable Shopify metafield groups. Rich text fields use a formatting editor.</span></div><div id="pci-manual-metafields" class="pci-metafields"></div></section>
+              <section class="pci-editor-card"><div class="pci-editor-card-head"><h4>Search engine listing</h4><span class="pci-muted">Edit the listing and compare it with the handle format and similar products.</span></div><div id="pci-manual-seo-preview"></div><div class="pci-form-grid"><div><label class="pci-label">Page title</label><input id="pci-manual-seo-title" class="pci-input" maxlength="70"></div><div><label class="pci-label">URL handle</label><input id="pci-manual-handle" class="pci-input" placeholder="my-product-handle"></div><div class="full"><label class="pci-label">Meta description</label><textarea id="pci-manual-seo-description" class="pci-textarea" maxlength="160"></textarea></div><div><label class="pci-label">URL format token</label><input id="pci-manual-handle-format" class="pci-input" placeholder="tub"></div><div><label class="pci-label">URL location token</label><input id="pci-manual-handle-location" class="pci-input" placeholder="uk"></div></div></section>
+            </main>
+            <aside class="pci-product-side">
+              <section class="pci-editor-card"><h4>Product organisation</h4><div class="pci-stack"><div><label class="pci-label">Vendor / Brand</label><input id="pci-manual-vendor" class="pci-input" list="pci-vendor-list"></div><div><label class="pci-label">Product type</label><input id="pci-manual-type" class="pci-input"></div><div><label class="pci-label">Product category</label><input id="pci-manual-category" class="pci-input"></div><div><label class="pci-label">Collections</label><input id="pci-manual-collections" class="pci-input" list="pci-collection-list" placeholder="Comma-separated handles or names"><div id="pci-manual-collection-suggestions"></div></div><div><label class="pci-label">Theme template</label><input id="pci-manual-theme-template" class="pci-input" list="pci-template-list" placeholder="gfuel"></div></div></section>
+              <section class="pci-editor-card"><h4>Tags</h4><input id="pci-manual-tags" class="pci-input" list="pci-tag-list" placeholder="Click chips below to add tags"><div id="pci-manual-tag-suggestions" class="pci-tag-suggestions"></div></section>
+              <section class="pci-editor-card"><h4>Source</h4><label class="pci-label">Source URL</label><input id="pci-manual-source" class="pci-input"></section>
+            </aside>
+          </div>
         </div>
-
 
         <div class="pci-card pci-pane" id="pci-pane-settings">
           <h3>Product import settings</h3>
@@ -1651,7 +1646,7 @@
     </main>
   </div>
 
-  <link rel="stylesheet" href="/product-creation-import.css?v=pci-v2">
+  <link rel="stylesheet" href="/product-creation-import.css?v=pci-v41">
   <script src="/admin.js?v=secure-6"></script>
   <script src="/admin-review-manager-enhancements.js?v=secure-6"></script>
   <script src="/nectar-score-notch-fix.js?v=secure-6"></script>
@@ -1661,7 +1656,7 @@
   <script src="/admin-ai-module-builder.js?v=ai-modules-1" defer></script>
   <script src="/admin-review-migrations.js?v=review-migrations-v28" defer></script>
   <script src="/admin-help-drawer.js?v=context-help-v28" defer></script>
-  <script src="/product-creation-import.js?v=pci-v2" defer></script>
+  <script src="/product-creation-import.js?v=pci-v41" defer></script>
   <script src="/reviews-launch-checklist.js?v=launch-v28" defer></script>
   <script src="/admin-product-context.js?v=context-nav-v28" defer></script>
   <script src="/admin-loyalty-foundation.js?v=secure-24"></script>
