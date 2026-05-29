@@ -5,6 +5,7 @@ const {
   assignLine,
   createDraftProduct,
   createPurchaseOrderDraft,
+  updatePurchaseOrderLineTreatment,
   formalisePurchaseOrderDraft,
   createPurchaseOrderPrompt,
   getProductImportSettings,
@@ -126,6 +127,21 @@ router.post('/purchase-order/draft', asyncRoute(async (req, res) => {
   const body = req.body || {};
   if (!body.importId) return res.status(400).json({ error: 'importId is required.' });
   const result = await createPurchaseOrderDraft({ shopDomain: shopDomainFromReq(req), importId: body.importId, lines: Array.isArray(body.lines) ? body.lines : [], purchaseOrder: body.purchaseOrder || {} });
+  res.json(result);
+}));
+
+
+router.post('/purchase-order/line-treatment', asyncRoute(async (req, res) => {
+  const body = req.body || {};
+  if (!body.importId || !body.lineId) return res.status(400).json({ error: 'importId and lineId are required.' });
+  const result = await updatePurchaseOrderLineTreatment({
+    shopDomain: shopDomainFromReq(req),
+    importId: body.importId,
+    lineId: body.lineId,
+    poLineType: body.poLineType || 'stock',
+    includeInPurchaseOrder: body.includeInPurchaseOrder,
+    poTreatmentNote: body.poTreatmentNote || '',
+  });
   res.json(result);
 }));
 

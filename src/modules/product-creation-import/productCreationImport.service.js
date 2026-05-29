@@ -82,6 +82,77 @@ function sumMoney(values = []) {
   return total ? total.toFixed(2) : '';
 }
 
+function normalisePoLineType(value = '') {
+  return ['stock', 'non_stock_charge', 'landing_item', 'excluded'].includes(value) ? value : 'stock';
+}
+
+function inferPoTreatment(line = {}) {
+  const explicitType = normalisePoLineType(line.poLineType || 'stock');
+  const explicitInclude = line.includeInPurchaseOrder;
+  const text = [line.title, line.discountLabel, line.poTreatmentNote, line.raw?.rawText].filter(Boolean).join(' ').toLowerCase();
+  let type = explicitType;
+  let note = line.poTreatmentNote || '';
+  if (!line.poLineType || line.poLineType === 'stock') {
+    if (/checkout\+|checkout plus|insurance|protect against|shipping protection|route protection|warranty|guarantee|loss,? theft|damage/.test(text)) {
+      type = 'non_stock_charge';
+      note = note || 'Non-stock charge/insurance line. Keep as an order cost, but do not create stock for it.';
+    } else if (/mystery\s+(energy\s+)?(tub|item|product)|mystery item|unknown item/.test(text)) {
+      type = 'landing_item';
+      note = note || 'Mystery/unknown item. Exclude from the stock PO until the actual landed product is known.';
+    }
+  }
+  let include = explicitInclude;
+  if (include === undefined || include === null) include = type === 'stock';
+  include = Boolean(include) && type === 'stock';
+  return { includeInPurchaseOrder: include, poLineType: type, poTreatmentNote: note };
+}
+
+function lineIsStockForPo(line = {}) {
+  const treatment = inferPoTreatment(line);
+  return treatment.includeInPurchaseOrder && treatment.poLineType === 'stock';
+}
+
+function lineToPoLine(line = {}) {
+  const match = line.match || {};
+  const quantity = Number(line.quantity || 1) || 1;
+  const netUnitCost = calculateNetUnitCost(line);
+  const grossUnitCost = calculateGrossUnitCost(line);
+  const netLineTotal = calculateNetLineTotal(line);
+  const grossLineTotal = calculateGrossLineTotal(line);
+  const lineDiscountTotal = calculateLineDiscountTotal(line);
+  const treatment = inferPoTreatment(line);
+  return {
+    lineId: line.lineId,
+    title: line.title || match.productTitle || '',
+    sku: line.sku || line.supplierProductCode || '',
+    barcode: line.barcode || '',
+    quantity,
+    unitCost: netUnitCost,
+    netUnitCost,
+    grossUnitCost,
+    originalUnitPrice: toMoney(line.originalUnitPrice || grossUnitCost || ''),
+    totalCost: netLineTotal,
+    netLineTotal,
+    grossLineTotal,
+    discountAmount: lineDiscountTotal,
+    lineDiscountTotal,
+    discountLabel: cleanText(line.discountLabel || '', 220),
+    suggestedRetailPrice: toMoney(line.suggestedRetailPrice || ''),
+    weight: line.weight || '',
+    weightUnit: line.weightUnit || 'g',
+    productId: match.productId || '',
+    variantId: match.variantId || '',
+    productTitle: match.productTitle || '',
+    handle: match.handle || '',
+    image: match.image || line.imageUrl || '',
+    matchStatus: match.status || 'unmatched',
+    includeInPurchaseOrder: treatment.includeInPurchaseOrder,
+    poLineType: treatment.poLineType,
+    poTreatmentNote: treatment.poTreatmentNote,
+    note: treatment.poTreatmentNote || match.reason || '',
+  };
+}
+
 async function scanUrlAndSave({ shopDomain, url }) {
   const extracted = await extractProductFromUrl(url);
   const draft = await enrichProductDraft({ shopDomain, draft: extracted });
@@ -228,66 +299,33 @@ async function assignLine({ shopDomain, importId, lineId, productId, variantId, 
 }
 
 function buildPurchaseOrderDraft(doc, overrideLines = []) {
-  const lines = (overrideLines.length ? overrideLines : doc.lines).map((line) => {
-    const match = line.match || {};
-    const quantity = Number(line.quantity || 1) || 1;
-    const netUnitCost = calculateNetUnitCost(line);
-    const grossUnitCost = calculateGrossUnitCost(line);
-    const netLineTotal = calculateNetLineTotal(line);
-    const grossLineTotal = calculateGrossLineTotal(line);
-    const lineDiscountTotal = calculateLineDiscountTotal(line);
-    return {
-      lineId: line.lineId,
-      title: line.title || match.productTitle || '',
-      sku: line.sku || line.supplierProductCode || '',
-      barcode: line.barcode || '',
-      quantity,
-      // unitCost remains the actually-paid/net unit cost for stock-margin reporting.
-      unitCost: netUnitCost,
-      netUnitCost,
-      // grossUnitCost is the original/pre-discount unit cost that should be used when
-      // creating a PO prompt with a separate discount so Shopify reconciles correctly.
-      grossUnitCost,
-      originalUnitPrice: toMoney(line.originalUnitPrice || grossUnitCost || ''),
-      // totalCost remains the actually-paid/net line total for backward compatibility.
-      totalCost: netLineTotal,
-      netLineTotal,
-      grossLineTotal,
-      discountAmount: lineDiscountTotal,
-      lineDiscountTotal,
-      discountLabel: cleanText(line.discountLabel || '', 220),
-      suggestedRetailPrice: toMoney(line.suggestedRetailPrice || ''),
-      weight: line.weight || '',
-      weightUnit: line.weightUnit || 'g',
-      productId: match.productId || '',
-      variantId: match.variantId || '',
-      productTitle: match.productTitle || '',
-      handle: match.handle || '',
-      image: match.image || line.imageUrl || '',
-      matchStatus: match.status || 'unmatched',
-      note: match.reason || '',
-    };
-  });
+  const sourceLines = overrideLines.length ? overrideLines : doc.lines;
+  const allPoLines = sourceLines.map((line) => lineToPoLine(line));
+  const lines = allPoLines.filter((line) => line.includeInPurchaseOrder && line.poLineType === 'stock');
+  const excludedLines = allPoLines.filter((line) => !line.includeInPurchaseOrder || line.poLineType !== 'stock');
 
   const grossSubtotal = sumMoney(lines.map((line) => line.grossLineTotal));
   const netProductSubtotal = sumMoney(lines.map((line) => line.netLineTotal || line.totalCost));
   const lineDiscountTotal = sumMoney(lines.map((line) => line.lineDiscountTotal || line.discountAmount));
+  const nonStockChargesTotal = sumMoney(excludedLines.filter((line) => line.poLineType === 'non_stock_charge').map((line) => line.netLineTotal || line.totalCost));
+  const removedLinesTotal = sumMoney(excludedLines.filter((line) => line.poLineType !== 'non_stock_charge').map((line) => line.netLineTotal || line.totalCost));
   const extractedDiscount = moneyNumber(doc.poLevelDiscount || doc.discountTotal || '');
   const allocatedLineDiscount = moneyNumber(lineDiscountTotal);
 
-  // If the invoice/order provided line-level discounts, those are allocated to the
-  // products. Only keep any remainder as a separate order-level discount.
+  // Product line discounts are allocated only to the included stock lines.
+  // Any remaining discount stays as an order-level discount.
   const orderLevelDiscountNumber = Math.max(0, extractedDiscount - allocatedLineDiscount);
   const orderLevelDiscount = moneyString(orderLevelDiscountNumber);
   const discountTotal = moneyString(allocatedLineDiscount + orderLevelDiscountNumber) || '';
   const shippingTotal = doc.shippingTotal || '';
   const taxTotal = doc.taxTotal || '';
-  const calculatedTotalNumber = moneyNumber(grossSubtotal) + moneyNumber(shippingTotal) + moneyNumber(taxTotal) - moneyNumber(discountTotal);
-  const calculatedTotal = calculatedTotalNumber > 0 ? calculatedTotalNumber.toFixed(2) : netProductSubtotal;
+  const calculatedTotalNumber = moneyNumber(grossSubtotal) + moneyNumber(nonStockChargesTotal) + moneyNumber(shippingTotal) + moneyNumber(taxTotal) - moneyNumber(discountTotal);
+  const calculatedTotal = calculatedTotalNumber > 0 ? calculatedTotalNumber.toFixed(2) : (netProductSubtotal || nonStockChargesTotal);
   const total = doc.total || calculatedTotal;
 
+  const existingStatus = doc.purchaseOrder?.status || 'none';
   return {
-    status: 'draft',
+    status: existingStatus === 'formalised' ? 'draft' : 'draft',
     poNumber: doc.purchaseOrder?.poNumber || `PO-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(doc._id).slice(-5).toUpperCase()}`,
     supplierName: doc.supplierName || '',
     supplierUrl: doc.supplierUrl || '',
@@ -296,9 +334,10 @@ function buildPurchaseOrderDraft(doc, overrideLines = []) {
     invoiceNumber: doc.invoiceNumber || '',
     invoiceDate: doc.invoiceDate || '',
     lines,
-    // Subtotal is now the gross product cost before discounts. This is deliberate:
-    // prompt-based Shopify PO creation needs the product cost + separate discount to
-    // reconcile totals such as 104.00 paid + 84.96 discount = 188.96 gross for 8 tubs.
+    excludedLines,
+    nonStockChargesTotal,
+    removedLinesTotal,
+    // Subtotal is the gross stock product cost before discounts.
     subtotal: grossSubtotal,
     grossSubtotal,
     netProductSubtotal,
@@ -341,6 +380,31 @@ async function createPurchaseOrderDraft({ shopDomain, importId, lines = [], purc
   return { import: doc, purchaseOrder: doc.purchaseOrder };
 }
 
+
+async function updatePurchaseOrderLineTreatment({ shopDomain, importId, lineId, poLineType = 'stock', includeInPurchaseOrder, poTreatmentNote = '' }) {
+  const doc = await ProductCreationImport.findOne({ _id: importId, shopDomain });
+  if (!doc) {
+    const error = new Error('Import not found.');
+    error.status = 404;
+    throw error;
+  }
+  const line = doc.lines.find((item) => item.lineId === lineId);
+  if (!line) {
+    const error = new Error('Import line not found.');
+    error.status = 404;
+    throw error;
+  }
+  line.poLineType = normalisePoLineType(poLineType);
+  line.includeInPurchaseOrder = includeInPurchaseOrder === undefined ? line.poLineType === 'stock' : Boolean(includeInPurchaseOrder) && line.poLineType === 'stock';
+  line.poTreatmentNote = cleanText(poTreatmentNote || line.poTreatmentNote || '', 300);
+
+  if (doc.purchaseOrder && ['draft', 'formalised'].includes(doc.purchaseOrder.status)) {
+    doc.purchaseOrder = buildPurchaseOrderDraft(doc);
+  }
+  await doc.save();
+  return { import: doc, purchaseOrder: doc.purchaseOrder };
+}
+
 async function formalisePurchaseOrderDraft({ shopDomain, importId, purchaseOrder = {} }) {
   const doc = await ProductCreationImport.findOne({ _id: importId, shopDomain });
   if (!doc) {
@@ -374,6 +438,7 @@ function buildPurchaseOrderPrompt({ doc, purchaseOrder }) {
   const po = purchaseOrder || doc.purchaseOrder || {};
   const currency = po.currency || doc.currency || 'GBP';
   const lines = Array.isArray(po.lines) ? po.lines : [];
+  const excludedLines = Array.isArray(po.excludedLines) ? po.excludedLines : [];
   const lineText = lines.length ? lines.map((line, index) => {
     const productBits = [
       line.productTitle ? `Matched Shopify product: ${line.productTitle}` : '',
@@ -401,6 +466,22 @@ function buildPurchaseOrderPrompt({ doc, purchaseOrder }) {
     return `${index + 1}. ${line.title || line.productTitle || 'Product'}\n   ${productBits || 'No Shopify product match recorded'}\n   ${costBits}`;
   }).join('\n') : 'No PO lines were found.';
 
+  const excludedText = excludedLines.length ? excludedLines.map((line, index) => {
+    const typeLabel = line.poLineType === 'non_stock_charge'
+      ? 'Non-stock charge / insurance'
+      : line.poLineType === 'landing_item'
+        ? 'Landing/unknown item - do not add to stock yet'
+        : 'Excluded from PO';
+    const costBits = [
+      `Quantity: ${line.quantity || 1}`,
+      line.netLineTotal || line.totalCost ? `Net amount: ${formatPoMoney(currency, line.netLineTotal || line.totalCost)}` : '',
+      line.lineDiscountTotal || line.discountAmount ? `Associated discount: ${formatPoMoney(currency, line.lineDiscountTotal || line.discountAmount)}` : '',
+      line.discountLabel ? `Label: ${line.discountLabel}` : '',
+      line.poTreatmentNote || line.note ? `Reason: ${line.poTreatmentNote || line.note}` : '',
+    ].filter(Boolean).join('; ');
+    return `${index + 1}. ${line.title || 'Removed line'} — ${typeLabel}\n   ${costBits || 'No cost recorded'}`;
+  }).join('\n') : 'No non-stock or removed lines.';
+
   const unmatchedCount = lines.filter((line) => !['assigned', 'created'].includes(line.matchStatus)).length;
   const prompt = [
     'Can you create a purchase order draft in Shopify using the details below?',
@@ -412,6 +493,7 @@ function buildPurchaseOrderPrompt({ doc, purchaseOrder }) {
     '- Use the matched Shopify products where product IDs, handles, SKUs or variant IDs are provided.',
     '- For product costs, use the GROSS/original unit cost when a line discount exists, then add the product/line discount so the PO total reconciles to the final paid total.',
     '- Do not double-count discounts. Product/line discounts are already allocated below. Only use an additional order-level discount if one is explicitly listed.',
+    '- Do not create stock/inventory lines for anything listed under non-stock/removed lines. Insurance/protection can be treated as an extra cost/note only if the PO flow supports it.',
     unmatchedCount ? `- ${unmatchedCount} line(s) may still need manual confirmation because they are not marked assigned/created.` : '- All lines are marked assigned or created in Nectar.',
     '',
     'Purchase order details:',
@@ -425,12 +507,17 @@ function buildPurchaseOrderPrompt({ doc, purchaseOrder }) {
     'Products coming into stock:',
     lineText,
     '',
+    'Non-stock / removed lines:',
+    excludedText,
+    '',
     'Order totals to reconcile:',
     `Gross product subtotal before discounts: ${formatPoMoney(currency, po.grossSubtotal || po.subtotal)}`,
     `Product/line discount total: ${formatPoMoney(currency, po.productDiscountTotal || po.lineDiscountTotal)}`,
     `Additional order-level discount: ${formatPoMoney(currency, po.orderLevelDiscount || po.poLevelDiscount)}`,
     `Total discount: ${formatPoMoney(currency, po.discountTotal)}`,
     `Net product subtotal after discounts: ${formatPoMoney(currency, po.netProductSubtotal)}`,
+    `Non-stock charges / insurance: ${formatPoMoney(currency, po.nonStockChargesTotal)}`,
+    `Removed/landing lines total kept out of stock PO: ${formatPoMoney(currency, po.removedLinesTotal)}`,
     `Shipping: ${formatPoMoney(currency, po.shippingTotal)}`,
     `Tax: ${formatPoMoney(currency, po.taxTotal)}`,
     `Final paid total: ${formatPoMoney(currency, po.total)}`,
@@ -518,6 +605,7 @@ module.exports = {
   getProductImportMetadata,
   suggestProductProfile,
   createPurchaseOrderDraft,
+  updatePurchaseOrderLineTreatment,
   formalisePurchaseOrderDraft,
   createPurchaseOrderPrompt,
 };

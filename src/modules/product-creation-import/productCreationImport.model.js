@@ -25,6 +25,9 @@ const importedLineSchema = new mongoose.Schema({
   imageSearchQuery: { type: String, default: '' },
   sourceUrl: { type: String, default: '' },
   confidence: { type: Number, default: 0 },
+  includeInPurchaseOrder: { type: Boolean, default: true },
+  poLineType: { type: String, enum: ['stock', 'non_stock_charge', 'landing_item', 'excluded'], default: 'stock' },
+  poTreatmentNote: { type: String, default: '' },
   raw: { type: mongoose.Schema.Types.Mixed, default: {} },
   match: {
     status: { type: String, enum: ['unmatched', 'suggested', 'assigned', 'created'], default: 'unmatched' },
@@ -63,6 +66,9 @@ const poLineSchema = new mongoose.Schema({
   handle: { type: String, default: '' },
   image: { type: String, default: '' },
   matchStatus: { type: String, default: 'unmatched' },
+  includeInPurchaseOrder: { type: Boolean, default: true },
+  poLineType: { type: String, enum: ['stock', 'non_stock_charge', 'landing_item', 'excluded'], default: 'stock' },
+  poTreatmentNote: { type: String, default: '' },
   note: { type: String, default: '' },
 }, { _id: false });
 
@@ -76,6 +82,9 @@ const purchaseOrderSchema = new mongoose.Schema({
   invoiceNumber: { type: String, default: '' },
   invoiceDate: { type: String, default: '' },
   lines: { type: [poLineSchema], default: [] },
+  excludedLines: { type: [poLineSchema], default: [] },
+  nonStockChargesTotal: { type: String, default: '' },
+  removedLinesTotal: { type: String, default: '' },
   subtotal: { type: String, default: '' },
   grossSubtotal: { type: String, default: '' },
   netProductSubtotal: { type: String, default: '' },

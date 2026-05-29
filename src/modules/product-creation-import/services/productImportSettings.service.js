@@ -37,17 +37,38 @@ const DEFAULT_SETTINGS = {
   metafieldMappingRules: [],
   conditionalRules: [
     {
-      enabled: true,
-      name: 'Example: set G Fuel product type from tag',
-      whenField: 'tags',
+      enabled: false,
+      name: 'Example only: set G Fuel tub product type',
+      whenField: 'title',
       operator: 'contains',
-      value: 'G Fuel',
+      value: 'tub',
       actionType: 'set_product_type',
       actionTarget: '',
       actionValue: 'Energy Drink',
     },
   ],
 };
+
+const CORE_PROFILE_KEYS = new Set(['core.formula_version', 'core.grouped_profiles', 'core.sourness', 'core.sweetness', 'core.flavour_profile']);
+
+function draftSearchText(draft = {}) {
+  return [draft.title, draft.vendor, draft.productType, parseTags(draft.tags).join(' '), draft.sourceUrl, draft.descriptionHtml]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+function isLikelyDrinkProduct(draft = {}) {
+  const text = draftSearchText(draft);
+  const nonDrink = /lunch\s*box|lunchbox|collectible|collector|shaker|cup|bottle|keychain|sticker|hat|shirt|hoodie|apparel|merch|accessor(y|ies)|checkout\+|insurance|warranty|protection|mystery\s+(item|product)/i.test(text)
+    && !/serving|formula|powder|hydration|energy\s*(drink|formula)|tub|can\s*(pack|case)|drink\s*mix/i.test(text);
+  if (nonDrink) return false;
+  return /serving|formula|powder|hydration|energy\s*(drink|formula)|gamer\s*drink|tub|drink\s*mix|can\s*(pack|case)|cans?\b|flavour|flavor/i.test(text);
+}
+
+function isCoreProfileTarget(target = '') {
+  return CORE_PROFILE_KEYS.has(String(target || '').toLowerCase());
+}
 
 function mergeDefaults(settings = {}) {
   return {
@@ -220,6 +241,7 @@ function applyConditionalRules(draft = {}, settings = {}) {
     } else if (rule.actionType === 'title_suffix' && rule.actionValue && !String(next.title || '').endsWith(rule.actionValue)) {
       next.title = `${next.title || ''} ${rule.actionValue}`.trim();
     } else if (rule.actionType === 'set_metafield' && rule.actionTarget && rule.actionValue) {
+      if (isCoreProfileTarget(rule.actionTarget) && !isLikelyDrinkProduct(next)) continue;
       const [namespace, key] = String(rule.actionTarget).split('.');
       if (namespace && key) {
         next.metafields = normaliseMetafields([...next.metafields, { namespace, key, value: rule.actionValue, type: 'single_line_text_field', source: 'conditional-rule' }]);
@@ -269,6 +291,9 @@ function ruleMatchesDraft(rule = {}, draft = {}) {
     [rule.tagContains, tags],
     [rule.titleContains, draft.title],
   ];
+  const hasAnyCondition = checks.some(([needle]) => Boolean(String(needle || '').trim()));
+  if (!hasAnyCondition) return false;
+  if (isCoreProfileTarget(rule.target) && !isLikelyDrinkProduct(draft)) return false;
   return checks.every(([needle, haystack]) => !needle || String(haystack || '').toLowerCase().includes(String(needle).toLowerCase()));
 }
 

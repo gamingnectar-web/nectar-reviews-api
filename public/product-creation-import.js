@@ -250,7 +250,15 @@
     document.querySelectorAll('.pci-line-field').forEach((input) => {
       const index = Number(input.dataset.index);
       const field = input.dataset.field;
-      if (state.latestImport.lines[index] && field) state.latestImport.lines[index][field] = input.value;
+      if (state.latestImport.lines[index] && field) {
+        state.latestImport.lines[index][field] = input.value;
+        if (field === 'poLineType') {
+          state.latestImport.lines[index].includeInPurchaseOrder = input.value === 'stock';
+          if (!state.latestImport.lines[index].poTreatmentNote) {
+            state.latestImport.lines[index].poTreatmentNote = input.value === 'non_stock_charge' ? 'Non-stock charge / insurance. Keep as cost only.' : input.value === 'landing_item' ? 'Unknown/mystery landed item. Exclude from stock PO until identified.' : input.value === 'excluded' ? 'Removed from PO by merchant.' : '';
+          }
+        }
+      }
     });
     return state.latestImport.lines;
   }
@@ -274,6 +282,48 @@
     if (byId('pci-invoice-tax-total')) byId('pci-invoice-tax-total').value = importDoc.taxTotal || byId('pci-invoice-tax-total').value || '';
   }
 
+
+  function poLineTypeLabel(type) {
+    return ({ stock: 'Stock product', non_stock_charge: 'Non-stock cost / insurance', landing_item: 'Landing item / unknown', excluded: 'Remove from PO' })[type || 'stock'] || 'Stock product';
+  }
+
+  function poLineTypeNote(type) {
+    return ({
+      stock: 'Include as product stock in the PO.',
+      non_stock_charge: 'Keep the cost for reconciliation, but do not create stock.',
+      landing_item: 'Do not add to the PO yet; add manually when the actual landed item is known.',
+      excluded: 'Completely exclude from the PO product lines.'
+    })[type || 'stock'] || '';
+  }
+
+  async function setLinePoTreatment(index, poLineType = 'stock') {
+    syncLineInputs();
+    const line = state.latestImport?.lines?.[index];
+    if (!line) return;
+    line.poLineType = poLineType;
+    line.includeInPurchaseOrder = poLineType === 'stock';
+    line.poTreatmentNote = poLineTypeNote(poLineType);
+    if (!state.latestImport?._id) return renderLines(state.latestImport);
+    setStatus('pci-invoice-status', `Updating PO treatment for ${esc(line.title || 'line')}…`);
+    try {
+      const data = await api('/purchase-order/line-treatment', { method: 'POST', body: JSON.stringify({ importId: state.latestImport._id, lineId: line.lineId, poLineType, includeInPurchaseOrder: poLineType === 'stock', poTreatmentNote: line.poTreatmentNote }) });
+      state.latestImport = data.import;
+      renderLines(state.latestImport);
+      if (data.purchaseOrder?.status === 'draft' || data.purchaseOrder?.status === 'formalised') renderPoDraft(data.purchaseOrder);
+      setStatus('pci-invoice-status', `${esc(line.title || 'Line')} set to ${esc(poLineTypeLabel(poLineType))}. Rebuild/formalise the internal PO when ready.`, 'ok');
+      state.poLoaded = false;
+      state.historyLoaded = false;
+    } catch (error) {
+      setStatus('pci-invoice-status', esc(error.message || 'Could not update PO treatment.'), 'err');
+    }
+  }
+
+  function setLinePoTreatmentById(lineId, poLineType = 'excluded') {
+    const index = (state.latestImport?.lines || []).findIndex((line) => String(line.lineId) === String(lineId));
+    if (index >= 0) return setLinePoTreatment(index, poLineType);
+    setStatus('pci-invoice-status', 'Could not find that source invoice line. Open the original invoice import and rebuild the PO.', 'warn');
+  }
+
   function renderLines(importDoc) {
     fillInvoiceMeta(importDoc || {});
     const box = byId('pci-invoice-lines');
@@ -289,7 +339,9 @@
       const link = shopifyProductUrl(m.productId);
       const image = line.imageUrl || m.image || '';
       const imageHint = line.imageSearchQuery || line.imageDescription || '';
-      return `<div class="pci-line" data-line-id="${esc(line.lineId)}"><div>${image ? `<img class="pci-line-img" src="${esc(image)}" alt="">` : '<div class="pci-line-img"></div>'}</div><div><h4>${esc(line.title || line.sku || 'Invoice product line')}</h4><small>SKU: ${esc(line.sku || line.supplierProductCode || '—')} · Barcode: ${esc(line.barcode || '—')}</small><small>Match: <span class="pci-pill ${matchClass}">${esc(m.status || 'unmatched')}</span> ${esc(m.productTitle || m.reason || '')} ${link ? `<a class="pci-shopify-link" href="${esc(link)}" target="_blank">Open Shopify ↗</a>` : ''}</small>${imageHint ? `<small>Image hint: ${esc(imageHint)}</small>` : ''}
+      const poType = line.poLineType || (line.includeInPurchaseOrder === false ? 'excluded' : 'stock');
+      const removed = poType !== 'stock' || line.includeInPurchaseOrder === false;
+      return `<div class="pci-line ${removed ? 'pci-line-excluded' : ''}" data-line-id="${esc(line.lineId)}"><div>${image ? `<img class="pci-line-img" src="${esc(image)}" alt="">` : '<div class="pci-line-img"></div>'}</div><div><h4>${esc(line.title || line.sku || 'Invoice product line')} ${removed ? `<span class="pci-pill warn">${esc(poLineTypeLabel(poType))}</span>` : ''}</h4><small>SKU: ${esc(line.sku || line.supplierProductCode || '—')} · Barcode: ${esc(line.barcode || '—')}</small><small>Match: <span class="pci-pill ${matchClass}">${esc(m.status || 'unmatched')}</span> ${esc(m.productTitle || m.reason || '')} ${link ? `<a class="pci-shopify-link" href="${esc(link)}" target="_blank">Open Shopify ↗</a>` : ''}</small>${imageHint ? `<small>Image hint: ${esc(imageHint)}</small>` : ''}${line.poTreatmentNote ? `<small>PO treatment: ${esc(line.poTreatmentNote)}</small>` : ''}
         <div class="pci-line-edit-grid">
           <label>Qty<input class="pci-input pci-line-field" data-index="${index}" data-field="quantity" value="${esc(line.quantity || 1)}"></label>
           <label>Price paid / unit cost after discount<input class="pci-input pci-line-field" data-index="${index}" data-field="unitCost" value="${esc(line.unitCost || '')}"></label>
@@ -297,7 +349,8 @@
           <label>Line/product discount total<input class="pci-input pci-line-field" data-index="${index}" data-field="discountAmount" value="${esc(line.discountAmount || '')}"></label>
           <label>Promo label<input class="pci-input pci-line-field" data-index="${index}" data-field="discountLabel" value="${esc(line.discountLabel || '')}"></label>
           <label>Retail price<input class="pci-input pci-line-field" data-index="${index}" data-field="suggestedRetailPrice" value="${esc(line.suggestedRetailPrice || '')}"></label>
-        </div><div id="pci-results-${index}" class="pci-search-results"></div></div><div class="pci-actions pci-line-actions"><button type="button" class="secondary-btn" onclick="window.ProductCreationImportAdmin.searchForLine(${index})">Search store</button>${m.status === 'suggested' && m.productId ? `<button type="button" class="primary-btn" onclick="window.ProductCreationImportAdmin.confirmSuggestedLine(${index})">Confirm match</button>` : ''}<button type="button" class="primary-btn" onclick="window.ProductCreationImportAdmin.openLineCreateMenu(${index})">Create…</button></div></div>`;
+          <label>PO treatment<select class="pci-input pci-line-field" data-index="${index}" data-field="poLineType"><option value="stock" ${poType === 'stock' ? 'selected' : ''}>Stock product</option><option value="non_stock_charge" ${poType === 'non_stock_charge' ? 'selected' : ''}>Non-stock cost / insurance</option><option value="landing_item" ${poType === 'landing_item' ? 'selected' : ''}>Landing item / unknown</option><option value="excluded" ${poType === 'excluded' ? 'selected' : ''}>Remove from PO</option></select></label>
+        </div><div id="pci-results-${index}" class="pci-search-results"></div></div><div class="pci-actions pci-line-actions"><button type="button" class="secondary-btn" onclick="window.ProductCreationImportAdmin.searchForLine(${index})">Search store</button>${m.status === 'suggested' && m.productId ? `<button type="button" class="primary-btn" onclick="window.ProductCreationImportAdmin.confirmSuggestedLine(${index})">Confirm match</button>` : ''}<button type="button" class="primary-btn" onclick="window.ProductCreationImportAdmin.openLineCreateMenu(${index})">Create…</button><button type="button" class="secondary-btn" onclick="window.ProductCreationImportAdmin.setLinePoTreatment(${index}, 'non_stock_charge')">Non-stock cost</button><button type="button" class="secondary-btn" onclick="window.ProductCreationImportAdmin.setLinePoTreatment(${index}, 'landing_item')">Landing later</button><button type="button" class="secondary-btn danger" onclick="window.ProductCreationImportAdmin.setLinePoTreatment(${index}, 'excluded')">Remove from PO</button>${removed ? `<button type="button" class="primary-btn" onclick="window.ProductCreationImportAdmin.setLinePoTreatment(${index}, 'stock')">Put back in PO</button>` : ''}</div></div>`;
     }).join('')}<div class="pci-po-actions"><button type="button" class="primary-btn" onclick="window.ProductCreationImportAdmin.createPurchaseOrderDraft()">Create draft PO</button><span class="pci-muted">Creates a PO draft using vendor, currency, quantities, gross product cost, line/product discounts and matched/created products.</span></div><div id="pci-po-draft"></div>`;
     if (importDoc.purchaseOrder?.status === 'draft' || importDoc.purchaseOrder?.status === 'formalised') renderPoDraft(importDoc.purchaseOrder);
   }
@@ -306,7 +359,10 @@
     const target = byId('pci-po-draft');
     if (!target || !po) return;
     const rows = po.lines || [];
-    target.innerHTML = `<div class="pci-po-card"><div class="pci-po-head"><div><h3>Internal Draft PO: ${esc(po.poNumber || 'Purchase Order')}</h3><p class="pci-muted">This is an internal supplier PO record inside the app. Shopify's visible Purchase Orders screen cannot currently be created through the public Admin API. Product-specific discounts are now allocated into the line totals, so the prompt can use gross product costs plus discount and still reconcile to the paid total.</p></div><span class="pci-pill ${po.status === 'formalised' ? 'ok' : 'warn'}">${esc(po.status || 'draft')}</span></div><div class="pci-form-grid"><div><label class="pci-label">Supplier / Vendor</label><input id="pci-po-supplier-name" class="pci-input" value="${esc(po.supplierName || '')}"></div><div><label class="pci-label">Currency</label><input id="pci-po-currency" class="pci-input" value="${esc(po.currency || 'GBP')}"></div></div><table class="pci-history"><thead><tr><th>Product</th><th>Qty</th><th>Gross/unit</th><th>Paid/unit</th><th>Product discount</th><th>Net line</th><th>Match</th></tr></thead><tbody>${rows.map((line) => `<tr><td><strong>${esc(line.title)}</strong><br><small>${esc(line.sku || line.productTitle || '')}</small></td><td>${esc(line.quantity)}</td><td>${money(line.grossUnitCost || line.originalUnitPrice || line.unitCost)}</td><td>${money(line.netUnitCost || line.unitCost)}</td><td>${line.lineDiscountTotal || line.discountAmount ? money(line.lineDiscountTotal || line.discountAmount) : '—'}<br><small>${esc(line.discountLabel || '')}</small></td><td>${money(line.netLineTotal || line.totalCost)}</td><td><span class="pci-pill ${['assigned','created'].includes(line.matchStatus) ? 'ok' : 'warn'}">${esc(line.matchStatus)}</span></td></tr>`).join('')}</tbody></table><div class="pci-po-totals"><span>Gross product subtotal <strong>${money(po.grossSubtotal || po.subtotal)}</strong></span><span>Product discounts <strong>${money(po.productDiscountTotal || po.lineDiscountTotal)}</strong></span><span>Extra order discount <strong>${money(po.orderLevelDiscount || '')}</strong></span><span>Net product cost <strong>${money(po.netProductSubtotal)}</strong></span><span>Shipping <strong>${money(po.shippingTotal)}</strong></span><span>Tax <strong>${money(po.taxTotal)}</strong></span><span>Total <strong>${money(po.total)}</strong></span></div><label class="pci-label">PO notes</label><textarea id="pci-po-notes" class="pci-textarea">${esc(po.notes || '')}</textarea><div class="pci-actions">${po.status === 'formalised' ? `<button type="button" class="primary-btn" onclick="window.ProductCreationImportAdmin.createPurchaseOrderPrompt()">Create prompt</button><span class="pci-muted">Copies gross costs, product discounts and final paid totals into a prompt you can paste into Shopify.</span>` : `<button type="button" class="primary-btn" onclick="window.ProductCreationImportAdmin.formalisePurchaseOrderDraft()">Formalise internal PO</button>`}</div></div>`;
+    const excludedRows = po.excludedLines || [];
+    const productRows = rows.length ? rows.map((line) => `<tr><td><strong>${esc(line.title)}</strong><br><small>${esc(line.sku || line.productTitle || '')}</small></td><td>${esc(line.quantity)}</td><td>${money(line.grossUnitCost || line.originalUnitPrice || line.unitCost)}</td><td>${money(line.netUnitCost || line.unitCost)}</td><td>${line.lineDiscountTotal || line.discountAmount ? money(line.lineDiscountTotal || line.discountAmount) : '—'}<br><small>${esc(line.discountLabel || '')}</small></td><td>${money(line.netLineTotal || line.totalCost)}</td><td><span class="pci-pill ${['assigned','created'].includes(line.matchStatus) ? 'ok' : 'warn'}">${esc(line.matchStatus)}</span></td><td><button type="button" class="secondary-btn danger" onclick="window.ProductCreationImportAdmin.setLinePoTreatmentById('${esc(line.lineId || '')}', 'excluded')">Remove</button></td></tr>`).join('') : '<tr><td colspan="8"><span class="pci-muted">No stock product lines are currently included in this PO.</span></td></tr>';
+    const excludedTable = excludedRows.length ? `<div class="pci-po-excluded"><h4>Not included as stock</h4><p class="pci-muted">These rows are kept out of the product stock PO. Non-stock costs can still be mentioned in the prompt for reconciliation; mystery/landing rows can be added later once the landed item is known.</p><table class="pci-history"><thead><tr><th>Line</th><th>Type</th><th>Qty</th><th>Amount</th><th>Reason</th><th>Action</th></tr></thead><tbody>${excludedRows.map((line) => `<tr><td><strong>${esc(line.title)}</strong><br><small>${esc(line.discountLabel || '')}</small></td><td><span class="pci-pill warn">${esc(poLineTypeLabel(line.poLineType))}</span></td><td>${esc(line.quantity || 1)}</td><td>${money(line.netLineTotal || line.totalCost)}</td><td><small>${esc(line.poTreatmentNote || line.note || '')}</small></td><td><button type="button" class="primary-btn" onclick="window.ProductCreationImportAdmin.setLinePoTreatmentById('${esc(line.lineId || '')}', 'stock')">Put back in PO</button></td></tr>`).join('')}</tbody></table></div>` : '';
+    target.innerHTML = `<div class="pci-po-card"><div class="pci-po-head"><div><h3>Internal Draft PO: ${esc(po.poNumber || 'Purchase Order')}</h3><p class="pci-muted">This is an internal supplier PO record inside the app. Shopify's visible Purchase Orders screen cannot currently be created through the public Admin API. Use Remove/Non-stock/Landing to keep mystery items and insurance out of the stock product lines before creating the prompt.</p></div><span class="pci-pill ${po.status === 'formalised' ? 'ok' : 'warn'}">${esc(po.status || 'draft')}</span></div><div class="pci-form-grid"><div><label class="pci-label">Supplier / Vendor</label><input id="pci-po-supplier-name" class="pci-input" value="${esc(po.supplierName || '')}"></div><div><label class="pci-label">Currency</label><input id="pci-po-currency" class="pci-input" value="${esc(po.currency || 'GBP')}"></div></div><table class="pci-history"><thead><tr><th>Product</th><th>Qty</th><th>Gross/unit</th><th>Paid/unit</th><th>Product discount</th><th>Net line</th><th>Match</th><th>Action</th></tr></thead><tbody>${productRows}</tbody></table>${excludedTable}<div class="pci-po-totals"><span>Gross product subtotal <strong>${money(po.grossSubtotal || po.subtotal)}</strong></span><span>Product discounts <strong>${money(po.productDiscountTotal || po.lineDiscountTotal)}</strong></span><span>Extra order discount <strong>${money(po.orderLevelDiscount || '')}</strong></span><span>Net stock product cost <strong>${money(po.netProductSubtotal)}</strong></span><span>Non-stock charges <strong>${money(po.nonStockChargesTotal)}</strong></span><span>Removed/landing lines <strong>${money(po.removedLinesTotal)}</strong></span><span>Shipping <strong>${money(po.shippingTotal)}</strong></span><span>Tax <strong>${money(po.taxTotal)}</strong></span><span>Total <strong>${money(po.total)}</strong></span></div><label class="pci-label">PO notes</label><textarea id="pci-po-notes" class="pci-textarea">${esc(po.notes || '')}</textarea><div class="pci-actions">${po.status === 'formalised' ? `<button type="button" class="primary-btn" onclick="window.ProductCreationImportAdmin.createPurchaseOrderPrompt()">Create prompt</button><span class="pci-muted">Copies stock lines, exclusions, non-stock charges and final paid totals into a prompt you can paste into Shopify.</span>` : `<button type="button" class="primary-btn" onclick="window.ProductCreationImportAdmin.formalisePurchaseOrderDraft()">Formalise internal PO</button>`}</div></div>`;
   }
 
 
@@ -560,7 +616,8 @@
       if (state.latestImport?._id && prefix === 'pci-url') payload.importId = state.latestImport._id;
       const data = await api('/shopify/create', { method: 'POST', body: JSON.stringify(payload) });
       const link = shopifyProductUrl(data.product?.id);
-      setStatus(statusId, `Created draft product: <strong>${esc(data.product?.title || draft.title)}</strong>${link ? ` · <a href="${esc(link)}" target="_blank">Open in Shopify ↗</a>` : ''}${data.product?.inventoryCostWarning ? `<br>${esc(data.product.inventoryCostWarning)}` : ''}${data.product?.fileCreateWarning ? `<br>${esc(data.product.fileCreateWarning)}` : ''}${data.product?.filesCreatedCount ? `<br>Copied ${esc(data.product.filesCreatedCount)} image(s) to Shopify Files.` : ''}`, data.product?.inventoryCostWarning ? 'warn' : 'ok');
+      const warnings = [data.product?.imageCreateWarning, data.product?.metafieldCreateWarning, data.product?.inventoryCostWarning, data.product?.fileCreateWarning].filter(Boolean).map((msg) => `<br>${esc(msg)}`).join('');
+      setStatus(statusId, `Created draft product: <strong>${esc(data.product?.title || draft.title)}</strong>${link ? ` · <a href="${esc(link)}" target="_blank">Open in Shopify ↗</a>` : ''}${warnings}${data.product?.attachedImageCount !== undefined ? `<br>Attached ${esc(data.product.attachedImageCount || 0)} of ${esc(data.product.imageCount || 0)} selected image(s).` : ''}${data.product?.filesCreatedCount ? `<br>Copied ${esc(data.product.filesCreatedCount)} image(s) to Shopify Files.` : ''}`, warnings ? 'warn' : 'ok');
       state.historyLoaded = false;
     } catch (error) { setStatus(statusId, esc(error.message || 'Product creation failed.'), 'err'); }
   }
@@ -685,7 +742,8 @@
       const data = await api('/shopify/create', { method: 'POST', body: JSON.stringify({ importId: state.latestImport._id, lineId: line.lineId }) });
       state.latestImport = data.import;
       renderLines(data.import);
-      setStatus('pci-invoice-status', `Created Shopify draft product: <strong>${esc(data.product?.title || line.title)}</strong>${data.product?.inventoryCostWarning ? `<br>${esc(data.product.inventoryCostWarning)}` : ''}${data.product?.fileCreateWarning ? `<br>${esc(data.product.fileCreateWarning)}` : ''}${data.product?.filesCreatedCount ? `<br>Copied ${esc(data.product.filesCreatedCount)} image(s) to Shopify Files.` : ''}`, data.product?.inventoryCostWarning ? 'warn' : 'ok');
+      const warnings = [data.product?.imageCreateWarning, data.product?.metafieldCreateWarning, data.product?.inventoryCostWarning, data.product?.fileCreateWarning].filter(Boolean).map((msg) => `<br>${esc(msg)}`).join('');
+      setStatus('pci-invoice-status', `Created Shopify draft product: <strong>${esc(data.product?.title || line.title)}</strong>${warnings}${data.product?.attachedImageCount !== undefined ? `<br>Attached ${esc(data.product.attachedImageCount || 0)} of ${esc(data.product.imageCount || 0)} selected image(s).` : ''}${data.product?.filesCreatedCount ? `<br>Copied ${esc(data.product.filesCreatedCount)} image(s) to Shopify Files.` : ''}`, warnings ? 'warn' : 'ok');
       state.historyLoaded = false;
     } catch (error) { setStatus('pci-invoice-status', esc(error.message || 'Create failed.'), 'err'); }
   }
@@ -822,6 +880,6 @@
     });
   }
 
-  window.ProductCreationImportAdmin = { init, scanUrl, analyseInvoice, createCurrentDraft, createManualDraft, searchForLine, confirmSuggestedLine, assignLine, assignLineFromModal, openLineCreateMenu, prefillUrlFromLine, prefillManualFromLine, createLine, createPurchaseOrderDraft, formalisePurchaseOrderDraft, loadHistory, loadPurchaseOrders, addTag, suggestProfile, loadSettings, saveSettings, addSkuRule, removeSkuRule, addConditionalRule, removeConditionalRule, addMetafieldRule, removeMetafieldRule, closeSearchModal, closePromptModal, runModalProductSearch, createPurchaseOrderPrompt, copyPurchaseOrderPrompt, toggleImageSelection, toggleImageSelectionFromCard, selectAllImages, clearImages, findBarcode };
+  window.ProductCreationImportAdmin = { init, scanUrl, analyseInvoice, createCurrentDraft, createManualDraft, searchForLine, confirmSuggestedLine, assignLine, assignLineFromModal, openLineCreateMenu, prefillUrlFromLine, prefillManualFromLine, createLine, setLinePoTreatment, setLinePoTreatmentById, createPurchaseOrderDraft, formalisePurchaseOrderDraft, loadHistory, loadPurchaseOrders, addTag, suggestProfile, loadSettings, saveSettings, addSkuRule, removeSkuRule, addConditionalRule, removeConditionalRule, addMetafieldRule, removeMetafieldRule, closeSearchModal, closePromptModal, runModalProductSearch, createPurchaseOrderPrompt, copyPurchaseOrderPrompt, toggleImageSelection, toggleImageSelectionFromCard, selectAllImages, clearImages, findBarcode };
   document.addEventListener('DOMContentLoaded', init);
 })();

@@ -345,3 +345,58 @@ Response:
 ```
 
 The PO Drafts tab also shows a **Create prompt** action for formalised internal POs.
+
+## v38 — PO line removal / non-stock treatment
+
+Invoice/order imports can now keep the source order accurate without forcing every visible line into the stock PO.
+
+New PO treatment options on each invoice line:
+
+- **Stock product** — included in the internal PO and must be matched/created before formalising.
+- **Non-stock cost / insurance** — kept as a reconciliation cost, but not treated as product inventory. Use this for lines like Checkout+, insurance, route/protection, warranty or damage cover.
+- **Landing item / unknown** — excluded from the stock PO until the actual landed item is known. Use this for mystery tubs/items that will be assigned when they arrive.
+- **Remove from PO** — removed from product stock lines entirely.
+
+The formalise step now only blocks unmatched **stock product** lines. Non-stock costs and removed/landing lines are carried into the generated prompt as context so Shopify/Sidekick does not create stock for them.
+
+The prompt now includes a dedicated **Non-stock / removed lines** section and totals for:
+
+- gross stock product subtotal
+- stock product discounts
+- net stock product cost
+- non-stock charges / insurance
+- removed/landing line value
+- shipping, tax and final paid total
+
+This is intended for cases such as:
+
+- **Mystery Energy Tub** — mark as `Landing item / unknown`, then add/receive it manually when the actual product is known.
+- **G FUEL Checkout+** — mark as `Non-stock cost / insurance`, so it reconciles the paid order total but does not create inventory.
+
+## v39 — robust draft creation + product-kind metafield guardrails
+
+This update fixes two live-test issues:
+
+1. **Draft product creation is now resilient.** The app creates the Shopify draft product first, then attaches optional parts one by one:
+   - selected product images
+   - Shopify product metafields
+   - inventory cost / price paid
+   - optional Shopify Files copies
+
+   This means a bad image URL, invalid metafield type/value, or missing optional scope no longer blocks the draft product itself from being created. The UI now shows warnings such as image/metafield failures after the draft product has been created.
+
+2. **Drink profile metafields are now product-kind aware.** Core drink profile fields are only suggested/applied to likely drink/consumable products:
+   - `core.formula_version`
+   - `core.grouped_profiles`
+   - `core.sourness`
+   - `core.sweetness`
+   - `core.flavour_profile`
+
+   Products such as lunch boxes, shakers, accessories, merch, insurance/protection lines and unknown mystery items will not inherit flavour, sweetness or sourness from unrelated G Fuel tubs.
+
+Additional guardrails:
+
+- Similar-product metafield copying no longer uses vendor alone. A G Fuel lunch box will not copy drink metafields from G Fuel tubs just because the vendor matches.
+- Metafield mapping rules must have at least one condition before they apply.
+- Core drink metafield rules are skipped for clear non-drink products.
+- OpenAI enrichment is explicitly instructed not to add flavour/sweetness/sourness/formula fields for non-consumable products.

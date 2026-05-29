@@ -17,6 +17,30 @@ function positiveMoney(value) {
   return number ? number.toFixed(2) : '';
 }
 
+
+function inferPoLineType(raw = {}) {
+  const text = [raw.title, raw.productTitle, raw.name, raw.description, raw.discountLabel, raw.promotion, raw.offer, raw.rawText]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  if (!text) return { poLineType: 'stock', includeInPurchaseOrder: true, poTreatmentNote: '' };
+  if (/checkout\+|checkout plus|insurance|protect against|shipping protection|route protection|warranty|guarantee|loss,? theft|damage/.test(text)) {
+    return {
+      poLineType: 'non_stock_charge',
+      includeInPurchaseOrder: false,
+      poTreatmentNote: 'Auto-detected as a non-stock charge/insurance line. Keep as an order cost, but do not create stock for it.'
+    };
+  }
+  if (/mystery\s+(energy\s+)?(tub|item|product)|mystery item|unknown item/.test(text)) {
+    return {
+      poLineType: 'landing_item',
+      includeInPurchaseOrder: false,
+      poTreatmentNote: 'Auto-detected as a mystery/unknown line. Excluded from the PO stock lines until the actual landed item is known.'
+    };
+  }
+  return { poLineType: 'stock', includeInPurchaseOrder: true, poTreatmentNote: '' };
+}
+
 function lineFromRaw(raw = {}, index = 0) {
   const quantity = Number(raw.quantity || raw.qty || 1) || 1;
   let unitCost = toMoney(raw.unitCost || raw.pricePaid || raw.cost || raw.unit_price || raw.price || raw.paidPrice || raw.finalUnitPrice || '');
@@ -62,6 +86,7 @@ function lineFromRaw(raw = {}, index = 0) {
     imageSearchQuery: cleanText(raw.imageSearchQuery || raw.productImageSearchQuery || raw.searchQuery || '', 300),
     sourceUrl: cleanText(raw.sourceUrl || raw.url || raw.productUrl || '', 500),
     confidence: Number(raw.confidence || 0.6),
+    ...inferPoLineType(raw),
     raw,
     match: { status: 'unmatched', score: 0, reason: 'Not matched yet.' },
   };
@@ -108,12 +133,12 @@ async function extractWithOpenAi({ imageDataUrl, filename, notes, supplierUrl })
   const model = process.env.OPENAI_INVOICE_MODEL || process.env.OPENAI_MODULE_MODEL || 'gpt-4.1-mini';
   const prompt = `Extract product purchase data from this supplier invoice, order confirmation, PO or receipt for a Shopify product import app. Return ONLY JSON with keys: supplierName, invoiceNumber, invoiceDate, currency, total, shippingTotal, taxTotal, discountTotal, lines.
 
-lines must be an array of product rows only. Each line object must include as many of these as possible: title, sku, barcode, supplierProductCode, quantity, unitCost, originalUnitPrice, totalCost, discountAmount, discountLabel, suggestedRetailPrice, imageUrl, imageDescription, imageSearchQuery, sourceUrl, confidence. Treat unitCost as the final paid/net unit cost after discounts, originalUnitPrice as the pre-discount unit price, totalCost as the final paid/net line total, and discountAmount as the total product-specific discount for that line as a positive number.
+lines should include product rows and any charge rows that appear in the order summary if they affect the paid total. Each line object must include as many of these as possible: title, sku, barcode, supplierProductCode, quantity, unitCost, originalUnitPrice, totalCost, discountAmount, discountLabel, suggestedRetailPrice, imageUrl, imageDescription, imageSearchQuery, sourceUrl, confidence. Treat unitCost as the final paid/net unit cost after discounts, originalUnitPrice as the pre-discount unit price, totalCost as the final paid/net line total, and discountAmount as the total product-specific discount for that line as a positive number.
 
 Important:
 - Look at product thumbnails/images in the screenshot. If an actual product image URL is visible in the document, return imageUrl. If not, describe the thumbnail in imageDescription and create a concise imageSearchQuery.
 - Capture free/discounted lines as quantity with unitCost 0.00 or the final paid price, originalUnitPrice as the visible crossed-out/original price, discountAmount as the line discount that made it free/discounted, and put the promotion text in discountLabel.
-- Do not include shipping, tax, payment rows, insurance rows, order status text or totals as product lines unless they are clearly a purchasable product line.
+- Do not include order status/payment text or subtotal/total rows as product lines. If a visible row is insurance/Checkout+/protection, include it as a line with the title and price so the app can mark it as a non-stock charge. If a visible row is a mystery/unknown item, include it so the merchant can exclude it from stock until landed.
 - Keep prices as decimal numbers without currency symbols. Discount amounts should be positive, even if shown as -£84.96.
 
 Notes: ${notes || ''}

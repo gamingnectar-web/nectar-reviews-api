@@ -1,7 +1,7 @@
 const { env } = require('../../../config/env');
 const { Shop } = require('../../../models');
 const { shopifyFetch, shopifyFetchOptional, getAccessTokenForShop, buildInstallUrl, getShopifyStoreUrl } = require('../../../utils/shopify');
-const { cleanText, normaliseTitle, toMoney, normaliseMetafields } = require('../utils/safe');
+const { cleanText, cleanUrl, normaliseTitle, toMoney, normaliseMetafields } = require('../utils/safe');
 const { normaliseDraftProduct } = require('./normaliseProduct.service');
 
 const REQUIRED_PRODUCT_IMPORT_SCOPES = ['read_products', 'write_products', 'read_inventory', 'write_inventory'];
@@ -313,6 +313,63 @@ async function createShopifyFilesFromImages({ shopDomain, images = [], title = '
   return data?.fileCreate || { files: [], userErrors: [] };
 }
 
+async function attachProductImagesOneByOne({ shopDomain, productId, images = [], title = '' }) {
+  const numericProductId = numericId(productId);
+  const cleanImages = (images || [])
+    .map((image, index) => ({
+      src: cleanUrl(image.src || image.url || ''),
+      alt: cleanText(image.alt || (index === 0 ? title : `${title} product image ${index + 1}`), 500),
+    }))
+    .filter((image) => image.src)
+    .slice(0, 50);
+  const attached = [];
+  const failed = [];
+  if (!numericProductId || !cleanImages.length) return { attached, failed };
+
+  for (const image of cleanImages) {
+    try {
+      const result = await shopifyFetch(`/admin/api/${env.shopifyApiVersion}/products/${numericProductId}/images.json`, {
+        shopDomain,
+        method: 'POST',
+        body: JSON.stringify({ image }),
+      });
+      if (result?.image?.src) attached.push(result.image);
+    } catch (error) {
+      failed.push({ src: image.src, error: error.message || 'Image upload failed' });
+    }
+  }
+  return { attached, failed };
+}
+
+async function attachProductMetafieldsOneByOne({ shopDomain, productId, metafields = [] }) {
+  const numericProductId = numericId(productId);
+  const cleanMetafields = (metafields || []).map(makeRestMetafield).filter(Boolean).slice(0, 100);
+  const attached = [];
+  const failed = [];
+  if (!numericProductId || !cleanMetafields.length) return { attached, failed };
+
+  for (const metafield of cleanMetafields) {
+    try {
+      const result = await shopifyFetch(`/admin/api/${env.shopifyApiVersion}/products/${numericProductId}/metafields.json`, {
+        shopDomain,
+        method: 'POST',
+        body: JSON.stringify({ metafield }),
+      });
+      if (result?.metafield) attached.push(result.metafield);
+    } catch (error) {
+      failed.push({ namespace: metafield.namespace, key: metafield.key, error: error.message || 'Metafield save failed' });
+    }
+  }
+  return { attached, failed };
+}
+
+function createProductErrorMessage(error) {
+  const raw = error?.message || 'Shopify product creation failed.';
+  if (error?.code === 'SHOPIFY_ACCESS_MISSING') return 'Shopify OAuth/Admin API token is missing for this shop. Reconnect the app, then try creating the draft product again.';
+  if (error?.code === 'SHOPIFY_REINSTALL_REQUIRED' || error?.status === 401 || error?.status === 403) return `Shopify refused product creation. Reinstall/reconnect the app with write_products enabled, then try again. ${raw}`.trim();
+  return raw;
+}
+
 async function createShopifyProductFromDraft({ shopDomain, draft }) {
   const normalised = normaliseDraftProduct(draft || {});
   const tags = Array.isArray(normalised.tags) ? normalised.tags.join(', ') : String(normalised.tags || '');
@@ -333,8 +390,11 @@ async function createShopifyProductFromDraft({ shopDomain, draft }) {
     ...(normalised.weight ? [{ namespace: 'external_import', key: 'imported_weight', type: 'single_line_text_field', value: `${normalised.weight}${normalised.weightUnit || 'g'}` }] : []),
     ...(normalised.quantity ? [{ namespace: 'external_import', key: 'invoice_quantity', type: 'number_integer', value: String(Math.round(Number(normalised.quantity) || 1)) }] : []),
     ...(normalised.metafields || []),
-  ]).map(makeRestMetafield).filter(Boolean);
+  ]);
 
+  // Create the product first with only fields that should not be optional.
+  // Images/metafields/inventory cost are attached afterwards one-by-one so a bad
+  // external image URL or a mismatched metafield definition cannot block draft creation.
   const product = {
     title: normalised.title,
     handle: normalised.handle || undefined,
@@ -344,42 +404,80 @@ async function createShopifyProductFromDraft({ shopDomain, draft }) {
     status: 'draft',
     tags,
     variants: [variant],
-    images: normalised.images.map((image) => ({ src: image.src, alt: image.alt || normalised.title })).slice(0, 50),
-    metafields,
   };
 
-  const result = await shopifyFetch(`/admin/api/${env.shopifyApiVersion}/products.json`, {
-    shopDomain,
-    method: 'POST',
-    body: JSON.stringify({ product }),
-  });
+  let result;
+  try {
+    result = await shopifyFetch(`/admin/api/${env.shopifyApiVersion}/products.json`, {
+      shopDomain,
+      method: 'POST',
+      body: JSON.stringify({ product }),
+    });
+  } catch (error) {
+    const err = new Error(createProductErrorMessage(error));
+    err.status = error.status;
+    err.code = error.code;
+    throw err;
+  }
 
+  const createdProduct = result.product || {};
   let inventoryCostWarning = '';
   let fileCreateWarning = '';
+  let imageCreateWarning = '';
+  let metafieldCreateWarning = '';
   let createdFiles = [];
-  if (normalised.cost && result.product?.variants?.[0]?.inventory_item_id) {
+  let attachedImages = [];
+  let savedMetafields = [];
+
+  if (normalised.images.length) {
+    const imageResult = await attachProductImagesOneByOne({ shopDomain, productId: createdProduct.id, images: normalised.images, title: normalised.title });
+    attachedImages = imageResult.attached || [];
+    if (imageResult.failed?.length) {
+      imageCreateWarning = `${imageResult.failed.length} selected image(s) could not be attached to the product. The draft product was still created.`;
+    }
+  }
+
+  if (metafields.length) {
+    const mfResult = await attachProductMetafieldsOneByOne({ shopDomain, productId: createdProduct.id, metafields });
+    savedMetafields = mfResult.attached || [];
+    if (mfResult.failed?.length) {
+      const examples = mfResult.failed.slice(0, 3).map((item) => `${item.namespace}.${item.key}`).join(', ');
+      metafieldCreateWarning = `${mfResult.failed.length} metafield(s) could not be saved${examples ? ` (${examples})` : ''}. This usually means the Shopify metafield definition expects another type/value. The draft product was still created.`;
+    }
+  }
+
+  if (normalised.cost && createdProduct?.variants?.[0]?.inventory_item_id) {
     try {
-      await updateInventoryItemCost({ shopDomain, inventoryItemId: result.product.variants[0].inventory_item_id, cost: normalised.cost });
+      await updateInventoryItemCost({ shopDomain, inventoryItemId: createdProduct.variants[0].inventory_item_id, cost: normalised.cost });
     } catch (error) {
       inventoryCostWarning = `Product was created, but Shopify inventory cost could not be saved. Reinstall with read_inventory/write_inventory and try again. ${error.message || ''}`.trim();
     }
   }
 
-  if (normalised.saveImagesToFiles && product.images.length) {
+  if (normalised.saveImagesToFiles && normalised.images.length) {
     try {
-      const fileResult = await createShopifyFilesFromImages({ shopDomain, images: product.images, title: normalised.title });
+      const fileResult = await createShopifyFilesFromImages({ shopDomain, images: normalised.images, title: normalised.title });
       createdFiles = fileResult.files || [];
     } catch (error) {
       fileCreateWarning = `Product was created, but selected images could not be copied to Shopify Files. Add write_files scope and reinstall if you want images under Content > Files. ${error.message || ''}`.trim();
     }
   }
 
-  return restProductToCard(result.product || {}, {
-    imageCount: product.images.length,
+  const card = restProductToCard(createdProduct || {}, {
+    imageCount: normalised.images.length,
+    attachedImageCount: attachedImages.length,
+    savedMetafieldCount: savedMetafields.length,
     inventoryCostWarning,
     fileCreateWarning,
+    imageCreateWarning,
+    metafieldCreateWarning,
     filesCreatedCount: createdFiles.length,
   });
+  if (attachedImages[0]?.src) {
+    card.image = attachedImages[0].src;
+    card.images = attachedImages.map((image) => image.src).filter(Boolean);
+  }
+  return card;
 }
 
 
@@ -462,18 +560,25 @@ async function getProductMetafieldsForRestProduct({ shopDomain, productId }) {
   return data?.metafields || [];
 }
 
-async function getProfileValuesFromExistingProducts({ shopDomain, tags = [], vendor = '', productType = '' }) {
+async function getProfileValuesFromExistingProducts({ shopDomain, tags = [], vendor = '', productType = '', title = '' }) {
   const data = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products.json?limit=250&fields=id,title,tags,vendor,product_type`, { shopDomain });
   if (!data) return { matchedProductCount: 0, metafields: [] };
   const wantedTags = new Set((Array.isArray(tags) ? tags : []).map((tag) => String(tag).toLowerCase()));
   const wantedVendor = String(vendor || '').toLowerCase();
   const wantedType = String(productType || '').toLowerCase();
+  const wantedTitleTokens = new Set(normaliseTitle(title).split(/\s+/).filter((word) => word.length > 2 && !['the', 'and', 'with', 'for', 'from', 'product', 'imported'].includes(word)));
   const candidates = (data.products || []).filter((product) => {
     const productTags = String(product.tags || '').split(',').map((tag) => tag.trim().toLowerCase());
     const tagHit = wantedTags.size ? productTags.some((tag) => wantedTags.has(tag)) : false;
     const vendorHit = wantedVendor && String(product.vendor || '').toLowerCase() === wantedVendor;
     const typeHit = wantedType && String(product.product_type || '').toLowerCase() === wantedType;
-    return tagHit || vendorHit || typeHit;
+    const productTitleTokens = new Set(normaliseTitle(product.title).split(/\s+/).filter((word) => word.length > 2));
+    const titleOverlap = Array.from(wantedTitleTokens).filter((token) => productTitleTokens.has(token)).length;
+    const narrowVendorTitleHit = vendorHit && wantedTitleTokens.size >= 2 && titleOverlap >= Math.min(2, wantedTitleTokens.size);
+
+    // Vendor alone is too broad for profile copying. A G Fuel lunch box should not inherit
+    // drink metafields from unrelated tubs just because the vendor matches.
+    return tagHit || typeHit || narrowVendorTitleHit;
   }).slice(0, 12);
 
   const counts = new Map();

@@ -11,6 +11,40 @@ const CORE_PROFILE_METAFIELDS = [
   { namespace: 'core', key: 'flavour_profile', name: 'Flavour Profile', type: 'single_line_text_field', help: 'Plain-English flavour description.' },
 ];
 
+const CORE_PROFILE_KEYS = new Set(['core.formula_version', 'core.grouped_profiles', 'core.sourness', 'core.sweetness', 'core.flavour_profile']);
+
+function draftSearchText(draft = {}) {
+  return [
+    draft.title,
+    draft.vendor,
+    draft.productType,
+    Array.isArray(draft.tags) ? draft.tags.join(' ') : draft.tags,
+    draft.sourceUrl,
+    draft.descriptionHtml,
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function isClearlyNonDrinkProduct(draft = {}) {
+  const text = draftSearchText(draft);
+  return /lunch\s*box|lunchbox|collectible|collector|shaker|cup|bottle|keychain|sticker|hat|shirt|hoodie|apparel|merch|accessor(y|ies)|checkout\+|insurance|warranty|protection|mystery\s+(item|product)/i.test(text)
+    && !/serving|formula|powder|hydration|energy\s*(drink|formula)|tub|can\s*(pack|case)|drink\s*mix/i.test(text);
+}
+
+function isLikelyDrinkProduct(draft = {}) {
+  const text = draftSearchText(draft);
+  if (isClearlyNonDrinkProduct(draft)) return false;
+  return /serving|formula|powder|hydration|energy\s*(drink|formula)|gamer\s*drink|tub|drink\s*mix|can\s*(pack|case)|cans?\b|flavour|flavor/i.test(text);
+}
+
+function filterMetafieldsForProductKind(items = [], draft = {}) {
+  const allowCoreDrinkProfile = isLikelyDrinkProduct(draft);
+  return (items || []).filter((item) => {
+    const compound = `${item.namespace}.${item.key}`;
+    if (!CORE_PROFILE_KEYS.has(compound)) return true;
+    return allowCoreDrinkProfile;
+  });
+}
+
 function mergeMetafields(...groups) {
   const byKey = new Map();
   groups.flat().filter(Boolean).forEach((item) => {
@@ -59,7 +93,8 @@ metafields must be an array of {namespace,key,type,value,confidence,source}. Inc
 
 Rules:
 - Preserve merchant terminology from existing tags/metafield names.
-- For G Fuel drinks/tubs, estimate Formula Version, sweetness, sourness and flavour profile from the product title, description and URL content.
+- For G Fuel drinks/tubs/consumable drink products only, estimate Formula Version, sweetness, sourness and flavour profile from the product title, description and URL content.
+- Do not add core.formula_version, core.grouped_profiles, core.sourness, core.sweetness or core.flavour_profile for accessories, lunch boxes, shakers, cases, apparel, insurance, or non-consumable merchandise.
 - core.sourness and core.sweetness must be string numbers from "1" to "5" only: 1 = very low, 3 = medium, 5 = very high. Do not use words like low/medium/high for these two fields.
 - Do not invent SKU, barcode or paid price. Only suggest weight if it is explicit in the page/title/description or clearly visible in provided content.
 - Suggest an SEO-safe handle matching the title.
@@ -68,7 +103,7 @@ Rules:
 Existing tag examples: ${(metadata.tags || []).slice(0, 80).map((item) => item.tag || item).join(', ')}
 Metafield definitions: ${(metadata.metafieldDefinitions || []).slice(0, 80).map((item) => `${item.namespace}.${item.key} (${item.name || item.type})`).join(', ')}
 Metafield mapping rules: ${JSON.stringify((metadata.settings?.metafieldMappingRules || []).filter((rule) => rule.enabled !== false).slice(0, 80)).slice(0, 4000)}
-Product draft: ${JSON.stringify({ title: draft.title, vendor: draft.vendor, productType: draft.productType, tags: draft.tags, sourceUrl: draft.sourceUrl, descriptionHtml: draft.descriptionHtml, handle: draft.handle, weight: draft.weight, weightUnit: draft.weightUnit }).slice(0, 7000)}`;
+Product draft: ${JSON.stringify({ title: draft.title, vendor: draft.vendor, productType: draft.productType, tags: draft.tags, sourceUrl: draft.sourceUrl, descriptionHtml: draft.descriptionHtml, handle: draft.handle, weight: draft.weight, weightUnit: draft.weightUnit, likelyDrinkProduct: isLikelyDrinkProduct(draft), clearlyNonDrinkProduct: isClearlyNonDrinkProduct(draft) }).slice(0, 7000)}`;
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -117,6 +152,7 @@ async function suggestProductProfile({ shopDomain, draft }) {
     tags: normalised.tags,
     vendor: normalised.vendor,
     productType: normalised.productType,
+    title: normalised.title,
   });
   const ai = await aiSuggestProductProfile({ draft: normalised, metadata });
 
@@ -125,11 +161,12 @@ async function suggestProductProfile({ shopDomain, draft }) {
     ...parseTags(ai?.tags || []),
   ])).slice(0, 40);
 
-  const suggestedMetafields = normaliseMetafields(normaliseCoreGaugeMetafields(mergeMetafields(
-    existing.metafields || [],
-    normalised.metafields || [],
-    ai?.metafields || []
-  )));
+  const mergedMetafields = mergeMetafields(
+    filterMetafieldsForProductKind(existing.metafields || [], normalised),
+    filterMetafieldsForProductKind(normalised.metafields || [], normalised),
+    filterMetafieldsForProductKind(ai?.metafields || [], normalised)
+  );
+  const suggestedMetafields = normaliseMetafields(normaliseCoreGaugeMetafields(filterMetafieldsForProductKind(mergedMetafields, normalised)));
 
   const settingsApplied = applySettingsToDraft({
     ...normalised,
@@ -148,7 +185,7 @@ async function suggestProductProfile({ shopDomain, draft }) {
     sku: settingsApplied.sku,
     title: settingsApplied.title,
     tags: settingsApplied.tags,
-    metafields: settingsApplied.metafields,
+    metafields: filterMetafieldsForProductKind(settingsApplied.metafields || [], settingsApplied),
     existingProfileMatchedProducts: existing.matchedProductCount || 0,
     aiNotes: cleanText(ai?.notes || ai?.error || '', 500),
   };
@@ -167,9 +204,9 @@ async function enrichProductDraft({ shopDomain, draft }) {
     weightUnit: suggestion.weightUnit || normalised.weightUnit,
     sku: suggestion.sku || normalised.sku,
     tags: suggestion.tags?.length ? suggestion.tags : normalised.tags,
-    metafields: normaliseCoreGaugeMetafields(mergeMetafields(normalised.metafields || [], suggestion.metafields || [])),
+    metafields: normaliseCoreGaugeMetafields(filterMetafieldsForProductKind(mergeMetafields(normalised.metafields || [], suggestion.metafields || []), normalised)),
     enrichment: suggestion,
   });
 }
 
-module.exports = { getProductImportMetadata, suggestProductProfile, enrichProductDraft, CORE_PROFILE_METAFIELDS };
+module.exports = { getProductImportMetadata, suggestProductProfile, enrichProductDraft, CORE_PROFILE_METAFIELDS, isLikelyDrinkProduct, isClearlyNonDrinkProduct, filterMetafieldsForProductKind };
