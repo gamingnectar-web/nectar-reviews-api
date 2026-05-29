@@ -1,19 +1,4 @@
-require('dotenv').config();
-
-// Render/Git safety guard: this app relies on src/utils/validation.js in many routes.
-// If a deploy accidentally omits that utility file, restore it before loading src/app
-// so the service starts instead of crashing with MODULE_NOT_FOUND.
-const fs = require('fs');
-const path = require('path');
-
-function ensureCoreUtilityFiles() {
-  const utilsDir = path.join(__dirname, 'src', 'utils');
-  const validationFile = path.join(utilsDir, 'validation.js');
-
-  if (fs.existsSync(validationFile)) return;
-
-  fs.mkdirSync(utilsDir, { recursive: true });
-  fs.writeFileSync(validationFile, `function cleanShopDomain(value) {
+function cleanShopDomain(value) {
   return String(value || '')
     .trim()
     .toLowerCase()
@@ -65,26 +50,3 @@ module.exports = {
   cleanReviewStatus,
   getClientIp,
 };
-`);
-  console.warn('Restored missing core utility file: src/utils/validation.js');
-}
-
-ensureCoreUtilityFiles();
-
-const app = require('./src/app');
-const { connectDb } = require('./src/config/db');
-const { env } = require('./src/config/env');
-const { startPlatformModuleJobs } = require('./src/modules');
-
-async function start() {
-  await connectDb();
-  startPlatformModuleJobs();
-  app.listen(env.port, () => {
-    console.log(`✅ Reviews Platform API running on port ${env.port}`);
-  });
-}
-
-start().catch((error) => {
-  console.error('❌ Failed to start Reviews Platform API:', error);
-  process.exit(1);
-});

@@ -1,13 +1,14 @@
 {
   "name": "reviews-platform-api",
-  "version": "1.2.26-v32-product-import-completion-check",
-  "description": "Reviews Platform API v32: completes PRODUCT CREATION & PRODUCT IMPORT checks, Shopify scope reporting, GraphQL product search, inventory cost updates and PO discount safeguards.",
+  "version": "1.2.27-v33-validation-startup-fix",
+  "description": "Reviews Platform API v33: fixes Render startup by restoring and verifying core validation utility plus Product Creation & Import checks.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check src/app.js && find src public Shopify-Liquid/assets extensions/review-widget-extension/assets -name '*.js' -print0 | xargs -0 -n1 node --check && node scripts/verify-restore.js && node scripts/cart-rewards-smoke-test.js",
+    "check": "node --check server.js && node --check src/app.js && find src public Shopify-Liquid/assets extensions/review-widget-extension/assets -name '*.js' -print0 | xargs -0 -n1 node --check && node scripts/verify-restore.js && node scripts/verify-relative-requires.js && node scripts/cart-rewards-smoke-test.js",
     "verify:restore": "node scripts/verify-restore.js",
-    "cart-rewards:smoke": "node scripts/cart-rewards-smoke-test.js"
+    "cart-rewards:smoke": "node scripts/cart-rewards-smoke-test.js",
+    "verify:requires": "node scripts/verify-relative-requires.js"
   },
   "engines": {
     "node": ">=18"
