@@ -8,12 +8,73 @@ const { enrichProductDraft, getProductImportMetadata, suggestProductProfile } = 
 const { suggestedRetailFromCost, toMoney, cleanText } = require('./utils/safe');
 const { getProductImportSettings, saveProductImportSettings } = require('./services/productImportSettings.service');
 
-function calculateLineTotal(line = {}) {
+
+function moneyNumber(value) {
+  const clean = toMoney(value || '');
+  const number = Number(clean);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function moneyString(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && Math.abs(number) > 0.0001 ? number.toFixed(2) : '';
+}
+
+function positiveMoney(value) {
+  const number = Math.abs(moneyNumber(value));
+  return number > 0 ? number.toFixed(2) : '';
+}
+
+function calculateNetLineTotal(line = {}) {
   const qty = Number(line.quantity || 1) || 1;
-  const unit = Number(toMoney(line.unitCost || 0)) || 0;
-  const total = Number(toMoney(line.totalCost || ''));
-  if (Number.isFinite(total) && total > 0) return total.toFixed(2);
+  const unit = moneyNumber(line.unitCost || 0);
+  const total = moneyNumber(line.totalCost || '');
+  if (total > 0 || String(line.totalCost || '').trim() === '0' || String(line.totalCost || '').trim() === '0.00') return total.toFixed(2);
   return (qty * unit).toFixed(2);
+}
+
+function calculateLineDiscountTotal(line = {}) {
+  const qty = Number(line.quantity || 1) || 1;
+  const explicit = Math.abs(moneyNumber(line.discountAmount || ''));
+  if (explicit > 0) return explicit.toFixed(2);
+
+  const originalUnit = moneyNumber(line.originalUnitPrice || '');
+  if (originalUnit > 0) {
+    const gross = originalUnit * qty;
+    const net = moneyNumber(calculateNetLineTotal(line));
+    const derived = gross - net;
+    if (derived > 0.004) return derived.toFixed(2);
+  }
+  return '';
+}
+
+function calculateGrossLineTotal(line = {}) {
+  const qty = Number(line.quantity || 1) || 1;
+  const originalUnit = moneyNumber(line.originalUnitPrice || '');
+  if (originalUnit > 0) return (originalUnit * qty).toFixed(2);
+  const net = moneyNumber(calculateNetLineTotal(line));
+  const discount = moneyNumber(calculateLineDiscountTotal(line));
+  return (net + discount).toFixed(2);
+}
+
+function calculateGrossUnitCost(line = {}) {
+  const qty = Number(line.quantity || 1) || 1;
+  const originalUnit = moneyNumber(line.originalUnitPrice || '');
+  if (originalUnit > 0) return originalUnit.toFixed(2);
+  const gross = moneyNumber(calculateGrossLineTotal(line));
+  return qty > 0 ? (gross / qty).toFixed(2) : gross.toFixed(2);
+}
+
+function calculateNetUnitCost(line = {}) {
+  const qty = Number(line.quantity || 1) || 1;
+  const unit = moneyNumber(line.unitCost || '');
+  if (unit > 0 || String(line.unitCost || '').trim() === '0' || String(line.unitCost || '').trim() === '0.00') return unit.toFixed(2);
+  const net = moneyNumber(calculateNetLineTotal(line));
+  return qty > 0 ? (net / qty).toFixed(2) : net.toFixed(2);
+}
+
+function calculateLineTotal(line = {}) {
+  return calculateNetLineTotal(line);
 }
 
 function sumMoney(values = []) {
@@ -169,16 +230,31 @@ async function assignLine({ shopDomain, importId, lineId, productId, variantId, 
 function buildPurchaseOrderDraft(doc, overrideLines = []) {
   const lines = (overrideLines.length ? overrideLines : doc.lines).map((line) => {
     const match = line.match || {};
+    const quantity = Number(line.quantity || 1) || 1;
+    const netUnitCost = calculateNetUnitCost(line);
+    const grossUnitCost = calculateGrossUnitCost(line);
+    const netLineTotal = calculateNetLineTotal(line);
+    const grossLineTotal = calculateGrossLineTotal(line);
+    const lineDiscountTotal = calculateLineDiscountTotal(line);
     return {
       lineId: line.lineId,
       title: line.title || match.productTitle || '',
       sku: line.sku || line.supplierProductCode || '',
       barcode: line.barcode || '',
-      quantity: Number(line.quantity || 1) || 1,
-      unitCost: toMoney(line.unitCost || ''),
-      originalUnitPrice: toMoney(line.originalUnitPrice || ''),
-      totalCost: calculateLineTotal(line),
-      discountAmount: toMoney(line.discountAmount || ''),
+      quantity,
+      // unitCost remains the actually-paid/net unit cost for stock-margin reporting.
+      unitCost: netUnitCost,
+      netUnitCost,
+      // grossUnitCost is the original/pre-discount unit cost that should be used when
+      // creating a PO prompt with a separate discount so Shopify reconciles correctly.
+      grossUnitCost,
+      originalUnitPrice: toMoney(line.originalUnitPrice || grossUnitCost || ''),
+      // totalCost remains the actually-paid/net line total for backward compatibility.
+      totalCost: netLineTotal,
+      netLineTotal,
+      grossLineTotal,
+      discountAmount: lineDiscountTotal,
+      lineDiscountTotal,
       discountLabel: cleanText(line.discountLabel || '', 220),
       suggestedRetailPrice: toMoney(line.suggestedRetailPrice || ''),
       weight: line.weight || '',
@@ -192,29 +268,47 @@ function buildPurchaseOrderDraft(doc, overrideLines = []) {
       note: match.reason || '',
     };
   });
-  const subtotal = sumMoney(lines.map((line) => line.totalCost));
-  // PO-level discount is the source of truth for purchase-order totals. Line discounts are
-  // retained on each row as context, but are not auto-subtracted because invoice/order line
-  // totals are usually already final paid totals and subtracting both would double-discount.
-  const discountTotal = doc.poLevelDiscount || doc.discountTotal || '';
+
+  const grossSubtotal = sumMoney(lines.map((line) => line.grossLineTotal));
+  const netProductSubtotal = sumMoney(lines.map((line) => line.netLineTotal || line.totalCost));
+  const lineDiscountTotal = sumMoney(lines.map((line) => line.lineDiscountTotal || line.discountAmount));
+  const extractedDiscount = moneyNumber(doc.poLevelDiscount || doc.discountTotal || '');
+  const allocatedLineDiscount = moneyNumber(lineDiscountTotal);
+
+  // If the invoice/order provided line-level discounts, those are allocated to the
+  // products. Only keep any remainder as a separate order-level discount.
+  const orderLevelDiscountNumber = Math.max(0, extractedDiscount - allocatedLineDiscount);
+  const orderLevelDiscount = moneyString(orderLevelDiscountNumber);
+  const discountTotal = moneyString(allocatedLineDiscount + orderLevelDiscountNumber) || '';
   const shippingTotal = doc.shippingTotal || '';
   const taxTotal = doc.taxTotal || '';
-  const totalNumber = [subtotal, shippingTotal, taxTotal].reduce((sum, value) => sum + (Number(toMoney(value)) || 0), 0) - (Number(toMoney(discountTotal)) || 0);
-  const total = doc.total || (totalNumber > 0 ? totalNumber.toFixed(2) : subtotal);
+  const calculatedTotalNumber = moneyNumber(grossSubtotal) + moneyNumber(shippingTotal) + moneyNumber(taxTotal) - moneyNumber(discountTotal);
+  const calculatedTotal = calculatedTotalNumber > 0 ? calculatedTotalNumber.toFixed(2) : netProductSubtotal;
+  const total = doc.total || calculatedTotal;
+
   return {
     status: 'draft',
     poNumber: doc.purchaseOrder?.poNumber || `PO-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(doc._id).slice(-5).toUpperCase()}`,
     supplierName: doc.supplierName || '',
     supplierUrl: doc.supplierUrl || '',
     currency: doc.currency || 'GBP',
-    poLevelDiscount: doc.poLevelDiscount || doc.discountTotal || '',
+    poLevelDiscount: orderLevelDiscount || doc.poLevelDiscount || '',
     invoiceNumber: doc.invoiceNumber || '',
     invoiceDate: doc.invoiceDate || '',
     lines,
-    subtotal,
+    // Subtotal is now the gross product cost before discounts. This is deliberate:
+    // prompt-based Shopify PO creation needs the product cost + separate discount to
+    // reconcile totals such as 104.00 paid + 84.96 discount = 188.96 gross for 8 tubs.
+    subtotal: grossSubtotal,
+    grossSubtotal,
+    netProductSubtotal,
+    lineDiscountTotal,
+    productDiscountTotal: lineDiscountTotal,
+    orderLevelDiscount,
     discountTotal,
     shippingTotal,
     taxTotal,
+    calculatedTotal,
     total,
     notes: doc.purchaseOrder?.notes || '',
     createdAt: doc.purchaseOrder?.createdAt || new Date(),
@@ -289,12 +383,19 @@ function buildPurchaseOrderPrompt({ doc, purchaseOrder }) {
       line.productId ? `Shopify product ID: ${line.productId}` : '',
       line.variantId ? `Shopify variant ID: ${line.variantId}` : '',
     ].filter(Boolean).join('; ');
+    const grossUnit = line.grossUnitCost || line.originalUnitPrice || line.unitCost;
+    const netUnit = line.netUnitCost || line.unitCost;
+    const grossLine = line.grossLineTotal || line.totalCost;
+    const netLine = line.netLineTotal || line.totalCost;
+    const discount = line.lineDiscountTotal || line.discountAmount;
     const costBits = [
       `Quantity: ${line.quantity || 1}`,
-      `Cost per unit: ${formatPoMoney(currency, line.unitCost)}`,
-      line.totalCost ? `Line total: ${formatPoMoney(currency, line.totalCost)}` : '',
-      line.originalUnitPrice ? `Original/compare-at unit price: ${formatPoMoney(currency, line.originalUnitPrice)}` : '',
-      line.discountAmount ? `Line discount context: ${formatPoMoney(currency, line.discountAmount)}` : '',
+      `Gross/original unit cost to enter on the PO: ${formatPoMoney(currency, grossUnit)}`,
+      `Paid/net unit cost after discount: ${formatPoMoney(currency, netUnit)}`,
+      grossLine ? `Gross/original line total before discount: ${formatPoMoney(currency, grossLine)}` : '',
+      discount ? `Product/line discount to apply: ${formatPoMoney(currency, discount)}` : '',
+      netLine ? `Net line total actually paid: ${formatPoMoney(currency, netLine)}` : '',
+      line.originalUnitPrice ? `Original/compare-at unit price detected: ${formatPoMoney(currency, line.originalUnitPrice)}` : '',
       line.discountLabel ? `Promotion/discount label: ${line.discountLabel}` : '',
     ].filter(Boolean).join('; ');
     return `${index + 1}. ${line.title || line.productTitle || 'Product'}\n   ${productBits || 'No Shopify product match recorded'}\n   ${costBits}`;
@@ -308,8 +409,9 @@ function buildPurchaseOrderPrompt({ doc, purchaseOrder }) {
     '- Use Shopify native Purchase Orders / inventory purchasing if available in this admin session.',
     '- Do not create a customer draft order or customer invoice.',
     '- Keep it as a draft purchase order unless I explicitly confirm receiving stock.',
-    '- Use the matched Shopify products where product IDs, handles or SKUs are provided.',
-    '- Treat the PO-level discount as the order discount. Line-level discounts are included as context only and should not be double-counted unless Shopify requires line-level allocation.',
+    '- Use the matched Shopify products where product IDs, handles, SKUs or variant IDs are provided.',
+    '- For product costs, use the GROSS/original unit cost when a line discount exists, then add the product/line discount so the PO total reconciles to the final paid total.',
+    '- Do not double-count discounts. Product/line discounts are already allocated below. Only use an additional order-level discount if one is explicitly listed.',
     unmatchedCount ? `- ${unmatchedCount} line(s) may still need manual confirmation because they are not marked assigned/created.` : '- All lines are marked assigned or created in Nectar.',
     '',
     'Purchase order details:',
@@ -323,17 +425,21 @@ function buildPurchaseOrderPrompt({ doc, purchaseOrder }) {
     'Products coming into stock:',
     lineText,
     '',
-    'Order totals:',
-    `Subtotal: ${formatPoMoney(currency, po.subtotal)}`,
-    `PO/order discount: ${formatPoMoney(currency, po.discountTotal || po.poLevelDiscount)}`,
+    'Order totals to reconcile:',
+    `Gross product subtotal before discounts: ${formatPoMoney(currency, po.grossSubtotal || po.subtotal)}`,
+    `Product/line discount total: ${formatPoMoney(currency, po.productDiscountTotal || po.lineDiscountTotal)}`,
+    `Additional order-level discount: ${formatPoMoney(currency, po.orderLevelDiscount || po.poLevelDiscount)}`,
+    `Total discount: ${formatPoMoney(currency, po.discountTotal)}`,
+    `Net product subtotal after discounts: ${formatPoMoney(currency, po.netProductSubtotal)}`,
     `Shipping: ${formatPoMoney(currency, po.shippingTotal)}`,
     `Tax: ${formatPoMoney(currency, po.taxTotal)}`,
-    `Final total: ${formatPoMoney(currency, po.total)}`,
+    `Final paid total: ${formatPoMoney(currency, po.total)}`,
+    po.calculatedTotal && po.total && po.calculatedTotal !== po.total ? `Calculated check total: ${formatPoMoney(currency, po.calculatedTotal)}. The invoice final paid total should be treated as source of truth.` : '',
     '',
     po.notes ? `Notes:\n${po.notes}` : 'Notes: none',
     '',
     'Please ask me to confirm any missing supplier, cost, quantity, product match or receiving-location information before finalising.'
-  ].join('\n');
+  ].filter((line) => line !== '').join('\n');
   return prompt;
 }
 

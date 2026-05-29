@@ -1,17 +1,56 @@
 const { cleanText, makeLineId, safeJsonParse, suggestedRetailFromCost, toMoney } = require('../utils/safe');
 
+function divideMoney(total, quantity) {
+  const qty = Number(quantity || 1) || 1;
+  const number = Number(toMoney(total || ''));
+  if (!Number.isFinite(number)) return '';
+  return (number / qty).toFixed(2);
+}
+
+function addMoney(...values) {
+  const total = values.reduce((sum, value) => sum + (Number(toMoney(value || '')) || 0), 0);
+  return total ? total.toFixed(2) : '';
+}
+
+function positiveMoney(value) {
+  const number = Math.abs(Number(toMoney(value || '')) || 0);
+  return number ? number.toFixed(2) : '';
+}
+
 function lineFromRaw(raw = {}, index = 0) {
-  const unitCost = toMoney(raw.unitCost || raw.pricePaid || raw.cost || raw.unit_price || raw.price || raw.paidPrice || raw.finalUnitPrice || '');
-  const originalUnitPrice = toMoney(raw.originalUnitPrice || raw.originalPrice || raw.retailPrice || raw.compareAtPrice || '');
-  const discountAmount = toMoney(raw.discountAmount || raw.discount || raw.discountValue || '');
-  const totalCost = toMoney(raw.totalCost || raw.lineTotal || raw.total || raw.paidTotal || '');
+  const quantity = Number(raw.quantity || raw.qty || 1) || 1;
+  let unitCost = toMoney(raw.unitCost || raw.pricePaid || raw.cost || raw.unit_price || raw.price || raw.paidPrice || raw.finalUnitPrice || '');
+  let originalUnitPrice = toMoney(raw.originalUnitPrice || raw.originalPrice || raw.retailPrice || raw.compareAtPrice || raw.grossUnitPrice || '');
+  let discountAmount = positiveMoney(raw.discountAmount || raw.discount || raw.discountValue || raw.lineDiscount || '');
+  let totalCost = toMoney(raw.totalCost || raw.lineTotal || raw.total || raw.paidTotal || raw.netLineTotal || '');
+
+  // Reconcile the three important PO values:
+  // gross/original unit cost, line discount total, and final paid/net line total.
+  // This lets the generated prompt say: 8 tubs at £23.62, discount £84.96,
+  // net paid £104.00, instead of losing the product discount context.
+  if (!totalCost && unitCost) totalCost = (Number(toMoney(unitCost)) * quantity).toFixed(2);
+  if (!unitCost && totalCost) unitCost = divideMoney(totalCost, quantity);
+
+  if (originalUnitPrice && totalCost && !discountAmount) {
+    const derived = (Number(originalUnitPrice) * quantity) - Number(totalCost);
+    if (Number.isFinite(derived) && derived > 0.004) discountAmount = derived.toFixed(2);
+  }
+  if (!originalUnitPrice && totalCost && discountAmount) {
+    originalUnitPrice = divideMoney(addMoney(totalCost, discountAmount), quantity);
+  }
+  if (originalUnitPrice && discountAmount && !totalCost) {
+    const derivedNet = (Number(originalUnitPrice) * quantity) - Number(discountAmount);
+    if (Number.isFinite(derivedNet) && derivedNet >= 0) totalCost = derivedNet.toFixed(2);
+  }
+  if (!unitCost && totalCost) unitCost = divideMoney(totalCost, quantity);
+
   return {
     lineId: raw.lineId || makeLineId(index),
     title: cleanText(raw.title || raw.productTitle || raw.name || raw.description || '', 220),
     sku: cleanText(raw.sku || raw.SKU || '', 120),
     barcode: cleanText(raw.barcode || raw.gtin || raw.ean || '', 120),
     supplierProductCode: cleanText(raw.supplierProductCode || raw.productCode || raw.code || '', 120),
-    quantity: Number(raw.quantity || raw.qty || 1) || 1,
+    quantity,
     unitCost,
     originalUnitPrice,
     totalCost,
@@ -69,13 +108,13 @@ async function extractWithOpenAi({ imageDataUrl, filename, notes, supplierUrl })
   const model = process.env.OPENAI_INVOICE_MODEL || process.env.OPENAI_MODULE_MODEL || 'gpt-4.1-mini';
   const prompt = `Extract product purchase data from this supplier invoice, order confirmation, PO or receipt for a Shopify product import app. Return ONLY JSON with keys: supplierName, invoiceNumber, invoiceDate, currency, total, shippingTotal, taxTotal, discountTotal, lines.
 
-lines must be an array of product rows only. Each line object must include as many of these as possible: title, sku, barcode, supplierProductCode, quantity, unitCost, originalUnitPrice, totalCost, discountAmount, discountLabel, suggestedRetailPrice, imageUrl, imageDescription, imageSearchQuery, sourceUrl, confidence.
+lines must be an array of product rows only. Each line object must include as many of these as possible: title, sku, barcode, supplierProductCode, quantity, unitCost, originalUnitPrice, totalCost, discountAmount, discountLabel, suggestedRetailPrice, imageUrl, imageDescription, imageSearchQuery, sourceUrl, confidence. Treat unitCost as the final paid/net unit cost after discounts, originalUnitPrice as the pre-discount unit price, totalCost as the final paid/net line total, and discountAmount as the total product-specific discount for that line as a positive number.
 
 Important:
 - Look at product thumbnails/images in the screenshot. If an actual product image URL is visible in the document, return imageUrl. If not, describe the thumbnail in imageDescription and create a concise imageSearchQuery.
-- Capture free/discounted lines as quantity with unitCost 0.00 or the final paid price, and put the promotion text in discountLabel.
+- Capture free/discounted lines as quantity with unitCost 0.00 or the final paid price, originalUnitPrice as the visible crossed-out/original price, discountAmount as the line discount that made it free/discounted, and put the promotion text in discountLabel.
 - Do not include shipping, tax, payment rows, insurance rows, order status text or totals as product lines unless they are clearly a purchasable product line.
-- Keep prices as decimal numbers without currency symbols.
+- Keep prices as decimal numbers without currency symbols. Discount amounts should be positive, even if shown as -£84.96.
 
 Notes: ${notes || ''}
 Supplier URL: ${supplierUrl || ''}

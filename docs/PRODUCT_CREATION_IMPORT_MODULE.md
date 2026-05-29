@@ -26,7 +26,7 @@ API namespace:
 read_products,write_products,read_inventory,write_inventory,read_customers,read_orders
 ```
 
-- PO discount logic has been tightened: PO-level discount is the source of truth for PO totals. Line-level discounts are retained as row context/promotional notes, but are no longer auto-subtracted from totals to avoid double-discounting when the extracted line total is already the paid/final total.
+- PO discount logic now allocates product-specific discounts into product lines. For example, if a line shows `£104.00 paid` and `£84.96 discount` for 8 tubs, the app calculates `£188.96 gross line total`, `£23.62 gross/unit`, `£13.00 paid/unit`, and keeps `£84.96 product discount`. The generated Shopify/Sidekick prompt uses gross product costs plus product discounts so the final total reconciles correctly.
 
 ## What changed in v31
 
@@ -46,7 +46,7 @@ read_products,write_products,read_inventory,write_inventory,read_customers,read_
   - Vendor presets.
   - SKU rules based on vendor, tag, product line and metafield values such as `core.formula_version`.
   - Conditional defaults, for example add a tag when title contains X, set product type when vendor contains X, or set a metafield when Formula Version equals EN.
-- Invoice import has vendor, currency, PO-level discount, shipping and tax fields before analysis/PO creation.
+- Invoice import has vendor, currency, product/order discount, shipping and tax fields before analysis/PO creation. Product-specific discounts are allocated to PO lines where detected; any remaining unallocated discount is kept as an extra order-level discount.
 - Invoice product search opens a modal with a search bar and selectable Shopify product results.
 - Draft PO creation posts vendor/currency/discount/shipping/tax overrides to the backend and does not depend on every line being matched first.
 
