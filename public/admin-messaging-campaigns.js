@@ -10,6 +10,7 @@
   let messageModules = [];
   let hiddenModuleIds = [];
   let providerProfiles = [];
+  let emailTemplates = [];
 
   const BUILT_IN_MODULES = [
     { id: 'notice', name: 'Notice box', title: 'Before you review', text: 'A quick note before you review: your feedback helps other customers choose confidently.', bgColor: '#f8fafc', borderColor: '#e5e7eb', borderWidth: 1, radius: 12, padding: 14, buttonText: '', buttonUrl: '' },
@@ -139,7 +140,7 @@
       .msg-input-action{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center}.msg-input-action .msg-btn{white-space:nowrap}.msg-section-row{border:1px solid var(--border,#e5e7eb);border-radius:14px;background:#fbfdff;padding:12px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:start}.msg-section-row.dragging{opacity:.55}.msg-drag-handle{cursor:grab;width:34px;height:34px;border:1px solid #d9e0ea;border-radius:10px;background:#fff;display:grid;place-items:center;font-weight:950;color:#667085}.msg-section-editor{display:grid;gap:10px}.msg-section-editor input,.msg-section-editor textarea,.msg-section-editor select{width:100%;min-height:38px;border:1px solid #cfd5dd;border-radius:10px;padding:8px 10px;font:inherit}.msg-section-editor textarea{min-height:68px;resize:none}.msg-section-style-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.msg-section-style-grid label{margin:0!important;font-size:11px!important;color:#667085!important}.msg-section-actions{display:flex;gap:6px}.msg-icon-btn{width:34px;height:34px;border:1px solid var(--border,#e5e7eb);border-radius:10px;background:#fff;color:#111827;font-weight:950;cursor:pointer}.msg-icon-btn.danger{color:#d72c0d;background:#fff1f3}.msg-code-card details{background:#fff;border-radius:16px;overflow:hidden}.msg-code-card summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:18px 20px;cursor:pointer}.msg-code-card summary::-webkit-details-marker{display:none}.msg-code-card summary:before{content:'+';display:inline-grid;place-items:center;width:30px;height:30px;border-radius:10px;border:1px solid #d9e0ea;background:#fff;font-weight:950;margin-right:12px}.msg-code-card details[open] summary:before{content:'−'}.msg-code-card summary>div{flex:1}.msg-code-card summary span{color:#667085;font-size:13px}.msg-link-rule-row{grid-template-columns:minmax(150px,180px) minmax(0,1fr) minmax(0,1fr) auto!important}.msg-link-rule-row .msg-btn{align-self:end;white-space:nowrap}
       .flow-product-modal-backdrop{position:fixed;inset:0;z-index:2147483000;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.56);}.flow-product-modal-backdrop.active{display:flex;}.flow-product-modal{width:min(860px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:18px;box-shadow:0 28px 90px rgba(15,23,42,.32);border:1px solid var(--border,#e5e7eb);}.flow-product-modal-head{display:flex;justify-content:space-between;gap:16px;padding:22px 24px;border-bottom:1px solid var(--border,#e5e7eb);}.flow-product-modal-head h3{margin:0 0 5px;font-size:20px;}.flow-product-modal-head p{margin:0;color:#667085;}.flow-product-modal-close{border:0;background:#f3f4f6;width:36px;height:36px;border-radius:999px;cursor:pointer;font-weight:900;}.flow-product-search{display:grid;grid-template-columns:1fr auto;gap:10px;padding:18px 24px;border-bottom:1px solid var(--border,#e5e7eb);}.flow-product-search input{min-height:44px;border:1px solid #cfd5dd;border-radius:10px;padding:10px 12px;font:inherit;}.flow-product-search button,.flow-product-modal-actions button{border:0;border-radius:10px;background:#111827;color:#fff;min-height:44px;padding:10px 16px;font-weight:900;cursor:pointer;}.flow-product-modal-actions{display:flex;justify-content:flex-end;gap:10px;padding:18px 24px 24px;}.flow-product-modal-actions .secondary{background:#fff;color:#111827;border:1px solid var(--border,#e5e7eb);}.flow-product-results{padding:12px 24px 4px;display:grid;gap:10px;}.flow-product-row{display:grid;grid-template-columns:auto 56px 1fr auto;gap:12px;align-items:center;padding:12px;border:1px solid var(--border,#e5e7eb);border-radius:14px;background:#fbfdff;}.flow-product-row img{width:56px;height:56px;object-fit:cover;border-radius:10px;background:#eef2f7;}.flow-product-row strong{display:block;font-size:14px;}.flow-product-row small{color:#667085;}.flow-product-row button{border:1px solid var(--border,#e5e7eb);background:#fff;color:#111827;border-radius:10px;min-height:38px;padding:8px 12px;font-weight:900;cursor:pointer;}.oauth-connect{display:flex;justify-content:space-between;gap:14px;align-items:center;border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:12px;padding:14px;}.oauth-connect a{background:#111827;color:#fff;text-decoration:none;border-radius:10px;padding:10px 14px;font-weight:900;white-space:nowrap;}
 
-      .msg-builder-grid,.msg-delivery-grid,.msg-settings-grid,.msg-tester-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}.msg-test-actions{display:grid!important;grid-template-columns:1fr 1fr 46px;gap:10px;align-items:center}.msg-test-actions .msg-template-add{width:46px;height:46px}.msg-section-list-wide{display:grid;gap:12px}.msg-section-row{grid-template-columns:38px minmax(0,1fr) 38px!important}.msg-section-editor{gap:12px!important}.msg-section-editor .msg-section-title-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,160px);gap:10px}.msg-section-style-grid{grid-template-columns:repeat(5,minmax(80px,1fr))!important}.msg-link-rule-row{grid-template-columns:180px minmax(220px,1fr) minmax(220px,1fr) auto!important}.msg-analytics-tabs{display:flex;gap:8px;margin:16px 0 12px;border-bottom:1px solid var(--border,#e5e7eb)}.msg-analytics-tab{border:0;background:transparent;padding:10px 13px;border-bottom:3px solid transparent;color:#667085;font-weight:900;cursor:pointer}.msg-analytics-tab.active{border-bottom-color:var(--blue,#005bd3);color:var(--blue,#005bd3)}.msg-analytics-list{display:grid;gap:8px}.msg-analytics-row{display:grid;grid-template-columns:1.2fr .8fr .8fr auto;gap:10px;align-items:center;border:1px solid var(--border,#e5e7eb);border-radius:12px;padding:10px 12px;background:#fff}.msg-analytics-row small{color:#667085}.msg-test-pill{display:inline-flex;align-items:center;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:10px;font-weight:950;text-transform:uppercase;padding:4px 7px;margin-left:6px}.msg-analytics-note{margin-top:10px;color:#667085;font-size:12px;line-height:1.45}.msg-link-rule-row label{margin-top:0}.msg-card .msg-inline-control{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end}
+      .msg-builder-grid,.msg-delivery-grid,.msg-settings-grid,.msg-tester-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}.msg-test-actions{display:grid!important;grid-template-columns:1fr 1fr 1fr 46px;gap:10px;align-items:center}.msg-test-actions .msg-template-add{width:46px;height:46px}.msg-section-list-wide{display:grid;gap:12px}.msg-section-row{grid-template-columns:38px minmax(0,1fr) 38px!important}.msg-section-editor{gap:12px!important}.msg-section-editor .msg-section-title-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,160px);gap:10px}.msg-section-style-grid{grid-template-columns:repeat(5,minmax(80px,1fr))!important}.msg-link-rule-row{grid-template-columns:180px minmax(220px,1fr) minmax(220px,1fr) auto!important}.msg-analytics-tabs{display:flex;gap:8px;margin:16px 0 12px;border-bottom:1px solid var(--border,#e5e7eb)}.msg-analytics-tab{border:0;background:transparent;padding:10px 13px;border-bottom:3px solid transparent;color:#667085;font-weight:900;cursor:pointer}.msg-analytics-tab.active{border-bottom-color:var(--blue,#005bd3);color:var(--blue,#005bd3)}.msg-analytics-list{display:grid;gap:8px}.msg-analytics-row{display:grid;grid-template-columns:1.2fr .8fr .8fr auto;gap:10px;align-items:center;border:1px solid var(--border,#e5e7eb);border-radius:12px;padding:10px 12px;background:#fff}.msg-analytics-row small{color:#667085}.msg-test-pill{display:inline-flex;align-items:center;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:10px;font-weight:950;text-transform:uppercase;padding:4px 7px;margin-left:6px}.msg-analytics-note{margin-top:10px;color:#667085;font-size:12px;line-height:1.45}.msg-link-rule-row label{margin-top:0}.msg-card .msg-inline-control{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end}
 
 
       .msg-provider-list,.msg-module-library{display:grid;gap:10px}.msg-provider-card,.msg-module-card{border:1px solid var(--border,#e5e7eb);border-radius:14px;background:#fbfdff;padding:14px;display:grid;gap:8px}.msg-provider-card-head,.msg-module-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.msg-provider-badges{display:flex;gap:6px;flex-wrap:wrap}.msg-badge{display:inline-flex;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:11px;font-weight:950;padding:4px 8px}.msg-badge.green{background:#ecfdf3;color:#027a48}.msg-badge.gray{background:#f3f4f6;color:#475467}.msg-module-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.msg-module-style-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}.msg-module-style-grid label,.msg-module-form-grid label{margin-top:0!important}.msg-template-card{padding:14px!important;cursor:default}.msg-template-top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start}.msg-template-remove{border:0;background:#fff1f3;color:#d72c0d;border-radius:999px;width:30px!important;height:30px!important;display:grid!important;place-items:center!important;font-size:16px;line-height:1;padding:0!important;position:static!important}.msg-template-meta{display:flex;gap:8px;flex-wrap:wrap;color:#667085;font-size:12px;margin-top:4px}.msg-template-card details{margin-top:10px;border-top:1px solid #e5e7eb;padding-top:10px}.msg-template-card summary{cursor:pointer;font-weight:900;color:#111827}.msg-template-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}.msg-modal-backdrop{position:fixed;inset:0;z-index:2147483500;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.56)}.msg-modal-backdrop.active{display:flex}.msg-modal{width:min(520px,100%);background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:18px;box-shadow:0 28px 90px rgba(15,23,42,.32);overflow:hidden}.msg-modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:22px 24px;border-bottom:1px solid var(--border,#e5e7eb)}.msg-modal-head h3{margin:0 0 4px;font-size:20px}.msg-modal-head p{margin:0;color:#667085}.msg-modal-close{border:0;background:#f3f4f6;width:36px;height:36px;border-radius:999px;display:grid;place-items:center;cursor:pointer;font-weight:950}.msg-modal-body{padding:20px 24px;display:grid;gap:12px}.msg-modal-body label{font-size:13px;font-weight:900}.msg-modal-body input{width:100%;min-height:44px;border:1px solid #cfd5dd;border-radius:10px;padding:10px 12px;font:inherit;box-sizing:border-box}.msg-modal-actions{display:flex;justify-content:flex-end;gap:10px;padding:0 24px 24px}.msg-product-search-explainer{display:grid;gap:10px}.msg-check-list{display:grid;gap:8px;margin:0;padding:0;list-style:none}.msg-check-list li{display:flex;gap:8px;align-items:flex-start;color:#475467;font-size:13px;line-height:1.45}.msg-check-list li:before{content:'✓';font-weight:950;color:#027a48}.msg-analytics-row.recipient{grid-template-columns:1.1fr .7fr .7fr .7fr auto}.msg-reminder-btn{border:1px solid var(--border,#e5e7eb);border-radius:10px;background:#fff;color:#111827;min-height:36px;padding:8px 11px;font-weight:900;cursor:pointer}.msg-reminder-btn:disabled{opacity:.5;cursor:not-allowed}.msg-settings-subnav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.msg-settings-mini{border:1px solid var(--border,#e5e7eb);background:#fff;border-radius:999px;padding:8px 12px;font-weight:900;cursor:pointer}.msg-settings-mini.active{background:#111827;color:#fff}.msg-code-card{min-width:0}.msg-code-card summary{min-width:0}.msg-code-card summary .msg-btn{flex-shrink:0}
@@ -174,7 +175,7 @@
           <div class="msg-grid msg-builder-grid">
             <div class="msg-stack">
               <div class="msg-card"><h3>Brand</h3><p>Keep this simple for Shopify Flow.</p><label>Brand logo URL</label><input id="msg-logo" type="url" placeholder="https://cdn.shopify.com/.../logo.png"><div class="msg-two"><div><label>Button colour</label><input id="msg-color" type="color" value="#111827"></div><div><label>Button radius</label><input id="msg-button-radius" type="number" min="0" max="40" value="8"></div></div><div class="msg-two"><div><label>Email background</label><input id="msg-bg-color" type="color" value="#f3f4f6"></div><div><label>Email card</label><input id="msg-card-color" type="color" value="#ffffff"></div></div></div>
-              <div class="msg-card"><h3>Email copy</h3><label>Heading</label><input id="msg-heading" type="text" value="How did we do?"><label>Intro line</label><input id="msg-intro" type="text" value='Hi {{ order.customer.firstName | default: "there" }}'><label>Body</label><textarea id="msg-body">We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?</textarea><label>Sign-off</label><input id="msg-signoff" type="text" value="Your feedback helps other customers make confident choices."></div><div class="msg-card"><h3>Email sections</h3><p>Add simple extra blocks before or after the products without editing code.</p><div class="msg-builder-section-controls"><div class="msg-input-action"><select id="msg-section-template"></select><button type="button" id="msg-add-section" class="msg-btn secondary">Add section</button></div><div id="msg-section-list" class="msg-section-list-wide"></div></div></div>
+              <div class="msg-card"><h3>Email copy</h3><label>Subject line</label><input id="msg-subject" type="text" value="How was your recent order?"><label>Heading</label><input id="msg-heading" type="text" value="How did we do?"><label>Intro line</label><input id="msg-intro" type="text" value='Hi {{ order.customer.firstName | default: "there" }}'><label>Body</label><textarea id="msg-body">We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?</textarea><label>Sign-off</label><input id="msg-signoff" type="text" value="Your feedback helps other customers make confident choices."></div><div class="msg-card"><h3>Review email templates</h3><p>Save this email design as a reusable template. Mark one template as Primary Reviews so live native review emails use it.</p><label>Template name</label><input id="msg-email-template-name" type="text" value="Reviews primary request"><div class="msg-actions"><button type="button" id="msg-save-email-template" class="msg-btn secondary">Save template</button><button type="button" id="msg-save-primary-template" class="msg-btn">Save & make primary</button></div><div id="msg-email-template-list" class="msg-template-list" style="margin-top:12px;"><div class="msg-help">Loading saved email templates...</div></div></div><div class="msg-card"><h3>Email sections</h3><p>Add simple extra blocks before or after the products without editing code.</p><div class="msg-builder-section-controls"><div class="msg-input-action"><select id="msg-section-template"></select><button type="button" id="msg-add-section" class="msg-btn secondary">Add section</button></div><div id="msg-section-list" class="msg-section-list-wide"></div></div></div>
               <div class="msg-card msg-link-compact"><h3>Review link defaults</h3><div class="msg-two"><div><label>Link mode</label><select id="msg-link-mode"><option value="both">Order and products</option><option value="order">Order only</option><option value="products">Product buttons only</option></select></div><div><label>Review page handle</label><input id="msg-page-handle" type="text" value="leave-review"></div></div><div class="msg-two"><div><label>Main button text</label><input id="msg-main-button-text" type="text" value="Review Your Order"></div><div><label>Product button text</label><input id="msg-product-button-text" type="text" value="Review This Item"></div></div><div class="msg-two"><div><label>Wait after fulfilment</label><select id="msg-delay-days"><option value="7">7 days</option><option value="10">10 days</option><option value="14" selected>14 days</option><option value="21">21 days</option><option value="30">30 days</option></select></div><div><label>Flow action</label><input value="Send email" readonly></div></div><div class="msg-help">Advanced conditional wording now lives in the Settings tab.</div></div>
             </div>
             <div class="msg-stack">
@@ -186,7 +187,7 @@
 
         <section id="msg-pane-tester" class="msg-pane">
           <div class="msg-grid msg-tester-grid">
-            <div class="msg-card"><h3>Review page tester</h3><p>Open your review page with safe preview data. This does not create a Shopify order.</p><label>Customer name</label><input id="msg-test-name" type="text" value="Alex"><label>Customer email</label><input id="msg-test-email" type="email" value="alex@example.com"><div class="msg-two"><div><label>Order number</label><input id="msg-test-order" type="text" value="1001"></div><div><label>Review mode</label><select id="msg-test-type"><option value="order">Review full order</option><option value="product">Review one product</option></select></div></div><label>How many sample products?</label><input id="msg-test-count" type="number" min="1" max="10" value="2"><div class="msg-actions"><button type="button" id="msg-pick-products" class="msg-btn secondary">Search Products</button><button type="button" id="msg-sample-products" class="msg-btn secondary">Use Sample Products</button></div><div id="msg-products" class="msg-products"></div><div class="msg-actions msg-test-actions"><button type="button" id="msg-open-test" class="msg-btn">Open Test Review Page</button><button type="button" id="msg-copy-test-url" class="msg-btn secondary">Copy Test URL</button><button type="button" id="msg-save-template" class="msg-template-add" title="Save this as a template">+</button></div></div>
+            <div class="msg-card"><h3>Review page tester</h3><p>Open your review page with safe preview data. This does not create a Shopify order.</p><label>Customer name</label><input id="msg-test-name" type="text" value="Alex"><label>Customer email</label><input id="msg-test-email" type="email" value="alex@example.com"><div class="msg-two"><div><label>Order number</label><input id="msg-test-order" type="text" value="1001"></div><div><label>Review mode</label><select id="msg-test-type"><option value="order">Review full order</option><option value="product">Review one product</option></select></div></div><label>How many sample products?</label><input id="msg-test-count" type="number" min="1" max="10" value="2"><div class="msg-actions"><button type="button" id="msg-pick-products" class="msg-btn secondary">Search Products</button><button type="button" id="msg-sample-products" class="msg-btn secondary">Use Sample Products</button></div><div id="msg-products" class="msg-products"></div><div class="msg-actions msg-test-actions"><button type="button" id="msg-open-test" class="msg-btn">Open Test Review Page</button><button type="button" id="msg-copy-test-url" class="msg-btn secondary">Copy Test URL</button><button type="button" id="msg-send-fake-order-email" class="msg-btn secondary">Send full test email</button><button type="button" id="msg-save-template" class="msg-template-add" title="Save this as a template">+</button></div></div>
             <div class="msg-stack">
               <div class="msg-card"><h3>Saved test templates</h3><p>Save repeatable review-page scenarios so you do not rebuild them each time.</p><div id="msg-template-list" class="msg-template-list"></div></div>
               <div class="msg-card msg-product-search-explainer"><h3>Product search connection</h3><p>Search pulls real Shopify products using this shop's OAuth install. Use it to test exactly what customers receive.</p><ul class="msg-check-list"><li>Search by title, handle, SKU, or product ID.</li><li>Selected products are added into the preview email and review-page URL.</li><li>No global Render token is used; each merchant uses their own install.</li></ul><div id="msg-shopify-status" class="msg-help">Checking Shopify product connection...</div></div>
@@ -415,6 +416,116 @@
 
   function loadTemplates() { try { reviewTemplates = JSON.parse(localStorage.getItem(storageKey('review_templates')) || '[]'); } catch (_) { reviewTemplates = []; } renderTemplates(); }
   function saveTemplates() { localStorage.setItem(storageKey('review_templates'), JSON.stringify(reviewTemplates.slice(0, 20))); renderTemplates(); }
+
+  function currentEmailTemplatePayload({ primary = false } = {}) {
+    const o = opts();
+    return {
+      name: val('msg-email-template-name', o.heading || 'Reviews email template'),
+      area: 'reviews',
+      kind: 'review_request',
+      enabled: true,
+      isPrimary: Boolean(primary),
+      subject: o.subject || 'How was your recent order?',
+      design: o,
+      sections: emailSections.slice(),
+      html: buildFlowEmailHtml(o),
+      notes: 'Saved from Messaging & Campaigns email builder.',
+    };
+  }
+
+  function renderEmailTemplates() {
+    const box = el('msg-email-template-list');
+    if (!box) return;
+    if (!emailTemplates.length) {
+      box.innerHTML = '<div class="msg-help">No saved email templates yet. Save this design, then mark one as Primary Reviews.</div>';
+      return;
+    }
+    box.innerHTML = emailTemplates.map((t) => `<div class="msg-template-card"><div class="msg-template-top"><div><strong>${escapeHtml(t.name || 'Template')}</strong><div class="msg-template-meta"><span>${t.isPrimary ? '✅ Primary Reviews' : 'Saved'}</span><span>${escapeHtml(t.subject || '')}</span><span>${escapeHtml(t.updatedAt ? new Date(t.updatedAt).toLocaleString() : '')}</span></div></div><button type="button" class="msg-template-remove" data-delete-email-template="${escapeHtml(t._id)}" title="Delete template">×</button></div><div class="msg-template-actions"><button type="button" class="msg-btn secondary" data-load-email-template="${escapeHtml(t._id)}">Load</button>${t.isPrimary ? '' : `<button type="button" class="msg-btn" data-primary-email-template="${escapeHtml(t._id)}">Make primary</button>`}</div></div>`).join('');
+    box.querySelectorAll('[data-load-email-template]').forEach((btn)=>btn.addEventListener('click',()=>loadEmailTemplate(btn.dataset.loadEmailTemplate)));
+    box.querySelectorAll('[data-primary-email-template]').forEach((btn)=>btn.addEventListener('click',()=>setPrimaryEmailTemplate(btn.dataset.primaryEmailTemplate)));
+    box.querySelectorAll('[data-delete-email-template]').forEach((btn)=>btn.addEventListener('click',()=>deleteEmailTemplate(btn.dataset.deleteEmailTemplate)));
+  }
+
+  async function loadEmailTemplates() {
+    try {
+      const result = await securedFetch('/admin/email-templates?area=reviews&kind=review_request');
+      emailTemplates = result.templates || [];
+      renderEmailTemplates();
+    } catch (error) {
+      const box = el('msg-email-template-list');
+      if (box) box.innerHTML = `<div class="msg-help">Could not load saved templates: ${escapeHtml(error.message || '')}</div>`;
+    }
+  }
+
+  async function saveCurrentEmailTemplate(primary = false) {
+    const payload = currentEmailTemplatePayload({ primary });
+    const result = await securedFetch('/admin/email-templates', { method: 'POST', body: JSON.stringify(payload) });
+    if (result.template?._id) {
+      showToast(primary ? 'Template saved and set as Primary Reviews' : 'Template saved');
+      await loadEmailTemplates();
+    }
+    return result.template;
+  }
+
+  async function setPrimaryEmailTemplate(id) {
+    await securedFetch(`/admin/email-templates/${encodeURIComponent(id)}/primary`, { method: 'POST', body: JSON.stringify({}) });
+    showToast('Primary Reviews template updated');
+    await loadEmailTemplates();
+  }
+
+  async function deleteEmailTemplate(id) {
+    if (!confirm('Delete this saved email template?')) return;
+    await securedFetch(`/admin/email-templates/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    showToast('Template deleted');
+    await loadEmailTemplates();
+  }
+
+  function loadEmailTemplate(id) {
+    const t = emailTemplates.find((item)=>String(item._id) === String(id));
+    if (!t) return;
+    const d = t.design || {};
+    if (el('msg-email-template-name')) el('msg-email-template-name').value = t.name || 'Reviews email template';
+    if (el('msg-subject')) el('msg-subject').value = t.subject || d.subject || 'How was your recent order?';
+    if (el('msg-logo')) el('msg-logo').value = d.logo || '';
+    if (el('msg-color')) el('msg-color').value = d.accentColor || '#111827';
+    if (el('msg-button-radius')) el('msg-button-radius').value = d.buttonRadius ?? 8;
+    if (el('msg-bg-color')) el('msg-bg-color').value = d.bgColor || '#f3f4f6';
+    if (el('msg-card-color')) el('msg-card-color').value = d.cardColor || '#ffffff';
+    if (el('msg-heading')) el('msg-heading').value = d.heading || 'How did we do?';
+    if (el('msg-intro')) el('msg-intro').value = d.intro || 'Hi {{ order.customer.firstName | default: "there" }}';
+    if (el('msg-body')) el('msg-body').value = d.body || '';
+    if (el('msg-signoff')) el('msg-signoff').value = d.signoff || '';
+    if (el('msg-link-mode')) el('msg-link-mode').value = d.linkMode || 'both';
+    if (el('msg-page-handle')) el('msg-page-handle').value = d.pageHandle || DEFAULT_PAGE_HANDLE;
+    if (el('msg-main-button-text')) el('msg-main-button-text').value = d.mainButtonText || 'Review Your Order';
+    if (el('msg-product-button-text')) el('msg-product-button-text').value = d.productButtonText || 'Review This Item';
+    if (el('msg-delay-days')) el('msg-delay-days').value = String(d.delayDays || 14);
+    emailSections.splice(0, emailSections.length, ...((t.sections || []).map((section)=>({ ...section, id: section.id || uid('section') }))));
+    renderEmailSections();
+    updatePreview();
+    showToast('Template loaded');
+  }
+
+  async function sendFullFakeOrderEmail() {
+    const email = val('msg-test-email') || val('msg-test-recipient');
+    if (!email) return showToast('Enter a test customer email first.');
+    await saveCurrentEmailTemplate(true);
+    const result = await securedFetch('/admin/review-automation/fake-order', {
+      method: 'POST',
+      body: JSON.stringify({
+        email,
+        recipientEmail: email,
+        customerName: val('msg-test-name', 'Alex'),
+        orderId: val('msg-test-order', `NECTAR-TEST-${Date.now().toString().slice(-6)}`),
+        products: products.length ? products : undefined,
+        sendNow: true,
+        delayDays: 0,
+      }),
+    });
+    showToast(result.job?.status === 'sent' ? 'Full fake-order review email sent.' : `Fake-order job created: ${result.job?.status || 'created'}`);
+    await loadAnalytics();
+  }
+
   function currentTemplatePayload() { return { name: `${val('msg-test-name','Customer')} · #${val('msg-test-order','1001')}`, customerName: val('msg-test-name','Alex'), customerEmail: val('msg-test-email','alex@example.com'), order: val('msg-test-order','1001'), mode: val('msg-test-type','order'), products: products.slice(), createdAt: new Date().toISOString() }; }
   function renderTemplates() {
     const box = el('msg-template-list');
@@ -448,6 +559,7 @@
       buttonRadius: Math.max(0, Math.min(40, Number(val('msg-button-radius', '8')) || 8)),
       bgColor: el('msg-bg-color')?.value || '#f3f4f6',
       cardColor: el('msg-card-color')?.value || '#ffffff',
+      subject: val('msg-subject', 'How was your recent order?'),
       heading: val('msg-heading', 'How did we do?'),
       intro: val('msg-intro', 'Hi {{ order.customer.firstName | default: "there" }}'),
       body: val('msg-body', "We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?"),
@@ -813,12 +925,12 @@
       method: 'POST',
       body: JSON.stringify({
         to,
-        subject: 'Review request test email',
+        subject: o.subject || 'Review request test email',
         html,
         orderId: val('msg-test-order', '1001'),
         itemId: first.id || '',
         token,
-        templateName: val('msg-heading', 'Review request'),
+        templateName: val('msg-email-template-name', val('msg-heading', 'Review request')),
         layoutName: val('msg-link-mode', 'both'),
         moduleNames: emailSections.map((section)=>section.title || sectionLabel(section.type)).filter(Boolean),
       }),
@@ -916,6 +1028,9 @@
     el('msg-open-test')?.addEventListener('click', () => window.open(testUrl(), '_blank', 'noopener'));
     el('msg-copy-test-url')?.addEventListener('click', () => copyText(testUrl(), 'Test review URL copied'));
     el('msg-save-template')?.addEventListener('click', saveTemplate);
+    el('msg-save-email-template')?.addEventListener('click', () => saveCurrentEmailTemplate(false).catch((error)=>showToast(error.message || 'Could not save template')));
+    el('msg-save-primary-template')?.addEventListener('click', () => saveCurrentEmailTemplate(true).catch((error)=>showToast(error.message || 'Could not save primary template')));
+    el('msg-send-fake-order-email')?.addEventListener('click', () => sendFullFakeOrderEmail().catch((error)=>showToast(error.message || 'Could not send full fake-order email')));
     el('msg-template-modal-close')?.addEventListener('click', closeTemplateModal);
     el('msg-template-cancel')?.addEventListener('click', closeTemplateModal);
     el('msg-template-confirm')?.addEventListener('click', confirmTemplateSave);
@@ -944,6 +1059,7 @@
     addSampleProducts();
     updatePreview();
     loadTemplates();
+    loadEmailTemplates();
     loadMessageModules();
     renderEmailSections();
     loadLinkRules();

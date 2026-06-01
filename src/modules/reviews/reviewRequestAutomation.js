@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const { env } = require('../../config/env');
-const { ReviewRequestJob, CampaignEvent, EmailProviderSettings, Settings, Shop } = require('../../models');
+const { ReviewRequestJob, CampaignEvent, EmailProviderSettings, Settings, Shop, EmailTemplate } = require('../../models');
 const { cleanText, cleanEmail, clampNumber } = require('../../utils/validation');
 const { decryptSecret, hashValue } = require('../../utils/crypto');
 const { createReviewToken } = require('../../utils/reviewTokens');
@@ -211,6 +211,74 @@ function campaignUniqueKey({ shopDomain, campaign, token }) {
   return hashValue(`${shopDomain}:${campaign}:sent:${token}`);
 }
 
+
+function escapeEmailHtml(value = '') {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function clampTemplateNumber(value, fallback, min, max) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+function templateText(value = '', context = {}) {
+  return String(value || '')
+    .replace(/\{\{\s*customerName\s*\}\}/gi, context.customerName || 'there')
+    .replace(/\{\{\s*orderId\s*\}\}/gi, context.orderId || 'recent order')
+    .replace(/\{\{\s*shopDomain\s*\}\}/gi, context.shopDomain || '')
+    .replace(/\{\{\s*reviewUrl\s*\}\}/gi, context.reviewUrl || '');
+}
+
+function sectionHtml(section = {}, context = {}) {
+  const title = templateText(section.title || section.name || '', context);
+  const text = templateText(section.text || section.body || '', context);
+  const buttonText = templateText(section.buttonText || '', context);
+  let buttonUrl = templateText(section.buttonUrl || '', context);
+  if (buttonUrl === '{{support_link}}') buttonUrl = `${context.reviewUrl || ''}${String(context.reviewUrl || '').includes('?') ? '&' : '?'}support=1`;
+  const bg = section.background || section.bg || 'transparent';
+  const border = section.border || '#e5e7eb';
+  const radius = clampTemplateNumber(section.radius, 14, 0, 40);
+  const padding = clampTemplateNumber(section.padding, 16, 4, 40);
+  const borderWidth = clampTemplateNumber(section.borderWidth ?? section.borderPx, 1, 0, 8);
+  if (!title && !text && !buttonText) return '';
+  return `<tr><td style="padding:12px 0 0 0;"><div style="text-align:left;background:${escapeEmailHtml(bg)};border:${borderWidth}px solid ${escapeEmailHtml(border)};border-radius:${radius}px;padding:${padding}px;color:#111827;">${title ? `<strong style="display:block;margin:0 0 6px;font-size:15px;">${escapeEmailHtml(title)}</strong>` : ''}${text ? `<p style="margin:0;color:#4b5563;font-size:14px;line-height:1.5;">${escapeEmailHtml(text)}</p>` : ''}${buttonText ? `<a href="${escapeEmailHtml(buttonUrl || context.reviewUrl || '#')}" style="display:inline-block;margin-top:10px;color:#111827;font-weight:bold;text-decoration:underline;">${escapeEmailHtml(buttonText)}</a>` : ''}</div></td></tr>`;
+}
+
+async function findPrimaryReviewTemplate(shopDomain) {
+  return EmailTemplate.findOne({ shopDomain, area: 'reviews', kind: 'review_request', enabled: true, isPrimary: true }).lean().catch(() => null);
+}
+
+function renderTemplateReviewEmail({ template, shopDomain, customerName, orderId, reviewUrl, products = [] }) {
+  const design = template?.design || {};
+  const context = { shopDomain, customerName: customerName || 'there', orderId: orderId || 'recent order', reviewUrl };
+  const bgColor = design.bgColor || '#f3f4f6';
+  const cardColor = design.cardColor || '#ffffff';
+  const accentColor = design.accentColor || '#111827';
+  const buttonRadius = clampTemplateNumber(design.buttonRadius, 10, 0, 40);
+  const heading = templateText(design.heading || 'How was your recent order?', context);
+  const intro = templateText(design.intro || 'Hi {{ customerName }}', context);
+  const body = templateText(design.body || 'We hope you are loving your recent purchase. Could you take 60 seconds to leave a quick review?', context);
+  const signoff = templateText(design.signoff || 'Your feedback helps other customers make confident choices.', context);
+  const mainButtonText = design.mainButtonText || 'Review Your Order';
+  const productButtonText = design.productButtonText || 'Review This Item';
+  const linkMode = ['order', 'products', 'both'].includes(design.linkMode) ? design.linkMode : 'both';
+  const logo = design.logo || '';
+  const sections = Array.isArray(template?.sections) ? template.sections : [];
+  const beforeSections = sections.filter((s) => (s.position || 'after') === 'before').map((section) => sectionHtml(section, context)).join('');
+  const afterSections = sections.filter((s) => (s.position || 'after') !== 'before').map((section) => sectionHtml(section, context)).join('');
+  const logoHtml = logo ? `<tr><td align="center" style="padding:0 0 18px 0;"><img src="${escapeEmailHtml(logo)}" alt="" style="max-width:160px;height:auto;display:block;"></td></tr>` : '';
+  const orderButton = `<tr><td align="center" style="padding:18px 0 14px 0;"><a href="${escapeEmailHtml(reviewUrl)}" style="display:inline-block;background:${escapeEmailHtml(accentColor)};color:#ffffff;text-decoration:none;font-size:16px;font-weight:bold;padding:14px 24px;border-radius:${buttonRadius}px;">${escapeEmailHtml(mainButtonText)}</a></td></tr>`;
+  const productRows = products.length ? `<tr><td style="padding:18px 0 0 0;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${products.slice(0, 12).map((product) => `<tr><td style="padding:12px 0;border-top:1px solid #e5e7eb;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px;font-weight:bold;line-height:1.35;vertical-align:middle;padding-right:12px;">${escapeEmailHtml(product.title || 'Purchased product')}</td><td align="right" style="vertical-align:middle;white-space:nowrap;"><div style="margin-bottom:8px;color:#f5b301;font-size:18px;letter-spacing:2px;">★★★★★</div><a href="${escapeEmailHtml(reviewUrl)}" style="display:inline-block;background:${escapeEmailHtml(accentColor)};color:#ffffff;text-decoration:none;font-size:13px;font-weight:bold;padding:9px 13px;border-radius:${buttonRadius}px;white-space:nowrap;">${escapeEmailHtml(productButtonText)}</a></td></tr></table></td></tr>`).join('')}</table></td></tr>` : '';
+  const links = linkMode === 'order' ? orderButton : linkMode === 'products' ? (productRows || orderButton) : orderButton + productRows;
+  return `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.55;color:#111827;background:${escapeEmailHtml(bgColor)};padding:28px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:640px;background:${escapeEmailHtml(cardColor)};border:1px solid #e5e7eb;border-radius:18px;padding:28px;text-align:center;"><tr><td>${logoHtml}<h1 style="margin:0 0 12px;font-size:28px;line-height:1.15;">${escapeEmailHtml(heading)}</h1><p style="margin:0 0 10px;color:#4b5563;">${escapeEmailHtml(intro)}</p><p style="margin:0 0 16px;color:#4b5563;">${escapeEmailHtml(body)}</p><p style="margin:0 0 14px;color:#667085;font-size:13px;">Order: <strong>${escapeEmailHtml(orderId || 'recent order')}</strong></p><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${beforeSections}${links}${afterSections}</table><p style="margin:22px 0 0;color:#667085;font-size:13px;">${escapeEmailHtml(signoff)}</p><p style="margin:18px 0 0;color:#98a2b3;font-size:12px;">This review link is unique to your order.</p></td></tr></table></td></tr></table></div>`;
+}
+
 async function sendReviewRequestJob(job) {
   const shopDomain = job.shopDomain;
   const settings = await EmailProviderSettings.findOne({ shopDomain });
@@ -235,8 +303,11 @@ async function sendReviewRequestJob(job) {
   const fromEmail = settings.fromEmail || settings.smtpUser;
   const fromName = settings.fromName || 'Store Reviews';
   const cfg = await getAutomationConfig(shopDomain);
-  const subject = cfg.subject || 'How was your recent order?';
-  const html = reviewRequestHtml({ shopDomain, customerName: job.customerName, orderId: job.orderName || job.orderId, reviewUrl, products: job.products || [] });
+  const primaryTemplate = await findPrimaryReviewTemplate(shopDomain);
+  const subject = primaryTemplate?.subject || cfg.subject || 'How was your recent order?';
+  const html = primaryTemplate
+    ? renderTemplateReviewEmail({ template: primaryTemplate, shopDomain, customerName: job.customerName, orderId: job.orderName || job.orderId, reviewUrl, products: job.products || [] })
+    : reviewRequestHtml({ shopDomain, customerName: job.customerName, orderId: job.orderName || job.orderId, reviewUrl, products: job.products || [] });
   const htmlHash = crypto.createHash('sha256').update(html).digest('hex').slice(0, 16);
   const transporter = createTransporterFromSettings(settings);
 
@@ -299,28 +370,145 @@ async function sendDueReviewRequests({ limit = 25 } = {}) {
   return { count: results.length, results };
 }
 
-async function registerReviewWebhookSubscriptions(shopDomain) {
+function reviewWebhookDefinitions() {
   const appBase = env.appUrl || '';
-  if (!appBase || !shopDomain) return { ok: false, skipped: true, reason: 'APP_URL or shop domain missing.' };
   const base = appBase.replace(/\/$/, '');
-  const hooks = [
-    { topic: 'orders/fulfilled', address: `${base}/api/webhooks/shopify/orders-fulfilled` },
-    { topic: 'orders/updated', address: `${base}/api/webhooks/shopify/orders-updated` },
+  return [
+    {
+      key: 'orders_fulfilled',
+      name: 'Order fulfillment',
+      topic: 'orders/fulfilled',
+      address: `${base}/api/webhooks/shopify/orders-fulfilled`,
+      endpoint: '/api/webhooks/shopify/orders-fulfilled',
+      format: 'json',
+      apiVersion: env.shopifyApiVersion,
+      purpose: 'Creates the private review-request job when Shopify marks an order as fulfilled.',
+      customerJourneyStep: 'Order fulfilled → Nectar receives the event → review request job is created.',
+      requiredForLaunch: true,
+    },
+    {
+      key: 'orders_updated',
+      name: 'Order update',
+      topic: 'orders/updated',
+      address: `${base}/api/webhooks/shopify/orders-updated`,
+      endpoint: '/api/webhooks/shopify/orders-updated',
+      format: 'json',
+      apiVersion: env.shopifyApiVersion,
+      purpose: 'Re-checks delivery tags/status changes so the review timer can start when the order is actually delivered.',
+      customerJourneyStep: 'Order receives the delivered tag/status update → Nectar releases the job into the 14-day timer.',
+      requiredForLaunch: true,
+    },
   ];
+}
+
+function expectedReviewWebhookSubscriptions() {
+  return reviewWebhookDefinitions().map(({ topic, address }) => ({ topic, address }));
+}
+
+function safeWebhookActual(item = {}) {
+  if (!item) return null;
+  return {
+    id: String(item.id || ''),
+    topic: String(item.topic || ''),
+    address: String(item.address || ''),
+    format: String(item.format || ''),
+    apiVersion: String(item.api_version || item.apiVersion || ''),
+    createdAt: item.created_at || item.createdAt || null,
+    updatedAt: item.updated_at || item.updatedAt || null,
+  };
+}
+
+async function inspectReviewWebhookSubscriptions(shopDomain) {
+  const hooks = reviewWebhookDefinitions();
+  if (!env.appUrl || !shopDomain) {
+    return { ok: false, skipped: true, reason: 'APP_URL or shop domain missing.', hooks, results: [] };
+  }
+
   const results = [];
   for (const hook of hooks) {
     const existing = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/webhooks.json?topic=${encodeURIComponent(hook.topic)}`, { shopDomain });
-    const already = (existing?.webhooks || []).some((item) => String(item.address || '').replace(/\/$/, '') === hook.address);
-    if (already) { results.push({ ok: true, already: true, ...hook }); continue; }
+    if (!existing) {
+      results.push({
+        ok: false,
+        unknown: true,
+        ...hook,
+        reason: 'Could not read Shopify webhooks. OAuth token may be missing read_webhooks or the app may need reconnecting.',
+      });
+      continue;
+    }
+    const matching = (existing.webhooks || []).find((item) => String(item.address || '').replace(/\/$/, '') === hook.address);
+    const sameTopic = existing.webhooks || [];
+    results.push(matching ? {
+      ok: true,
+      already: true,
+      verifiedInShopify: true,
+      ...hook,
+      webhookId: String(matching.id || ''),
+      actual: safeWebhookActual(matching),
+      matchingTopicCount: sameTopic.length,
+    } : {
+      ok: false,
+      missing: true,
+      verifiedInShopify: false,
+      ...hook,
+      reason: 'Expected webhook was not found in Shopify Admin.',
+      actual: null,
+      matchingTopicCount: sameTopic.length,
+      otherAddressesForTopic: sameTopic.map((item) => safeWebhookActual(item)).filter(Boolean),
+    });
+  }
+  return { ok: results.every((item) => item.ok), hooks, results, checkedAt: new Date() };
+}
+
+async function registerReviewWebhookSubscriptions(shopDomain) {
+  const appBase = env.appUrl || '';
+  if (!appBase || !shopDomain) return { ok: false, skipped: true, reason: 'APP_URL or shop domain missing.' };
+  const hooks = reviewWebhookDefinitions();
+  const results = [];
+  for (const hook of hooks) {
+    const existing = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/webhooks.json?topic=${encodeURIComponent(hook.topic)}`, { shopDomain });
+    const alreadyMatch = (existing?.webhooks || []).find((item) => String(item.address || '').replace(/\/$/, '') === hook.address);
+    if (alreadyMatch) {
+      results.push({ ok: true, already: true, verifiedInShopify: true, ...hook, webhookId: String(alreadyMatch.id || ''), actual: safeWebhookActual(alreadyMatch) });
+      continue;
+    }
     const created = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/webhooks.json`, {
       shopDomain,
       method: 'POST',
       body: JSON.stringify({ webhook: { topic: hook.topic, address: hook.address, format: 'json' } }),
     });
-    results.push(created?.webhook?.id ? { ok: true, ...hook, webhookId: String(created.webhook.id) } : { ok: false, ...hook, reason: 'Shopify did not confirm webhook creation. Check scopes/install.' });
+    results.push(created?.webhook?.id ? {
+      ok: true,
+      verifiedInShopify: true,
+      ...hook,
+      webhookId: String(created.webhook.id),
+      actual: safeWebhookActual(created.webhook),
+    } : {
+      ok: false,
+      verifiedInShopify: false,
+      ...hook,
+      reason: 'Shopify did not confirm webhook creation. Check write_webhooks scope, OAuth reconnect and Render logs.',
+    });
   }
   const allOk = results.every((item) => item.ok);
-  await Shop.findOneAndUpdate({ shopDomain }, { $set: { 'modules.reviews.webhookInstalledAt': allOk ? new Date() : null, 'modules.reviews.webhookTopics': results.map((r) => r.topic), 'modules.reviews.webhookAddresses': results.map((r) => r.address) } }).catch(() => {});
+  await Shop.findOneAndUpdate({ shopDomain }, {
+    $set: {
+      'modules.reviews.enabled': true,
+      'modules.reviews.webhookInstalledAt': allOk ? new Date() : null,
+      'modules.reviews.webhookSource': allOk ? 'shopify_api_registration' : 'shopify_api_registration_failed',
+      'modules.reviews.webhookMode': 'automatic',
+      'modules.reviews.webhookTopics': results.map((r) => r.topic),
+      'modules.reviews.webhookAddresses': results.map((r) => r.address),
+      'modules.reviews.webhookAddress': results.find((r) => r.topic === 'orders/fulfilled')?.address || hooks[0].address,
+      'modules.reviews.webhookTopic': 'orders/fulfilled',
+      'modules.reviews.webhookVerificationStatus': allOk ? 'verified' : 'failed',
+      'modules.reviews.webhookVerificationCheckedAt': new Date(),
+      'modules.reviews.webhookRegistrationResults': results,
+      'modules.reviews.webhookInspectionResults': results,
+      'modules.reviews.manualSetupFinalised': false,
+    },
+    $setOnInsert: { shopDomain },
+  }, { upsert: true, setDefaultsOnInsert: true }).catch(() => {});
   return { ok: allOk, topics: results.map((r) => r.topic), results };
 }
 
@@ -380,6 +568,8 @@ module.exports = {
   scheduleReviewRequestFromOrder,
   updateReviewRequestDeliveryFromOrder,
   sendDueReviewRequests,
+  expectedReviewWebhookSubscriptions,
+  inspectReviewWebhookSubscriptions,
   registerReviewWebhookSubscriptions,
   automationReadiness,
   startReviewRequestJobs,

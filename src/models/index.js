@@ -211,6 +211,25 @@ const emailProviderProfileSchema = new mongoose.Schema({
 emailProviderProfileSchema.index({ shopDomain: 1, name: 1 });
 
 
+const emailTemplateSchema = new mongoose.Schema({
+  shopDomain: { type: String, required: true, index: true },
+  name: { type: String, required: true, default: 'Review request template' },
+  area: { type: String, enum: ['reviews', 'loyalty', 'cartRewards', 'general'], default: 'reviews', index: true },
+  kind: { type: String, enum: ['review_request', 'manual_reminder', 'general'], default: 'review_request', index: true },
+  enabled: { type: Boolean, default: true, index: true },
+  isPrimary: { type: Boolean, default: false, index: true },
+  subject: { type: String, default: 'How was your recent order?' },
+  previewText: { type: String, default: '' },
+  design: { type: mongoose.Schema.Types.Mixed, default: {} },
+  sections: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  html: { type: String, default: '' },
+  notes: { type: String, default: '' },
+  lastUsedAt: { type: Date, default: null },
+}, { timestamps: true });
+emailTemplateSchema.index({ shopDomain: 1, area: 1, kind: 1, isPrimary: 1 });
+emailTemplateSchema.index({ shopDomain: 1, area: 1, kind: 1, updatedAt: -1 });
+
+
 const loyaltyRewardTemplateSchema = new mongoose.Schema({
   id: { type: String, required: true },
   name: { type: String, default: 'Review thank-you discount' },
@@ -360,7 +379,23 @@ const shopSchema = new mongoose.Schema({
   uninstalledAt: { type: Date, default: null },
   plan: { type: String, default: 'development' },
   modules: {
-    reviews: { enabled: { type: Boolean, default: true } },
+    reviews: {
+      enabled: { type: Boolean, default: true },
+      webhookInstalledAt: { type: Date, default: null },
+      webhookManualConfirmedAt: { type: Date, default: null },
+      webhookSource: { type: String, default: '' },
+      webhookMode: { type: String, default: '' },
+      webhookTopics: { type: [String], default: [] },
+      webhookAddresses: { type: [String], default: [] },
+      webhookAddress: { type: String, default: '' },
+      webhookTopic: { type: String, default: '' },
+      webhookVerificationStatus: { type: String, default: '' },
+      webhookVerificationCheckedAt: { type: Date, default: null },
+      webhookRegistrationResults: { type: [mongoose.Schema.Types.Mixed], default: [] },
+      webhookInspectionResults: { type: [mongoose.Schema.Types.Mixed], default: [] },
+      manualSetupFinalised: { type: Boolean, default: false },
+      manualSetupFinalisedAt: { type: Date, default: null },
+    },
     discounts: { enabled: { type: Boolean, default: false } },
     loyalty: { enabled: { type: Boolean, default: false } },
     referrals: { enabled: { type: Boolean, default: false } },
@@ -374,6 +409,7 @@ module.exports = {
   CampaignEvent: mongoose.models.CampaignEvent || mongoose.model('CampaignEvent', campaignEventSchema, 'campaign_events'),
   EmailProviderSettings: mongoose.models.EmailProviderSettings || mongoose.model('EmailProviderSettings', emailProviderSettingsSchema, 'email_provider_settings'),
   EmailProviderProfile: mongoose.models.EmailProviderProfile || mongoose.model('EmailProviderProfile', emailProviderProfileSchema, 'email_provider_profiles'),
+  EmailTemplate: mongoose.models.EmailTemplate || mongoose.model('EmailTemplate', emailTemplateSchema, 'email_templates'),
   Shop: mongoose.models.Shop || mongoose.model('Shop', shopSchema, 'shops'),
   E2ETestRun: mongoose.models.E2ETestRun || mongoose.model('E2ETestRun', e2eTestRunSchema, 'e2e_test_runs'),
   ReviewRequestJob: mongoose.models.ReviewRequestJob || mongoose.model('ReviewRequestJob', reviewRequestJobSchema, 'review_request_jobs'),

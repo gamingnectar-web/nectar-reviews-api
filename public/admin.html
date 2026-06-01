@@ -1047,6 +1047,15 @@
           </div>
         </div>
         <div class="panel launch-card">
+          <div class="settings-card-header"><div><h3>Shopify webhook registry</h3><p>Shows the review webhooks Nectar expects, whether Shopify has them, what they do, and the saved internal connection status.</p></div><button class="secondary-btn compact" type="button" onclick="window.verifyReviewWebhooks?.()">Refresh from Shopify</button></div>
+          <div id="review-webhook-registry" class="webhook-registry-wrap"><p class="muted">Loading webhook status…</p></div>
+        </div>
+
+        <div class="panel launch-card">
+          <div class="settings-card-header"><div><h3>All Reviews page</h3><p>Create a searchable customer reviews page for SEO, AI discovery and social proof. This uses approved, non-test reviews only.</p></div><button class="secondary-btn compact" type="button" onclick="window.loadAllReviewsPageSetup?.()">Refresh</button></div>
+          <div id="all-reviews-page-setup" class="webhook-registry-wrap"><p class="muted">Loading all reviews page setup…</p></div>
+        </div>
+        <div class="panel launch-card">
           <div class="settings-card-header"><div><h3>Recent review request jobs</h3><p>Shows fake-order and live-order jobs. A real go-live path should create a scheduled job first, then mark it sent after the delay.</p></div><button class="secondary-btn compact" type="button" onclick="window.loadReviewsLaunchChecklist?.()">Refresh</button></div>
           <div id="review-launch-jobs" class="launch-job-list"><p class="muted">No jobs loaded yet.</p></div>
         </div>

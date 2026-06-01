@@ -2,14 +2,14 @@ const express = require('express');
 const { env } = require('../config/env');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
-const { Review, Settings, CampaignEvent, EmailProviderSettings, EmailProviderProfile, Shop, E2ETestRun, ReviewRequestJob } = require('../models');
+const { Review, Settings, CampaignEvent, EmailProviderSettings, EmailProviderProfile, EmailTemplate, Shop, E2ETestRun, ReviewRequestJob } = require('../models');
 const { requireAdminSession } = require('../utils/security');
 const { cleanText, cleanEmail, clampNumber, cleanReviewStatus } = require('../utils/validation');
 const { encryptSecret, decryptSecret } = require('../utils/crypto');
 const { publicEmailSettings } = require('../utils/emailSettings');
 const { shopifyFetch, shopifyFetchOptional, getAccessTokenForShop, buildInstallUrl } = require('../utils/shopify');
 const { createReviewToken } = require('../utils/reviewTokens');
-const { scheduleReviewRequestFromOrder, sendDueReviewRequests, automationReadiness, registerReviewWebhookSubscriptions } = require('../modules/reviews/reviewRequestAutomation');
+const { scheduleReviewRequestFromOrder, sendDueReviewRequests, automationReadiness, registerReviewWebhookSubscriptions, inspectReviewWebhookSubscriptions, expectedReviewWebhookSubscriptions } = require('../modules/reviews/reviewRequestAutomation');
 const { awardForReview, getOrCreateLoyaltyProgram, normaliseCustomerRef, customerHintFromHash, createLedgerEntry } = require('../modules/loyalty/loyalty.service');
 const { getOrCreateDiscountProgram, issueDiscountCode } = require('../modules/discounts/discounts.service');
 
@@ -104,6 +104,75 @@ function publicProviderProfile(profile) {
     lastTestStatus: profile.lastTestStatus || '',
     lastTestError: profile.lastTestError || '',
   };
+}
+
+
+function publicEmailTemplate(template) {
+  if (!template) return null;
+  return {
+    _id: String(template._id),
+    name: template.name || 'Review request template',
+    area: template.area || 'reviews',
+    kind: template.kind || 'review_request',
+    enabled: template.enabled !== false,
+    isPrimary: Boolean(template.isPrimary),
+    subject: template.subject || 'How was your recent order?',
+    previewText: template.previewText || '',
+    design: template.design || {},
+    sections: Array.isArray(template.sections) ? template.sections : [],
+    notes: template.notes || '',
+    lastUsedAt: template.lastUsedAt || null,
+    updatedAt: template.updatedAt || null,
+    createdAt: template.createdAt || null,
+  };
+}
+
+function cleanTemplateArea(value = 'reviews') {
+  return ['reviews', 'loyalty', 'cartRewards', 'general'].includes(value) ? value : 'reviews';
+}
+
+function cleanTemplateKind(value = 'review_request') {
+  return ['review_request', 'manual_reminder', 'general'].includes(value) ? value : 'review_request';
+}
+
+function cleanTemplateDesign(raw = {}) {
+  const design = raw && typeof raw === 'object' ? raw : {};
+  return {
+    logo: cleanText(design.logo || '', 1000),
+    accentColor: cleanText(design.accentColor || '#111827', 40),
+    buttonRadius: clampNumber(design.buttonRadius, 0, 40, 8),
+    bgColor: cleanText(design.bgColor || '#f3f4f6', 40),
+    cardColor: cleanText(design.cardColor || '#ffffff', 40),
+    heading: cleanText(design.heading || 'How did we do?', 180),
+    intro: cleanText(design.intro || 'Hi {{ customerName }}', 240),
+    body: cleanText(design.body || '', 1000),
+    signoff: cleanText(design.signoff || '', 260),
+    linkMode: ['both', 'order', 'products'].includes(design.linkMode) ? design.linkMode : 'both',
+    mainButtonText: cleanText(design.mainButtonText || 'Review Your Order', 80),
+    productButtonText: cleanText(design.productButtonText || 'Review This Item', 80),
+    pageHandle: cleanText(design.pageHandle || 'leave-review', 120),
+    delayDays: clampNumber(design.delayDays, 0, 365, 14),
+  };
+}
+
+function cleanTemplateSections(value = []) {
+  return (Array.isArray(value) ? value : [])
+    .map((section) => ({
+      id: cleanText(section.id || `section-${Date.now()}`, 80),
+      type: cleanText(section.type || 'notice', 80),
+      position: ['before', 'after'].includes(section.position) ? section.position : 'after',
+      title: cleanText(section.title || section.name || '', 180),
+      text: cleanText(section.text || section.body || '', 1000),
+      background: cleanText(section.background || section.bg || 'transparent', 40),
+      border: cleanText(section.border || '#e5e7eb', 40),
+      radius: clampNumber(section.radius, 0, 60, 14),
+      padding: clampNumber(section.padding, 0, 60, 16),
+      borderWidth: clampNumber(section.borderWidth ?? section.borderPx, 0, 8, 1),
+      buttonText: cleanText(section.buttonText || '', 120),
+      buttonUrl: cleanText(section.buttonUrl || '', 1000),
+    }))
+    .filter((section) => section.title || section.text || section.buttonText)
+    .slice(0, 20);
 }
 
 function providerUpdateFromBody(body = {}, existing = null) {
@@ -988,6 +1057,129 @@ router.delete('/email-settings', async (req, res, next) => {
 });
 
 
+router.get('/email-templates', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const area = cleanTemplateArea(req.query.area || 'reviews');
+    const kind = cleanTemplateKind(req.query.kind || 'review_request');
+    const templates = await EmailTemplate.find({ shopDomain, area, kind }).sort({ isPrimary: -1, updatedAt: -1 }).lean();
+    return res.json({ ok: true, templates: templates.map(publicEmailTemplate) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/email-templates', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const area = cleanTemplateArea(req.body.area || 'reviews');
+    const kind = cleanTemplateKind(req.body.kind || 'review_request');
+    const isPrimary = Boolean(req.body.isPrimary);
+    if (isPrimary) await EmailTemplate.updateMany({ shopDomain, area, kind }, { $set: { isPrimary: false } });
+    const template = await EmailTemplate.create({
+      shopDomain,
+      name: cleanText(req.body.name || 'Review request template', 120),
+      area,
+      kind,
+      enabled: req.body.enabled !== false,
+      isPrimary,
+      subject: cleanText(req.body.subject || 'How was your recent order?', 180),
+      previewText: cleanText(req.body.previewText || '', 240),
+      design: cleanTemplateDesign(req.body.design || {}),
+      sections: cleanTemplateSections(req.body.sections || []),
+      html: cleanText(req.body.html || '', 200000),
+      notes: cleanText(req.body.notes || '', 1000),
+    });
+    return res.status(201).json({ ok: true, template: publicEmailTemplate(template) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/email-templates/:id', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const existing = await EmailTemplate.findOne({ _id: req.params.id, shopDomain });
+    if (!existing) return res.status(404).json({ error: 'Template not found.' });
+    const area = cleanTemplateArea(req.body.area || existing.area || 'reviews');
+    const kind = cleanTemplateKind(req.body.kind || existing.kind || 'review_request');
+    const isPrimary = req.body.isPrimary === undefined ? existing.isPrimary : Boolean(req.body.isPrimary);
+    if (isPrimary) await EmailTemplate.updateMany({ shopDomain, area, kind, _id: { $ne: existing._id } }, { $set: { isPrimary: false } });
+    existing.name = cleanText(req.body.name || existing.name || 'Review request template', 120);
+    existing.area = area;
+    existing.kind = kind;
+    existing.enabled = req.body.enabled !== false;
+    existing.isPrimary = isPrimary;
+    existing.subject = cleanText(req.body.subject || existing.subject || 'How was your recent order?', 180);
+    existing.previewText = cleanText(req.body.previewText || existing.previewText || '', 240);
+    existing.design = cleanTemplateDesign(req.body.design || existing.design || {});
+    existing.sections = cleanTemplateSections(req.body.sections || existing.sections || []);
+    if (req.body.html !== undefined) existing.html = cleanText(req.body.html || '', 200000);
+    existing.notes = cleanText(req.body.notes || existing.notes || '', 1000);
+    await existing.save();
+    return res.json({ ok: true, template: publicEmailTemplate(existing) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/email-templates/:id/primary', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const template = await EmailTemplate.findOne({ _id: req.params.id, shopDomain });
+    if (!template) return res.status(404).json({ error: 'Template not found.' });
+    await EmailTemplate.updateMany({ shopDomain, area: template.area, kind: template.kind }, { $set: { isPrimary: false } });
+    template.isPrimary = true;
+    template.enabled = true;
+    await template.save();
+    return res.json({ ok: true, template: publicEmailTemplate(template) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/email-templates/:id', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const result = await EmailTemplate.deleteOne({ _id: req.params.id, shopDomain });
+    return res.json({ ok: true, deleted: Boolean(result.deletedCount) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/all-reviews-page-setup', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const [acceptedReviews, pendingReviews] = await Promise.all([
+      Review.countDocuments({ shopDomain, status: 'accepted', isDeleted: { $ne: true }, isTestReview: { $ne: true } }),
+      Review.countDocuments({ shopDomain, status: 'pending', isDeleted: { $ne: true }, isTestReview: { $ne: true } }),
+    ]);
+    const appUrl = env.appUrl || '';
+    return res.json({
+      ok: true,
+      shopDomain,
+      appUrl,
+      acceptedReviews,
+      pendingReviews,
+      apiEndpoint: `${appUrl}/api/reviews/seo-page?shopDomain=${encodeURIComponent(shopDomain)}&limit=120`,
+      recommendedPageHandle: 'reviews',
+      themeBlockName: 'All Reviews SEO Page',
+      liquidSnippet: `{% render 'all_reviews_seo_page' %}`,
+      appBlockInstructions: [
+        'Online Store → Themes → Customize.',
+        'Open or create a page template for /pages/reviews.',
+        'Add the Nectar “All Reviews SEO Page” app block.',
+        `Set Nectar app URL to ${appUrl || 'your Render app URL'}.`,
+        'Save and preview /pages/reviews.',
+      ],
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+
 router.post('/campaign-reminder', async (req, res, next) => {
   const shopDomain = shopDomainFromReq(req);
   try {
@@ -1104,6 +1296,11 @@ router.post('/test-email', async (req, res, next) => {
       email: to,
       itemId,
       token,
+      subject,
+      templateName,
+      layoutName,
+      moduleNames,
+      htmlHash,
       userAgent: cleanText(req.headers['user-agent'], 500),
     });
     await Settings.findOneAndUpdate({ shopDomain }, { $inc: { emailsSentTotal: 1 }, $setOnInsert: { shopDomain } }, { upsert: true });
@@ -1313,6 +1510,241 @@ router.post('/review-automation/register-webhook', async (req, res, next) => {
     const result = await registerReviewWebhookSubscriptions(shopDomain);
     const readiness = await automationReadiness(shopDomain);
     return res.json({ ok: Boolean(result.ok), result, readiness });
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+function currentWebhookScopeStatus(shop = {}) {
+  const combined = String(shop?.scopes || env.shopifyScopes || '');
+  const scopes = new Set(combined.split(',').map((scope) => scope.trim()).filter(Boolean));
+  return {
+    read_webhooks: scopes.has('read_webhooks'),
+    write_webhooks: scopes.has('write_webhooks'),
+    raw: combined,
+  };
+}
+
+function buildStoredWebhookMeta(shop = {}) {
+  const reviews = shop?.modules?.reviews || {};
+  return {
+    installedAt: reviews.webhookInstalledAt || null,
+    manualConfirmedAt: reviews.webhookManualConfirmedAt || reviews.manualSetupFinalisedAt || null,
+    source: reviews.webhookSource || '',
+    mode: reviews.webhookMode || '',
+    topics: Array.isArray(reviews.webhookTopics) ? reviews.webhookTopics : [],
+    addresses: Array.isArray(reviews.webhookAddresses) ? reviews.webhookAddresses : [],
+    primaryTopic: reviews.webhookTopic || '',
+    primaryAddress: reviews.webhookAddress || '',
+    verificationStatus: reviews.webhookVerificationStatus || '',
+    verificationCheckedAt: reviews.webhookVerificationCheckedAt || null,
+    manualSetupFinalised: Boolean(reviews.manualSetupFinalised),
+    registrationResults: Array.isArray(reviews.webhookRegistrationResults) ? reviews.webhookRegistrationResults : [],
+    inspectionResults: Array.isArray(reviews.webhookInspectionResults) ? reviews.webhookInspectionResults : [],
+  };
+}
+
+function buildWebhookRegistry({ shopDomain, shop, inspection, updateStored = false }) {
+  const stored = buildStoredWebhookMeta(shop || {});
+  const scopeStatus = currentWebhookScopeStatus(shop || {});
+  const inspectedByTopic = new Map((inspection?.results || []).map((item) => [item.topic, item]));
+  const storedReady = Boolean(stored.installedAt || stored.primaryAddress || stored.manualSetupFinalised);
+  const readAvailable = Boolean(scopeStatus.read_webhooks);
+  const webhooks = expectedReviewWebhookSubscriptions().map((expected) => {
+    const inspected = inspectedByTopic.get(expected.topic) || null;
+    const verified = Boolean(inspected?.ok && inspected?.verifiedInShopify !== false);
+    const missing = Boolean(inspected?.missing);
+    const unknown = Boolean(inspected?.unknown || inspection?.skipped);
+    const isFulfilled = expected.topic === 'orders/fulfilled';
+    const status = verified ? 'verified' : unknown && storedReady ? 'manual_unverified' : missing ? 'missing' : storedReady && !readAvailable ? 'manual_unverified' : 'missing';
+    return {
+      key: isFulfilled ? 'orders_fulfilled' : expected.topic.replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '').toLowerCase(),
+      name: isFulfilled ? 'Order fulfillment' : expected.topic === 'orders/updated' ? 'Order update' : expected.topic,
+      topic: expected.topic,
+      address: expected.address,
+      endpoint: expected.address.replace(env.appUrl || '', '') || expected.address,
+      format: 'json',
+      apiVersion: env.shopifyApiVersion,
+      status,
+      verifiedInShopify: verified,
+      storedInNectar: storedReady,
+      requiredForLaunch: true,
+      purpose: isFulfilled
+        ? 'Creates a private review-request job when Shopify marks an order as fulfilled.'
+        : 'Updates the job when order tags/status change, including the delivered tag gate.',
+      customerJourneyStep: isFulfilled
+        ? 'Fulfilled order → Nectar receives webhook → review job is created.'
+        : 'Order update/delivered tag → Nectar releases the job into the configured timer.',
+      actual: inspected?.actual || null,
+      matchingTopicCount: inspected?.matchingTopicCount || 0,
+      otherAddressesForTopic: inspected?.otherAddressesForTopic || [],
+      reason: inspected?.reason || (verified ? 'Found in Shopify and matching Nectar endpoint.' : status === 'manual_unverified' ? 'Nectar has manual setup finalised, but Shopify webhook read verification is unavailable.' : 'Expected webhook is not confirmed.'),
+    };
+  });
+  const verifiedCount = webhooks.filter((item) => item.verifiedInShopify).length;
+  const missingCount = webhooks.filter((item) => item.status === 'missing').length;
+  return {
+    ok: missingCount === 0 && (verifiedCount === webhooks.length || storedReady),
+    shopDomain,
+    appUrl: env.appUrl || '',
+    checkedAt: inspection?.checkedAt || new Date(),
+    readAvailable,
+    writeAvailable: Boolean(scopeStatus.write_webhooks),
+    scopeStatus,
+    stored,
+    summary: {
+      expectedCount: webhooks.length,
+      verifiedCount,
+      missingCount,
+      storedReady,
+      status: verifiedCount === webhooks.length ? 'verified' : storedReady && !readAvailable ? 'manual_unverified' : missingCount ? 'attention' : 'unknown',
+      message: verifiedCount === webhooks.length
+        ? 'All expected review webhooks are present in Shopify and match Nectar endpoints.'
+        : storedReady && !readAvailable
+          ? 'Nectar is finalised for manual webhook setup, but this app install cannot read Shopify webhooks to verify them.'
+          : 'One or more expected review webhooks are missing or not verified in Shopify.',
+    },
+    webhooks,
+    rawInspection: inspection || null,
+  };
+}
+
+async function inspectAndOptionallyPersistWebhookRegistry(shopDomain, { persist = false } = {}) {
+  const shop = await Shop.findOne({ shopDomain }).lean();
+  const inspection = await inspectReviewWebhookSubscriptions(shopDomain).catch((error) => ({
+    ok: false,
+    skipped: true,
+    reason: error.message || 'Could not inspect Shopify webhooks.',
+    results: expectedReviewWebhookSubscriptions().map((hook) => ({ ...hook, ok: false, unknown: true, reason: error.message || 'Inspection failed.' })),
+    checkedAt: new Date(),
+  }));
+  const registry = buildWebhookRegistry({ shopDomain, shop, inspection });
+  if (persist) {
+    const now = new Date();
+    const verified = registry.webhooks.every((item) => item.verifiedInShopify);
+    await Shop.findOneAndUpdate({ shopDomain }, {
+      $set: {
+        'modules.reviews.enabled': true,
+        'modules.reviews.webhookInstalledAt': verified ? now : (registry.summary.storedReady && !registry.readAvailable ? (registry.stored.installedAt || now) : null),
+        'modules.reviews.webhookSource': verified ? 'shopify_api_verified' : (registry.summary.storedReady ? registry.stored.source || 'manual_shopify_admin_confirmation' : 'not_verified'),
+        'modules.reviews.webhookMode': verified ? 'verified' : (registry.stored.mode || 'manual'),
+        'modules.reviews.webhookTopics': registry.webhooks.map((hook) => hook.topic),
+        'modules.reviews.webhookAddresses': registry.webhooks.map((hook) => hook.address),
+        'modules.reviews.webhookAddress': registry.webhooks.find((hook) => hook.topic === 'orders/fulfilled')?.address || '',
+        'modules.reviews.webhookTopic': 'orders/fulfilled',
+        'modules.reviews.webhookVerificationStatus': verified ? 'verified' : (registry.readAvailable ? 'missing_or_mismatched' : 'manual_unverified'),
+        'modules.reviews.webhookVerificationCheckedAt': now,
+        'modules.reviews.webhookInspectionResults': registry.webhooks,
+      },
+      $setOnInsert: { shopDomain },
+    }, { upsert: true, setDefaultsOnInsert: true });
+  }
+  return registry;
+}
+
+router.get('/review-automation/webhooks', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const registry = await inspectAndOptionallyPersistWebhookRegistry(shopDomain, { persist: false });
+    return res.json(registry);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/review-automation/verify-webhooks', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const registry = await inspectAndOptionallyPersistWebhookRegistry(shopDomain, { persist: true });
+    return res.json({ ok: registry.ok, ...registry });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/review-automation/confirm-manual-webhook', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const expectedHooks = expectedReviewWebhookSubscriptions();
+    const fulfilledHook = expectedHooks.find((hook) => hook.topic === 'orders/fulfilled') || expectedHooks[0];
+    const updatedHook = expectedHooks.find((hook) => hook.topic === 'orders/updated') || expectedHooks[1];
+
+    // If read_webhooks is available, verify the merchant's manually-created webhooks.
+    // If it is not available, still finalise the internal Nectar connection points so
+    // manual setup works and the launch checklist reflects the documented setup.
+    const inspection = await inspectReviewWebhookSubscriptions(shopDomain).catch((error) => ({
+      ok: false,
+      skipped: true,
+      reason: error.message || 'Could not inspect Shopify webhooks.',
+      results: expectedHooks.map((hook) => ({ ...hook, ok: false, unknown: true })),
+    }));
+
+    const now = new Date();
+    const verificationStatus = inspection.ok ? 'verified' : (inspection.skipped ? 'manual_unverified' : 'manual_confirmed_not_verified');
+    const canTrustManualAsReady = Boolean(inspection.ok || inspection.skipped);
+
+    const existingSettings = await Settings.findOne({ shopDomain }).lean().catch(() => null);
+    const existingAuto = existingSettings?.reviewAutomation || {};
+    const settingsSet = {};
+    if (existingAuto.enabled === undefined) settingsSet['reviewAutomation.enabled'] = true;
+    if (existingAuto.nativeEnabled === undefined) settingsSet['reviewAutomation.nativeEnabled'] = true;
+    if (!existingAuto.mode) settingsSet['reviewAutomation.mode'] = 'native';
+    if (!existingAuto.trigger) settingsSet['reviewAutomation.trigger'] = 'orders/fulfilled';
+    if (existingAuto.delayDays === undefined || existingAuto.delayDays === null) settingsSet['reviewAutomation.delayDays'] = 14;
+    if (existingAuto.deliveryTagRequired === undefined) settingsSet['reviewAutomation.deliveryTagRequired'] = true;
+    if (!existingAuto.deliveryTag) settingsSet['reviewAutomation.deliveryTag'] = 'delivered';
+    if (!existingAuto.deliveryAnchor) settingsSet['reviewAutomation.deliveryAnchor'] = 'delivered_tag';
+    if (!existingAuto.campaign) settingsSet['reviewAutomation.campaign'] = 'native_review_request';
+    if (!existingAuto.subject) settingsSet['reviewAutomation.subject'] = 'How was your recent order?';
+
+    if (Object.keys(settingsSet).length) {
+      await Settings.findOneAndUpdate(
+        { shopDomain },
+        { $set: settingsSet, $setOnInsert: { shopDomain } },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+    }
+
+    await Shop.findOneAndUpdate(
+      { shopDomain },
+      {
+        $set: {
+          'modules.reviews.enabled': true,
+          'modules.reviews.webhookInstalledAt': now,
+          'modules.reviews.webhookManualConfirmedAt': now,
+          'modules.reviews.webhookSource': 'manual_shopify_admin_confirmation',
+          'modules.reviews.webhookMode': 'manual',
+          'modules.reviews.webhookTopics': expectedHooks.map((hook) => hook.topic),
+          'modules.reviews.webhookAddresses': expectedHooks.map((hook) => hook.address),
+          'modules.reviews.webhookAddress': fulfilledHook?.address || '',
+          'modules.reviews.webhookTopic': 'orders/fulfilled',
+          'modules.reviews.webhookVerificationStatus': verificationStatus,
+          'modules.reviews.webhookVerificationCheckedAt': now,
+          'modules.reviews.webhookInspectionResults': inspection.results || [],
+          'modules.reviews.manualSetupFinalised': true,
+          'modules.reviews.manualSetupFinalisedAt': now,
+        },
+        $setOnInsert: { shopDomain },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    const readiness = await automationReadiness(shopDomain);
+    return res.json({
+      ok: true,
+      confirmed: true,
+      manualFinalised: true,
+      verificationStatus,
+      verifiedInShopify: Boolean(inspection.ok),
+      inspection,
+      readiness,
+      webhookRegistry: buildWebhookRegistry({ shopDomain, shop: await Shop.findOne({ shopDomain }).lean(), inspection }),
+      addresses: {
+        fulfilledAddress: fulfilledHook?.address || '',
+        updatedAddress: updatedHook?.address || '',
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -1637,7 +2069,11 @@ router.get('/review-launch-checklist', async (req, res, next) => {
     const tokenReady = Boolean(env.emailCredentialSecret || env.shopifyApiSecret);
     const auto = settings?.reviewAutomation || {};
     const nativeReady = Boolean(auto.enabled !== false && auto.nativeEnabled !== false && emailReady && tokenReady);
-    const webhookReady = Boolean(shop?.modules?.reviews?.webhookInstalledAt || shop?.modules?.reviews?.webhookAddress);
+    const webhookMeta = shop?.modules?.reviews || {};
+    const webhookVerificationStatus = webhookMeta.webhookVerificationStatus || '';
+    const webhookProblem = ['failed', 'missing_or_mismatched', 'manual_confirmed_not_verified'].includes(webhookVerificationStatus);
+    const webhookReady = Boolean(webhookMeta.webhookInstalledAt) && !webhookProblem;
+    const webhookManual = webhookMeta.webhookSource === 'manual_shopify_admin_confirmation';
     const latestJob = recentJobs[0] || null;
 
     const checks = [
@@ -1677,9 +2113,13 @@ router.get('/review-launch-checklist', async (req, res, next) => {
         key: 'orders_fulfilled_webhook',
         label: 'Fulfilled-order webhook',
         status: webhookReady ? 'ready' : (oauthReady ? 'warning' : 'blocked'),
-        detail: webhookReady ? `Webhook registered${shop?.modules?.reviews?.webhookTopic ? ` for ${shop.modules.reviews.webhookTopic}` : ''}.` : 'Webhook is not marked as registered yet. Fake-order tests still work, but live fulfilled orders will not schedule emails.',
-        action: 'Click Register webhook in the launch checklist.',
-        target: 'v-review-launch',
+        detail: webhookReady
+          ? (webhookManual
+            ? `Manual Shopify webhooks have been finalised in Nectar${webhookVerificationStatus ? ` (${webhookVerificationStatus})` : ''}.`
+            : `Webhook registered${webhookMeta.webhookTopic ? ` for ${webhookMeta.webhookTopic}` : ''}.`)
+          : 'Webhook is not marked as registered yet. Fake-order tests still work, but live fulfilled orders will not schedule emails.',
+        action: webhookReady ? '' : 'Click Register now, or use Finalise manual setup if you created the webhooks in Shopify Admin.',
+        target: 'v-review-launch:register-webhook',
       },
       {
         key: 'native_scheduler',
@@ -1722,6 +2162,7 @@ router.get('/review-launch-checklist', async (req, res, next) => {
         latestJob: latestJob ? { status: latestJob.status, orderId: latestJob.orderId, scheduledAt: latestJob.scheduledAt, sentAt: latestJob.sentAt, blockedReason: latestJob.blockedReason || latestJob.errorMessage || '' } : null,
       },
       checks,
+      webhookRegistry: buildWebhookRegistry({ shopDomain, shop, inspection: { results: webhookMeta.webhookInspectionResults || [], skipped: !webhookMeta.webhookInspectionResults?.length, checkedAt: webhookMeta.webhookVerificationCheckedAt || null } }),
       recentJobs: recentJobs.map((job) => ({
         id: String(job._id),
         status: job.status,
