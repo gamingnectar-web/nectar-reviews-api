@@ -217,6 +217,18 @@ async function activeEmailSettings(shopDomain) {
   return settings;
 }
 
+function publicEmailSendError(error = {}) {
+  const code = error.code ? ` (${error.code})` : '';
+  const response = error.response || error.command || error.reason || '';
+  const message = error.message || 'Unknown SMTP error';
+  const joined = `${message}${code}${response ? ` — ${response}` : ''}`;
+  if (/auth|credentials|invalid login|username|password|app password/i.test(joined)) return `Email provider rejected the login. Check the SMTP username and app password. ${joined}`;
+  if (/enotfound|econnrefused|etimedout|timeout|dns/i.test(joined)) return `Could not reach the SMTP server. Check host, port and security mode. ${joined}`;
+  if (/recipient|mailbox|relay|550|553|554/i.test(joined)) return `The email provider rejected the recipient or sender. ${joined}`;
+  return `Email send failed: ${joined}`;
+}
+
+
 async function buildCampaignAnalytics(shopDomain, options = {}) {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const includeTest = Boolean(options.includeTest);
@@ -1415,8 +1427,9 @@ router.post('/test-email', async (req, res, next) => {
     await settings.save();
     return res.json({ ok: true, message: 'Test email sent.' });
   } catch (error) {
-    await EmailProviderSettings.findOneAndUpdate({ shopDomain }, { $set: { lastTestedAt: new Date(), lastTestStatus: 'failed', lastTestError: error.message || 'Failed to send test email' } }).catch(() => {});
-    next(error);
+    const publicMessage = publicEmailSendError(error);
+    await EmailProviderSettings.findOneAndUpdate({ shopDomain }, { $set: { lastTestedAt: new Date(), lastTestStatus: 'failed', lastTestError: publicMessage } }).catch(() => {});
+    return res.status(502).json({ error: publicMessage, detail: error.message || 'Failed to send test email' });
   }
 });
 
@@ -1646,22 +1659,45 @@ function buildStoredWebhookMeta(shop = {}) {
     manualSetupFinalised: Boolean(reviews.manualSetupFinalised),
     registrationResults: Array.isArray(reviews.webhookRegistrationResults) ? reviews.webhookRegistrationResults : [],
     inspectionResults: Array.isArray(reviews.webhookInspectionResults) ? reviews.webhookInspectionResults : [],
+    lastWebhookReceivedAt: reviews.lastWebhookReceivedAt || null,
+    lastWebhookTopic: reviews.lastWebhookTopic || '',
+    lastWebhookId: reviews.lastWebhookId || '',
+    lastWebhookOrderId: reviews.lastWebhookOrderId || '',
+    lastWebhookOrderName: reviews.lastWebhookOrderName || '',
+    lastOrdersFulfilledWebhookAt: reviews.lastOrdersFulfilledWebhookAt || null,
+    lastOrdersUpdatedWebhookAt: reviews.lastOrdersUpdatedWebhookAt || null,
+    webhookReceiptCount: Number(reviews.webhookReceiptCount || 0),
+    ordersFulfilledReceiptCount: Number(reviews.ordersFulfilledReceiptCount || 0),
+    ordersUpdatedReceiptCount: Number(reviews.ordersUpdatedReceiptCount || 0),
   };
 }
 
 function buildWebhookRegistry({ shopDomain, shop, inspection, updateStored = false }) {
   const stored = buildStoredWebhookMeta(shop || {});
   const scopeStatus = currentWebhookScopeStatus(shop || {});
-  const inspectedByTopic = new Map((inspection?.results || []).map((item) => [item.topic, item]));
+  const inspectedResults = inspection?.results || [];
+  const inspectedByTopic = new Map(inspectedResults.map((item) => [item.topic, item]));
   const storedReady = Boolean(stored.installedAt || stored.primaryAddress || stored.manualSetupFinalised);
-  const readAvailable = true;
+  const inspectionUnknown = Boolean(inspection?.skipped || !inspectedResults.length || inspectedResults.every((item) => item.unknown));
+  const readAvailable = !inspectionUnknown;
+  const lastReceivedByTopic = {
+    'orders/fulfilled': stored.lastOrdersFulfilledWebhookAt,
+    'orders/updated': stored.lastOrdersUpdatedWebhookAt,
+  };
+  const receiptCountsByTopic = {
+    'orders/fulfilled': stored.ordersFulfilledReceiptCount,
+    'orders/updated': stored.ordersUpdatedReceiptCount,
+  };
   const webhooks = expectedReviewWebhookSubscriptions().map((expected) => {
     const inspected = inspectedByTopic.get(expected.topic) || null;
     const verified = Boolean(inspected?.ok && inspected?.verifiedInShopify !== false);
     const missing = Boolean(inspected?.missing);
-    const unknown = Boolean(inspected?.unknown || inspection?.skipped);
+    const unknown = Boolean(inspected?.unknown || inspectionUnknown);
     const isFulfilled = expected.topic === 'orders/fulfilled';
-    const status = verified ? 'verified' : unknown && storedReady ? 'manual_unverified' : missing ? 'missing' : storedReady ? 'manual_unverified' : 'missing';
+    const receivedAt = lastReceivedByTopic[expected.topic] || null;
+    const receivedCount = Number(receiptCountsByTopic[expected.topic] || 0);
+    const received = Boolean(receivedAt || receivedCount);
+    const status = verified ? 'verified' : received ? 'received' : storedReady ? 'manual_ready' : missing ? 'missing' : unknown ? 'manual_unverified' : 'missing';
     return {
       key: isFulfilled ? 'orders_fulfilled' : expected.topic.replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '').toLowerCase(),
       name: isFulfilled ? 'Order fulfillment' : expected.topic === 'orders/updated' ? 'Order update' : expected.topic,
@@ -1672,6 +1708,12 @@ function buildWebhookRegistry({ shopDomain, shop, inspection, updateStored = fal
       apiVersion: env.shopifyApiVersion,
       status,
       verifiedInShopify: verified,
+      receivedByNectar: received,
+      lastReceivedAt: receivedAt,
+      receivedCount,
+      lastReceivedWebhookId: expected.topic === stored.lastWebhookTopic ? stored.lastWebhookId : '',
+      lastReceivedOrderId: expected.topic === stored.lastWebhookTopic ? stored.lastWebhookOrderId : '',
+      lastReceivedOrderName: expected.topic === stored.lastWebhookTopic ? stored.lastWebhookOrderName : '',
       storedInNectar: storedReady,
       requiredForLaunch: true,
       purpose: isFulfilled
@@ -1683,31 +1725,43 @@ function buildWebhookRegistry({ shopDomain, shop, inspection, updateStored = fal
       actual: inspected?.actual || null,
       matchingTopicCount: inspected?.matchingTopicCount || 0,
       otherAddressesForTopic: inspected?.otherAddressesForTopic || [],
-      reason: inspected?.reason || (verified ? 'Found in Shopify and matching Nectar endpoint.' : status === 'manual_unverified' ? 'Nectar has manual/config-file webhook setup finalised internally; Shopify did not return a matching runtime webhook record for this check.' : 'Expected webhook is not confirmed.'),
+      reason: verified
+        ? 'Found in Shopify and matching Nectar endpoint.'
+        : received
+          ? 'Nectar has received this webhook from Shopify. This is the strongest proof manual setup is working.'
+          : storedReady
+            ? 'Manual/config-file webhook setup is finalised internally. Send a Shopify test notification or fulfil/update a test order to confirm delivery into Nectar.'
+            : inspected?.reason || 'Expected webhook is not confirmed.',
     };
   });
   const verifiedCount = webhooks.filter((item) => item.verifiedInShopify).length;
+  const receivedCount = webhooks.filter((item) => item.receivedByNectar).length;
   const missingCount = webhooks.filter((item) => item.status === 'missing').length;
+  const operationalCount = webhooks.filter((item) => item.verifiedInShopify || item.receivedByNectar || storedReady).length;
   return {
-    ok: missingCount === 0 && (verifiedCount === webhooks.length || storedReady),
+    ok: operationalCount === webhooks.length,
     shopDomain,
     appUrl: env.appUrl || '',
-    checkedAt: inspection?.checkedAt || new Date(),
+    checkedAt: inspection?.checkedAt || stored.verificationCheckedAt || new Date(),
     readAvailable,
-    writeAvailable: true,
+    writeAvailable: false,
     scopeStatus,
     stored,
     summary: {
       expectedCount: webhooks.length,
       verifiedCount,
+      receivedCount,
+      operationalCount,
       missingCount,
       storedReady,
-      status: verifiedCount === webhooks.length ? 'verified' : storedReady ? 'manual_unverified' : missingCount ? 'attention' : 'unknown',
+      status: verifiedCount === webhooks.length ? 'verified' : receivedCount === webhooks.length ? 'received' : storedReady ? 'manual_ready' : missingCount ? 'attention' : 'unknown',
       message: verifiedCount === webhooks.length
-        ? 'All expected review webhooks are present in Shopify and match Nectar endpoints.'
-        : storedReady
-          ? 'Nectar has finalised webhook setup internally. If these are configured through shopify.app.toml, run Shopify app deploy and use Refresh from Shopify to compare any app-owned runtime webhooks Shopify returns.'
-          : 'One or more expected review webhooks are missing or not verified in Shopify.',
+        ? 'All expected review webhooks are visible in Shopify and match Nectar endpoints.'
+        : receivedCount === webhooks.length
+          ? 'Nectar has received both review webhook events. Manual setup is working.'
+          : storedReady
+            ? 'Manual webhook setup is finalised in Nectar. Send Shopify test notifications to prove both events reach Nectar.'
+            : 'Manual webhook setup is not finalised yet. Create the two Shopify webhooks, then finalise manual setup.',
     },
     webhooks,
     rawInspection: inspection || null,
@@ -1730,14 +1784,14 @@ async function inspectAndOptionallyPersistWebhookRegistry(shopDomain, { persist 
     await Shop.findOneAndUpdate({ shopDomain }, {
       $set: {
         'modules.reviews.enabled': true,
-        'modules.reviews.webhookInstalledAt': verified ? now : (registry.summary.storedReady && !registry.readAvailable ? (registry.stored.installedAt || now) : null),
+        'modules.reviews.webhookInstalledAt': verified ? now : (registry.summary.storedReady ? (registry.stored.installedAt || now) : null),
         'modules.reviews.webhookSource': verified ? 'shopify_api_verified' : (registry.summary.storedReady ? registry.stored.source || 'manual_shopify_admin_confirmation' : 'not_verified'),
         'modules.reviews.webhookMode': verified ? 'verified' : (registry.stored.mode || 'manual'),
         'modules.reviews.webhookTopics': registry.webhooks.map((hook) => hook.topic),
         'modules.reviews.webhookAddresses': registry.webhooks.map((hook) => hook.address),
         'modules.reviews.webhookAddress': registry.webhooks.find((hook) => hook.topic === 'orders/fulfilled')?.address || '',
         'modules.reviews.webhookTopic': 'orders/fulfilled',
-        'modules.reviews.webhookVerificationStatus': verified ? 'verified' : (registry.readAvailable ? 'missing_or_mismatched' : 'manual_unverified'),
+        'modules.reviews.webhookVerificationStatus': verified ? 'verified' : (registry.summary.storedReady ? 'manual_ready' : (registry.readAvailable ? 'missing_or_mismatched' : 'manual_unverified')),
         'modules.reviews.webhookVerificationCheckedAt': now,
         'modules.reviews.webhookInspectionResults': registry.webhooks,
       },
@@ -1875,7 +1929,8 @@ router.post('/review-automation/fake-order', async (req, res, next) => {
     const refreshed = await ReviewRequestJob.findById(job._id).lean();
     return res.status(201).json({ ok: true, job: refreshed || job, sendResult });
   } catch (error) {
-    next(error);
+    const publicMessage = publicEmailSendError(error);
+    return res.status(error.statusCode || 502).json({ error: publicMessage, detail: error.message || 'Fake-order email failed' });
   }
 });
 
