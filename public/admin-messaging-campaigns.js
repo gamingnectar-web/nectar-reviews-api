@@ -89,6 +89,34 @@
     if (!raw || /^none$/i.test(raw) || /^transparent$/i.test(raw)) return 'transparent';
     return raw;
   }
+  function isTransparentColor(value) {
+    return !String(value || '').trim() || /^(none|transparent)$/i.test(String(value || '').trim());
+  }
+  function isHexColor(value) {
+    return /^#[0-9a-f]{6}$/i.test(String(value || '').trim());
+  }
+  function colourLabel(value) {
+    const raw = String(value || '').trim();
+    if (isTransparentColor(raw)) return 'None / transparent';
+    return isHexColor(raw) ? 'Colour selected' : raw;
+  }
+  function refreshColorButton(inputOrId) {
+    const input = typeof inputOrId === 'string' ? el(inputOrId) : inputOrId;
+    if (!input) return;
+    const button = document.querySelector(`[data-color-picker-for="${input.id}"]`);
+    if (!button) return;
+    const value = String(input.value || '').trim();
+    const swatch = button.querySelector('.msg-color-swatch');
+    const label = button.querySelector('.msg-color-label');
+    if (swatch) {
+      swatch.style.background = isTransparentColor(value) ? 'linear-gradient(45deg,#fff 0,#fff 46%,#d92d20 48%,#d92d20 52%,#fff 54%,#fff 100%)' : value;
+    }
+    if (label) label.textContent = colourLabel(value);
+    button.title = isTransparentColor(value) ? 'Transparent/no colour' : value;
+  }
+  function refreshAllColorButtons() {
+    document.querySelectorAll('[data-color-picker-for]').forEach((button) => refreshColorButton(button.dataset.colorPickerFor));
+  }
   function normaliseButtonUrl(raw) {
     const value = String(raw || '').trim();
     if (!value) return '';
@@ -102,7 +130,7 @@
     modal = document.createElement('div');
     modal.id = 'msg-color-choice-modal';
     modal.className = 'msg-color-modal';
-    modal.innerHTML = `<div class="msg-color-modal-card" role="dialog" aria-modal="true"><button type="button" class="msg-color-close">×</button><h3>Choose colour</h3><p>Select a colour, paste a hex value, or choose none.</p><input id="msg-color-native" type="color" value="#f8fafc"><input id="msg-color-hex" type="text" placeholder="#f8fafc"><div class="msg-color-swatches"><button data-color-value="#f8fafc" style="background:#f8fafc"></button><button data-color-value="#fff7ed" style="background:#fff7ed"></button><button data-color-value="#ecfdf3" style="background:#ecfdf3"></button><button data-color-value="#eff6ff" style="background:#eff6ff"></button><button data-color-value="#111827" style="background:#111827"></button></div><div class="msg-actions"><button type="button" class="msg-btn secondary" data-color-none>None</button><button type="button" class="msg-btn" data-color-apply>Apply</button></div></div>`;
+    modal.innerHTML = `<div class="msg-color-modal-card" role="dialog" aria-modal="true"><button type="button" class="msg-color-close">×</button><h3>Choose colour</h3><p>Select a colour, paste a hex value, or choose <strong>None / transparent</strong>.</p><div class="msg-colour-preview-row"><span class="msg-colour-preview-swatch" id="msg-color-preview-swatch"></span><strong id="msg-color-preview-label">Colour selected</strong></div><label>Colour picker</label><input id="msg-color-native" type="color" value="#f8fafc"><label>Hex / value</label><input id="msg-color-hex" type="text" placeholder="#f8fafc or none"><div class="msg-color-swatches"><button data-color-value="#f8fafc" style="background:#f8fafc" title="Soft grey"></button><button data-color-value="#fff7ed" style="background:#fff7ed" title="Warm cream"></button><button data-color-value="#ecfdf3" style="background:#ecfdf3" title="Soft green"></button><button data-color-value="#eff6ff" style="background:#eff6ff" title="Soft blue"></button><button data-color-value="#111827" style="background:#111827" title="Dark navy"></button></div><div class="msg-actions"><button type="button" class="msg-btn secondary" data-color-none>None / transparent</button><button type="button" class="msg-btn" data-color-apply>Apply</button></div></div>`;
     document.body.appendChild(modal);
     modal.addEventListener('click', (event) => { if (event.target === modal) modal.classList.remove('active'); });
     modal.querySelector('.msg-color-close')?.addEventListener('click', () => modal.classList.remove('active'));
@@ -115,13 +143,23 @@
     const modal = ensureColorChoiceModal();
     const native = modal.querySelector('#msg-color-native');
     const hex = modal.querySelector('#msg-color-hex');
+    const preview = modal.querySelector('#msg-color-preview-swatch');
+    const label = modal.querySelector('#msg-color-preview-label');
     const current = String(input.value || '').trim();
+    const updateModalPreview = () => {
+      const value = String(hex?.value || native?.value || '').trim();
+      if (preview) preview.style.background = isTransparentColor(value) ? 'linear-gradient(45deg,#fff 0,#fff 46%,#d92d20 48%,#d92d20 52%,#fff 54%,#fff 100%)' : value;
+      if (label) label.textContent = colourLabel(value);
+    };
     const safe = /^#[0-9a-f]{6}$/i.test(current) ? current : '#f8fafc';
     if (native) native.value = safe;
-    if (hex) hex.value = /^none$/i.test(current) ? 'none' : current;
+    if (hex) hex.value = /^(none|transparent)$/i.test(current) ? 'none' : current;
+    updateModalPreview();
+    native && (native.oninput = (event) => { if (hex) hex.value = event.target.value; updateModalPreview(); });
+    hex && (hex.oninput = updateModalPreview);
     modal.classList.add('active');
-    modal.querySelector('[data-color-apply]').onclick = () => { input.value = (hex?.value || native?.value || 'none').trim() || 'none'; input.dispatchEvent(new Event('input', { bubbles: true })); modal.classList.remove('active'); };
-    modal.querySelector('[data-color-none]').onclick = () => { input.value = 'none'; input.dispatchEvent(new Event('input', { bubbles: true })); modal.classList.remove('active'); };
+    modal.querySelector('[data-color-apply]').onclick = () => { input.value = (hex?.value || native?.value || 'none').trim() || 'none'; refreshColorButton(input); input.dispatchEvent(new Event('input', { bubbles: true })); modal.classList.remove('active'); };
+    modal.querySelector('[data-color-none]').onclick = () => { input.value = 'none'; refreshColorButton(input); input.dispatchEvent(new Event('input', { bubbles: true })); modal.classList.remove('active'); };
   }
 
   function injectStyles() {
@@ -144,7 +182,7 @@
 
 
       .msg-provider-list,.msg-module-library{display:grid;gap:10px}.msg-provider-card,.msg-module-card{border:1px solid var(--border,#e5e7eb);border-radius:14px;background:#fbfdff;padding:14px;display:grid;gap:8px}.msg-provider-card-head,.msg-module-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.msg-provider-badges{display:flex;gap:6px;flex-wrap:wrap}.msg-badge{display:inline-flex;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:11px;font-weight:950;padding:4px 8px}.msg-badge.green{background:#ecfdf3;color:#027a48}.msg-badge.gray{background:#f3f4f6;color:#475467}.msg-module-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.msg-module-style-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}.msg-module-style-grid label,.msg-module-form-grid label{margin-top:0!important}.msg-template-card{padding:14px!important;cursor:default}.msg-template-top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start}.msg-template-remove{border:0;background:#fff1f3;color:#d72c0d;border-radius:999px;width:30px!important;height:30px!important;display:grid!important;place-items:center!important;font-size:16px;line-height:1;padding:0!important;position:static!important}.msg-template-meta{display:flex;gap:8px;flex-wrap:wrap;color:#667085;font-size:12px;margin-top:4px}.msg-template-card details{margin-top:10px;border-top:1px solid #e5e7eb;padding-top:10px}.msg-template-card summary{cursor:pointer;font-weight:900;color:#111827}.msg-template-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}.msg-modal-backdrop{position:fixed;inset:0;z-index:2147483500;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.56)}.msg-modal-backdrop.active{display:flex}.msg-modal{width:min(520px,100%);background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:18px;box-shadow:0 28px 90px rgba(15,23,42,.32);overflow:hidden}.msg-modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:22px 24px;border-bottom:1px solid var(--border,#e5e7eb)}.msg-modal-head h3{margin:0 0 4px;font-size:20px}.msg-modal-head p{margin:0;color:#667085}.msg-modal-close{border:0;background:#f3f4f6;width:36px;height:36px;border-radius:999px;display:grid;place-items:center;cursor:pointer;font-weight:950}.msg-modal-body{padding:20px 24px;display:grid;gap:12px}.msg-modal-body label{font-size:13px;font-weight:900}.msg-modal-body input{width:100%;min-height:44px;border:1px solid #cfd5dd;border-radius:10px;padding:10px 12px;font:inherit;box-sizing:border-box}.msg-modal-actions{display:flex;justify-content:flex-end;gap:10px;padding:0 24px 24px}.msg-product-search-explainer{display:grid;gap:10px}.msg-check-list{display:grid;gap:8px;margin:0;padding:0;list-style:none}.msg-check-list li{display:flex;gap:8px;align-items:flex-start;color:#475467;font-size:13px;line-height:1.45}.msg-check-list li:before{content:'✓';font-weight:950;color:#027a48}.msg-analytics-row.recipient{grid-template-columns:1.1fr .7fr .7fr .7fr auto}.msg-reminder-btn{border:1px solid var(--border,#e5e7eb);border-radius:10px;background:#fff;color:#111827;min-height:36px;padding:8px 11px;font-weight:900;cursor:pointer}.msg-reminder-btn:disabled{opacity:.5;cursor:not-allowed}.msg-settings-subnav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.msg-settings-mini{border:1px solid var(--border,#e5e7eb);background:#fff;border-radius:999px;padding:8px 12px;font-weight:900;cursor:pointer}.msg-settings-mini.active{background:#111827;color:#fff}.msg-code-card{min-width:0}.msg-code-card summary{min-width:0}.msg-code-card summary .msg-btn{flex-shrink:0}
-      .msg-modules-stack{display:grid!important;grid-template-columns:1fr!important;gap:16px!important}.msg-module-card .msg-template-actions{justify-content:flex-start;align-items:center}.msg-btn.danger{background:#fff1f3!important;color:#d72c0d!important;border-color:#fecdd6!important}.msg-provider-card .msg-icon-btn,.msg-template-remove{display:grid!important;place-items:center!important;line-height:1!important;padding:0!important}.msg-template-card{overflow:visible}.msg-template-actions{position:static!important;display:flex!important;justify-content:flex-start!important;align-items:center!important;margin-top:12px!important}.msg-template-actions .msg-btn{position:static!important;width:auto!important;height:auto!important;white-space:normal!important}.msg-analytics-row{grid-template-columns:1.1fr .7fr .7fr .9fr auto!important}.msg-analytics-row.recipient{grid-template-columns:1.1fr .7fr .7fr 1fr auto!important}.msg-analytics-sent-details{margin-top:5px;color:#667085;font-size:12px;line-height:1.35}.msg-analytics-row .msg-muted-line{color:#667085;font-size:12px;line-height:1.35}.msg-provider-primary-actions{display:flex;gap:6px;flex-wrap:wrap}.msg-provider-primary-actions .msg-btn{min-height:36px;padding:8px 10px;font-size:12px}.msg-module-link-grid{display:grid;grid-template-columns:180px minmax(0,1fr);gap:12px}.msg-color-modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:999999}.msg-color-modal.active{display:flex}.msg-color-modal-card{width:min(420px,calc(100vw - 28px));background:#fff;border-radius:18px;padding:20px;border:1px solid #e5e7eb;box-shadow:0 24px 80px rgba(15,23,42,.22);position:relative}.msg-color-close{position:absolute;right:12px;top:10px;width:34px;height:34px;border-radius:999px;border:0;background:#f2f4f7;font-size:22px;cursor:pointer}.msg-color-modal-card input{width:100%;margin:8px 0}.msg-color-swatches{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.msg-color-swatches button{width:38px;height:38px;border-radius:999px;border:1px solid #d0d5dd;cursor:pointer} @media(max-width:720px){.msg-module-link-grid{grid-template-columns:1fr}.msg-analytics-row,.msg-analytics-row.recipient{grid-template-columns:1fr!important}}
+      .msg-modules-stack{display:grid!important;grid-template-columns:1fr!important;gap:16px!important}.msg-module-card .msg-template-actions{justify-content:flex-start;align-items:center}.msg-btn.danger{background:#fff1f3!important;color:#d72c0d!important;border-color:#fecdd6!important}.msg-provider-card .msg-icon-btn,.msg-template-remove{display:grid!important;place-items:center!important;line-height:1!important;padding:0!important}.msg-template-card{overflow:visible}.msg-template-actions{position:static!important;display:flex!important;justify-content:flex-start!important;align-items:center!important;margin-top:12px!important}.msg-template-actions .msg-btn{position:static!important;width:auto!important;height:auto!important;white-space:normal!important}.msg-analytics-row{grid-template-columns:1.1fr .7fr .7fr .9fr auto!important}.msg-analytics-row.recipient{grid-template-columns:1.1fr .7fr .7fr 1fr auto!important}.msg-analytics-sent-details{margin-top:5px;color:#667085;font-size:12px;line-height:1.35}.msg-analytics-row .msg-muted-line{color:#667085;font-size:12px;line-height:1.35}.msg-provider-primary-actions{display:flex;gap:6px;flex-wrap:wrap}.msg-provider-primary-actions .msg-btn{min-height:36px;padding:8px 10px;font-size:12px}.msg-module-link-grid{display:grid;grid-template-columns:180px minmax(0,1fr);gap:12px}.msg-color-picker{width:100%;min-height:44px;border:1px solid #cfd5dd;border-radius:10px;background:#fff;display:flex;align-items:center;gap:10px;padding:8px 12px;font-weight:900;cursor:pointer;text-align:left}.msg-color-swatch,.msg-colour-preview-swatch{width:26px;height:26px;border-radius:999px;border:1px solid #d0d5dd;box-shadow:inset 0 0 0 1px rgba(255,255,255,.65);flex:0 0 auto}.msg-color-label{color:#111827}.msg-hidden-color-input{position:absolute!important;opacity:0!important;pointer-events:none!important;width:1px!important;height:1px!important}.msg-typography-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.msg-send-result{margin-top:16px;border:1px solid #d9e0ea;border-radius:16px;background:#fff;padding:16px;display:none}.msg-send-result.active{display:block}.msg-send-result.ok{border-color:#abefc6;background:#f6fef9}.msg-send-result.bad{border-color:#fecdd6;background:#fffafb}.msg-send-result.warning{border-color:#fedf89;background:#fffcf5}.msg-send-result h3{margin:0 0 6px}.msg-send-result small{color:#667085}.msg-send-preview-frame{margin-top:12px;border:1px solid #e5e7eb;border-radius:14px;background:#f8fafc;padding:14px;max-height:520px;overflow:auto}.msg-hidden-presets details{border:1px solid var(--border,#e5e7eb);border-radius:14px;background:#fbfdff;padding:0}.msg-hidden-presets summary{cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:12px 14px;font-weight:950}.msg-hidden-presets summary:after{content:'+';width:28px;height:28px;border-radius:8px;background:#fff;border:1px solid #d0d5dd;display:grid;place-items:center}.msg-hidden-presets details[open] summary:after{content:'−'}.msg-hidden-preset-row{display:flex;justify-content:space-between;gap:12px;align-items:center;border-top:1px solid #e5e7eb;padding:10px 14px}.msg-analytics-toolbar{display:flex;justify-content:space-between;gap:12px;align-items:center;margin:12px 0;flex-wrap:wrap}.msg-analytics-toolbar label{display:flex;align-items:center;gap:8px;margin:0!important;font-weight:900}.msg-color-modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:999999}.msg-color-modal.active{display:flex}.msg-color-modal-card{width:min(460px,calc(100vw - 28px));background:#fff;border-radius:18px;padding:20px;border:1px solid #e5e7eb;box-shadow:0 24px 80px rgba(15,23,42,.22);position:relative}.msg-color-close{position:absolute;right:12px;top:10px;width:34px;height:34px;border-radius:999px;border:0;background:#f2f4f7;font-size:22px;cursor:pointer}.msg-color-modal-card input{width:100%;margin:8px 0}.msg-colour-preview-row{display:flex;gap:10px;align-items:center;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;background:#fbfdff;margin:12px 0}.msg-color-swatches{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.msg-color-swatches button{width:38px;height:38px;border-radius:999px;border:1px solid #d0d5dd;cursor:pointer} @media(max-width:720px){.msg-module-link-grid{grid-template-columns:1fr}.msg-analytics-row,.msg-analytics-row.recipient{grid-template-columns:1fr!important}}
 
 
       @media(max-width:1100px){.msg-header{flex-direction:column}.msg-flow-card{min-width:0}.msg-grid{grid-template-columns:1fr}.msg-preview-head{flex-direction:column;align-items:stretch}}@media(max-width:650px){.msg-two,.msg-analytics{grid-template-columns:1fr}.flow-product-search{grid-template-columns:1fr}.flow-product-row{grid-template-columns:auto 44px 1fr}.flow-product-row button{grid-column:1/-1}.msg-tabs{overflow:auto;flex-wrap:nowrap}.msg-tab{white-space:nowrap}}
@@ -174,8 +212,8 @@
         <section id="msg-pane-builder" class="msg-pane active">
           <div class="msg-grid msg-builder-grid">
             <div class="msg-stack">
-              <div class="msg-card"><h3>Brand</h3><p>Keep this simple for Shopify Flow.</p><label>Brand logo URL</label><input id="msg-logo" type="url" placeholder="https://cdn.shopify.com/.../logo.png"><div class="msg-two"><div><label>Button colour</label><input id="msg-color" type="color" value="#111827"></div><div><label>Button radius</label><input id="msg-button-radius" type="number" min="0" max="40" value="8"></div></div><div class="msg-two"><div><label>Email background</label><input id="msg-bg-color" type="color" value="#f3f4f6"></div><div><label>Email card</label><input id="msg-card-color" type="color" value="#ffffff"></div></div></div>
-              <div class="msg-card"><h3>Email copy</h3><label>Subject line</label><input id="msg-subject" type="text" value="How was your recent order?"><label>Heading</label><input id="msg-heading" type="text" value="How did we do?"><label>Intro line</label><input id="msg-intro" type="text" value='Hi {{ order.customer.firstName | default: "there" }}'><label>Body</label><textarea id="msg-body">We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?</textarea><label>Sign-off</label><input id="msg-signoff" type="text" value="Your feedback helps other customers make confident choices."></div><div class="msg-card"><h3>Review email templates</h3><p>Save this email design as a reusable template. Mark one template as Primary Reviews so live native review emails use it.</p><label>Template name</label><input id="msg-email-template-name" type="text" value="Reviews primary request"><div class="msg-actions"><button type="button" id="msg-save-email-template" class="msg-btn secondary">Save template</button><button type="button" id="msg-save-primary-template" class="msg-btn">Save & make primary</button></div><div id="msg-email-template-list" class="msg-template-list" style="margin-top:12px;"><div class="msg-help">Loading saved email templates...</div></div></div><div class="msg-card"><h3>Email sections</h3><p>Add simple extra blocks before or after the products without editing code.</p><div class="msg-builder-section-controls"><div class="msg-input-action"><select id="msg-section-template"></select><button type="button" id="msg-add-section" class="msg-btn secondary">Add section</button></div><div id="msg-section-list" class="msg-section-list-wide"></div></div></div>
+              <div class="msg-card"><h3>Brand</h3><p>Keep this simple for Shopify Flow.</p><label>Brand logo URL</label><input id="msg-logo" type="url" placeholder="https://cdn.shopify.com/.../logo.png"><div class="msg-two"><div><label>Button colour</label><input id="msg-color" class="msg-hidden-color-input" type="text" value="#111827"><button type="button" class="msg-color-picker" data-color-picker-for="msg-color"><span class="msg-color-swatch"></span><span class="msg-color-label">Colour selected</span></button></div><div><label>Button radius</label><input id="msg-button-radius" type="number" min="0" max="40" value="8"></div></div><div class="msg-two"><div><label>Email background</label><input id="msg-bg-color" class="msg-hidden-color-input" type="text" value="#f3f4f6"><button type="button" class="msg-color-picker" data-color-picker-for="msg-bg-color"><span class="msg-color-swatch"></span><span class="msg-color-label">Colour selected</span></button></div><div><label>Email card</label><input id="msg-card-color" class="msg-hidden-color-input" type="text" value="#ffffff"><button type="button" class="msg-color-picker" data-color-picker-for="msg-card-color"><span class="msg-color-swatch"></span><span class="msg-color-label">Colour selected</span></button></div></div></div>
+              <div class="msg-card"><h3>Email copy</h3><label>Subject line</label><input id="msg-subject" type="text" value="How was your recent order?"><label>Heading</label><input id="msg-heading" type="text" value="How did we do?"><div class="msg-typography-grid"><div><label>Title alignment</label><select id="msg-heading-align"><option value="left">Left</option><option value="center" selected>Centre</option><option value="right">Right</option></select></div><div><label>Title weight</label><select id="msg-heading-weight"><option value="300">Slim</option><option value="400">Regular</option><option value="600">Semi bold</option><option value="700" selected>Bold</option><option value="800">Extra bold</option></select></div><div><label>Font family</label><select id="msg-heading-font"><option value="Arial,Helvetica,sans-serif">Arial</option><option value="Verdana,Geneva,sans-serif">Verdana</option><option value="Georgia,serif">Georgia</option><option value="Trebuchet MS,Arial,sans-serif">Trebuchet</option><option value="Inter,Arial,sans-serif">Inter-style</option></select></div></div><label>Intro line</label><input id="msg-intro" type="text" value='Hi {{ order.customer.firstName | default: "there" }}'><label>Body</label><textarea id="msg-body">We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?</textarea><label>Sign-off</label><input id="msg-signoff" type="text" value="Your feedback helps other customers make confident choices."></div><div class="msg-card"><h3>Review email templates</h3><p>Save this email design as a reusable template. Mark one template as Primary Reviews so live native review emails use it.</p><label>Template name</label><input id="msg-email-template-name" type="text" value="Reviews primary request"><div class="msg-actions"><button type="button" id="msg-save-email-template" class="msg-btn secondary">Save template</button><button type="button" id="msg-save-primary-template" class="msg-btn">Save & make primary</button></div><div id="msg-email-template-list" class="msg-template-list" style="margin-top:12px;"><div class="msg-help">Loading saved email templates...</div></div></div><div class="msg-card"><h3>Email sections</h3><p>Add simple extra blocks before or after the products without editing code.</p><div class="msg-builder-section-controls"><div class="msg-input-action"><select id="msg-section-template"></select><button type="button" id="msg-add-section" class="msg-btn secondary">Add section</button></div><div id="msg-section-list" class="msg-section-list-wide"></div></div></div>
               <div class="msg-card msg-link-compact"><h3>Review link defaults</h3><div class="msg-two"><div><label>Link mode</label><select id="msg-link-mode"><option value="both">Order and products</option><option value="order">Order only</option><option value="products">Product buttons only</option></select></div><div><label>Review page handle</label><input id="msg-page-handle" type="text" value="leave-review"></div></div><div class="msg-two"><div><label>Main button text</label><input id="msg-main-button-text" type="text" value="Review Your Order"></div><div><label>Product button text</label><input id="msg-product-button-text" type="text" value="Review This Item"></div></div><div class="msg-two"><div><label>Wait after fulfilment</label><select id="msg-delay-days"><option value="7">7 days</option><option value="10">10 days</option><option value="14" selected>14 days</option><option value="21">21 days</option><option value="30">30 days</option></select></div><div><label>Flow action</label><input value="Send email" readonly></div></div><div class="msg-help">Advanced conditional wording now lives in the Settings tab.</div></div>
             </div>
             <div class="msg-stack">
@@ -183,6 +221,7 @@
 
             </div>
           </div>
+          <div id="msg-last-send-result" class="msg-send-result" aria-live="polite"></div>
         </section>
 
         <section id="msg-pane-tester" class="msg-pane">
@@ -203,11 +242,11 @@
         </section>
 
         <section id="msg-pane-analytics" class="msg-pane">
-          <div class="msg-card"><h3>Campaign analytics</h3><p>Unique open/click tracking by campaign, including test emails.</p><div id="msg-analytics" class="msg-analytics"><div><span>Sent</span><strong>0</strong></div><div><span>Open rate</span><strong>0%</strong></div><div><span>Click rate</span><strong>0%</strong></div></div><div id="msg-analytics-breakdown" class="msg-link-rule-list" style="margin-top:16px;"></div><div class="msg-analytics-tabs"><button class="msg-analytics-tab active" data-analytics-list="recipients" type="button">Recipients</button><button class="msg-analytics-tab" data-analytics-list="sent" type="button">Sent</button><button class="msg-analytics-tab" data-analytics-list="opened" type="button">Opened</button><button class="msg-analytics-tab" data-analytics-list="clicked" type="button">Clicked</button><button class="msg-analytics-tab" data-analytics-list="reviewed" type="button">Reviewed</button></div><div id="msg-analytics-list" class="msg-analytics-list"></div><p class="msg-analytics-note">Open rates are based on unique recipient tokens. Re-opening the same email does not increase the rate.</p></div>
+          <div class="msg-card"><h3>Campaign analytics</h3><p>Unique open/click tracking by campaign, including test emails.</p><div id="msg-analytics" class="msg-analytics"><div><span>Sent</span><strong>0</strong></div><div><span>Open rate</span><strong>0%</strong></div><div><span>Click rate</span><strong>0%</strong></div></div><div class="msg-analytics-toolbar"><label><input id="msg-analytics-include-tests" type="checkbox"> Include test/fake emails</label><button type="button" id="msg-analytics-refresh" class="msg-btn secondary">Refresh analytics</button></div><div id="msg-analytics-breakdown" class="msg-link-rule-list" style="margin-top:16px;"></div><div class="msg-analytics-tabs"><button class="msg-analytics-tab active" data-analytics-list="recipients" type="button">Recipients</button><button class="msg-analytics-tab" data-analytics-list="sent" type="button">Sent</button><button class="msg-analytics-tab" data-analytics-list="opened" type="button">Opened</button><button class="msg-analytics-tab" data-analytics-list="clicked" type="button">Clicked</button><button class="msg-analytics-tab" data-analytics-list="reviewed" type="button">Reviewed</button></div><div id="msg-analytics-list" class="msg-analytics-list"></div><p class="msg-analytics-note">Open rates are based on unique recipient tokens. Re-opening the same email does not increase the rate.</p></div>
         </section>
         <section id="msg-pane-modules" class="msg-pane">
           <div class="msg-modules-stack">
-            <div class="msg-card"><h3>Create email module</h3><p>Build reusable content blocks that appear as options in the Email Builder. Use your own names, copy, border, radius, button and layout settings.</p><div class="msg-module-form-grid"><div><label>Module name</label><input id="msg-module-name" type="text" placeholder="e.g. Delivery notice"></div><div><label>Internal type</label><select id="msg-module-position"><option value="before">Before products</option><option value="after">After products</option></select></div></div><label>Title</label><input id="msg-module-title" type="text" placeholder="A quick note"><label>Description</label><textarea id="msg-module-text" placeholder="Write the message customers should see."></textarea><div class="msg-module-form-grid"><div><label>Button text</label><input id="msg-module-button-text" type="text" placeholder="Optional"></div><div><label>Button URL or page</label><div class="msg-module-link-grid"><select id="msg-module-link-type"><option value="external">External URL</option><option value="internal">Internal Shopify page/path</option><option value="support_modal">Review page support modal</option></select><input id="msg-module-button-url" type="text" placeholder="/pages/contact or https://..."></div><span class="msg-field-hint">Internal links can be /pages/rewards, /collections/all, /account, etc.</span></div></div><div class="msg-module-style-grid"><label>Background<input id="msg-module-bg" class="msg-none-input" type="text" value="none" placeholder="none or #f8fafc"></label><label>Border<input id="msg-module-border" class="msg-none-input" type="text" value="#e5e7eb" placeholder="none or #e5e7eb"></label><label>Thickness<input id="msg-module-border-width" type="number" min="0" max="8" value="1"></label><label>Radius<input id="msg-module-radius" type="number" min="0" max="32" value="14"></label><label>Padding<input id="msg-module-padding" type="number" min="8" max="36" value="16"></label></div><div class="msg-actions"><button type="button" id="msg-save-module" class="msg-btn">Save Module</button><button type="button" id="msg-clear-module" class="msg-btn secondary">Clear</button></div></div>
+            <div class="msg-card"><h3>Create email module</h3><p>Build reusable content blocks that appear as options in the Email Builder. Use your own names, copy, border, radius, button and layout settings.</p><div class="msg-module-form-grid"><div><label>Module name</label><input id="msg-module-name" type="text" placeholder="e.g. Delivery notice"></div><div><label>Internal type</label><select id="msg-module-position"><option value="before">Before products</option><option value="after">After products</option></select></div></div><label>Title</label><input id="msg-module-title" type="text" placeholder="A quick note"><label>Description</label><textarea id="msg-module-text" placeholder="Write the message customers should see."></textarea><div class="msg-module-form-grid"><div><label>Button text</label><input id="msg-module-button-text" type="text" placeholder="Optional"></div><div><label>Button URL or page</label><div class="msg-module-link-grid"><select id="msg-module-link-type"><option value="external">External URL</option><option value="internal">Internal Shopify page/path</option><option value="support_modal">Review page support modal</option></select><input id="msg-module-button-url" type="text" placeholder="/pages/contact or https://..."></div><span class="msg-field-hint">Internal links can be /pages/rewards, /collections/all, /account, etc.</span></div></div><div class="msg-module-style-grid"><label>Background<input id="msg-module-bg" class="msg-hidden-color-input" type="text" value="none"><button type="button" class="msg-color-picker" data-color-picker-for="msg-module-bg"><span class="msg-color-swatch"></span><span class="msg-color-label">None / transparent</span></button></label><label>Border<input id="msg-module-border" class="msg-hidden-color-input" type="text" value="#e5e7eb"><button type="button" class="msg-color-picker" data-color-picker-for="msg-module-border"><span class="msg-color-swatch"></span><span class="msg-color-label">Colour selected</span></button></label><label>Thickness<input id="msg-module-border-width" type="number" min="0" max="8" value="1"></label><label>Radius<input id="msg-module-radius" type="number" min="0" max="32" value="14"></label><label>Padding<input id="msg-module-padding" type="number" min="8" max="36" value="16"></label></div><div class="msg-actions"><button type="button" id="msg-save-module" class="msg-btn">Save Module</button><button type="button" id="msg-clear-module" class="msg-btn secondary">Clear</button></div></div>
             <div class="msg-card"><h3>Module library</h3><p>Saved modules appear in the Email Builder dropdown and can be inserted without squeezing more controls into the widget area.</p><div id="msg-module-library" class="msg-module-library"></div></div>
           </div>
         </section>
@@ -247,6 +286,21 @@
   function findSectionModule(type){ return allSectionModules().find((m)=>m.id === type || m.id === String(type).replace(/^custom:/,'custom:')); }
   function sectionLabel(type){ return findSectionModule(type)?.name || findSectionModule(type)?.title || 'Custom section'; }
   function sectionDefaults(type){ return findSectionModule(type)?.text || 'Add your custom message here.'; }
+  function sectionColorControl(index, field, value) {
+    const safe = String(value || '').trim() || 'none';
+    const swatch = isTransparentColor(safe) ? 'linear-gradient(45deg,#fff 0,#fff 46%,#d92d20 48%,#d92d20 52%,#fff 54%,#fff 100%)' : safe;
+    return `<input class="msg-hidden-color-input" data-section-index="${index}" data-section-field="${field}" value="${escapeHtml(safe)}"><button type="button" class="msg-color-picker" data-section-color-button="${index}:${field}"><span class="msg-color-swatch" style="background:${escapeHtml(swatch)}"></span><span class="msg-color-label">${escapeHtml(colourLabel(safe))}</span></button>`;
+  }
+  function updateSectionColorButton(input) {
+    const key = `${input.dataset.sectionIndex}:${input.dataset.sectionField}`;
+    const button = document.querySelector(`[data-section-color-button="${key}"]`);
+    if (!button) return;
+    const value = String(input.value || '').trim();
+    const swatch = button.querySelector('.msg-color-swatch');
+    const label = button.querySelector('.msg-color-label');
+    if (swatch) swatch.style.background = isTransparentColor(value) ? 'linear-gradient(45deg,#fff 0,#fff 46%,#d92d20 48%,#d92d20 52%,#fff 54%,#fff 100%)' : value;
+    if (label) label.textContent = colourLabel(value);
+  }
   function renderEmailSections(){
     const box = el('msg-section-list'); if(!box) return;
     if(!emailSections.length){ box.innerHTML = '<div class="msg-help">No extra sections yet. The email remains simple by default.</div>'; return; }
@@ -260,8 +314,8 @@
           </div>
           <textarea data-section-index="${i}" data-section-field="text" placeholder="Section text">${escapeHtml(item.text || '')}</textarea>
           <div class="msg-section-style-grid">
-            <label>Background<input data-section-index="${i}" data-section-field="bgColor" placeholder="none or #f8fafc" value="${escapeHtml(item.bgColor || 'none')}"></label>
-            <label>Border<input data-section-index="${i}" data-section-field="borderColor" placeholder="none or #e5e7eb" value="${escapeHtml(item.borderColor || '#e5e7eb')}"></label>
+            <label>Background${sectionColorControl(i, 'bgColor', item.bgColor || 'none')}</label>
+            <label>Border${sectionColorControl(i, 'borderColor', item.borderColor || '#e5e7eb')}</label>
             <label>Radius<input data-section-index="${i}" data-section-field="radius" type="number" min="0" max="28" value="${Number(item.radius ?? 12)}"></label>
             <label>Padding<input data-section-index="${i}" data-section-field="padding" type="number" min="8" max="32" value="${Number(item.padding ?? 14)}"></label>
             <label>Border px<input data-section-index="${i}" data-section-field="borderWidth" type="number" min="0" max="8" value="${Number(item.borderWidth ?? 1)}"></label>
@@ -270,10 +324,15 @@
         </div>
         <div class="msg-section-actions"><button type="button" class="msg-icon-btn danger" data-remove-section="${i}" title="Remove">×</button></div>
       </div>`).join('');
-    box.querySelectorAll('[data-section-field="bgColor"], [data-section-field="borderColor"]').forEach((input)=>input.addEventListener('click',()=>openColorChoice(input)));
+    box.querySelectorAll('[data-section-color-button]').forEach((button)=>button.addEventListener('click',()=>{
+      const [i, field] = String(button.dataset.sectionColorButton || '').split(':');
+      const input = box.querySelector(`[data-section-index="${i}"][data-section-field="${field}"]`);
+      if (input) openColorChoice(input);
+    }));
     box.querySelectorAll('[data-section-field]').forEach((input)=>input.addEventListener('input',()=>{
       const i=Number(input.dataset.sectionIndex); if(!emailSections[i]) return;
       const field=input.dataset.sectionField; emailSections[i][field] = input.type === 'number' ? Number(input.value || 0) : input.value;
+      if (field === 'bgColor' || field === 'borderColor') updateSectionColorButton(input);
       updatePreview();
     }));
     box.querySelectorAll('[data-remove-section]').forEach((btn)=>btn.addEventListener('click',()=>{ emailSections.splice(Number(btn.dataset.removeSection),1); renderEmailSections(); updatePreview(); }));
@@ -401,16 +460,23 @@
       createdAt: new Date().toISOString(),
     };
   }
-  function clearModuleForm() { ['msg-module-name','msg-module-title','msg-module-text','msg-module-button-text','msg-module-button-url'].forEach((id)=>{ if(el(id)) el(id).value=''; }); if(el('msg-module-bg')) el('msg-module-bg').value='none'; if(el('msg-module-border')) el('msg-module-border').value='#e5e7eb'; if(el('msg-module-link-type')) el('msg-module-link-type').value='external'; if(el('msg-module-border-width')) el('msg-module-border-width').value='1'; if(el('msg-module-radius')) el('msg-module-radius').value='14'; if(el('msg-module-padding')) el('msg-module-padding').value='16'; }
+  function clearModuleForm() { ['msg-module-name','msg-module-title','msg-module-text','msg-module-button-text','msg-module-button-url'].forEach((id)=>{ if(el(id)) el(id).value=''; }); if(el('msg-module-bg')) el('msg-module-bg').value='none'; if(el('msg-module-border')) el('msg-module-border').value='#e5e7eb'; if(el('msg-module-link-type')) el('msg-module-link-type').value='external'; if(el('msg-module-border-width')) el('msg-module-border-width').value='1'; if(el('msg-module-radius')) el('msg-module-radius').value='14'; if(el('msg-module-padding')) el('msg-module-padding').value='16'; refreshAllColorButtons(); }
   function saveMessageModule() { try { const payload = moduleFormPayload(); messageModules.unshift(payload); saveMessageModules(); clearModuleForm(); showToast('Email module saved'); } catch (error) { showToast(error.message || 'Could not save module'); } }
   function renderModuleLibrary() {
     const box = el('msg-module-library'); if (!box) return;
     const all = allSectionModules();
-    const hiddenNote = hiddenModuleIds.length ? `<div class="msg-help"><strong>${hiddenModuleIds.length} preset module(s) hidden.</strong> <button type="button" class="msg-btn secondary" data-restore-modules>Restore presets</button></div>` : '';
+    const hiddenPresets = BUILT_IN_MODULES.concat([
+      { id: 'review_reassurance', name: 'Review reassurance', title: 'A note on moderation' },
+      { id: 'loyalty_points', name: 'Loyalty points reminder', title: 'Earn loyalty points' },
+      { id: 'cart_rewards', name: 'Cart rewards nudge', title: 'Unlock cart rewards' },
+      { id: 'support_first', name: 'Support before review', title: 'Need help first?' },
+    ]).filter((module) => hiddenModuleIds.includes(module.id));
+    const hiddenNote = hiddenPresets.length ? `<div class="msg-hidden-presets"><details><summary>${hiddenPresets.length} hidden preset module(s)</summary>${hiddenPresets.map((module)=>`<div class="msg-hidden-preset-row"><span><strong>${escapeHtml(module.name || module.title || module.id)}</strong><br><small>${escapeHtml(module.title || '')}</small></span><button type="button" class="msg-btn secondary" data-restore-one-module="${escapeHtml(module.id)}">Add back</button></div>`).join('')}<div class="msg-hidden-preset-row"><span>Restore every hidden preset</span><button type="button" class="msg-btn" data-restore-modules>Restore all</button></div></details></div>` : '';
     box.innerHTML = hiddenNote + all.map((module)=>`<div class="msg-module-card"><div class="msg-module-card-head"><div><strong>${escapeHtml(module.name || module.title)}</strong><div class="msg-template-meta"><span>${escapeHtml(module.position || 'before')} products</span><span>${Number(module.borderWidth ?? 1)}px border</span><span>${Number(module.radius ?? 0)}px radius</span></div></div><div class="msg-provider-badges">${String(module.id).startsWith('custom:') ? '<span class="msg-badge green">Custom</span>' : '<span class="msg-badge gray">Preset</span>'}</div></div><div class="msg-help" style="margin-top:8px;"><strong>${escapeHtml(module.title || module.name)}</strong><br>${escapeHtml(module.text || '')}${module.buttonText ? `<br><br>Button: ${escapeHtml(module.buttonText)}` : ''}</div><div class="msg-template-actions"><button type="button" class="msg-btn secondary" data-insert-module="${escapeHtml(module.id)}">Add to email</button>${String(module.id).startsWith('custom:') ? `<button type="button" class="msg-btn secondary danger" data-delete-module="${escapeHtml(module.id.replace(/^custom:/,''))}">Remove</button>` : `<button type="button" class="msg-btn secondary danger" data-hide-module="${escapeHtml(module.id)}">Hide preset</button>`}</div></div>`).join('');
     box.querySelectorAll('[data-insert-module]').forEach((btn)=>btn.addEventListener('click',()=>addModuleSection(btn.dataset.insertModule)));
     box.querySelectorAll('[data-delete-module]').forEach((btn)=>btn.addEventListener('click',()=>{ messageModules = messageModules.filter((m)=>m.id !== btn.dataset.deleteModule); saveMessageModules(); }));
     box.querySelectorAll('[data-hide-module]').forEach((btn)=>btn.addEventListener('click',()=>{ if (!hiddenModuleIds.includes(btn.dataset.hideModule)) hiddenModuleIds.push(btn.dataset.hideModule); saveMessageModules(); }));
+    box.querySelectorAll('[data-restore-one-module]').forEach((btn)=>btn.addEventListener('click',()=>{ hiddenModuleIds = hiddenModuleIds.filter((id)=>id !== btn.dataset.restoreOneModule); saveMessageModules(); }));
     box.querySelector('[data-restore-modules]')?.addEventListener('click',()=>{ hiddenModuleIds = []; saveMessageModules(); });
   }
 
@@ -492,6 +558,9 @@
     if (el('msg-bg-color')) el('msg-bg-color').value = d.bgColor || '#f3f4f6';
     if (el('msg-card-color')) el('msg-card-color').value = d.cardColor || '#ffffff';
     if (el('msg-heading')) el('msg-heading').value = d.heading || 'How did we do?';
+    if (el('msg-heading-align')) el('msg-heading-align').value = d.headingAlign || 'center';
+    if (el('msg-heading-weight')) el('msg-heading-weight').value = d.headingWeight || '700';
+    if (el('msg-heading-font')) el('msg-heading-font').value = d.headingFont || 'Arial,Helvetica,sans-serif';
     if (el('msg-intro')) el('msg-intro').value = d.intro || 'Hi {{ order.customer.firstName | default: "there" }}';
     if (el('msg-body')) el('msg-body').value = d.body || '';
     if (el('msg-signoff')) el('msg-signoff').value = d.signoff || '';
@@ -506,24 +575,52 @@
     showToast('Template loaded');
   }
 
+  function renderLastSendResult({ ok = false, warning = false, title = '', detail = '', meta = [], html = '' } = {}) {
+    const box = el('msg-last-send-result');
+    if (!box) return;
+    const tone = ok ? 'ok' : warning ? 'warning' : 'bad';
+    box.className = `msg-send-result active ${tone}`;
+    const rows = Array.isArray(meta) && meta.length ? `<p><small>${meta.map(escapeHtml).join(' · ')}</small></p>` : '';
+    box.innerHTML = `<h3>${escapeHtml(title || (ok ? 'Email send succeeded' : 'Email send failed'))}</h3><p>${escapeHtml(detail || '')}</p>${rows}${html ? `<details open><summary><strong>Layout that was sent / attempted</strong></summary><div class="msg-send-preview-frame">${html}</div></details>` : ''}`;
+  }
+
   async function sendFullFakeOrderEmail() {
     const email = val('msg-test-email') || val('msg-test-recipient');
     if (!email) return showToast('Enter a test customer email first.');
-    await saveCurrentEmailTemplate(true);
-    const result = await securedFetch('/admin/review-automation/fake-order', {
-      method: 'POST',
-      body: JSON.stringify({
-        email,
-        recipientEmail: email,
-        customerName: val('msg-test-name', 'Alex'),
-        orderId: val('msg-test-order', `NECTAR-TEST-${Date.now().toString().slice(-6)}`),
-        products: products.length ? products : undefined,
-        sendNow: true,
-        delayDays: 0,
-      }),
-    });
-    showToast(result.job?.status === 'sent' ? 'Full fake-order review email sent.' : `Fake-order job created: ${result.job?.status || 'created'}`);
-    await loadAnalytics();
+    updatePreview();
+    const o = opts();
+    const attemptedHtml = buildRenderedTestEmailHtml(o, `test-${Date.now()}`);
+    try {
+      await saveCurrentEmailTemplate(true);
+      const result = await securedFetch('/admin/review-automation/fake-order', {
+        method: 'POST',
+        body: JSON.stringify({
+          email,
+          recipientEmail: email,
+          customerName: val('msg-test-name', 'Alex'),
+          orderId: val('msg-test-order', `NECTAR-TEST-${Date.now().toString().slice(-6)}`),
+          products: products.length ? products : undefined,
+          sendNow: true,
+          delayDays: 0,
+        }),
+      });
+      const status = result.job?.status || 'created';
+      const sent = status === 'sent';
+      const sendError = result.sendResult?.results?.find((item)=>item.error)?.error || result.job?.errorMessage || result.error || '';
+      renderLastSendResult({
+        ok: sent,
+        warning: !sent && !sendError,
+        title: sent ? 'Full fake-order review email sent' : `Fake-order job ${status}`,
+        detail: sent ? `Sent to ${email} using the Primary Reviews template.` : (sendError || 'The fake-order job was created but has not sent yet. Check the provider and due-job result below.'),
+        meta: [`Recipient: ${email}`, `Order: ${val('msg-test-order','1001')}`, `Template: ${val('msg-email-template-name','Primary Reviews')}`],
+        html: result.emailPreviewHtml || attemptedHtml,
+      });
+      showToast(sent ? 'Full fake-order review email sent.' : `Fake-order job ${status}`);
+      await loadAnalytics();
+    } catch (error) {
+      renderLastSendResult({ ok: false, title: 'Full fake-order email failed', detail: error.message || 'Unknown send error', meta: [`Recipient: ${email}`, `Template: ${val('msg-email-template-name','Primary Reviews')}`], html: attemptedHtml });
+      throw error;
+    }
   }
 
   function currentTemplatePayload() { return { name: `${val('msg-test-name','Customer')} · #${val('msg-test-order','1001')}`, customerName: val('msg-test-name','Alex'), customerEmail: val('msg-test-email','alex@example.com'), order: val('msg-test-order','1001'), mode: val('msg-test-type','order'), products: products.slice(), createdAt: new Date().toISOString() }; }
@@ -561,6 +658,9 @@
       cardColor: el('msg-card-color')?.value || '#ffffff',
       subject: val('msg-subject', 'How was your recent order?'),
       heading: val('msg-heading', 'How did we do?'),
+      headingAlign: ['left','center','right'].includes(val('msg-heading-align','center')) ? val('msg-heading-align','center') : 'center',
+      headingWeight: ['300','400','600','700','800'].includes(val('msg-heading-weight','700')) ? val('msg-heading-weight','700') : '700',
+      headingFont: val('msg-heading-font', 'Arial,Helvetica,sans-serif'),
       intro: val('msg-intro', 'Hi {{ order.customer.firstName | default: "there" }}'),
       body: val('msg-body', "We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?"),
       signoff: val('msg-signoff', 'Your feedback helps other customers make confident choices.'),
@@ -631,7 +731,7 @@
     const logoHtml = o.logo ? `<tr><td align="center" style="padding:0 0 18px 0;"><img src="${escapeHtml(o.logo)}" alt="" style="max-width:160px;height:auto;display:block;"></td></tr>` : '';
     const beforeSections = renderEmailSectionRows('before', context);
     const afterSections = renderEmailSectionRows('after', context);
-    return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:${o.bgColor};margin:0;padding:0;width:100%;"><tr><td align="center" style="padding:28px 12px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:620px;background:${o.cardColor};border-radius:16px;overflow:hidden;"><tr><td style="padding:34px 26px;font-family:Arial,Helvetica,sans-serif;text-align:center;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${logoHtml}<tr><td align="center" style="padding:0 0 12px 0;"><h1 style="margin:0;color:#111827;font-size:28px;line-height:1.25;font-weight:700;">${escapeHtml(o.heading)}</h1></td></tr><tr><td align="center" style="padding:0 0 10px 0;"><p style="margin:0;color:#4b5563;font-size:16px;line-height:1.6;">${o.intro}</p></td></tr><tr><td align="center" style="padding:0 0 12px 0;"><p style="margin:0;color:#4b5563;font-size:16px;line-height:1.6;">${escapeHtml(o.body)}</p></td></tr>${beforeSections}${inner}${afterSections}<tr><td align="center" style="padding:24px 0 0 0;"><p style="margin:0;color:#6b7280;font-size:13px;line-height:1.5;">${escapeHtml(o.signoff)}</p></td></tr><tr><td align="center" style="padding:20px 0 0 0;"><p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;">${escapeHtml(o.footerLabel || 'Sent by {{ shop.name }}.')} </p></td></tr>${footerExtra}</table></td></tr></table></td></tr></table>`;
+    return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:${o.bgColor};margin:0;padding:0;width:100%;"><tr><td align="center" style="padding:28px 12px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:620px;background:${o.cardColor};border-radius:16px;overflow:hidden;"><tr><td style="padding:34px 26px;font-family:Arial,Helvetica,sans-serif;text-align:center;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${logoHtml}<tr><td align="${escapeHtml(o.headingAlign || 'center')}" style="padding:0 0 12px 0;"><h1 style="margin:0;color:#111827;font-size:28px;line-height:1.25;font-weight:${escapeHtml(o.headingWeight || '700')};font-family:${escapeHtml(o.headingFont || 'Arial,Helvetica,sans-serif')};text-align:${escapeHtml(o.headingAlign || 'center')};">${escapeHtml(o.heading)}</h1></td></tr><tr><td align="center" style="padding:0 0 10px 0;"><p style="margin:0;color:#4b5563;font-size:16px;line-height:1.6;">${o.intro}</p></td></tr><tr><td align="center" style="padding:0 0 12px 0;"><p style="margin:0;color:#4b5563;font-size:16px;line-height:1.6;">${escapeHtml(o.body)}</p></td></tr>${beforeSections}${inner}${afterSections}<tr><td align="center" style="padding:24px 0 0 0;"><p style="margin:0;color:#6b7280;font-size:13px;line-height:1.5;">${escapeHtml(o.signoff)}</p></td></tr><tr><td align="center" style="padding:20px 0 0 0;"><p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;">${escapeHtml(o.footerLabel || 'Sent by {{ shop.name }}.')} </p></td></tr>${footerExtra}</table></td></tr></table></td></tr></table>`;
   }
 
   function productStars(starColor) {
@@ -921,22 +1021,28 @@
     const token = `test-${Date.now()}`;
     const html = buildRenderedTestEmailHtml(o, token);
     const first = products[0] || {};
-    await securedFetch('/admin/test-email', {
-      method: 'POST',
-      body: JSON.stringify({
-        to,
-        subject: o.subject || 'Review request test email',
-        html,
-        orderId: val('msg-test-order', '1001'),
-        itemId: first.id || '',
-        token,
-        templateName: val('msg-email-template-name', val('msg-heading', 'Review request')),
-        layoutName: val('msg-link-mode', 'both'),
-        moduleNames: emailSections.map((section)=>section.title || sectionLabel(section.type)).filter(Boolean),
-      }),
-    });
-    showToast('Test email sent');
-    await loadAnalytics();
+    try {
+      await securedFetch('/admin/test-email', {
+        method: 'POST',
+        body: JSON.stringify({
+          to,
+          subject: o.subject || 'Review request test email',
+          html,
+          orderId: val('msg-test-order', '1001'),
+          itemId: first.id || '',
+          token,
+          templateName: val('msg-email-template-name', val('msg-heading', 'Review request')),
+          layoutName: val('msg-link-mode', 'both'),
+          moduleNames: emailSections.map((section)=>section.title || sectionLabel(section.type)).filter(Boolean),
+        }),
+      });
+      renderLastSendResult({ ok: true, title: 'Test email sent', detail: `Sent to ${to}.`, meta: [`Subject: ${o.subject || 'Review request test email'}`, `Template: ${val('msg-email-template-name','Review request')}`], html });
+      showToast('Test email sent');
+      await loadAnalytics();
+    } catch (error) {
+      renderLastSendResult({ ok: false, title: 'Test email failed', detail: error.message || 'Unknown send error', meta: [`Recipient: ${to}`, `Subject: ${o.subject || 'Review request test email'}`], html });
+      throw error;
+    }
   }
 
   let currentAnalytics = null;
@@ -993,7 +1099,8 @@
 
   async function loadAnalytics() {
     try {
-      const a = await securedFetch('/admin/campaign-analytics');
+      const includeTests = Boolean(el('msg-analytics-include-tests')?.checked);
+      const a = await securedFetch(`/admin/campaign-analytics?includeTest=${includeTests ? '1' : '0'}`);
       currentAnalytics = a;
       const box = el('msg-analytics');
       if (box) box.innerHTML = `<div><span>Sent</span><strong>${Number(a.totals?.sent || 0)}</strong></div><div><span>Open rate</span><strong>${Number(a.openRate || 0)}%</strong></div><div><span>Click rate</span><strong>${Number(a.clickRate || 0)}%</strong></div>`;
@@ -1022,6 +1129,8 @@
     document.querySelectorAll('#nr-messaging-campaigns-mount input,#nr-messaging-campaigns-mount textarea,#nr-messaging-campaigns-mount select').forEach((node) => node.addEventListener('input', updatePreview));
     document.querySelectorAll('#nr-messaging-campaigns-mount .msg-tab').forEach((btn) => btn.addEventListener('click', () => switchPane(btn.dataset.msgTab)));
     document.querySelectorAll('#nr-messaging-campaigns-mount .msg-analytics-tab').forEach((btn) => btn.addEventListener('click', () => { currentAnalyticsList = btn.dataset.analyticsList || 'sent'; document.querySelectorAll('#nr-messaging-campaigns-mount .msg-analytics-tab').forEach((b)=>b.classList.toggle('active', b===btn)); renderAnalyticsList(); }));
+    el('msg-analytics-include-tests')?.addEventListener('change', () => loadAnalytics());
+    el('msg-analytics-refresh')?.addEventListener('click', () => loadAnalytics());
     el('msg-copy-code-btn')?.addEventListener('click', () => copyText(el('msg-code-output').value, 'Email HTML copied'));
     el('msg-sample-products')?.addEventListener('click', addSampleProducts);
     el('msg-pick-products')?.addEventListener('click', () => searchProducts().catch((error) => showToast(error.message || 'Product search failed')));
@@ -1039,6 +1148,9 @@
     el('msg-clear-module')?.addEventListener('click', clearModuleForm);
     el('msg-module-link-type')?.addEventListener('change', (event)=>{ const input = el('msg-module-button-url'); if (!input) return; if (event.target.value === 'support_modal') { input.value='{{support_link}}'; input.disabled=true; } else { input.disabled=false; if (input.value === '{{support_link}}') input.value=''; } });
     ['msg-module-bg','msg-module-border'].forEach((id)=>{ const input = el(id); if (input) input.addEventListener('click', ()=>openColorChoice(input)); });
+    document.querySelectorAll('#nr-messaging-campaigns-mount [data-color-picker-for]').forEach((btn)=>{ const input = el(btn.dataset.colorPickerFor); if (input) btn.addEventListener('click', ()=>openColorChoice(input)); });
+    ['msg-color','msg-bg-color','msg-card-color','msg-module-bg','msg-module-border'].forEach((id)=>{ const input = el(id); if (input) input.addEventListener('input', ()=>refreshColorButton(input)); });
+    refreshAllColorButtons();
     document.querySelectorAll('#nr-messaging-campaigns-mount [data-add-module-section]').forEach((btn) => btn.addEventListener('click', () => addModuleSection(btn.dataset.addModuleSection)));
     el('msg-add-link-rule')?.addEventListener('click', addLinkRule);
     el('msg-preview-desktop')?.addEventListener('click', () => setPreviewMode('desktop'));
@@ -1058,6 +1170,7 @@
     bind();
     addSampleProducts();
     updatePreview();
+    refreshAllColorButtons();
     loadTemplates();
     loadEmailTemplates();
     loadMessageModules();

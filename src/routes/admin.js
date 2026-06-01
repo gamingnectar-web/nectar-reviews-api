@@ -217,12 +217,19 @@ async function activeEmailSettings(shopDomain) {
   return settings;
 }
 
-async function buildCampaignAnalytics(shopDomain) {
+async function buildCampaignAnalytics(shopDomain, options = {}) {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const [events, reviews] = await Promise.all([
+  const includeTest = Boolean(options.includeTest);
+  const [allEvents, allReviews] = await Promise.all([
     CampaignEvent.find({ shopDomain, createdAt: { $gte: since } }).lean(),
     Review.find({ shopDomain, createdAt: { $gte: since } }).lean(),
   ]);
+  const isTestEvent = (event = {}) => String(event.campaign || '').toLowerCase().includes('test') || String(event.token || '').toLowerCase().startsWith('test');
+  const isTestReview = (review = {}) => Boolean(review.isTestReview || review.testMode) || String(review.campaign || '').toLowerCase().includes('test');
+  const excludedTestEvents = allEvents.filter(isTestEvent).length;
+  const excludedTestReviews = allReviews.filter(isTestReview).length;
+  const events = includeTest ? allEvents : allEvents.filter((event) => !isTestEvent(event));
+  const reviews = includeTest ? allReviews : allReviews.filter((review) => !isTestReview(review));
 
   const campaignMap = {};
   const makeRecipientKey = (event = {}) => {
@@ -299,7 +306,7 @@ async function buildCampaignAnalytics(shopDomain) {
     const rawSent = group.sent.size;
     const rawOpen = group.open.size;
     const rawClick = group.click.size;
-    const sent = Math.max(rawSent, rawOpen ? 1 : 0, rawClick ? 1 : 0, group.reviewed.size ? 1 : 0);
+    const sent = rawSent;
     const open = sent ? Math.min(rawOpen, sent) : 0;
     const click = sent ? Math.min(rawClick, sent) : 0;
     const reviewed = group.reviewed.size;
@@ -389,6 +396,9 @@ async function buildCampaignAnalytics(shopDomain) {
 
   return {
     windowDays: 30,
+    includeTest,
+    excludedTestEvents,
+    excludedTestReviews,
     totals,
     byCampaign,
     openRate: totals.sent ? Math.min(100, Number(((totals.open / totals.sent) * 100).toFixed(1))) : 0,
@@ -857,7 +867,8 @@ router.get('/stats', async (req, res, next) => {
 
 router.get('/campaign-analytics', async (req, res, next) => {
   try {
-    const analytics = await buildCampaignAnalytics(shopDomainFromReq(req));
+    const includeTest = ['1', 'true', 'yes'].includes(String(req.query.includeTest || '').toLowerCase());
+    const analytics = await buildCampaignAnalytics(shopDomainFromReq(req), { includeTest });
     return res.json(analytics);
   } catch (error) {
     next(error);
@@ -1762,10 +1773,14 @@ router.post('/review-automation/fake-order', async (req, res, next) => {
       line_items: Array.isArray(req.body?.products) && req.body.products.length ? req.body.products : [{ product_id: 999999999001, variant_id: 999999999002, title: 'Nectar fake-order product', quantity: 1 }],
     };
     const delayDays = req.body?.sendNow ? 0 : req.body?.delayDays;
-    const job = await scheduleReviewRequestFromOrder({ shopDomain, order, source: 'admin_fake_order', delayDays, testMode: true, webhookId: `fake-${Date.now()}` });
-    if (req.body?.sendNow) await sendDueReviewRequests({ limit: 10 });
+    const job = await scheduleReviewRequestFromOrder({ shopDomain, order: { ...order, delivered: true }, source: 'admin_fake_order', delayDays, testMode: true, webhookId: `fake-${Date.now()}` });
+    let sendResult = null;
+    if (req.body?.sendNow) {
+      await ReviewRequestJob.updateOne({ _id: job._id }, { $set: { status: 'scheduled', scheduledAt: new Date(Date.now() - 5000), blockedReason: '' } });
+      sendResult = await sendDueReviewRequests({ limit: 10 });
+    }
     const refreshed = await ReviewRequestJob.findById(job._id).lean();
-    return res.status(201).json({ ok: true, job: refreshed || job });
+    return res.status(201).json({ ok: true, job: refreshed || job, sendResult });
   } catch (error) {
     next(error);
   }
