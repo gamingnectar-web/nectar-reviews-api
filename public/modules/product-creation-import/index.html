@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nectar Product Importer</title>
+  <link rel="stylesheet" href="./product-import-batch.css" />
+</head>
+<body>
+  <main class="batch-shell">
+    <header class="batch-hero">
+      <div>
+        <p class="eyebrow">PRODUCT CREATION & IMPORT</p>
+        <h1>Batch product importer</h1>
+        <p class="muted">Paste as many product URLs as needed, set shared supplier/brand defaults once, then scan, review and create Shopify draft products only when approved.</p>
+      </div>
+      <div class="hero-actions">
+        <button class="secondary-btn" id="refresh-batches">Refresh batches</button>
+        <button class="primary-btn" id="create-batch">Create batch</button>
+      </div>
+    </header>
+
+    <section class="batch-grid">
+      <article class="panel">
+        <h2>Batch defaults</h2>
+        <p class="muted">These are applied across every product in this batch unless a product has a stronger extracted value.</p>
+        <div class="form-grid">
+          <label>Batch name<input id="batch-name" placeholder="G FUEL May supplier import"></label>
+          <label>Supplier / brand<input id="default-supplier" placeholder="G FUEL"></label>
+          <label>Vendor<input id="default-vendor" placeholder="G FUEL"></label>
+          <label>Product type<input id="default-product-type" placeholder="Energy Drink / Hydration / Tub"></label>
+          <label>Product category<input id="default-product-category" placeholder="Food, Beverages & Tobacco > Beverages"></label>
+          <label>Theme template<input id="default-template" placeholder="gfuel"></label>
+          <label>Collections<input id="default-collections" placeholder="gfuel, energy-drinks, new-arrivals"></label>
+          <label>Suggested tags<input id="default-tags" placeholder="Sugar Free, Caffeinated"></label>
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Product links</h2>
+        <p class="muted">One URL per line is best. The backend will accept however many links you paste; large batches can be scanned in chunks.</p>
+        <textarea id="batch-links" rows="15" placeholder="https://example.com/products/product-one\nhttps://example.com/products/product-two"></textarea>
+        <div class="action-row">
+          <button class="secondary-btn" id="add-links" disabled>Add links to current batch</button>
+          <button class="primary-btn" id="scan-batch" disabled>Scan all queued</button>
+        </div>
+        <p id="batch-status" class="status-text">No batch loaded.</p>
+      </article>
+    </section>
+
+    <section class="panel full-width">
+      <div class="section-head">
+        <div>
+          <h2>Batch review</h2>
+          <p class="muted">Approve only the rows you are happy with. Shopify products are always created as drafts.</p>
+        </div>
+        <div class="hero-actions">
+          <button class="secondary-btn" id="approve-ready" disabled>Approve ready rows</button>
+          <button class="primary-btn" id="create-drafts" disabled>Create approved Shopify drafts</button>
+        </div>
+      </div>
+      <div id="batch-summary" class="summary-row"></div>
+      <div id="batch-items" class="item-table"><p class="muted">Create or open a batch to begin.</p></div>
+    </section>
+
+    <section class="panel full-width">
+      <h2>Recent batches</h2>
+      <div id="recent-batches" class="recent-list"><p class="muted">Loading…</p></div>
+    </section>
+  </main>
+
+  <dialog id="item-dialog" class="item-dialog">
+    <div class="dialog-head">
+      <div><h2 id="dialog-title">Product</h2><p id="dialog-subtitle" class="muted"></p></div>
+      <button class="secondary-btn" id="close-dialog">Close</button>
+    </div>
+    <div id="dialog-body"></div>
+  </dialog>
+
+  <script src="./product-import-batch.js"></script>
+</body>
+</html>
