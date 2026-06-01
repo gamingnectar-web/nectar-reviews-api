@@ -1955,7 +1955,7 @@ router.post('/review-automation/fake-order', async (req, res, next) => {
     let sendResult = null;
     if (req.body?.sendNow) {
       await ReviewRequestJob.updateOne({ _id: job._id }, { $set: { status: 'scheduled', scheduledAt: new Date(Date.now() - 5000), blockedReason: '' } });
-      sendResult = await sendDueReviewRequests({ limit: 10 });
+      sendResult = await sendDueReviewRequests({ limit: 1, jobId: job._id });
     }
     const refreshed = await ReviewRequestJob.findById(job._id).lean();
     return res.status(201).json({ ok: true, job: refreshed || job, sendResult });

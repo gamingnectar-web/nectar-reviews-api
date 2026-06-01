@@ -349,9 +349,10 @@ async function sendReviewRequestJob(job) {
   return job;
 }
 
-async function sendDueReviewRequests({ limit = 25 } = {}) {
+async function sendDueReviewRequests({ limit = 25, jobId = '' } = {}) {
   const now = new Date();
-  const jobs = await ReviewRequestJob.find({ status: 'scheduled', scheduledAt: { $lte: now } }).sort({ scheduledAt: 1 }).limit(limit);
+  const filter = jobId ? { _id: jobId } : { status: 'scheduled', scheduledAt: { $lte: now } };
+  const jobs = await ReviewRequestJob.find(filter).sort({ scheduledAt: 1 }).limit(limit);
   const results = [];
   for (const job of jobs) {
     try {

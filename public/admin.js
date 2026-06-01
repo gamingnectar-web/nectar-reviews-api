@@ -2150,3 +2150,20 @@ Testing:
 
 
 document.addEventListener('DOMContentLoaded', initResponsiveNavGroups);
+
+// Fixed sidebar helper: keeps desktop navigation anchored and scrollable after dynamic admin views load.
+(function fixedSidebarObserver(){
+  function apply(){
+    if (window.matchMedia('(max-width: 900px)').matches) return;
+    const sidebar = document.querySelector('.sidebar');
+    const main = document.querySelector('.main');
+    if (!sidebar || !main) return;
+    const width = Math.max(260, Math.min(320, Math.round(sidebar.getBoundingClientRect().width || 280)));
+    document.documentElement.style.setProperty('--ncr-sidebar', `${width}px`);
+    sidebar.classList.add('ncr-fixed-sidebar-ready');
+    main.classList.add('ncr-fixed-main-ready');
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply); else apply();
+  window.addEventListener('resize', apply);
+  window.addEventListener('load', apply);
+})();

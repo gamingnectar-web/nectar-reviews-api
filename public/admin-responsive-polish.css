@@ -122,3 +122,35 @@
 @media(max-width:900px){
   .main{margin-left:0!important;}
 }
+
+/* Final fixed sidebar hardening: keep navigation available on long admin pages. */
+@media (min-width:901px){
+  html body .app-shell{display:block!important;min-height:100vh!important;overflow:visible!important;}
+  html body .app-shell > .sidebar,
+  html body aside.sidebar{
+    position:fixed!important;
+    inset:0 auto 0 0!important;
+    width:var(--ncr-sidebar,280px)!important;
+    height:100vh!important;
+    height:100dvh!important;
+    max-height:100dvh!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    overscroll-behavior:contain!important;
+    scrollbar-gutter:stable!important;
+    background:#fff!important;
+    z-index:1000!important;
+  }
+  html body .app-shell > .main,
+  html body main.main{
+    margin-left:var(--ncr-sidebar,280px)!important;
+    width:calc(100% - var(--ncr-sidebar,280px))!important;
+    min-height:100vh!important;
+    min-width:0!important;
+  }
+  html body .sidebar .nav-title{position:sticky;top:0;background:#fff;z-index:2;}
+}
+@media (max-width:900px){
+  html body .app-shell > .sidebar,html body aside.sidebar{position:relative!important;width:100%!important;height:auto!important;max-height:none!important;overflow:visible!important;}
+  html body .app-shell > .main,html body main.main{margin-left:0!important;width:100%!important;}
+}
