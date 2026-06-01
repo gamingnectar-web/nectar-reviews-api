@@ -1446,6 +1446,7 @@
             <p>Scan an external product page, upload an invoice image, match invoice lines to existing Shopify products, or create new Shopify draft products safely. Products are created as drafts first so they can be checked before publishing.</p>
             <div class="pci-tabs" role="tablist">
               <button type="button" class="pci-tab active" data-pci-tab="url" onclick="window.pciTab('url')">URL Import</button>
+              <button type="button" class="pci-tab" data-pci-tab="batch" onclick="window.pciTab('batch')">Batch Import</button>
               <button type="button" class="pci-tab" data-pci-tab="invoice" onclick="window.pciTab('invoice')">Invoice Import</button>
               <button type="button" class="pci-tab" data-pci-tab="manual" onclick="window.pciTab('manual')">Manual Create</button>
               <button type="button" class="pci-tab" data-pci-tab="metafields" onclick="window.pciTab('metafields')">Metafield Mapper</button>
@@ -1458,6 +1459,17 @@
             <h3>Connection status</h3>
             <div id="pci-health" class="pci-status">Loading product import status…</div><datalist id="pci-tag-list"></datalist><datalist id="pci-vendor-list"></datalist><datalist id="pci-metafield-list"></datalist><datalist id="pci-collection-list"></datalist><datalist id="pci-template-list"></datalist>
           </div>
+        </div>
+
+        <div class="pci-card pci-pane pci-full-product-pane" id="pci-pane-batch">
+          <div class="pci-pane-head">
+            <div>
+              <h3>Batch product import</h3>
+              <p>Paste as many supplier/product links as needed, apply shared brand/product defaults once, scan in batches, review extracted SEO/flavour/nutrition/media, then create Shopify draft products only after approval.</p>
+            </div>
+            <div class="pci-actions compact"><button class="secondary-btn" type="button" onclick="document.getElementById('pci-batch-frame')?.contentWindow?.location.reload()">Refresh batch workspace</button></div>
+          </div>
+          <iframe id="pci-batch-frame" class="pci-batch-frame" src="/modules/product-creation-import/index.html" title="Batch product importer"></iframe>
         </div>
 
         <div class="pci-card pci-pane active pci-full-product-pane" id="pci-pane-url">

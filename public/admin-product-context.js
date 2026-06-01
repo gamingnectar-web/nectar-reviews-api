@@ -27,7 +27,8 @@
       { label: 'Reviews Visual Customiser', view: 'v-style' }
     ],
     'product-creation-import': [
-      { label: 'Import Dashboard', view: 'v-product-creation-import', pciTab: 'url' },
+      { label: 'Import Dashboard', view: 'v-product-creation-import', pciTab: 'batch' },
+      { label: 'Batch Import', view: 'v-product-creation-import', pciTab: 'batch', pill: 'New' },
       { label: 'URL Import', view: 'v-product-creation-import', pciTab: 'url' },
       { label: 'Invoice Import', view: 'v-product-creation-import', pciTab: 'invoice' },
       { label: 'Manual Create', view: 'v-product-creation-import', pciTab: 'manual' },
@@ -77,6 +78,7 @@
     ],
     'product-creation-import': [
       { label: 'Connection Status', view: 'v-product-creation-import', pciTab: 'url' },
+      { label: 'Batch Import Defaults', view: 'v-product-creation-import', pciTab: 'batch' },
       { label: 'Shopify Product Search', view: 'v-product-creation-import', pciTab: 'invoice' },
       { label: 'Import Rules', view: 'v-product-creation-import', pciTab: 'settings' },
       { label: 'History', view: 'v-product-creation-import', pciTab: 'history' }
