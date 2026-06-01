@@ -435,7 +435,7 @@ async function inspectReviewWebhookSubscriptions(shopDomain) {
         ok: false,
         unknown: true,
         ...hook,
-        reason: 'Could not read Shopify webhooks. OAuth token may be missing read_webhooks or the app may need reconnecting.',
+        reason: 'Could not read Shopify runtime webhooks. If these are defined in shopify.app.toml, deploy the app configuration and use the manual/config-file finalise action.',
       });
       continue;
     }
@@ -490,7 +490,7 @@ async function registerReviewWebhookSubscriptions(shopDomain) {
       ok: false,
       verifiedInShopify: false,
       ...hook,
-      reason: 'Shopify did not confirm webhook creation. Check write_webhooks scope, OAuth reconnect and Render logs.',
+      reason: 'Shopify did not confirm webhook creation. Check the app install token, order scopes, APP_URL and Render logs. If using shopify.app.toml, deploy the Shopify app configuration instead.',
     });
   }
   const allOk = results.every((item) => item.ok);

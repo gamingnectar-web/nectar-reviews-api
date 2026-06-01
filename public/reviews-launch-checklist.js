@@ -150,7 +150,7 @@
       toast(result.summary?.message || 'Webhook verification refreshed.');
       await window.loadReviewsLaunchChecklist?.();
     } catch (error) {
-      toast(error.message || 'Could not verify Shopify webhooks. Check read_webhooks scope and reconnect Shopify.');
+      toast(error.message || 'Could not verify Shopify webhooks. If you use shopify.app.toml, run Shopify app deploy and refresh again.');
     }
   };
 
@@ -233,9 +233,17 @@
     if (!box) return;
     try {
       const data = await api('/admin/all-reviews-page-setup');
-      box.innerHTML = `<div class="webhook-registry-grid"><div class="webhook-card ${Number(data.acceptedReviews || 0) ? 'verified' : 'manual_unverified'}"><div class="webhook-card-head"><div><strong>All Reviews SEO Page</strong><p>${Number(data.acceptedReviews || 0)} accepted live review(s), ${Number(data.pendingReviews || 0)} pending.</p></div><span>${Number(data.acceptedReviews || 0) ? 'Ready' : 'Needs reviews'}</span></div><div class="webhook-card-body"><p><strong>Recommended Shopify page:</strong> /pages/${esc(data.recommendedPageHandle || 'reviews')}</p><p><strong>Theme app block:</strong> ${esc(data.themeBlockName || 'All Reviews SEO Page')}</p><p><strong>API endpoint:</strong></p><code>${esc(data.apiEndpoint || '')}</code><div class="launch-actions-stack" style="margin-top:12px;"><button type="button" class="secondary-btn" data-copy-all-reviews-snippet>Copy Liquid snippet</button><button type="button" class="secondary-btn" data-open-all-reviews-api>Open API preview</button></div></div></div></div>`;
+      const checks = Array.isArray(data.pageChecks) ? data.pageChecks : [];
+      const pageCards = checks.map((page)=>{
+        const cls = page.status === 'ready' ? 'verified' : page.status === 'missing' ? 'missing' : 'manual_unverified';
+        const label = page.status === 'ready' ? 'Verified' : page.status === 'missing' ? 'Missing' : 'Needs check';
+        return `<div class="webhook-card ${cls}"><div class="webhook-card-head"><div><strong>${esc(page.label || 'Storefront page')}</strong><p>/pages/${esc(page.handle || '')}</p></div><span>${label}</span></div><div class="webhook-card-body"><p>${esc(page.detail || '')}</p><code>${esc(page.url || '')}</code>${page.url ? `<div class="launch-actions-stack" style="margin-top:12px;"><button type="button" class="secondary-btn" data-open-page="${esc(page.url)}">Open page</button></div>` : ''}</div></div>`;
+      }).join('');
+      box.innerHTML = `<div class="webhook-registry-summary"><div><strong>Review storefront pages</strong><p>${Number(data.acceptedReviews || 0)} accepted live review(s), ${Number(data.pendingReviews || 0)} pending. These pages must exist before customer links go live.</p></div><button type="button" class="secondary-btn" data-refresh-page-checks>Refresh pages</button></div><div class="webhook-registry-grid">${pageCards}<div class="webhook-card ${Number(data.acceptedReviews || 0) ? 'verified' : 'manual_unverified'}"><div class="webhook-card-head"><div><strong>All Reviews SEO block</strong><p>Theme block and API feed for the public reviews page.</p></div><span>${Number(data.acceptedReviews || 0) ? 'Ready' : 'Needs reviews'}</span></div><div class="webhook-card-body"><p><strong>Recommended Shopify page:</strong> /pages/${esc(data.recommendedPageHandle || 'reviews')}</p><p><strong>Theme app block:</strong> ${esc(data.themeBlockName || 'All Reviews SEO Page')}</p><p><strong>API endpoint:</strong></p><code>${esc(data.apiEndpoint || '')}</code><div class="launch-actions-stack" style="margin-top:12px;"><button type="button" class="secondary-btn" data-copy-all-reviews-snippet>Copy Liquid snippet</button><button type="button" class="secondary-btn" data-open-all-reviews-api>Open API preview</button></div></div></div></div>`;
       box.querySelector('[data-copy-all-reviews-snippet]')?.addEventListener('click', async()=>{ await navigator.clipboard.writeText(data.liquidSnippet || "{% render 'all_reviews_seo_page' %}"); toast('All Reviews Liquid snippet copied.'); });
       box.querySelector('[data-open-all-reviews-api]')?.addEventListener('click', ()=>{ if (data.apiEndpoint) window.open(data.apiEndpoint, '_blank', 'noopener'); });
+      box.querySelector('[data-refresh-page-checks]')?.addEventListener('click', ()=>window.loadAllReviewsPageSetup?.());
+      box.querySelectorAll('[data-open-page]').forEach((btn)=>btn.addEventListener('click',()=>window.open(btn.dataset.openPage, '_blank', 'noopener')));
     } catch (error) {
       box.innerHTML = `<div class="webhook-card missing"><strong>Could not load All Reviews setup</strong><p>${esc(error.message || 'Check Render logs.')}</p></div>`;
     }

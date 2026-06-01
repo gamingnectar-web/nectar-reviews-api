@@ -8,7 +8,7 @@ Checked after merging the webhook registry/security update.
 - Render build command is `npm ci && npm run deploy:preflight`.
 - Render start command is `npm start` / `node server.js`.
 - Shopify API version is standardised to `2026-04` in `render.yaml`, matching the manual webhook screen and app default.
-- `SHOPIFY_SCOPES` example includes `read_webhooks` and `write_webhooks`.
+- `SHOPIFY_SCOPES` example avoids non-existent webhook scopes and includes `read_online_store_pages` so the app can verify /pages/leave-review and /pages/reviews from Shopify Admin when the storefront is password-protected.
 - Review webhook routes are mounted before JSON body parsing so HMAC validation can use the raw body.
 - Expected review webhooks are:
   - `orders/fulfilled` -> `/api/webhooks/shopify/orders-fulfilled`
@@ -25,4 +25,4 @@ Checked after merging the webhook registry/security update.
 
 ## Notes
 
-If automatic webhook registration is required, the Shopify app must be reconnected after adding `read_webhooks,write_webhooks` to `SHOPIFY_SCOPES`; Shopify does not grant new scopes to an old OAuth token automatically.
+For app-managed webhooks, keep subscriptions in `shopify.app.toml` and run `shopify app deploy` for production. For page verification, reconnect after adding `read_online_store_pages` so the token includes page-read permission.

@@ -1159,6 +1159,94 @@ router.delete('/email-templates/:id', async (req, res, next) => {
   }
 });
 
+
+function normalisePageHandle(value = '') {
+  const raw = cleanText(value || '', 120).toLowerCase();
+  return raw.replace(/^\/pages\//, '').replace(/^pages\//, '').replace(/^\//, '').replace(/\/$/, '').replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'leave-review';
+}
+
+async function checkShopifyStorefrontPage(shopDomain, handle, label = 'Storefront page') {
+  const cleanHandle = normalisePageHandle(handle);
+  const publicUrl = `https://${shopDomain}/pages/${cleanHandle}`;
+  const expected = {
+    label,
+    handle: cleanHandle,
+    url: publicUrl,
+    status: 'missing',
+    adminVerified: false,
+    publicVerified: false,
+    adminAvailable: false,
+    published: false,
+    pageId: '',
+    title: '',
+    detail: 'The page has not been verified yet.',
+    checkedAt: new Date(),
+  };
+
+  try {
+    const pageData = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/pages.json?handle=${encodeURIComponent(cleanHandle)}&limit=1`, { shopDomain });
+    if (pageData && Array.isArray(pageData.pages)) {
+      expected.adminAvailable = true;
+      const page = pageData.pages.find((item) => String(item.handle || '').toLowerCase() === cleanHandle) || pageData.pages[0] || null;
+      if (page) {
+        expected.adminVerified = true;
+        expected.pageId = String(page.id || '');
+        expected.title = page.title || label;
+        expected.published = Boolean(page.published_at || page.publishedAt);
+        expected.status = expected.published ? 'ready' : 'warning';
+        expected.detail = expected.published
+          ? `${label} exists in Shopify and is published.`
+          : `${label} exists in Shopify but is not published yet.`;
+        return expected;
+      }
+    }
+  } catch (_) {}
+
+  try {
+    if (typeof fetch === 'function') {
+      const response = await fetch(publicUrl, { method: 'GET', redirect: 'follow', signal: AbortSignal.timeout(7000) });
+      expected.publicStatusCode = response.status;
+      const contentType = response.headers.get('content-type') || '';
+      if (response.ok && contentType.includes('text/html')) {
+        const html = (await response.text()).slice(0, 120000).toLowerCase();
+        const obviousMissing = html.includes('404') && (html.includes('page not found') || html.includes('not found'));
+        if (!obviousMissing) {
+          expected.publicVerified = true;
+          expected.published = true;
+          expected.status = 'ready';
+          expected.detail = `${label} is reachable on the storefront.`;
+          return expected;
+        }
+      }
+      expected.detail = response.status === 401 || response.status === 403
+        ? `${label} could not be verified publicly, possibly because the store is password-protected. Add read_online_store_pages to the app scopes for Admin verification.`
+        : `${label} was not found at ${publicUrl}.`;
+      expected.status = response.status === 401 || response.status === 403 ? 'warning' : 'missing';
+    }
+  } catch (error) {
+    expected.status = expected.adminAvailable ? 'missing' : 'warning';
+    expected.detail = `Could not verify ${label}: ${error.message || 'storefront check failed'}.`;
+  }
+
+  return expected;
+}
+
+router.get('/storefront-page-checks', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const reviewHandle = normalisePageHandle(req.query.reviewPageHandle || req.query.reviewHandle || 'leave-review');
+    const allReviewsHandle = normalisePageHandle(req.query.allReviewsPageHandle || req.query.reviewsHandle || 'reviews');
+    const pages = await Promise.all([
+      checkShopifyStorefrontPage(shopDomain, reviewHandle, 'Leave Review page'),
+      checkShopifyStorefrontPage(shopDomain, allReviewsHandle, 'All Reviews page'),
+    ]);
+    const readyCount = pages.filter((page) => page.status === 'ready').length;
+    return res.json({ ok: true, shopDomain, pages, summary: { expectedCount: pages.length, readyCount, missingCount: pages.filter((page) => page.status === 'missing').length, warningCount: pages.filter((page) => page.status === 'warning').length } });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/all-reviews-page-setup', async (req, res, next) => {
   try {
     const shopDomain = shopDomainFromReq(req);
@@ -1167,12 +1255,17 @@ router.get('/all-reviews-page-setup', async (req, res, next) => {
       Review.countDocuments({ shopDomain, status: 'pending', isDeleted: { $ne: true }, isTestReview: { $ne: true } }),
     ]);
     const appUrl = env.appUrl || '';
+    const pageChecks = await Promise.all([
+      checkShopifyStorefrontPage(shopDomain, 'leave-review', 'Leave Review page'),
+      checkShopifyStorefrontPage(shopDomain, 'reviews', 'All Reviews page'),
+    ]);
     return res.json({
       ok: true,
       shopDomain,
       appUrl,
       acceptedReviews,
       pendingReviews,
+      pageChecks,
       apiEndpoint: `${appUrl}/api/reviews/seo-page?shopDomain=${encodeURIComponent(shopDomain)}&limit=120`,
       recommendedPageHandle: 'reviews',
       themeBlockName: 'All Reviews SEO Page',
@@ -1531,8 +1624,8 @@ function currentWebhookScopeStatus(shop = {}) {
   const combined = String(shop?.scopes || env.shopifyScopes || '');
   const scopes = new Set(combined.split(',').map((scope) => scope.trim()).filter(Boolean));
   return {
-    read_webhooks: scopes.has('read_webhooks'),
-    write_webhooks: scopes.has('write_webhooks'),
+    shopifyManagedAppConfig: true,
+    rawScopes: Array.from(scopes),
     raw: combined,
   };
 }
@@ -1561,14 +1654,14 @@ function buildWebhookRegistry({ shopDomain, shop, inspection, updateStored = fal
   const scopeStatus = currentWebhookScopeStatus(shop || {});
   const inspectedByTopic = new Map((inspection?.results || []).map((item) => [item.topic, item]));
   const storedReady = Boolean(stored.installedAt || stored.primaryAddress || stored.manualSetupFinalised);
-  const readAvailable = Boolean(scopeStatus.read_webhooks);
+  const readAvailable = true;
   const webhooks = expectedReviewWebhookSubscriptions().map((expected) => {
     const inspected = inspectedByTopic.get(expected.topic) || null;
     const verified = Boolean(inspected?.ok && inspected?.verifiedInShopify !== false);
     const missing = Boolean(inspected?.missing);
     const unknown = Boolean(inspected?.unknown || inspection?.skipped);
     const isFulfilled = expected.topic === 'orders/fulfilled';
-    const status = verified ? 'verified' : unknown && storedReady ? 'manual_unverified' : missing ? 'missing' : storedReady && !readAvailable ? 'manual_unverified' : 'missing';
+    const status = verified ? 'verified' : unknown && storedReady ? 'manual_unverified' : missing ? 'missing' : storedReady ? 'manual_unverified' : 'missing';
     return {
       key: isFulfilled ? 'orders_fulfilled' : expected.topic.replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '').toLowerCase(),
       name: isFulfilled ? 'Order fulfillment' : expected.topic === 'orders/updated' ? 'Order update' : expected.topic,
@@ -1590,7 +1683,7 @@ function buildWebhookRegistry({ shopDomain, shop, inspection, updateStored = fal
       actual: inspected?.actual || null,
       matchingTopicCount: inspected?.matchingTopicCount || 0,
       otherAddressesForTopic: inspected?.otherAddressesForTopic || [],
-      reason: inspected?.reason || (verified ? 'Found in Shopify and matching Nectar endpoint.' : status === 'manual_unverified' ? 'Nectar has manual setup finalised, but Shopify webhook read verification is unavailable.' : 'Expected webhook is not confirmed.'),
+      reason: inspected?.reason || (verified ? 'Found in Shopify and matching Nectar endpoint.' : status === 'manual_unverified' ? 'Nectar has manual/config-file webhook setup finalised internally; Shopify did not return a matching runtime webhook record for this check.' : 'Expected webhook is not confirmed.'),
     };
   });
   const verifiedCount = webhooks.filter((item) => item.verifiedInShopify).length;
@@ -1601,7 +1694,7 @@ function buildWebhookRegistry({ shopDomain, shop, inspection, updateStored = fal
     appUrl: env.appUrl || '',
     checkedAt: inspection?.checkedAt || new Date(),
     readAvailable,
-    writeAvailable: Boolean(scopeStatus.write_webhooks),
+    writeAvailable: true,
     scopeStatus,
     stored,
     summary: {
@@ -1609,11 +1702,11 @@ function buildWebhookRegistry({ shopDomain, shop, inspection, updateStored = fal
       verifiedCount,
       missingCount,
       storedReady,
-      status: verifiedCount === webhooks.length ? 'verified' : storedReady && !readAvailable ? 'manual_unverified' : missingCount ? 'attention' : 'unknown',
+      status: verifiedCount === webhooks.length ? 'verified' : storedReady ? 'manual_unverified' : missingCount ? 'attention' : 'unknown',
       message: verifiedCount === webhooks.length
         ? 'All expected review webhooks are present in Shopify and match Nectar endpoints.'
-        : storedReady && !readAvailable
-          ? 'Nectar is finalised for manual webhook setup, but this app install cannot read Shopify webhooks to verify them.'
+        : storedReady
+          ? 'Nectar has finalised webhook setup internally. If these are configured through shopify.app.toml, run Shopify app deploy and use Refresh from Shopify to compare any app-owned runtime webhooks Shopify returns.'
           : 'One or more expected review webhooks are missing or not verified in Shopify.',
     },
     webhooks,
@@ -1681,7 +1774,7 @@ router.post('/review-automation/confirm-manual-webhook', async (req, res, next) 
     const fulfilledHook = expectedHooks.find((hook) => hook.topic === 'orders/fulfilled') || expectedHooks[0];
     const updatedHook = expectedHooks.find((hook) => hook.topic === 'orders/updated') || expectedHooks[1];
 
-    // If read_webhooks is available, verify the merchant's manually-created webhooks.
+    // If Shopify returns runtime webhook records, verify them; otherwise this remains a config/manual finalisation.
     // If it is not available, still finalise the internal Nectar connection points so
     // manual setup works and the launch checklist reflects the documented setup.
     const inspection = await inspectReviewWebhookSubscriptions(shopDomain).catch((error) => ({
