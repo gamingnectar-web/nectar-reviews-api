@@ -4,24 +4,10 @@
   const toast = (msg) => (window.showToast || console.log)(msg);
   const statusText = (status) => ({ready:'Ready', blocked:'Blocked', warning:'Warning', manual:'Manual', info:'Info'}[status] || status || 'Info');
   const statusIcon = (status) => ({ready:'✓', blocked:'!', warning:'⚠', manual:'↗', info:'i'}[status] || '•');
-  const webhookStatusText = (status) => ({verified:'Verified', missing:'Missing', manual_unverified:'Manual / unverified', attention:'Needs attention', unknown:'Unknown'}[status] || status || 'Unknown');
-  const webhookStatusIcon = (status) => ({verified:'✓', missing:'!', manual_unverified:'?', attention:'⚠', unknown:'?'}[status] || '•');
-
-  function ensureWebhookStyles(){
-    if (document.getElementById('nectar-webhook-registry-styles')) return;
-    const style = document.createElement('style');
-    style.id = 'nectar-webhook-registry-styles';
-    style.textContent = `
-      .webhook-registry-summary{border:1px solid #d9e0ea;background:#fbfdff;border-radius:14px;padding:12px 14px;margin:8px 0 14px;display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}.webhook-registry-summary strong{display:block;margin-bottom:3px}.webhook-registry-summary p{margin:0;color:#667085}.webhook-registry-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.webhook-registry-item{border:1px solid #e5e7eb;background:#fff;border-radius:16px;padding:14px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:start;box-shadow:0 8px 18px rgba(15,23,42,.035)}.webhook-registry-item[data-status=verified]{border-color:#abefc6;background:#f6fef9}.webhook-registry-item[data-status=missing]{border-color:#fecdd6;background:#fff7f7}.webhook-registry-item[data-status=manual_unverified]{border-color:#fedf89;background:#fffcf5}.webhook-registry-dot{width:30px;height:30px;border-radius:999px;display:grid;place-items:center;font-weight:900;background:#f2f4f7;color:#344054}.webhook-registry-item[data-status=verified] .webhook-registry-dot{background:#039855;color:white}.webhook-registry-item[data-status=missing] .webhook-registry-dot{background:#d92d20;color:white}.webhook-registry-item[data-status=manual_unverified] .webhook-registry-dot{background:#f79009;color:#111827}.webhook-registry-copy strong{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.webhook-registry-copy em{font-size:11px;text-transform:uppercase;letter-spacing:.04em;font-style:normal;color:#667085}.webhook-registry-copy p{margin:5px 0;color:#475467;line-height:1.45}.webhook-registry-copy code{display:block;background:#fff;border:1px solid #edf0f3;border-radius:9px;padding:7px 8px;font-size:12px;word-break:break-all;margin-top:8px}.webhook-registry-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.webhook-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.52);z-index:9999;display:grid;place-items:center;padding:20px}.webhook-modal{max-width:760px;width:min(760px,100%);max-height:86vh;overflow:auto;background:#fff;border-radius:20px;box-shadow:0 24px 70px rgba(15,23,42,.28);border:1px solid #e5e7eb}.webhook-modal header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 20px;border-bottom:1px solid #edf0f3}.webhook-modal header h3{margin:0}.webhook-modal header p{margin:6px 0 0;color:#667085}.webhook-modal-body{padding:18px 20px;display:grid;gap:12px}.webhook-modal-grid{display:grid;grid-template-columns:180px minmax(0,1fr);gap:8px 12px}.webhook-modal-grid span{color:#667085;font-weight:800}.webhook-modal-grid code{word-break:break-all;background:#f8fafc;border:1px solid #edf0f3;border-radius:8px;padding:6px}.webhook-modal-close{border:0;background:#f2f4f7;border-radius:999px;width:34px;height:34px;font-size:20px;cursor:pointer}@media(max-width:900px){.webhook-registry-list,.webhook-modal-grid{grid-template-columns:1fr}.webhook-registry-summary{align-items:flex-start}}`;
-    document.head.appendChild(style);
-  }
 
   let lastChecklist = null;
 
   function targetButton(check){
-    if (check.key === 'orders_fulfilled_webhook' && check.status !== 'ready') {
-      return `<div class="launch-actions-stack"><button class="primary-btn compact" type="button" onclick="window.registerReviewWebhook?.()">Register now</button><button class="secondary-btn compact" type="button" onclick="window.confirmManualReviewWebhook?.()">Finalise manual setup</button></div>`;
-    }
     if (!check.target) return '';
     const [view, sub] = String(check.target).split(':');
     return `<button class="secondary-btn compact" type="button" onclick="window.goReviewLaunchTarget('${esc(view)}','${esc(sub||'')}')">Go there</button>`;
@@ -59,69 +45,6 @@
     }).join('') || '<p class="muted">No review request jobs yet. Run a fake-order test to create one without touching live orders.</p>';
   }
 
-
-  function renderWebhookRegistry(registry){
-    ensureWebhookStyles();
-    const box = document.getElementById('review-webhook-registry');
-    if (!box) return;
-    if (!registry) {
-      box.innerHTML = '<p class="muted">Webhook status has not loaded yet.</p>';
-      return;
-    }
-    const summary = registry.summary || {};
-    const checkedAt = registry.checkedAt ? new Date(registry.checkedAt).toLocaleString() : 'Not checked yet';
-    const hooks = registry.webhooks || [];
-    box.innerHTML = `
-      <div class="webhook-registry-summary" data-status="${esc(summary.status || 'unknown')}">
-        <div><strong>${esc(summary.message || 'Webhook status unknown.')}</strong><p>${esc(summary.verifiedCount || 0)} of ${esc(summary.expectedCount || hooks.length || 0)} verified in Shopify · Last checked ${esc(checkedAt)}</p></div>
-        <div class="webhook-registry-actions"><button class="secondary-btn compact" type="button" onclick="window.verifyReviewWebhooks?.()">Refresh from Shopify</button><button class="secondary-btn compact" type="button" onclick="window.open('https://help.shopify.com/en/manual/fulfillment/setup/notifications/webhooks','_blank','noopener')">Shopify docs</button></div>
-      </div>
-      <div class="webhook-registry-list">
-        ${hooks.map((hook, index)=>`
-          <div class="webhook-registry-item" data-status="${esc(hook.status)}">
-            <span class="webhook-registry-dot">${esc(webhookStatusIcon(hook.status))}</span>
-            <div class="webhook-registry-copy">
-              <strong>${esc(hook.name)} <em>${esc(webhookStatusText(hook.status))}</em></strong>
-              <p>${esc(hook.purpose || '')}</p>
-              <code>${esc(hook.topic)} → ${esc(hook.endpoint || hook.address)}</code>
-              <div class="webhook-registry-actions"><button class="secondary-btn compact" type="button" onclick="window.showReviewWebhookDetails?.(${index})">View details</button></div>
-            </div>
-          </div>`).join('')}
-      </div>`;
-  }
-
-  window.showReviewWebhookDetails = function(index){
-    const hook = lastChecklist?.webhookRegistry?.webhooks?.[index];
-    if (!hook) return;
-    ensureWebhookStyles();
-    const actual = hook.actual || {};
-    const overlay = document.createElement('div');
-    overlay.className = 'webhook-modal-overlay';
-    overlay.innerHTML = `<div class="webhook-modal" role="dialog" aria-modal="true">
-      <header><div><h3>${esc(hook.name)}</h3><p>${esc(webhookStatusText(hook.status))} · ${esc(hook.reason || '')}</p></div><button class="webhook-modal-close" type="button" aria-label="Close">×</button></header>
-      <div class="webhook-modal-body">
-        <p>${esc(hook.customerJourneyStep || hook.purpose || '')}</p>
-        <div class="webhook-modal-grid">
-          <span>Expected topic</span><code>${esc(hook.topic)}</code>
-          <span>Expected URL</span><code>${esc(hook.address)}</code>
-          <span>Expected format</span><div>${esc(String(hook.format || 'json').toUpperCase())}</div>
-          <span>Expected API version</span><div>${esc(hook.apiVersion || '')}</div>
-          <span>Verified in Shopify</span><div>${hook.verifiedInShopify ? 'Yes' : 'No'}</div>
-          <span>Nectar stored setup</span><div>${hook.storedInNectar ? 'Yes' : 'No'}</div>
-          <span>Shopify webhook ID</span><div>${esc(actual.id || hook.webhookId || 'Not available')}</div>
-          <span>Shopify API version</span><div>${esc(actual.apiVersion || 'Not available')}</div>
-          <span>Created in Shopify</span><div>${esc(actual.createdAt ? new Date(actual.createdAt).toLocaleString() : 'Not available')}</div>
-          <span>Updated in Shopify</span><div>${esc(actual.updatedAt ? new Date(actual.updatedAt).toLocaleString() : 'Not available')}</div>
-        </div>
-        ${hook.otherAddressesForTopic?.length ? `<div><strong>Other Shopify webhooks for this topic</strong>${hook.otherAddressesForTopic.map((item)=>`<code>${esc(item.address || '')}</code>`).join('')}</div>` : ''}
-      </div>
-    </div>`;
-    document.body.appendChild(overlay);
-    const close = () => overlay.remove();
-    overlay.querySelector('.webhook-modal-close')?.addEventListener('click', close);
-    overlay.addEventListener('click', (event)=>{ if (event.target === overlay) close(); });
-  };
-
   window.loadReviewsLaunchChecklist = async function(){
     if (!document.getElementById('v-review-launch')) return;
     try {
@@ -130,7 +53,6 @@
       renderChecks(data.checks || []);
       renderPath(data.livePath || []);
       renderJobs(data.recentJobs || []);
-      renderWebhookRegistry(data.webhookRegistry || null);
       const banner = document.querySelector('.launch-mode-banner');
       if (banner) banner.dataset.ready = data.summary?.ready ? 'ready' : 'blocked';
       const dot = document.getElementById('nav-status-reviews');
@@ -138,45 +60,6 @@
       window.updateProductNavStatuses?.(data);
     } catch (error) {
       renderChecks([{ status:'blocked', label:'Could not load launch checklist', detail:error.message || 'Refresh the page and try again.', action:'Check the API logs in Render.' }]);
-    }
-  };
-
-  window.verifyReviewWebhooks = async function(){
-    try {
-      const result = await api('/admin/review-automation/verify-webhooks', { method:'POST', body: JSON.stringify({}) });
-      lastChecklist = { ...(lastChecklist || {}), webhookRegistry: result };
-      renderWebhookRegistry(result);
-      toast(result.summary?.message || 'Webhook verification refreshed.');
-      await window.loadReviewsLaunchChecklist?.();
-    } catch (error) {
-      toast(error.message || 'Could not verify Shopify webhooks. Check read_webhooks scope and reconnect Shopify.');
-    }
-  };
-
-  window.registerReviewWebhook = async function(){
-    try {
-      const result = await api('/admin/review-automation/register-webhook', { method:'POST', body: JSON.stringify({}) });
-      if (result.ok) toast('Shopify order webhooks registered. Refreshing checks…');
-      else toast(result.result?.results?.find?.((r)=>!r.ok)?.reason || result.result?.reason || 'Webhook could not be registered. Check OAuth scopes and reconnect Shopify.');
-      await window.loadReviewsLaunchChecklist?.();
-      await window.NectarAdminProductContext?.refreshStatuses?.();
-    } catch (error) {
-      toast(error.message || 'Could not register Shopify webhook. Check scopes, OAuth and Render logs.');
-      await window.loadReviewsLaunchChecklist?.();
-    }
-  };
-
-  window.confirmManualReviewWebhook = async function(){
-    const ok = confirm('Only continue if Shopify Admin already has BOTH webhooks saved: Order fulfillment → /api/webhooks/shopify/orders-fulfilled and Order update → /api/webhooks/shopify/orders-updated. Nectar will now finalise the internal connection flags/settings that manual Shopify setup cannot update. Continue?');
-    if (!ok) return;
-    try {
-      const result = await api('/admin/review-automation/confirm-manual-webhook', { method:'POST', body: JSON.stringify({}) });
-      const verified = result.verifiedInShopify ? ' Verified in Shopify.' : ' Marked as manual setup; Shopify read verification was not available.';
-      toast(`Manual webhook setup finalised in Nectar.${verified} Refreshing checks…`);
-      await window.loadReviewsLaunchChecklist?.();
-      await window.NectarAdminProductContext?.refreshStatuses?.();
-    } catch (error) {
-      toast(error.message || 'Could not confirm manual webhooks.');
     }
   };
 
@@ -194,9 +77,8 @@
         btn?.scrollIntoView({ behavior:'smooth', block:'center' });
       }
       if (view === 'v-review-launch') {
-        const register = Array.from(document.querySelectorAll('button')).find((button)=>/register shopify fulfilled-order webhook|register shopify webhook|register now/i.test(button.textContent || ''));
+        const register = Array.from(document.querySelectorAll('button')).find((button)=>/register shopify fulfilled-order webhook|register shopify webhook/i.test(button.textContent || ''));
         register?.scrollIntoView({ behavior:'smooth', block:'center' });
-        if (sub === 'register-webhook') setTimeout(()=>register?.click(), 160);
       }
       if (view === 'v-style') document.getElementById('v-style')?.scrollIntoView({ behavior:'smooth', block:'start' });
       if (view === 'v-settings') document.getElementById('widget-render-names')?.scrollIntoView({ behavior:'smooth', block:'center' });

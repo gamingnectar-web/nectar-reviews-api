@@ -125,7 +125,7 @@ const productCreationImportSchema = new mongoose.Schema({
   purchaseOrder: { type: purchaseOrderSchema, default: () => ({ status: 'none' }) },
   createdShopifyProduct: { type: mongoose.Schema.Types.Mixed, default: null },
   errors: { type: [String], default: [] },
-}, { timestamps: true, collection: 'product_creation_imports', suppressReservedKeysWarning: true });
+}, { timestamps: true, collection: 'product_creation_imports' });
 
 productCreationImportSchema.index({ shopDomain: 1, sourceUrl: 1 });
 productCreationImportSchema.index({ shopDomain: 1, createdAt: -1 });

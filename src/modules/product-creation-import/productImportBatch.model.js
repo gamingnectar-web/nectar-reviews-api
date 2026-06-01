@@ -78,7 +78,7 @@ const productImportBatchSchema = new mongoose.Schema({
     failed: { type: Number, default: 0 },
   },
   errors: { type: [String], default: [] },
-}, { timestamps: true, collection: 'product_import_batches', suppressReservedKeysWarning: true });
+}, { timestamps: true, collection: 'product_import_batches' });
 
 productImportBatchSchema.index({ shopDomain: 1, createdAt: -1 });
 productImportBatchSchema.index({ shopDomain: 1, status: 1, createdAt: -1 });

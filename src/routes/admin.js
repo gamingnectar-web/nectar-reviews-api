@@ -9,7 +9,7 @@ const { encryptSecret, decryptSecret } = require('../utils/crypto');
 const { publicEmailSettings } = require('../utils/emailSettings');
 const { shopifyFetch, shopifyFetchOptional, getAccessTokenForShop, buildInstallUrl } = require('../utils/shopify');
 const { createReviewToken } = require('../utils/reviewTokens');
-const { scheduleReviewRequestFromOrder, sendDueReviewRequests, automationReadiness, registerReviewWebhookSubscriptions, inspectReviewWebhookSubscriptions, expectedReviewWebhookSubscriptions } = require('../modules/reviews/reviewRequestAutomation');
+const { scheduleReviewRequestFromOrder, sendDueReviewRequests, automationReadiness, registerReviewWebhookSubscriptions } = require('../modules/reviews/reviewRequestAutomation');
 const { awardForReview, getOrCreateLoyaltyProgram, normaliseCustomerRef, customerHintFromHash, createLedgerEntry } = require('../modules/loyalty/loyalty.service');
 const { getOrCreateDiscountProgram, issueDiscountCode } = require('../modules/discounts/discounts.service');
 
@@ -1318,241 +1318,6 @@ router.post('/review-automation/register-webhook', async (req, res, next) => {
   }
 });
 
-
-function currentWebhookScopeStatus(shop = {}) {
-  const combined = String(shop?.scopes || env.shopifyScopes || '');
-  const scopes = new Set(combined.split(',').map((scope) => scope.trim()).filter(Boolean));
-  return {
-    read_webhooks: scopes.has('read_webhooks'),
-    write_webhooks: scopes.has('write_webhooks'),
-    raw: combined,
-  };
-}
-
-function buildStoredWebhookMeta(shop = {}) {
-  const reviews = shop?.modules?.reviews || {};
-  return {
-    installedAt: reviews.webhookInstalledAt || null,
-    manualConfirmedAt: reviews.webhookManualConfirmedAt || reviews.manualSetupFinalisedAt || null,
-    source: reviews.webhookSource || '',
-    mode: reviews.webhookMode || '',
-    topics: Array.isArray(reviews.webhookTopics) ? reviews.webhookTopics : [],
-    addresses: Array.isArray(reviews.webhookAddresses) ? reviews.webhookAddresses : [],
-    primaryTopic: reviews.webhookTopic || '',
-    primaryAddress: reviews.webhookAddress || '',
-    verificationStatus: reviews.webhookVerificationStatus || '',
-    verificationCheckedAt: reviews.webhookVerificationCheckedAt || null,
-    manualSetupFinalised: Boolean(reviews.manualSetupFinalised),
-    registrationResults: Array.isArray(reviews.webhookRegistrationResults) ? reviews.webhookRegistrationResults : [],
-    inspectionResults: Array.isArray(reviews.webhookInspectionResults) ? reviews.webhookInspectionResults : [],
-  };
-}
-
-function buildWebhookRegistry({ shopDomain, shop, inspection, updateStored = false }) {
-  const stored = buildStoredWebhookMeta(shop || {});
-  const scopeStatus = currentWebhookScopeStatus(shop || {});
-  const inspectedByTopic = new Map((inspection?.results || []).map((item) => [item.topic, item]));
-  const storedReady = Boolean(stored.installedAt || stored.primaryAddress || stored.manualSetupFinalised);
-  const readAvailable = Boolean(scopeStatus.read_webhooks);
-  const webhooks = expectedReviewWebhookSubscriptions().map((expected) => {
-    const inspected = inspectedByTopic.get(expected.topic) || null;
-    const verified = Boolean(inspected?.ok && inspected?.verifiedInShopify !== false);
-    const missing = Boolean(inspected?.missing);
-    const unknown = Boolean(inspected?.unknown || inspection?.skipped);
-    const isFulfilled = expected.topic === 'orders/fulfilled';
-    const status = verified ? 'verified' : unknown && storedReady ? 'manual_unverified' : missing ? 'missing' : storedReady && !readAvailable ? 'manual_unverified' : 'missing';
-    return {
-      key: isFulfilled ? 'orders_fulfilled' : expected.topic.replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '').toLowerCase(),
-      name: isFulfilled ? 'Order fulfillment' : expected.topic === 'orders/updated' ? 'Order update' : expected.topic,
-      topic: expected.topic,
-      address: expected.address,
-      endpoint: expected.address.replace(env.appUrl || '', '') || expected.address,
-      format: 'json',
-      apiVersion: env.shopifyApiVersion,
-      status,
-      verifiedInShopify: verified,
-      storedInNectar: storedReady,
-      requiredForLaunch: true,
-      purpose: isFulfilled
-        ? 'Creates a private review-request job when Shopify marks an order as fulfilled.'
-        : 'Updates the job when order tags/status change, including the delivered tag gate.',
-      customerJourneyStep: isFulfilled
-        ? 'Fulfilled order → Nectar receives webhook → review job is created.'
-        : 'Order update/delivered tag → Nectar releases the job into the configured timer.',
-      actual: inspected?.actual || null,
-      matchingTopicCount: inspected?.matchingTopicCount || 0,
-      otherAddressesForTopic: inspected?.otherAddressesForTopic || [],
-      reason: inspected?.reason || (verified ? 'Found in Shopify and matching Nectar endpoint.' : status === 'manual_unverified' ? 'Nectar has manual setup finalised, but Shopify webhook read verification is unavailable.' : 'Expected webhook is not confirmed.'),
-    };
-  });
-  const verifiedCount = webhooks.filter((item) => item.verifiedInShopify).length;
-  const missingCount = webhooks.filter((item) => item.status === 'missing').length;
-  return {
-    ok: missingCount === 0 && (verifiedCount === webhooks.length || storedReady),
-    shopDomain,
-    appUrl: env.appUrl || '',
-    checkedAt: inspection?.checkedAt || new Date(),
-    readAvailable,
-    writeAvailable: Boolean(scopeStatus.write_webhooks),
-    scopeStatus,
-    stored,
-    summary: {
-      expectedCount: webhooks.length,
-      verifiedCount,
-      missingCount,
-      storedReady,
-      status: verifiedCount === webhooks.length ? 'verified' : storedReady && !readAvailable ? 'manual_unverified' : missingCount ? 'attention' : 'unknown',
-      message: verifiedCount === webhooks.length
-        ? 'All expected review webhooks are present in Shopify and match Nectar endpoints.'
-        : storedReady && !readAvailable
-          ? 'Nectar is finalised for manual webhook setup, but this app install cannot read Shopify webhooks to verify them.'
-          : 'One or more expected review webhooks are missing or not verified in Shopify.',
-    },
-    webhooks,
-    rawInspection: inspection || null,
-  };
-}
-
-async function inspectAndOptionallyPersistWebhookRegistry(shopDomain, { persist = false } = {}) {
-  const shop = await Shop.findOne({ shopDomain }).lean();
-  const inspection = await inspectReviewWebhookSubscriptions(shopDomain).catch((error) => ({
-    ok: false,
-    skipped: true,
-    reason: error.message || 'Could not inspect Shopify webhooks.',
-    results: expectedReviewWebhookSubscriptions().map((hook) => ({ ...hook, ok: false, unknown: true, reason: error.message || 'Inspection failed.' })),
-    checkedAt: new Date(),
-  }));
-  const registry = buildWebhookRegistry({ shopDomain, shop, inspection });
-  if (persist) {
-    const now = new Date();
-    const verified = registry.webhooks.every((item) => item.verifiedInShopify);
-    await Shop.findOneAndUpdate({ shopDomain }, {
-      $set: {
-        'modules.reviews.enabled': true,
-        'modules.reviews.webhookInstalledAt': verified ? now : (registry.summary.storedReady && !registry.readAvailable ? (registry.stored.installedAt || now) : null),
-        'modules.reviews.webhookSource': verified ? 'shopify_api_verified' : (registry.summary.storedReady ? registry.stored.source || 'manual_shopify_admin_confirmation' : 'not_verified'),
-        'modules.reviews.webhookMode': verified ? 'verified' : (registry.stored.mode || 'manual'),
-        'modules.reviews.webhookTopics': registry.webhooks.map((hook) => hook.topic),
-        'modules.reviews.webhookAddresses': registry.webhooks.map((hook) => hook.address),
-        'modules.reviews.webhookAddress': registry.webhooks.find((hook) => hook.topic === 'orders/fulfilled')?.address || '',
-        'modules.reviews.webhookTopic': 'orders/fulfilled',
-        'modules.reviews.webhookVerificationStatus': verified ? 'verified' : (registry.readAvailable ? 'missing_or_mismatched' : 'manual_unverified'),
-        'modules.reviews.webhookVerificationCheckedAt': now,
-        'modules.reviews.webhookInspectionResults': registry.webhooks,
-      },
-      $setOnInsert: { shopDomain },
-    }, { upsert: true, setDefaultsOnInsert: true });
-  }
-  return registry;
-}
-
-router.get('/review-automation/webhooks', async (req, res, next) => {
-  try {
-    const shopDomain = shopDomainFromReq(req);
-    const registry = await inspectAndOptionallyPersistWebhookRegistry(shopDomain, { persist: false });
-    return res.json(registry);
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/review-automation/verify-webhooks', async (req, res, next) => {
-  try {
-    const shopDomain = shopDomainFromReq(req);
-    const registry = await inspectAndOptionallyPersistWebhookRegistry(shopDomain, { persist: true });
-    return res.json({ ok: registry.ok, ...registry });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/review-automation/confirm-manual-webhook', async (req, res, next) => {
-  try {
-    const shopDomain = shopDomainFromReq(req);
-    const expectedHooks = expectedReviewWebhookSubscriptions();
-    const fulfilledHook = expectedHooks.find((hook) => hook.topic === 'orders/fulfilled') || expectedHooks[0];
-    const updatedHook = expectedHooks.find((hook) => hook.topic === 'orders/updated') || expectedHooks[1];
-
-    // If read_webhooks is available, verify the merchant's manually-created webhooks.
-    // If it is not available, still finalise the internal Nectar connection points so
-    // manual setup works and the launch checklist reflects the documented setup.
-    const inspection = await inspectReviewWebhookSubscriptions(shopDomain).catch((error) => ({
-      ok: false,
-      skipped: true,
-      reason: error.message || 'Could not inspect Shopify webhooks.',
-      results: expectedHooks.map((hook) => ({ ...hook, ok: false, unknown: true })),
-    }));
-
-    const now = new Date();
-    const verificationStatus = inspection.ok ? 'verified' : (inspection.skipped ? 'manual_unverified' : 'manual_confirmed_not_verified');
-    const canTrustManualAsReady = Boolean(inspection.ok || inspection.skipped);
-
-    const existingSettings = await Settings.findOne({ shopDomain }).lean().catch(() => null);
-    const existingAuto = existingSettings?.reviewAutomation || {};
-    const settingsSet = {};
-    if (existingAuto.enabled === undefined) settingsSet['reviewAutomation.enabled'] = true;
-    if (existingAuto.nativeEnabled === undefined) settingsSet['reviewAutomation.nativeEnabled'] = true;
-    if (!existingAuto.mode) settingsSet['reviewAutomation.mode'] = 'native';
-    if (!existingAuto.trigger) settingsSet['reviewAutomation.trigger'] = 'orders/fulfilled';
-    if (existingAuto.delayDays === undefined || existingAuto.delayDays === null) settingsSet['reviewAutomation.delayDays'] = 14;
-    if (existingAuto.deliveryTagRequired === undefined) settingsSet['reviewAutomation.deliveryTagRequired'] = true;
-    if (!existingAuto.deliveryTag) settingsSet['reviewAutomation.deliveryTag'] = 'delivered';
-    if (!existingAuto.deliveryAnchor) settingsSet['reviewAutomation.deliveryAnchor'] = 'delivered_tag';
-    if (!existingAuto.campaign) settingsSet['reviewAutomation.campaign'] = 'native_review_request';
-    if (!existingAuto.subject) settingsSet['reviewAutomation.subject'] = 'How was your recent order?';
-
-    if (Object.keys(settingsSet).length) {
-      await Settings.findOneAndUpdate(
-        { shopDomain },
-        { $set: settingsSet, $setOnInsert: { shopDomain } },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      );
-    }
-
-    await Shop.findOneAndUpdate(
-      { shopDomain },
-      {
-        $set: {
-          'modules.reviews.enabled': true,
-          'modules.reviews.webhookInstalledAt': now,
-          'modules.reviews.webhookManualConfirmedAt': now,
-          'modules.reviews.webhookSource': 'manual_shopify_admin_confirmation',
-          'modules.reviews.webhookMode': 'manual',
-          'modules.reviews.webhookTopics': expectedHooks.map((hook) => hook.topic),
-          'modules.reviews.webhookAddresses': expectedHooks.map((hook) => hook.address),
-          'modules.reviews.webhookAddress': fulfilledHook?.address || '',
-          'modules.reviews.webhookTopic': 'orders/fulfilled',
-          'modules.reviews.webhookVerificationStatus': verificationStatus,
-          'modules.reviews.webhookVerificationCheckedAt': now,
-          'modules.reviews.webhookInspectionResults': inspection.results || [],
-          'modules.reviews.manualSetupFinalised': true,
-          'modules.reviews.manualSetupFinalisedAt': now,
-        },
-        $setOnInsert: { shopDomain },
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
-
-    const readiness = await automationReadiness(shopDomain);
-    return res.json({
-      ok: true,
-      confirmed: true,
-      manualFinalised: true,
-      verificationStatus,
-      verifiedInShopify: Boolean(inspection.ok),
-      inspection,
-      readiness,
-      webhookRegistry: buildWebhookRegistry({ shopDomain, shop: await Shop.findOne({ shopDomain }).lean(), inspection }),
-      addresses: {
-        fulfilledAddress: fulfilledHook?.address || '',
-        updatedAddress: updatedHook?.address || '',
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
 router.post('/review-automation/fake-order', async (req, res, next) => {
   try {
     const shopDomain = shopDomainFromReq(req);
@@ -1872,11 +1637,7 @@ router.get('/review-launch-checklist', async (req, res, next) => {
     const tokenReady = Boolean(env.emailCredentialSecret || env.shopifyApiSecret);
     const auto = settings?.reviewAutomation || {};
     const nativeReady = Boolean(auto.enabled !== false && auto.nativeEnabled !== false && emailReady && tokenReady);
-    const webhookMeta = shop?.modules?.reviews || {};
-    const webhookVerificationStatus = webhookMeta.webhookVerificationStatus || '';
-    const webhookProblem = ['failed', 'missing_or_mismatched', 'manual_confirmed_not_verified'].includes(webhookVerificationStatus);
-    const webhookReady = Boolean(webhookMeta.webhookInstalledAt) && !webhookProblem;
-    const webhookManual = webhookMeta.webhookSource === 'manual_shopify_admin_confirmation';
+    const webhookReady = Boolean(shop?.modules?.reviews?.webhookInstalledAt || shop?.modules?.reviews?.webhookAddress);
     const latestJob = recentJobs[0] || null;
 
     const checks = [
@@ -1916,13 +1677,9 @@ router.get('/review-launch-checklist', async (req, res, next) => {
         key: 'orders_fulfilled_webhook',
         label: 'Fulfilled-order webhook',
         status: webhookReady ? 'ready' : (oauthReady ? 'warning' : 'blocked'),
-        detail: webhookReady
-          ? (webhookManual
-            ? `Manual Shopify webhooks have been finalised in Nectar${webhookVerificationStatus ? ` (${webhookVerificationStatus})` : ''}.`
-            : `Webhook registered${webhookMeta.webhookTopic ? ` for ${webhookMeta.webhookTopic}` : ''}.`)
-          : 'Webhook is not marked as registered yet. Fake-order tests still work, but live fulfilled orders will not schedule emails.',
-        action: webhookReady ? '' : 'Click Register now, or use Finalise manual setup if you created the webhooks in Shopify Admin.',
-        target: 'v-review-launch:register-webhook',
+        detail: webhookReady ? `Webhook registered${shop?.modules?.reviews?.webhookTopic ? ` for ${shop.modules.reviews.webhookTopic}` : ''}.` : 'Webhook is not marked as registered yet. Fake-order tests still work, but live fulfilled orders will not schedule emails.',
+        action: 'Click Register webhook in the launch checklist.',
+        target: 'v-review-launch',
       },
       {
         key: 'native_scheduler',
@@ -1965,7 +1722,6 @@ router.get('/review-launch-checklist', async (req, res, next) => {
         latestJob: latestJob ? { status: latestJob.status, orderId: latestJob.orderId, scheduledAt: latestJob.scheduledAt, sentAt: latestJob.sentAt, blockedReason: latestJob.blockedReason || latestJob.errorMessage || '' } : null,
       },
       checks,
-      webhookRegistry: buildWebhookRegistry({ shopDomain, shop, inspection: { results: webhookMeta.webhookInspectionResults || [], skipped: !webhookMeta.webhookInspectionResults?.length, checkedAt: webhookMeta.webhookVerificationCheckedAt || null } }),
       recentJobs: recentJobs.map((job) => ({
         id: String(job._id),
         status: job.status,
