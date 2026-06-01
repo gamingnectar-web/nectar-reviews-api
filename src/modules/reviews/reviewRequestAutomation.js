@@ -299,17 +299,56 @@ async function sendDueReviewRequests({ limit = 25 } = {}) {
   return { count: results.length, results };
 }
 
-function expectedReviewWebhookSubscriptions() {
+function reviewWebhookDefinitions() {
   const appBase = env.appUrl || '';
   const base = appBase.replace(/\/$/, '');
   return [
-    { topic: 'orders/fulfilled', address: `${base}/api/webhooks/shopify/orders-fulfilled` },
-    { topic: 'orders/updated', address: `${base}/api/webhooks/shopify/orders-updated` },
+    {
+      key: 'orders_fulfilled',
+      name: 'Order fulfillment',
+      topic: 'orders/fulfilled',
+      address: `${base}/api/webhooks/shopify/orders-fulfilled`,
+      endpoint: '/api/webhooks/shopify/orders-fulfilled',
+      format: 'json',
+      apiVersion: env.shopifyApiVersion,
+      purpose: 'Creates the private review-request job when Shopify marks an order as fulfilled.',
+      customerJourneyStep: 'Order fulfilled → Nectar receives the event → review request job is created.',
+      requiredForLaunch: true,
+    },
+    {
+      key: 'orders_updated',
+      name: 'Order update',
+      topic: 'orders/updated',
+      address: `${base}/api/webhooks/shopify/orders-updated`,
+      endpoint: '/api/webhooks/shopify/orders-updated',
+      format: 'json',
+      apiVersion: env.shopifyApiVersion,
+      purpose: 'Re-checks delivery tags/status changes so the review timer can start when the order is actually delivered.',
+      customerJourneyStep: 'Order receives the delivered tag/status update → Nectar releases the job into the 14-day timer.',
+      requiredForLaunch: true,
+    },
   ];
 }
 
+function expectedReviewWebhookSubscriptions() {
+  return reviewWebhookDefinitions().map(({ topic, address }) => ({ topic, address }));
+}
+
+function safeWebhookActual(item = {}) {
+  if (!item) return null;
+  return {
+    id: String(item.id || ''),
+    topic: String(item.topic || ''),
+    address: String(item.address || ''),
+    format: String(item.format || ''),
+    apiVersion: String(item.api_version || item.apiVersion || ''),
+    createdAt: item.created_at || item.createdAt || null,
+    updatedAt: item.updated_at || item.updatedAt || null,
+  };
+}
+
 async function inspectReviewWebhookSubscriptions(shopDomain) {
-  const hooks = expectedReviewWebhookSubscriptions();
+  const hooks = reviewWebhookDefinitions();
   if (!env.appUrl || !shopDomain) {
     return { ok: false, skipped: true, reason: 'APP_URL or shop domain missing.', hooks, results: [] };
   }
@@ -318,30 +357,67 @@ async function inspectReviewWebhookSubscriptions(shopDomain) {
   for (const hook of hooks) {
     const existing = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/webhooks.json?topic=${encodeURIComponent(hook.topic)}`, { shopDomain });
     if (!existing) {
-      results.push({ ok: false, unknown: true, ...hook, reason: 'Could not read Shopify webhooks. OAuth token may be missing read_webhooks.' });
+      results.push({
+        ok: false,
+        unknown: true,
+        ...hook,
+        reason: 'Could not read Shopify webhooks. OAuth token may be missing read_webhooks or the app may need reconnecting.',
+      });
       continue;
     }
-    const match = (existing.webhooks || []).find((item) => String(item.address || '').replace(/\/$/, '') === hook.address);
-    results.push(match ? { ok: true, already: true, ...hook, webhookId: String(match.id || '') } : { ok: false, missing: true, ...hook, reason: 'Webhook was not found in Shopify Admin.' });
+    const matching = (existing.webhooks || []).find((item) => String(item.address || '').replace(/\/$/, '') === hook.address);
+    const sameTopic = existing.webhooks || [];
+    results.push(matching ? {
+      ok: true,
+      already: true,
+      verifiedInShopify: true,
+      ...hook,
+      webhookId: String(matching.id || ''),
+      actual: safeWebhookActual(matching),
+      matchingTopicCount: sameTopic.length,
+    } : {
+      ok: false,
+      missing: true,
+      verifiedInShopify: false,
+      ...hook,
+      reason: 'Expected webhook was not found in Shopify Admin.',
+      actual: null,
+      matchingTopicCount: sameTopic.length,
+      otherAddressesForTopic: sameTopic.map((item) => safeWebhookActual(item)).filter(Boolean),
+    });
   }
-  return { ok: results.every((item) => item.ok), hooks, results };
+  return { ok: results.every((item) => item.ok), hooks, results, checkedAt: new Date() };
 }
 
 async function registerReviewWebhookSubscriptions(shopDomain) {
   const appBase = env.appUrl || '';
   if (!appBase || !shopDomain) return { ok: false, skipped: true, reason: 'APP_URL or shop domain missing.' };
-  const hooks = expectedReviewWebhookSubscriptions();
+  const hooks = reviewWebhookDefinitions();
   const results = [];
   for (const hook of hooks) {
     const existing = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/webhooks.json?topic=${encodeURIComponent(hook.topic)}`, { shopDomain });
-    const already = (existing?.webhooks || []).some((item) => String(item.address || '').replace(/\/$/, '') === hook.address);
-    if (already) { results.push({ ok: true, already: true, ...hook }); continue; }
+    const alreadyMatch = (existing?.webhooks || []).find((item) => String(item.address || '').replace(/\/$/, '') === hook.address);
+    if (alreadyMatch) {
+      results.push({ ok: true, already: true, verifiedInShopify: true, ...hook, webhookId: String(alreadyMatch.id || ''), actual: safeWebhookActual(alreadyMatch) });
+      continue;
+    }
     const created = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/webhooks.json`, {
       shopDomain,
       method: 'POST',
       body: JSON.stringify({ webhook: { topic: hook.topic, address: hook.address, format: 'json' } }),
     });
-    results.push(created?.webhook?.id ? { ok: true, ...hook, webhookId: String(created.webhook.id) } : { ok: false, ...hook, reason: 'Shopify did not confirm webhook creation. Check scopes/install.' });
+    results.push(created?.webhook?.id ? {
+      ok: true,
+      verifiedInShopify: true,
+      ...hook,
+      webhookId: String(created.webhook.id),
+      actual: safeWebhookActual(created.webhook),
+    } : {
+      ok: false,
+      verifiedInShopify: false,
+      ...hook,
+      reason: 'Shopify did not confirm webhook creation. Check write_webhooks scope, OAuth reconnect and Render logs.',
+    });
   }
   const allOk = results.every((item) => item.ok);
   await Shop.findOneAndUpdate({ shopDomain }, {
@@ -357,6 +433,8 @@ async function registerReviewWebhookSubscriptions(shopDomain) {
       'modules.reviews.webhookVerificationStatus': allOk ? 'verified' : 'failed',
       'modules.reviews.webhookVerificationCheckedAt': new Date(),
       'modules.reviews.webhookRegistrationResults': results,
+      'modules.reviews.webhookInspectionResults': results,
+      'modules.reviews.manualSetupFinalised': false,
     },
     $setOnInsert: { shopDomain },
   }, { upsert: true, setDefaultsOnInsert: true }).catch(() => {});
