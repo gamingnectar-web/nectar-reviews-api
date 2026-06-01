@@ -178,6 +178,8 @@ function cleanTemplateSections(value = []) {
 function providerUpdateFromBody(body = {}, existing = null) {
   if (!body.provider || body.provider === 'none') throw new Error('Choose a provider.');
   if (!body.smtpHost || !body.smtpUser || !body.fromEmail) throw new Error('SMTP host, username, and from email are required.');
+  const smtpHostError = assertValidSmtpHost(body.smtpHost);
+  if (smtpHostError) throw new Error(smtpHostError);
   if (!body.smtpPass && !existing?.smtpPassEncrypted) throw new Error('SMTP password/app password is required the first time you save.');
   const update = {
     enabled: body.enabled !== false,
@@ -217,12 +219,30 @@ async function activeEmailSettings(shopDomain) {
   return settings;
 }
 
+function looksLikeEmailAddressHost(value = '') {
+  const v = String(value || '').trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
+
+function assertValidSmtpHost(value = '') {
+  const host = cleanText(value, 200);
+  if (!host) return 'SMTP host is required.';
+  if (looksLikeEmailAddressHost(host)) {
+    return 'SMTP host cannot be an email address. Use the mail server host, for example smtp.gmail.com or smtp.office365.com, and put the email address in SMTP username / From email.';
+  }
+  if (/^https?:\/\//i.test(host) || /\//.test(host)) {
+    return 'SMTP host should be only the server name, for example smtp.gmail.com, not a URL.';
+  }
+  return '';
+}
+
 function publicEmailSendError(error = {}) {
   const code = error.code ? ` (${error.code})` : '';
   const response = error.response || error.command || error.reason || '';
   const message = error.message || 'Unknown SMTP error';
   const joined = `${message}${code}${response ? ` — ${response}` : ''}`;
   if (/auth|credentials|invalid login|username|password|app password/i.test(joined)) return `Email provider rejected the login. Check the SMTP username and app password. ${joined}`;
+  if (/queryA EBADNAME|badname/i.test(joined)) return `SMTP host looks invalid. The host should be a mail server such as smtp.gmail.com, not an email address. ${joined}`;
   if (/enotfound|econnrefused|etimedout|timeout|dns/i.test(joined)) return `Could not reach the SMTP server. Check host, port and security mode. ${joined}`;
   if (/recipient|mailbox|relay|550|553|554/i.test(joined)) return `The email provider rejected the recipient or sender. ${joined}`;
   return `Email send failed: ${joined}`;
@@ -1009,6 +1029,8 @@ router.patch('/email-settings', async (req, res, next) => {
     if (!body.smtpHost || !body.smtpUser || !body.fromEmail) {
       return res.status(400).json({ error: 'SMTP host, username, and from email are required.' });
     }
+    const smtpHostError = assertValidSmtpHost(body.smtpHost);
+    if (smtpHostError) return res.status(400).json({ error: smtpHostError });
     if (!body.smtpPass && !existing?.smtpPassEncrypted) {
       return res.status(400).json({ error: 'SMTP password/app password is required the first time you save.' });
     }
@@ -1098,10 +1120,11 @@ router.post('/email-templates', async (req, res, next) => {
     const area = cleanTemplateArea(req.body.area || 'reviews');
     const kind = cleanTemplateKind(req.body.kind || 'review_request');
     const isPrimary = Boolean(req.body.isPrimary);
+    const templateName = cleanText(req.body.name || 'Review request template', 120);
     if (isPrimary) await EmailTemplate.updateMany({ shopDomain, area, kind }, { $set: { isPrimary: false } });
-    const template = await EmailTemplate.create({
+    const payload = {
       shopDomain,
-      name: cleanText(req.body.name || 'Review request template', 120),
+      name: templateName,
       area,
       kind,
       enabled: req.body.enabled !== false,
@@ -1112,7 +1135,12 @@ router.post('/email-templates', async (req, res, next) => {
       sections: cleanTemplateSections(req.body.sections || []),
       html: cleanText(req.body.html || '', 200000),
       notes: cleanText(req.body.notes || '', 1000),
-    });
+    };
+    const template = await EmailTemplate.findOneAndUpdate(
+      { shopDomain, area, kind, name: templateName },
+      { $set: payload, $setOnInsert: { createdAt: new Date() } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
     return res.status(201).json({ ok: true, template: publicEmailTemplate(template) });
   } catch (error) {
     next(error);
@@ -1368,6 +1396,9 @@ router.post('/test-email', async (req, res, next) => {
     if (!settings || !settings.enabled || !settings.smtpPassEncrypted) {
       return res.status(400).json({ error: 'Email provider is not configured for this shop.' });
     }
+
+    const smtpHostError = assertValidSmtpHost(settings.smtpHost);
+    if (smtpHostError) return res.status(400).json({ error: smtpHostError });
 
     const transporter = nodemailer.createTransport({
       host: settings.smtpHost,
