@@ -10,7 +10,7 @@ function securityHeaders(req, res, next) {
     "style-src 'self' 'unsafe-inline' https:",
     "img-src 'self' data: https:",
     "connect-src 'self' https:",
-    "frame-ancestors https://*.myshopify.com https://admin.shopify.com",
+    "frame-ancestors 'self' https://*.myshopify.com https://admin.shopify.com",
     "base-uri 'self'",
     "form-action 'self'",
   ].join('; ');

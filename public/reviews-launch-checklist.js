@@ -8,6 +8,9 @@
   let lastChecklist = null;
 
   function targetButton(check){
+    if (check.key === 'orders_fulfilled_webhook' && check.status !== 'ready') {
+      return `<div class="launch-actions-stack"><button class="primary-btn compact" type="button" onclick="window.registerReviewWebhook?.()">Register now</button><button class="secondary-btn compact" type="button" onclick="window.confirmManualReviewWebhook?.()">Finalise manual setup</button></div>`;
+    }
     if (!check.target) return '';
     const [view, sub] = String(check.target).split(':');
     return `<button class="secondary-btn compact" type="button" onclick="window.goReviewLaunchTarget('${esc(view)}','${esc(sub||'')}')">Go there</button>`;
@@ -63,6 +66,33 @@
     }
   };
 
+  window.registerReviewWebhook = async function(){
+    try {
+      const result = await api('/admin/review-automation/register-webhook', { method:'POST', body: JSON.stringify({}) });
+      if (result.ok) toast('Shopify order webhooks registered. Refreshing checks…');
+      else toast(result.result?.results?.find?.((r)=>!r.ok)?.reason || result.result?.reason || 'Webhook could not be registered. Check OAuth scopes and reconnect Shopify.');
+      await window.loadReviewsLaunchChecklist?.();
+      await window.NectarAdminProductContext?.refreshStatuses?.();
+    } catch (error) {
+      toast(error.message || 'Could not register Shopify webhook. Check scopes, OAuth and Render logs.');
+      await window.loadReviewsLaunchChecklist?.();
+    }
+  };
+
+  window.confirmManualReviewWebhook = async function(){
+    const ok = confirm('Only continue if Shopify Admin already has BOTH webhooks saved: Order fulfillment → /api/webhooks/shopify/orders-fulfilled and Order update → /api/webhooks/shopify/orders-updated. Nectar will now finalise the internal connection flags/settings that manual Shopify setup cannot update. Continue?');
+    if (!ok) return;
+    try {
+      const result = await api('/admin/review-automation/confirm-manual-webhook', { method:'POST', body: JSON.stringify({}) });
+      const verified = result.verifiedInShopify ? ' Verified in Shopify.' : ' Marked as manual setup; Shopify read verification was not available.';
+      toast(`Manual webhook setup finalised in Nectar.${verified} Refreshing checks…`);
+      await window.loadReviewsLaunchChecklist?.();
+      await window.NectarAdminProductContext?.refreshStatuses?.();
+    } catch (error) {
+      toast(error.message || 'Could not confirm manual webhooks.');
+    }
+  };
+
   window.goReviewLaunchTarget = function(view, sub){
     if (view) window.tab?.(view);
     setTimeout(()=>{
@@ -77,8 +107,9 @@
         btn?.scrollIntoView({ behavior:'smooth', block:'center' });
       }
       if (view === 'v-review-launch') {
-        const register = Array.from(document.querySelectorAll('button')).find((button)=>/register shopify fulfilled-order webhook|register shopify webhook/i.test(button.textContent || ''));
+        const register = Array.from(document.querySelectorAll('button')).find((button)=>/register shopify fulfilled-order webhook|register shopify webhook|register now/i.test(button.textContent || ''));
         register?.scrollIntoView({ behavior:'smooth', block:'center' });
+        if (sub === 'register-webhook') setTimeout(()=>register?.click(), 160);
       }
       if (view === 'v-style') document.getElementById('v-style')?.scrollIntoView({ behavior:'smooth', block:'start' });
       if (view === 'v-settings') document.getElementById('widget-render-names')?.scrollIntoView({ behavior:'smooth', block:'center' });

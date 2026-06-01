@@ -2,7 +2,10 @@
   const state = { batch: null, batches: [] };
   const $ = (id) => document.getElementById(id);
   const params = new URLSearchParams(window.location.search);
-  const shopDomain = params.get('shop') || params.get('shopDomain') || '';
+  const parentShopDomain = (() => {
+    try { return window.parent?.SHOP_DOMAIN || ''; } catch (_) { return ''; }
+  })();
+  const shopDomain = (params.get('shop') || params.get('shopDomain') || parentShopDomain || '').toLowerCase();
 
   async function api(path, options = {}) {
     const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
@@ -35,6 +38,10 @@
   }
 
   async function loadRecentBatches() {
+    if (!shopDomain) {
+      $('recent-batches').innerHTML = '<p class="error-text">No Shopify shop domain was passed into this embedded workspace. Open the app from Shopify Admin again.</p>';
+      return;
+    }
     const data = await api('/batches?limit=20');
     state.batches = data.batches || [];
     $('recent-batches').innerHTML = state.batches.length ? state.batches.map((batch) => `
