@@ -151,6 +151,12 @@ function cleanTemplateDesign(raw = {}) {
     mainButtonText: cleanText(design.mainButtonText || 'Review Your Order', 80),
     productButtonText: cleanText(design.productButtonText || 'Review This Item', 80),
     pageHandle: cleanText(design.pageHandle || 'leave-review', 120),
+    productShowStars: design.productShowStars !== false,
+    productStarPosition: ['above_button', 'between', 'under_title'].includes(design.productStarPosition) ? design.productStarPosition : 'above_button',
+    productTitleWeight: ['400', '600', '700', '800'].includes(String(design.productTitleWeight || '')) ? String(design.productTitleWeight) : '700',
+    productShowId: design.productShowId !== false,
+    productImageSize: clampNumber(design.productImageSize, 36, 96, 58),
+    productRowAlign: ['left', 'compact'].includes(design.productRowAlign) ? design.productRowAlign : 'left',
     delayDays: clampNumber(design.delayDays, 0, 365, 14),
   };
 }
@@ -1200,6 +1206,44 @@ router.delete('/email-templates/:id', async (req, res, next) => {
 });
 
 
+async function generateReviewPageSeoContent({ shopDomain, type = 'leave_review', handle = 'leave-review' }) {
+  const fallback = type === 'all_reviews'
+    ? {
+        title: 'Customer Reviews',
+        body_html: `<div class="nectar-reviews-page-placeholder"><h1>Customer Reviews</h1><p>Read verified customer feedback and see what shoppers think about our products and service.</p><p>This page is ready for the Nectar All Reviews SEO app block or Liquid snippet.</p><div id="nectar-all-reviews-page-root"></div></div>`,
+        meta_title: 'Customer Reviews | Verified Buyer Feedback',
+        meta_description: 'Read verified customer reviews, product feedback and shopping experiences from real customers.',
+      }
+    : {
+        title: 'Leave a Review',
+        body_html: `<div class="nectar-leave-review-placeholder"><h1>Leave a Review</h1><p>Thanks for shopping with us. Use your secure review link from your email to review your recent order.</p><p>If something did not go to plan, you can contact customer service before submitting your review.</p><div id="nectar-leave-review-root"></div></div>`,
+        meta_title: 'Leave a Review | Share Your Feedback',
+        meta_description: 'Share feedback on your recent order using your secure review link. Your review helps other customers shop with confidence.',
+      };
+  const apiKey = process.env.OPENAI_API_KEY || '';
+  if (!apiKey) return { ...fallback, source: 'fallback' };
+  try {
+    const prompt = `Create concise Shopify page SEO and safe HTML body for ${type === 'all_reviews' ? 'an all customer reviews page' : 'a leave a review landing page'} for shop ${shopDomain}. Handle: ${handle}. Return JSON only with title, meta_title, meta_description, body_html. Body HTML must be simple, no scripts, and mention Nectar review block/root can be used.`;
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: process.env.OPENAI_MODULE_MODEL || 'gpt-4.1-mini', messages: [{ role: 'user', content: prompt }], temperature: 0.4, response_format: { type: 'json_object' } }),
+    });
+    if (!response.ok) throw new Error(`OpenAI returned ${response.status}`);
+    const json = await response.json();
+    const parsed = JSON.parse(json.choices?.[0]?.message?.content || '{}');
+    return {
+      title: cleanText(parsed.title || fallback.title, 180),
+      body_html: cleanText(parsed.body_html || fallback.body_html, 20000),
+      meta_title: cleanText(parsed.meta_title || fallback.meta_title, 180),
+      meta_description: cleanText(parsed.meta_description || fallback.meta_description, 320),
+      source: 'openai',
+    };
+  } catch (error) {
+    return { ...fallback, source: 'fallback', warning: error.message || 'OpenAI generation failed' };
+  }
+}
+
 function normalisePageHandle(value = '') {
   const raw = cleanText(value || '', 120).toLowerCase();
   return raw.replace(/^\/pages\//, '').replace(/^pages\//, '').replace(/^\//, '').replace(/\/$/, '').replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'leave-review';
@@ -1270,6 +1314,54 @@ async function checkShopifyStorefrontPage(shopDomain, handle, label = 'Storefron
 
   return expected;
 }
+
+
+router.get('/shopify-pages/search', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const q = cleanText(req.query.q || '', 120).toLowerCase();
+    const data = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/pages.json?limit=50`, { shopDomain });
+    if (!data || !Array.isArray(data.pages)) {
+      return res.status(400).json({ error: 'Shopify pages could not be read. Add read_content/read_online_store_pages to Shopify scopes and reconnect the app.' });
+    }
+    const pages = data.pages
+      .filter((page) => !q || String(page.title || '').toLowerCase().includes(q) || String(page.handle || '').toLowerCase().includes(q))
+      .slice(0, 20)
+      .map((page) => ({ id: String(page.id || ''), title: page.title || page.handle || 'Page', handle: page.handle || '', url: `/pages/${page.handle || ''}`, published: Boolean(page.published_at) }));
+    return res.json({ ok: true, pages });
+  } catch (error) { next(error); }
+});
+
+router.post('/storefront-pages/create', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const type = ['leave_review', 'all_reviews'].includes(req.body?.type) ? req.body.type : 'leave_review';
+    const handle = normalisePageHandle(req.body?.handle || (type === 'all_reviews' ? 'reviews' : 'leave-review'));
+    const existing = await checkShopifyStorefrontPage(shopDomain, handle, type === 'all_reviews' ? 'All Reviews page' : 'Leave Review page');
+    if (existing.adminVerified) return res.json({ ok: true, created: false, page: existing, message: `/pages/${handle} already exists.` });
+    const generated = await generateReviewPageSeoContent({ shopDomain, type, handle });
+    const body = {
+      page: {
+        title: generated.title,
+        handle,
+        body_html: generated.body_html,
+        published: true,
+        metafields: [
+          { namespace: 'nectar', key: 'seo_title', type: 'single_line_text_field', value: generated.meta_title },
+          { namespace: 'nectar', key: 'seo_description', type: 'multi_line_text_field', value: generated.meta_description },
+        ],
+      },
+    };
+    const created = await shopifyFetch(`/admin/api/${env.shopifyApiVersion}/pages.json`, { shopDomain, method: 'POST', body: JSON.stringify(body) });
+    const page = created.page || {};
+    return res.status(201).json({ ok: true, created: true, source: generated.source, warning: generated.warning || '', page: { id: String(page.id || ''), title: page.title || generated.title, handle: page.handle || handle, url: `https://${shopDomain}/pages/${page.handle || handle}`, published: Boolean(page.published_at) }, message: `Created /pages/${page.handle || handle}. Add the Nectar theme/app block if required.` });
+  } catch (error) {
+    if (error.code === 'SHOPIFY_REINSTALL_REQUIRED' || error.status === 401 || error.status === 403) {
+      error.message = `${error.message}. To create Shopify pages, add read_content and write_content scopes, run shopify app deploy, then reconnect the app.`;
+    }
+    next(error);
+  }
+});
 
 router.get('/storefront-page-checks', async (req, res, next) => {
   try {

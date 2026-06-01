@@ -6,7 +6,7 @@ Important notes:
 
 - Keep webhook API version aligned with the backend `SHOPIFY_API_VERSION` currently used by Render. This package uses `2026-04`.
 - Do not add `read_webhooks` or `write_webhooks`; they are not valid Shopify access scopes.
-- Add `read_online_store_pages` so Nectar can verify whether `/pages/leave-review` and `/pages/reviews` exist from the Admin API.
+- Add `read_content`, `write_content`, and `read_online_store_pages` so Nectar can verify whether `/pages/leave-review` and `/pages/reviews` exist from the Admin API.
 
 ```toml
 client_id = "9b0bf096b37faf6dc0b19037b2d9d62a"
