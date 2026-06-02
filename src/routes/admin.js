@@ -132,7 +132,7 @@ function cleanTemplateArea(value = 'reviews') {
 }
 
 function cleanTemplateKind(value = 'review_request') {
-  return ['review_request', 'manual_reminder', 'general'].includes(value) ? value : 'review_request';
+  return ['review_request', 'manual_reminder', 'general', 'product_card_layout'].includes(value) ? value : 'review_request';
 }
 
 function cleanTemplateDesign(raw = {}) {
@@ -167,6 +167,19 @@ function cleanTemplateDesign(raw = {}) {
     productImageSize: clampNumber(design.productImageSize, 36, 120, 58),
     productRowAlign: ['left', 'compact', 'stacked'].includes(design.productRowAlign) ? design.productRowAlign : 'left',
     productElementOrder: (Array.isArray(design.productElementOrder) ? design.productElementOrder : String(design.productElementOrder || 'image,title,id,stars,button').split(',')).map((item) => cleanText(item, 30)).filter((item) => ['image','title','id','stars','button'].includes(item)).slice(0, 8),
+    productLayoutZones: (() => {
+      const allowed = ['image', 'title', 'id', 'stars', 'button'];
+      const source = design.productLayoutZones && typeof design.productLayoutZones === 'object' ? design.productLayoutZones : {};
+      const clean = { left: [], middle: [], right: [], hidden: [] };
+      ['left', 'middle', 'right', 'hidden'].forEach((zone) => {
+        (Array.isArray(source[zone]) ? source[zone] : []).forEach((item) => {
+          const key = cleanText(item, 30);
+          if (allowed.includes(key) && !Object.values(clean).some((items) => items.includes(key))) clean[zone].push(key);
+        });
+      });
+      allowed.forEach((key) => { if (!Object.values(clean).some((items) => items.includes(key))) clean.hidden.push(key); });
+      return clean;
+    })(),
     delayDays: clampNumber(design.delayDays, 0, 365, 14),
   };
 }

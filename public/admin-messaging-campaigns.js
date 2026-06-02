@@ -12,6 +12,8 @@
   let providerProfiles = [];
   let emailTemplates = [];
   let selectedEmailTemplateId = '';
+  let productLayoutTemplates = [];
+  let selectedProductLayoutTemplateId = '';
   let fontOverrides = [];
 
   const BUILT_IN_MODULES = [
@@ -286,6 +288,9 @@
       @media(max-width:1100px){.msg-header{flex-direction:column}.msg-flow-card{min-width:0}.msg-grid{grid-template-columns:1fr}.msg-preview-head{flex-direction:column;align-items:stretch}}@media(max-width:650px){.msg-two,.msg-analytics{grid-template-columns:1fr}.flow-product-search{grid-template-columns:1fr}.flow-product-row{grid-template-columns:auto 44px 1fr}.flow-product-row button{grid-column:1/-1}.msg-tabs{overflow:auto;flex-wrap:nowrap}.msg-tab{white-space:nowrap}}
       .msg-layout-row{align-items:end}.msg-product-display-card{border-color:#dbeafe!important;background:linear-gradient(180deg,#fff,#f8fbff)!important}.msg-color-picker{display:flex!important;align-items:center!important;gap:10px!important;width:100%!important;min-height:44px!important;border:1px solid #d0d5dd!important;border-radius:14px!important;background:#fff!important;padding:8px 12px!important;color:#111827!important;font-weight:900!important;box-shadow:0 1px 2px rgba(15,23,42,.04)!important}.msg-color-swatch{width:26px!important;height:26px!important;border-radius:999px!important;border:1px solid #d0d5dd!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,.7)!important}.msg-template-card{display:grid!important;gap:12px!important}.msg-template-meta span{font-size:11px!important;font-weight:850!important}.msg-preview-card{overflow:clip!important}.msg-preview-stage .msg-preview-wrap table{box-shadow:0 18px 42px rgba(15,23,42,.08)!important}.msg-page-result{display:flex;width:100%;justify-content:space-between;gap:12px;align-items:center;border:1px solid #e5e7eb;background:#fff;border-radius:12px;padding:10px 12px;margin-top:8px;text-align:left;cursor:pointer}.msg-page-result span{color:#667085;font-size:12px}.msg-modal-kicker{display:inline-flex;background:#eef2ff;color:#3730a3;border-radius:999px;padding:4px 9px;font-size:11px;font-weight:950;text-transform:uppercase;letter-spacing:.04em}.msg-color-modal-card input[type=color]{width:100%;height:48px;border:1px solid #d0d5dd;border-radius:14px;padding:5px;background:#fff}.msg-advanced-colour{border:1px solid #e5e7eb;border-radius:14px;padding:10px 12px;background:#f8fafc}.msg-advanced-colour summary{font-weight:900;cursor:pointer}.msg-advanced-colour input{margin-top:10px!important}
 
+
+      .msg-card-headline{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.msg-mini-status{display:inline-flex;align-items:center;border:1px solid #dbeafe;background:#eff6ff;color:#1d4ed8;border-radius:999px;padding:6px 10px;font-size:11px;font-weight:950;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}.msg-product-layout-split{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(260px,.65fr);gap:16px;align-items:start}.msg-product-layout-board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.msg-layout-zone{border:1px solid #dbe3ef;background:#fff;border-radius:16px;padding:12px;min-height:138px}.msg-layout-zone strong{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#344054}.msg-layout-zone small{display:block;color:#667085;font-size:11px;margin:3px 0 10px}.msg-zone-slot{display:grid;gap:8px;min-height:74px;align-content:start}.msg-zone-slot.empty{border:1px dashed #cfd8e3;border-radius:12px;place-items:center;color:#98a2b3;font-weight:800;background:#f8fafc}.msg-zone-slot em{font-style:normal;font-size:12px}.msg-layout-zone-hidden{margin-top:10px;min-height:auto;background:#f8fafc}.msg-layout-zone-hidden .msg-zone-slot{display:flex;flex-wrap:wrap;min-height:42px}.msg-product-layout-chip{justify-content:space-between;min-width:0}.msg-product-layout-chip .remove{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:#f2f4f7;color:#667085;font-weight:950;line-height:1}.msg-product-layout-chip:hover .remove{background:#fff1f3;color:#b42318}.msg-product-layout-chip.is-hidden{opacity:.72;background:#f8fafc;border-style:dashed}.msg-product-layout-chip.is-hidden .remove{background:#ecfdf3;color:#027a48}.msg-product-layout-thumbnail{position:sticky;top:16px;border:1px solid #dbe3ef;border-radius:18px;background:linear-gradient(180deg,#fff,#f8fbff);padding:14px;box-shadow:0 12px 28px rgba(15,23,42,.06)}.msg-product-thumb-shell{background:#f3f6fa;border-radius:16px;padding:13px}.msg-product-thumb-label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#667085;font-weight:950;margin:0 0 9px}.msg-product-layout-template-list{margin-top:14px}.msg-product-layout-template-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.msg-product-layout-template-card{border:1px solid #dce3ec;background:#fff;border-radius:18px;padding:14px;display:grid;gap:12px}.msg-product-layout-template-card.selected{border-color:#111827;box-shadow:0 0 0 3px rgba(17,24,39,.08)}.msg-product-layout-template-thumb{border:1px solid #edf1f6;border-radius:16px;background:#f8fafc;padding:10px;max-height:260px;overflow:auto}@media(max-width:1000px){.msg-product-layout-split{grid-template-columns:1fr}.msg-product-layout-thumbnail{position:static}.msg-product-layout-board{grid-template-columns:1fr}}
+
       .msg-subtabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}.msg-subtab{border:1px solid #d0d5dd;background:#fff;border-radius:999px;padding:9px 13px;font-weight:900;cursor:pointer;color:#475467}.msg-subtab.active{background:#111827;color:#fff;border-color:#111827}.msg-module-subpane{display:none}.msg-module-subpane.active{display:block}.msg-template-library-wide{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}.msg-template-card.selected{border-color:#111827!important;box-shadow:0 0 0 3px rgba(17,24,39,.08)!important}.msg-template-render-card{padding:0!important;overflow:hidden}.msg-template-render-head{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:20px;border-bottom:1px solid #e5e7eb}.msg-template-render-stage{background:#f4f6f8;padding:22px;overflow:auto}.msg-template-render-frame{max-width:760px;margin:0 auto}.msg-template-render-frame.mobile{max-width:390px;border:12px solid #111827;border-radius:30px;background:#fff;overflow:hidden}.msg-layout-gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:12px 0}.msg-layout-card{border:1px solid #d9e0ea;background:#fff;border-radius:16px;padding:12px;text-align:left;cursor:pointer}.msg-layout-card.active{border-color:#111827;box-shadow:0 0 0 3px rgba(17,24,39,.08)}.msg-layout-card strong{display:block;font-size:13px}.msg-layout-card span{display:block;color:#667085;font-size:12px;line-height:1.35;margin-top:4px}.msg-product-layout-designer{border:1px dashed #cfd5dd;background:#f8fafc;border-radius:16px;padding:14px;margin:12px 0}.msg-product-layout-dropzone{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.msg-product-layout-chip{display:inline-flex;gap:8px;align-items:center;border:1px solid #d0d5dd;background:#fff;border-radius:999px;padding:9px 12px;font-weight:900;cursor:grab}.msg-product-layout-chip.dragging{opacity:.45}.msg-product-layout-chip .drag{color:#667085}.msg-font-list{display:grid;gap:10px;margin-top:12px}.msg-font-row{display:flex;justify-content:space-between;gap:10px;align-items:center;border:1px solid #e5e7eb;border-radius:14px;background:#fbfdff;padding:12px}.msg-font-row small{display:block;color:#667085;margin-top:3px;word-break:break-all}.msg-typography-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}@media(max-width:760px){.msg-typography-grid{grid-template-columns:1fr}.msg-template-render-head{display:block}.msg-template-library-wide{grid-template-columns:1fr}}
     `;
     document.head.appendChild(style);
@@ -379,37 +384,205 @@
     showToast('Font override saved');
   }
 
-  function productElementOrderFromInput() {
+  function defaultProductLayoutZones() {
+    return { left: ['image'], middle: ['title', 'id', 'stars'], right: ['button'], hidden: [] };
+  }
+  function allowedProductElementIds() {
+    return PRODUCT_LAYOUT_ELEMENTS.map((item) => item.id);
+  }
+  function normaliseProductLayoutZones(raw = null) {
+    const allowed = allowedProductElementIds();
+    const zones = raw && typeof raw === 'object' ? raw : defaultProductLayoutZones();
+    const clean = { left: [], middle: [], right: [], hidden: [] };
+    ['left', 'middle', 'right', 'hidden'].forEach((zone) => {
+      (Array.isArray(zones[zone]) ? zones[zone] : []).forEach((id) => {
+        const key = String(id || '').trim();
+        if (allowed.includes(key) && !Object.values(clean).some((items) => items.includes(key))) clean[zone].push(key);
+      });
+    });
+    allowed.forEach((id) => {
+      if (!Object.values(clean).some((items) => items.includes(id))) clean.hidden.push(id);
+    });
+    return clean;
+  }
+  function productLayoutZonesFromInput() {
+    const input = el('msg-product-layout-zones');
+    if (input?.value) {
+      try { return normaliseProductLayoutZones(JSON.parse(input.value)); } catch (_) {}
+    }
+    const order = productElementOrderFromInput(false);
+    if (order.length) {
+      const zones = defaultProductLayoutZones();
+      zones.middle = order.filter((id) => id !== 'image' && id !== 'button');
+      zones.left = order.includes('image') ? ['image'] : [];
+      zones.right = order.includes('button') ? ['button'] : [];
+      zones.hidden = allowedProductElementIds().filter((id) => !order.includes(id));
+      return normaliseProductLayoutZones(zones);
+    }
+    return defaultProductLayoutZones();
+  }
+  function setProductLayoutZones(zones = {}, { refresh = true } = {}) {
+    const clean = normaliseProductLayoutZones(zones);
+    const input = el('msg-product-layout-zones');
+    if (input) input.value = JSON.stringify(clean);
+    const orderInput = el('msg-product-element-order');
+    if (orderInput) orderInput.value = ['left', 'middle', 'right'].flatMap((zone) => clean[zone]).join(',');
+    if (el('msg-product-star-position')) el('msg-product-star-position').value = 'custom';
+    if (refresh) {
+      renderProductLayoutDesigner();
+      renderProductLayoutTemplateList();
+      renderLayoutGallery();
+      updatePreview();
+    }
+    return clean;
+  }
+  function productElementOrderFromInput(includeMissing = false) {
     const raw = val('msg-product-element-order', 'image,title,id,stars,button');
-    const allowed = PRODUCT_LAYOUT_ELEMENTS.map((item) => item.id);
+    const allowed = allowedProductElementIds();
     const order = raw.split(',').map((item) => item.trim()).filter((item) => allowed.includes(item));
-    allowed.forEach((item) => { if (!order.includes(item)) order.push(item); });
+    if (includeMissing) allowed.forEach((item) => { if (!order.includes(item)) order.push(item); });
     return order;
   }
   function setProductElementOrder(order = []) {
-    const allowed = PRODUCT_LAYOUT_ELEMENTS.map((item) => item.id);
+    const allowed = allowedProductElementIds();
     const clean = order.filter((item) => allowed.includes(item));
-    allowed.forEach((item) => { if (!clean.includes(item)) clean.push(item); });
-    const input = el('msg-product-element-order');
-    if (input) input.value = clean.join(',');
-    renderProductLayoutDesigner();
-    renderLayoutGallery();
-    updatePreview();
+    const zones = productLayoutZonesFromInput();
+    zones.left = clean.filter((id) => id === 'image');
+    zones.right = clean.filter((id) => id === 'button');
+    zones.middle = clean.filter((id) => id !== 'image' && id !== 'button');
+    zones.hidden = allowed.filter((id) => !clean.includes(id));
+    setProductLayoutZones(zones);
   }
   function productLayoutControlsHtml() {
-    return `<div class="msg-card msg-product-display-card"><h3>Product card layout</h3><p>Customise only the product card area used inside review emails. Drag the elements into the order you want customers to see.</p><input id="msg-product-element-order" type="hidden" value="image,title,id,stars,button"><div id="msg-product-layout-designer" class="msg-product-layout-designer"></div><div class="msg-two"><div><label>Show product stars</label><select id="msg-product-show-stars"><option value="true" selected>Show stars</option><option value="false">Hide stars</option></select></div><div><label>Star position</label><select id="msg-product-star-position"><option value="above_button" selected>Above button</option><option value="between">Between title and button</option><option value="under_title">Under product title</option><option value="custom">Use dragged order</option></select></div></div><div class="msg-two"><div><label>Product title weight</label><select id="msg-product-title-weight"><option value="400">Regular</option><option value="600">Semi bold</option><option value="700" selected>Bold</option><option value="800">Extra bold</option></select></div><div><label>Show product ID</label><select id="msg-product-show-id"><option value="true" selected>Show product ID</option><option value="false">Hide product ID</option></select></div></div><div class="msg-two"><div><label>Product image size</label><input id="msg-product-image-size" type="number" min="36" max="120" value="58"></div><div><label>Product row alignment</label><select id="msg-product-row-align"><option value="left" selected>Left image, title, button</option><option value="compact">Compact centred title</option><option value="stacked">Stacked mobile-first</option></select></div></div><div class="msg-help">VIP layout controls affect product cards only. The wider email heading/copy still uses the Brand & layout and Email copy panels.</div></div>`;
+    return `<div class="msg-card msg-product-display-card"><div class="msg-card-headline"><div><h3>Product card layout</h3><p>Customise only the product card area used inside review emails. Drag elements into the left, middle or right zones, or remove them completely.</p></div><div class="msg-mini-status">Live thumbnail</div></div><div class="msg-product-layout-split"><div><input id="msg-product-element-order" type="hidden" value="image,title,id,stars,button"><input id="msg-product-layout-zones" type="hidden" value='${JSON.stringify(defaultProductLayoutZones())}'><div id="msg-product-layout-designer" class="msg-product-layout-designer"></div></div><div id="msg-product-layout-thumbnail" class="msg-product-layout-thumbnail"></div></div><div class="msg-two"><div><label>Product layout template name</label><input id="msg-product-layout-template-name" type="text" value="Balanced product card"></div><div><label>Save this product-card layout</label><button type="button" id="msg-save-product-layout-template" class="msg-btn secondary full">Save layout template</button></div></div><div class="msg-two"><div><label>Show product stars</label><select id="msg-product-show-stars"><option value="true" selected>Show stars</option><option value="false">Hide stars</option></select></div><div><label>Star position</label><select id="msg-product-star-position"><option value="custom" selected>Use canvas zones</option><option value="above_button">Above button</option><option value="between">Between title and button</option><option value="under_title">Under product title</option></select></div></div><div class="msg-two"><div><label>Product title weight</label><select id="msg-product-title-weight"><option value="400">Regular</option><option value="600">Semi bold</option><option value="700" selected>Bold</option><option value="800">Extra bold</option></select></div><div><label>Show product ID</label><select id="msg-product-show-id"><option value="true" selected>Show product ID</option><option value="false">Hide product ID</option></select></div></div><div class="msg-two"><div><label>Product image size</label><input id="msg-product-image-size" type="number" min="36" max="120" value="58"></div><div><label>Product row alignment</label><select id="msg-product-row-align"><option value="left" selected>Left / middle / right canvas</option><option value="compact">Compact centred title</option><option value="stacked">Stacked mobile-first</option></select></div></div><div class="msg-help">Remove elements into the hidden zone when you do not want them in product cards. The thumbnail is a representative example of the saved layout.</div><div id="msg-product-layout-template-list" class="msg-product-layout-template-list"><div class="msg-help">Loading saved product-card layouts...</div></div></div>`;
+  }
+  function productElementChipHtml(id, zone) {
+    const item = PRODUCT_LAYOUT_ELEMENTS.find((entry) => entry.id === id) || { label: id };
+    const removeLabel = zone === 'hidden' ? 'Restore into middle' : 'Remove from card';
+    return `<button type="button" draggable="true" class="msg-product-layout-chip ${zone === 'hidden' ? 'is-hidden' : ''}" data-product-element="${escapeHtml(id)}" data-zone="${escapeHtml(zone)}"><span class="drag">☰</span><span>${escapeHtml(item.label)}</span><span class="remove" data-product-element-remove="${escapeHtml(id)}" title="${escapeHtml(removeLabel)}">${zone === 'hidden' ? '+' : '×'}</span></button>`;
   }
   function renderProductLayoutDesigner() {
     const box = el('msg-product-layout-designer');
     if (!box) return;
-    const order = productElementOrderFromInput();
-    box.innerHTML = `<div class="msg-product-layout-dropzone">${order.map((id, index) => { const item = PRODUCT_LAYOUT_ELEMENTS.find((entry) => entry.id === id); return `<button type="button" draggable="true" class="msg-product-layout-chip" data-product-layout-chip="${escapeHtml(id)}" data-product-layout-index="${index}"><span class="drag">☰</span>${escapeHtml(item?.label || id)}</button>`; }).join('')}</div><p class="msg-field-hint">Drag to reorder. The Preview updates instantly. Hidden fields such as Product ID are ignored when disabled.</p>`;
-    box.querySelectorAll('[data-product-layout-chip]').forEach((chip)=>{
-      chip.addEventListener('dragstart',(event)=>{ event.dataTransfer.setData('text/plain', chip.dataset.productLayoutIndex || '0'); chip.classList.add('dragging'); });
-      chip.addEventListener('dragend',()=>chip.classList.remove('dragging'));
-      chip.addEventListener('dragover',(event)=>event.preventDefault());
-      chip.addEventListener('drop',(event)=>{ event.preventDefault(); const from=Number(event.dataTransfer.getData('text/plain')); const to=Number(chip.dataset.productLayoutIndex); const current=productElementOrderFromInput(); if(Number.isNaN(from)||Number.isNaN(to)||from===to)return; const [moved]=current.splice(from,1); current.splice(to,0,moved); setProductElementOrder(current); });
+    const zones = productLayoutZonesFromInput();
+    const zoneLabel = { left: 'Left', middle: 'Middle', right: 'Right', hidden: 'Hidden / removed' };
+    const zoneHint = { left: 'Usually image', middle: 'Title, ID, stars', right: 'Action button', hidden: 'Drag here to remove' };
+    box.innerHTML = `<div class="msg-product-layout-board">${['left','middle','right'].map((zone) => `<div class="msg-layout-zone" data-layout-zone="${zone}"><strong>${zoneLabel[zone]}</strong><small>${zoneHint[zone]}</small><div class="msg-zone-slot ${zones[zone].length ? '' : 'empty'}">${zones[zone].length ? zones[zone].map((id) => productElementChipHtml(id, zone)).join('') : '<em>Drop element here</em>'}</div></div>`).join('')}</div><div class="msg-layout-zone msg-layout-zone-hidden" data-layout-zone="hidden"><strong>${zoneLabel.hidden}</strong><small>${zoneHint.hidden}</small><div class="msg-zone-slot ${zones.hidden.length ? '' : 'empty'}">${zones.hidden.length ? zones.hidden.map((id) => productElementChipHtml(id, 'hidden')).join('') : '<em>No hidden elements</em>'}</div></div><p class="msg-field-hint">Drag elements between zones. Use × to remove an element or + to restore it. The thumbnail updates instantly.</p>`;
+    box.querySelectorAll('[data-product-element]').forEach((chip) => {
+      chip.addEventListener('dragstart', (event) => {
+        event.dataTransfer.setData('text/plain', chip.dataset.productElement || '');
+        chip.classList.add('dragging');
+      });
+      chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
     });
+    box.querySelectorAll('[data-layout-zone]').forEach((zoneNode) => {
+      zoneNode.addEventListener('dragover', (event) => event.preventDefault());
+      zoneNode.addEventListener('drop', (event) => {
+        event.preventDefault();
+        const id = event.dataTransfer.getData('text/plain');
+        const targetZone = zoneNode.dataset.layoutZone || 'middle';
+        moveProductElementToZone(id, targetZone);
+      });
+    });
+    box.querySelectorAll('[data-product-element-remove]').forEach((btn) => btn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const id = btn.dataset.productElementRemove;
+      const zonesNow = productLayoutZonesFromInput();
+      const isHidden = zonesNow.hidden.includes(id);
+      moveProductElementToZone(id, isHidden ? 'middle' : 'hidden');
+    }));
+    renderProductLayoutThumbnail();
+  }
+  function moveProductElementToZone(id, targetZone = 'middle') {
+    const allowed = allowedProductElementIds();
+    if (!allowed.includes(id) || !['left','middle','right','hidden'].includes(targetZone)) return;
+    const zones = productLayoutZonesFromInput();
+    Object.keys(zones).forEach((zone) => { zones[zone] = zones[zone].filter((item) => item !== id); });
+    zones[targetZone].push(id);
+    setProductLayoutZones(zones);
+  }
+  function productLayoutThumbnailHtml(design = opts()) {
+    const sample = { id: design.productShowId ? 'sample-product' : '', title: 'Example Product', image: '' };
+    return `<div class="msg-product-thumb-shell"><div class="msg-product-thumb-label">Representative product card</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${productRowEmailHtml({ o: design, product: sample, url: '#preview' })}</table></div>`;
+  }
+  function renderProductLayoutThumbnail() {
+    const box = el('msg-product-layout-thumbnail');
+    if (!box) return;
+    box.innerHTML = productLayoutThumbnailHtml(opts());
+  }
+  function productLayoutTemplatePayload() {
+    const o = opts();
+    const design = {
+      productLayoutZones: o.productLayoutZones,
+      productElementOrder: o.productElementOrder,
+      productShowStars: o.productShowStars,
+      productStarPosition: o.productStarPosition,
+      productTitleWeight: o.productTitleWeight,
+      productShowId: o.productShowId,
+      productImageSize: o.productImageSize,
+      productRowAlign: o.productRowAlign,
+      starColor: o.starColor,
+      productButtonText: o.productButtonText,
+      accentColor: o.accentColor,
+      buttonRadius: o.buttonRadius,
+      headingFont: o.headingFont,
+    };
+    return { area: 'reviews', kind: 'product_card_layout', name: val('msg-product-layout-template-name', 'Product card layout'), subject: 'Product card layout', design, sections: [], isPrimary: false };
+  }
+  async function loadProductLayoutTemplates() {
+    try {
+      const result = await securedFetch('/admin/email-templates?area=reviews&kind=product_card_layout');
+      productLayoutTemplates = result.templates || [];
+      renderProductLayoutTemplateList();
+    } catch (error) {
+      const box = el('msg-product-layout-template-list');
+      if (box) box.innerHTML = `<div class="msg-state bad">Could not load product-card layouts: ${escapeHtml(error.message || 'Unknown error')}</div>`;
+    }
+  }
+  async function saveProductLayoutTemplate() {
+    const result = await securedFetch('/admin/email-templates', { method: 'POST', body: JSON.stringify(productLayoutTemplatePayload()) });
+    selectedProductLayoutTemplateId = String(result.template?._id || '');
+    await loadProductLayoutTemplates();
+    showToast('Product-card layout saved');
+  }
+  function applyProductLayoutTemplate(id) {
+    const t = productLayoutTemplates.find((item) => String(item._id) === String(id));
+    if (!t) return;
+    const d = t.design || {};
+    if (el('msg-product-layout-template-name')) el('msg-product-layout-template-name').value = t.name || 'Product card layout';
+    if (d.productLayoutZones) setProductLayoutZones(d.productLayoutZones, { refresh: false });
+    if (d.productElementOrder) set('msg-product-element-order', Array.isArray(d.productElementOrder) ? d.productElementOrder.join(',') : d.productElementOrder);
+    set('msg-product-show-stars', d.productShowStars !== false);
+    set('msg-product-star-position', d.productStarPosition || 'custom');
+    set('msg-product-title-weight', d.productTitleWeight || '700');
+    set('msg-product-show-id', d.productShowId !== false);
+    set('msg-product-image-size', d.productImageSize || 58);
+    set('msg-product-row-align', d.productRowAlign || 'left');
+    if (d.starColor) set('msg-star-color', d.starColor);
+    if (d.accentColor) set('msg-color', d.accentColor);
+    if (d.buttonRadius !== undefined) set('msg-button-radius', d.buttonRadius);
+    selectedProductLayoutTemplateId = String(id || '');
+    refreshAllColorButtons();
+    renderProductLayoutDesigner();
+    renderProductLayoutTemplateList();
+    updatePreview();
+  }
+  async function deleteProductLayoutTemplate(id) {
+    if (!confirm('Delete this product-card layout?')) return;
+    await securedFetch(`/admin/email-templates/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (String(selectedProductLayoutTemplateId) === String(id)) selectedProductLayoutTemplateId = '';
+    await loadProductLayoutTemplates();
+  }
+  function renderProductLayoutTemplateList() {
+    const box = el('msg-product-layout-template-list');
+    if (!box) return;
+    if (!productLayoutTemplates.length) {
+      box.innerHTML = '<div class="msg-help">No saved product-card layouts yet. Name the current layout and save it to reuse later.</div>';
+      return;
+    }
+    box.innerHTML = `<div class="msg-product-layout-template-grid">${productLayoutTemplates.map((t) => `<div class="msg-product-layout-template-card ${String(t._id) === String(selectedProductLayoutTemplateId) ? 'selected' : ''}"><div class="msg-template-top"><div><strong>${escapeHtml(t.name || 'Product card layout')}</strong><div class="msg-template-meta"><span>${escapeHtml(t.updatedAt ? new Date(t.updatedAt).toLocaleString() : '')}</span></div></div><button type="button" class="msg-template-remove" data-delete-product-layout="${escapeHtml(t._id)}">×</button></div><div class="msg-product-layout-template-thumb">${productLayoutThumbnailHtml({ ...opts(), ...(t.design || {}) })}</div><div class="msg-template-actions"><button type="button" class="msg-btn secondary" data-apply-product-layout="${escapeHtml(t._id)}">Apply layout</button></div></div>`).join('')}</div>`;
+    box.querySelectorAll('[data-apply-product-layout]').forEach((btn) => btn.addEventListener('click', () => applyProductLayoutTemplate(btn.dataset.applyProductLayout)));
+    box.querySelectorAll('[data-delete-product-layout]').forEach((btn) => btn.addEventListener('click', (event) => { event.stopPropagation(); deleteProductLayoutTemplate(btn.dataset.deleteProductLayout); }));
   }
 
   function templateLibraryPreviewHtml(template) {
@@ -851,6 +1024,7 @@
     if (el('msg-product-image-size')) el('msg-product-image-size').value = d.productImageSize || 58;
     if (el('msg-product-row-align')) el('msg-product-row-align').value = d.productRowAlign || 'left';
     if (el('msg-product-element-order')) el('msg-product-element-order').value = Array.isArray(d.productElementOrder) ? d.productElementOrder.join(',') : (d.productElementOrder || 'image,title,id,stars,button');
+    if (d.productLayoutZones) setProductLayoutZones(d.productLayoutZones, { refresh: false });
     renderProductLayoutDesigner();
     selectedEmailTemplateId = String(t._id || selectedEmailTemplateId || '');
     emailSections.splice(0, emailSections.length, ...((t.sections || []).map((section)=>({ ...section, id: section.id || uid('section') }))));
@@ -1022,6 +1196,7 @@
     if (preset.bgColor) set('msg-bg-color', preset.bgColor);
     if (preset.cardColor) set('msg-card-color', preset.cardColor);
     if (preset.productElementOrder) set('msg-product-element-order', preset.productElementOrder.join(','));
+    if (preset.productElementOrder) { const zones = defaultProductLayoutZones(); zones.left = preset.productElementOrder.includes('image') ? ['image'] : []; zones.right = preset.productElementOrder.includes('button') ? ['button'] : []; zones.middle = preset.productElementOrder.filter((id)=>id !== 'image' && id !== 'button'); zones.hidden = allowedProductElementIds().filter((id)=>!preset.productElementOrder.includes(id)); setProductLayoutZones(zones, { refresh: false }); }
     set('msg-product-row-align', preset.productRowAlign);
     set('msg-product-star-position', preset.productStarPosition);
     set('msg-product-show-stars', preset.productShowStars !== false);
@@ -1066,7 +1241,8 @@
       productShowId: val('msg-product-show-id', 'true') !== 'false',
       productImageSize: Math.max(36, Math.min(120, Number(val('msg-product-image-size','58')) || 58)),
       productRowAlign: ['left','compact','stacked'].includes(val('msg-product-row-align','left')) ? val('msg-product-row-align','left') : 'left',
-      productElementOrder: productElementOrderFromInput(),
+      productElementOrder: productElementOrderFromInput(false),
+      productLayoutZones: productLayoutZonesFromInput(),
       pageHandle,
       delayDays: val('msg-delay-days', '14'),
     };
@@ -1158,7 +1334,32 @@
     const button = `<a href="${url}" style="display:inline-block;background:${escapeHtml(o.accentColor)};color:#ffffff;text-decoration:none;font-size:13px;font-weight:bold;padding:9px 13px;border-radius:${o.buttonRadius}px;white-space:nowrap;">${buttonText}</a>`;
     const titleHtml = `<div style="font-family:${escapeHtml(o.headingFont || 'Arial,Helvetica,sans-serif')};color:#111827;font-size:14px;font-weight:${escapeHtml(titleWeight)};line-height:1.35;">${title}</div>`;
     const map = { image: img, title: titleHtml, id: idLine, stars, button };
-    let order = Array.isArray(o.productElementOrder) ? o.productElementOrder : productElementOrderFromInput();
+    const allowedVisible = (key) => key !== 'id' || o.productShowId ? (key !== 'stars' || o.productShowStars) : false;
+    const renderPieces = (items = [], align = 'left') => items.filter((key) => allowedVisible(key) && map[key]).map((key) => `<div style="margin:4px 0;text-align:${align};">${map[key]}</div>`).join('');
+    const align = o.productRowAlign === 'compact' || o.productRowAlign === 'stacked' ? 'center' : 'left';
+
+    if (o.productStarPosition === 'custom' && o.productLayoutZones && typeof o.productLayoutZones === 'object') {
+      const zones = normaliseProductLayoutZones(o.productLayoutZones);
+      const left = zones.left.filter(allowedVisible);
+      const middle = zones.middle.filter(allowedVisible);
+      const right = zones.right.filter(allowedVisible);
+      const active = [...left, ...middle, ...right].filter((key) => map[key]);
+      if (!active.length) return '';
+      if (o.productRowAlign === 'stacked') {
+        const all = [...left, ...middle, ...right];
+        return `<tr><td style="padding:14px 0;border-top:1px solid #e5e7eb;text-align:center;">${renderPieces(all, 'center')}</td></tr>`;
+      }
+      const leftHtml = renderPieces(left, left.includes('image') && left.length === 1 ? 'left' : align);
+      const middleHtml = renderPieces(middle, align);
+      const rightHtml = renderPieces(right, 'right');
+      const cols = [];
+      if (leftHtml) cols.push(`<td style="vertical-align:middle;text-align:left;padding-right:12px;width:${left.includes('image') ? size + 12 : 120}px;">${leftHtml}</td>`);
+      if (middleHtml) cols.push(`<td style="vertical-align:middle;text-align:${align};padding:0 10px;">${middleHtml}</td>`);
+      if (rightHtml) cols.push(`<td style="vertical-align:middle;text-align:right;padding-left:12px;width:140px;">${rightHtml}</td>`);
+      return `<tr><td style="padding:12px 0;border-top:1px solid #e5e7eb;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>${cols.join('')}</tr></table></td></tr>`;
+    }
+
+    let order = Array.isArray(o.productElementOrder) ? o.productElementOrder : productElementOrderFromInput(false);
     if (o.productStarPosition !== 'custom') {
       order = ['image','title'];
       if (o.productShowId) order.push('id');
@@ -1167,9 +1368,8 @@
       if (o.productStarPosition === 'above_button' && o.productShowStars) order = ['image','title'].concat(o.productShowId ? ['id'] : [], ['stars','button']);
       if (o.productStarPosition === 'between' && o.productShowStars) order = ['image','title'].concat(o.productShowId ? ['id'] : [], ['stars','button']);
     }
-    const visible = order.filter((key) => key !== 'id' || o.productShowId).filter((key) => key !== 'stars' || o.productShowStars).filter((key) => map[key]);
+    const visible = order.filter(allowedVisible).filter((key) => map[key]);
     const imageFirst = visible[0] === 'image';
-    const align = o.productRowAlign === 'compact' || o.productRowAlign === 'stacked' ? 'center' : 'left';
     const content = visible.filter((key) => key !== 'image').map((key) => `<div style="margin:4px 0;">${map[key]}</div>`).join('');
     if (o.productRowAlign === 'stacked' || !imageFirst) {
       const imageBlock = visible.includes('image') ? `<div style="margin:0 0 10px 0;">${img}</div>` : '';
@@ -1604,6 +1804,7 @@
     el('msg-copy-test-url')?.addEventListener('click', () => copyText(testUrl(), 'Test review URL copied'));
     el('msg-save-template')?.addEventListener('click', saveTemplate);
     el('msg-save-email-template')?.addEventListener('click', () => saveCurrentEmailTemplate(false).catch((error)=>showToast(error.message || 'Could not save template')));
+    el('msg-save-product-layout-template')?.addEventListener('click', () => saveProductLayoutTemplate().catch((error)=>showToast(error.message || 'Could not save product-card layout')));
     el('msg-save-primary-template')?.addEventListener('click', () => saveCurrentEmailTemplate(true).catch((error)=>showToast(error.message || 'Could not save primary template')));
     el('msg-send-fake-order-email')?.addEventListener('click', () => sendFullFakeOrderEmail().catch((error)=>showToast(error.message || 'Could not send full fake-order email')));
     el('msg-apply-layout-preset')?.addEventListener('click', () => applyEmailLayoutPreset(val('msg-layout-preset', 'classic')));
@@ -1658,6 +1859,7 @@
     refreshAllColorButtons();
     loadTemplates();
     loadEmailTemplates();
+    loadProductLayoutTemplates();
     loadMessageModules();
     renderEmailSections();
     loadLinkRules();

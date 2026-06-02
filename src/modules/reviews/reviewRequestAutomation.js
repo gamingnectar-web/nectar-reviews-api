@@ -289,7 +289,19 @@ function renderTemplateReviewEmail({ template, shopDomain, shopName, customerNam
   const productElementOrder = (Array.isArray(design.productElementOrder) ? design.productElementOrder : String(design.productElementOrder || 'image,title,id,stars,button').split(','))
     .map((item) => String(item || '').trim())
     .filter((item) => allowedOrder.includes(item));
-  allowedOrder.forEach((item) => { if (!productElementOrder.includes(item)) productElementOrder.push(item); });
+  const normaliseProductLayoutZones = (raw = {}) => {
+    const source = raw && typeof raw === 'object' ? raw : {};
+    const clean = { left: [], middle: [], right: [], hidden: [] };
+    ['left', 'middle', 'right', 'hidden'].forEach((zone) => {
+      (Array.isArray(source[zone]) ? source[zone] : []).forEach((item) => {
+        const key = String(item || '').trim();
+        if (allowedOrder.includes(key) && !Object.values(clean).some((items) => items.includes(key))) clean[zone].push(key);
+      });
+    });
+    allowedOrder.forEach((key) => { if (!Object.values(clean).some((items) => items.includes(key))) clean.hidden.push(key); });
+    return clean;
+  };
+  const productLayoutZones = normaliseProductLayoutZones(design.productLayoutZones || { left: productElementOrder.includes('image') ? ['image'] : [], middle: productElementOrder.filter((id) => !['image', 'button'].includes(id)), right: productElementOrder.includes('button') ? ['button'] : [], hidden: allowedOrder.filter((id) => !productElementOrder.includes(id)) });
   const linkMode = ['order', 'products', 'both'].includes(design.linkMode) ? design.linkMode : 'both';
   const logo = design.logo || '';
   const sections = Array.isArray(template?.sections) ? template.sections : [];
@@ -304,6 +316,29 @@ function renderTemplateReviewEmail({ template, shopDomain, shopName, customerNam
     const imgHtml = product.image ? `<img src="${escapeEmailHtml(product.image)}" width="${productImageSize}" height="${productImageSize}" alt="" style="display:block;width:${productImageSize}px;height:${productImageSize}px;object-fit:cover;border-radius:10px;background:#eef2f7;border:0;">` : `<div style="width:${productImageSize}px;height:${productImageSize}px;border-radius:10px;background:#eef2f7;"></div>`;
     const buttonHtml = `<a href="${escapeEmailHtml(reviewUrl)}" style="display:inline-block;background:${escapeEmailHtml(accentColor)};color:#ffffff;text-decoration:none;font-size:13px;font-weight:bold;padding:9px 13px;border-radius:${buttonRadius}px;white-space:nowrap;">${escapeEmailHtml(productButtonText)}</a>`;
     const map = { image: imgHtml, title: titleHtml, id: idHtml, stars: productShowStars ? starHtml : '', button: buttonHtml };
+    const allowedVisible = (key) => (key !== 'id' || productShowId) && (key !== 'stars' || productShowStars) && map[key];
+    const renderPieces = (items = [], align = 'left') => items.filter(allowedVisible).map((key) => `<div style="margin:4px 0;text-align:${align};">${map[key]}</div>`).join('');
+    const align = productRowAlign === 'compact' || productRowAlign === 'stacked' ? 'center' : 'left';
+    if (productStarPosition === 'custom') {
+      const zones = productLayoutZones;
+      const left = zones.left.filter(allowedVisible);
+      const middle = zones.middle.filter(allowedVisible);
+      const right = zones.right.filter(allowedVisible);
+      const active = [...left, ...middle, ...right];
+      if (active.length) {
+        if (productRowAlign === 'stacked') {
+          return `<tr><td style="padding:14px 0;border-top:1px solid #e5e7eb;text-align:center;">${renderPieces(active, 'center')}</td></tr>`;
+        }
+        const leftHtml = renderPieces(left, 'left');
+        const middleHtml = renderPieces(middle, align);
+        const rightHtml = renderPieces(right, 'right');
+        const cols = [];
+        if (leftHtml) cols.push(`<td style="vertical-align:middle;text-align:left;padding-right:12px;width:${left.includes('image') ? productImageSize + 12 : 120}px;">${leftHtml}</td>`);
+        if (middleHtml) cols.push(`<td style="vertical-align:middle;text-align:${align};padding:0 10px;">${middleHtml}</td>`);
+        if (rightHtml) cols.push(`<td style="vertical-align:middle;text-align:right;padding-left:12px;width:140px;">${rightHtml}</td>`);
+        return `<tr><td style="padding:12px 0;border-top:1px solid #e5e7eb;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>${cols.join('')}</tr></table></td></tr>`;
+      }
+    }
     let order = productElementOrder.slice();
     if (productStarPosition !== 'custom') {
       order = ['image', 'title'];
@@ -313,8 +348,7 @@ function renderTemplateReviewEmail({ template, shopDomain, shopName, customerNam
       }
       order.push('button');
     }
-    const visible = order.filter((key) => key !== 'id' || productShowId).filter((key) => key !== 'stars' || productShowStars).filter((key) => map[key]);
-    const align = productRowAlign === 'compact' || productRowAlign === 'stacked' ? 'center' : 'left';
+    const visible = order.filter(allowedVisible);
     const content = visible.filter((key) => key !== 'image').map((key) => `<div style="margin:4px 0;">${map[key]}</div>`).join('');
     const imageFirst = visible[0] === 'image';
     if (productRowAlign === 'stacked' || !imageFirst) {

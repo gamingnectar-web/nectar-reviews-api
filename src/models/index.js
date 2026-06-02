@@ -221,7 +221,7 @@ const emailTemplateSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, index: true },
   name: { type: String, required: true, default: 'Review request template' },
   area: { type: String, enum: ['reviews', 'loyalty', 'cartRewards', 'general'], default: 'reviews', index: true },
-  kind: { type: String, enum: ['review_request', 'manual_reminder', 'general'], default: 'review_request', index: true },
+  kind: { type: String, enum: ['review_request', 'manual_reminder', 'general', 'product_card_layout'], default: 'review_request', index: true },
   enabled: { type: Boolean, default: true, index: true },
   isPrimary: { type: Boolean, default: false, index: true },
   subject: { type: String, default: 'How was your recent order?' },

@@ -1,5 +1,5 @@
 (() => {
-  const state = { batch: null, batches: [] };
+  const state = { batch: null, batches: [], activeItemId: '' };
   const $ = (id) => document.getElementById(id);
   const params = new URLSearchParams(window.location.search);
   const parentShopDomain = (() => {
@@ -17,6 +17,8 @@
   }
 
   function csv(id) { return ($(id)?.value || '').split(',').map((x) => x.trim()).filter(Boolean); }
+  function parseCsv(value) { return String(value || '').split(',').map((x) => x.trim()).filter(Boolean); }
+  function joinCsv(value) { return Array.isArray(value) ? value.filter(Boolean).join(', ') : String(value || ''); }
   function defaults() {
     return {
       supplierName: $('default-supplier').value,
@@ -47,7 +49,7 @@
     $('recent-batches').innerHTML = state.batches.length ? state.batches.map((batch) => `
       <div class="recent-row">
         <div><strong>${escapeHtml(batch.name || 'Product import batch')}</strong><br><small class="muted">${batch.summary?.total || 0} items · ${batch.status || 'draft'} · ${new Date(batch.createdAt).toLocaleString()}</small></div>
-        <button class="secondary-btn" data-open-batch="${batch._id}">Open</button>
+        <button class="secondary-btn" data-open-batch="${escapeAttr(batch._id)}">Open</button>
       </div>`).join('') : '<p class="muted">No batches yet.</p>';
     document.querySelectorAll('[data-open-batch]').forEach((button) => button.addEventListener('click', () => openBatch(button.dataset.openBatch)));
   }
@@ -94,12 +96,12 @@
   }
 
   async function approveReady() {
-    const ready = (state.batch?.items || []).filter((item) => ['ready','warning'].includes(item.validation?.status) && item.approvalStatus !== 'approved');
+    const ready = (state.batch?.items || []).filter((item) => item.validation?.status === 'ready' && item.approvalStatus !== 'approved');
     for (const item of ready) {
       const data = await api(`/batches/${state.batch._id}/items/${item.itemId}/approval`, { method: 'POST', body: JSON.stringify({ approvalStatus: 'approved' }) });
       state.batch = data.batch;
     }
-    setBusy(`Approved ${ready.length} ready/warning row(s).`);
+    setBusy(`Approved ${ready.length} fully ready row(s). Rows with warnings still need manual review.`);
     renderBatch();
   }
 
@@ -125,22 +127,29 @@
 
   function renderItemRow(item) {
     const image = item.selectedImages?.[0]?.src || item.draft?.images?.[0]?.src || '';
+    const issues = item.validation?.issues || [];
+    const validationStatus = item.validation?.status || 'unchecked';
     return `<div class="item-row">
       <div>${image ? `<img src="${escapeAttr(image)}" alt="">` : '<span class="badge blocked">No image</span>'}</div>
-      <div class="item-title"><strong>${escapeHtml(item.draft?.title || item.title || item.originalInput || 'Queued product')}</strong><small>${escapeHtml(item.sourceUrl || item.originalInput || '')}</small></div>
+      <div class="item-title"><strong>${escapeHtml(item.draft?.title || item.title || item.originalInput || 'Queued product')}</strong><small>${escapeHtml(item.sourceUrl || item.originalInput || '')}</small>${issues.length ? `<small class="issue-preview">${escapeHtml(issues.slice(0, 2).join(' · '))}${issues.length > 2 ? ` +${issues.length - 2} more` : ''}</small>` : ''}</div>
       <span class="badge ${escapeAttr(item.status || '')}">${escapeHtml(item.status || 'queued')}</span>
+      <span class="badge ${escapeAttr(validationStatus)}">${escapeHtml(validationStatus)}</span>
       <span class="badge ${escapeAttr(item.approvalStatus || '')}">${escapeHtml(item.approvalStatus || 'pending')}</span>
       <span>${escapeHtml(item.draft?.productType || item.productType || '—')}</span>
       <span>${escapeHtml(item.nutrition?.productFlavour || '—')}</span>
       <span>${escapeHtml(item.nutrition?.caffeineMgPerServing !== undefined && item.nutrition?.caffeineMgPerServing !== '' ? `${item.nutrition.caffeineMgPerServing}mg` : '—')}</span>
-      <div class="row-actions"><button class="secondary-btn" data-view-item="${escapeAttr(item.itemId)}">Review</button><button class="secondary-btn" data-rescan-item="${escapeAttr(item.itemId)}">Rescan</button><button class="primary-btn" data-approve-item="${escapeAttr(item.itemId)}">Approve</button></div>
+      <div class="row-actions"><button class="secondary-btn" data-view-item="${escapeAttr(item.itemId)}">Review / edit</button><button class="secondary-btn" data-rescan-item="${escapeAttr(item.itemId)}">Rescan</button><button class="primary-btn" data-approve-item="${escapeAttr(item.itemId)}">Approve</button></div>
     </div>`;
   }
 
   async function approveItem(itemId) {
+    const item = findItem(itemId);
+    if (!item) return;
+    if (item.validation?.status === 'blocked' && !window.confirm('This item is still blocked. Approve anyway?')) return;
     const data = await api(`/batches/${state.batch._id}/items/${itemId}/approval`, { method: 'POST', body: JSON.stringify({ approvalStatus: 'approved' }) });
     state.batch = data.batch;
     renderBatch();
+    if ($('item-dialog')?.open && state.activeItemId === itemId) viewItem(itemId, { keepOpen: true });
   }
 
   async function rescanItem(itemId) {
@@ -149,35 +158,422 @@
     state.batch = data.batch;
     setBusy('Product rescan complete.');
     renderBatch();
+    if ($('item-dialog')?.open && state.activeItemId === itemId) viewItem(itemId, { keepOpen: true });
   }
 
-  function viewItem(itemId) {
-    const item = (state.batch?.items || []).find((row) => row.itemId === itemId);
+  function findItem(itemId) {
+    return (state.batch?.items || []).find((row) => row.itemId === itemId);
+  }
+
+  function viewItem(itemId, options = {}) {
+    const item = findItem(itemId);
     if (!item) return;
+    state.activeItemId = itemId;
     $('dialog-title').textContent = item.draft?.title || item.title || 'Product';
     $('dialog-subtitle').textContent = item.sourceUrl || item.originalInput || '';
-    $('dialog-body').innerHTML = `<div class="dialog-body-grid">
-      <div>
-        <h3>Selected product images</h3>
-        <div class="image-grid">${(item.selectedImages || []).map((img) => `<div class="image-card"><img src="${escapeAttr(img.src)}" alt=""><small>${escapeHtml(img.reason || '')}</small></div>`).join('') || '<p class="muted">No selected images.</p>'}</div>
-        <h3>Rejected / possible images</h3>
-        <div class="image-grid">${(item.rejectedImages || []).slice(0,12).map((img) => `<div class="image-card"><img src="${escapeAttr(img.src)}" alt=""><small>${escapeHtml(img.rejectReason || img.reason || '')}</small></div>`).join('') || '<p class="muted">No rejected images.</p>'}</div>
-      </div>
-      <div>
-        <div class="kv">
-          <div><span>SEO title</span><strong>${escapeHtml(item.draft?.seo?.title || '—')}</strong></div>
-          <div><span>SEO description</span><strong>${escapeHtml(item.draft?.seo?.description || '—')}</strong></div>
-          <div><span>Flavour</span><strong>${escapeHtml(item.nutrition?.productFlavour || '—')}</strong></div>
-          <div><span>Sweet / Sour</span><strong>${escapeHtml(`${item.nutrition?.sweetness || '—'} / ${item.nutrition?.sourness || '—'}`)}</strong></div>
-          <div><span>Servings</span><strong>${escapeHtml(item.nutrition?.servings || '—')}</strong></div>
-          <div><span>Caffeine</span><strong>${escapeHtml(item.nutrition?.caffeineMgPerServing !== undefined && item.nutrition?.caffeineMgPerServing !== '' ? `${item.nutrition.caffeineMgPerServing}mg` : '—')}</strong></div>
-          <div><span>Validation</span><strong>${escapeHtml(item.validation?.status || 'unchecked')}</strong><small>${escapeHtml((item.validation?.issues || []).join(' · '))}</small></div>
+    $('dialog-body').innerHTML = renderEditor(item);
+    bindEditorEvents(itemId);
+    if (!$('item-dialog').open || !options.keepOpen) $('item-dialog').showModal();
+  }
+
+  function renderEditor(item) {
+    const draft = item.draft || {};
+    const nutrition = item.nutrition || {};
+    const selected = item.selectedImages?.length ? item.selectedImages : draft.images || [];
+    const rejected = item.rejectedImages || [];
+    const metafields = item.metafieldPlan?.length ? item.metafieldPlan : draft.metafields || [];
+    const clientIssues = getClientValidationIssues(item);
+    const confidence = Math.round(Number(item.confidence || item.aiEnrichment?.confidence || 0) * 100);
+
+    return `<div class="editor-shell">
+      <aside class="editor-nav">
+        <div class="readiness-card ${escapeAttr(item.validation?.status || 'unchecked')}">
+          <span class="eyebrow">READINESS</span>
+          <strong>${escapeHtml(item.validation?.status || 'unchecked')}</strong>
+          <small>${confidence ? `${confidence}% source confidence` : 'AI/source confidence unavailable'}</small>
         </div>
-        <h3>Metafield plan</h3>
-        <pre class="codebox">${escapeHtml(JSON.stringify(item.metafieldPlan || item.draft?.metafields || [], null, 2))}</pre>
+        <a href="#product-basics">Basics</a>
+        <a href="#product-description">Description</a>
+        <a href="#product-media">Media</a>
+        <a href="#product-pricing">Pricing & inventory</a>
+        <a href="#product-seo">SEO</a>
+        <a href="#product-metafields">Metafields</a>
+        <a href="#product-validation">Validation</a>
+      </aside>
+
+      <section class="editor-main">
+        <div class="editor-alert ${clientIssues.length ? 'warning' : 'ready'}">
+          <strong>${clientIssues.length ? 'Needs review before you trust this product' : 'No obvious review issues found'}</strong>
+          ${clientIssues.length ? `<ul>${clientIssues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join('')}</ul>` : '<p>Still check the product carefully before creating the Shopify draft.</p>'}
+        </div>
+
+        ${section('product-basics', 'Product basics', 'Core Shopify fields. These are editable overrides; saving writes them back to the batch item.', `
+          <div class="field-grid two">
+            ${field('Product title', 'title', draft.title || item.title || '', 'text', 'Shown as the Shopify product title.')}
+            ${field('URL handle', 'handle', draft.handle || '', 'text', 'This becomes the Shopify product URL handle.')}
+            ${field('Vendor', 'vendor', draft.vendor || item.vendor || '', 'text', 'Brand/vendor used in Shopify.')}
+            ${field('Product type', 'productType', draft.productType || item.productType || '', 'text', 'Your Shopify product type.')}
+            ${field('Shopify category', 'productCategory', draft.productCategory || item.productCategory || '', 'text', 'Taxonomy/category for the product.')}
+            ${field('Theme template', 'themeTemplate', draft.themeTemplate || item.templateSuffix || '', 'text', 'Template suffix only, e.g. gfuel.')}
+            ${field('Collections', 'collections', joinCsv(draft.collections), 'text', 'Comma-separated collection handles/names.')}
+            ${field('Suggested tags', 'recommendedTags', joinCsv(draft.recommendedTags), 'text', 'Suggestions only. Tags below are the ones actually saved.')}
+            ${field('Approved Shopify tags', 'tags', joinCsv(draft.tags), 'text', 'Comma-separated tags to apply. Nothing is added unless it is here.')}
+            ${field('Product status', 'status', draft.status || 'draft', 'select', 'Shopify product status.', ['draft','active','archived'])}
+          </div>
+        `)}
+
+        ${section('product-description', 'Description', 'The description is now visible and directly editable, so you can confirm the AI has not invented or truncated content.', `
+          ${field('Product description / body HTML', 'descriptionHtml', draft.descriptionHtml || '', 'textarea', 'Accepts HTML. This is the Shopify product body.')}
+          ${renderAiEvidence(item)}
+        `)}
+
+        ${section('product-media', 'Media', 'Pick the main Shopify media order. Selected images are saved in this order; rejected images are only suggestions.', `
+          <div class="media-toolbar">
+            <strong>Selected product images</strong>
+            <span class="muted">First selected image becomes the main Shopify image.</span>
+          </div>
+          <div class="editor-image-grid selected-images" data-selected-images>
+            ${selected.length ? selected.map((img, index) => renderSelectedImage(img, index)).join('') : '<p class="muted">No selected images. Choose from possible images below or paste image URLs in the JSON/debug panel.</p>'}
+          </div>
+          <details class="foldout" open>
+            <summary>Rejected / possible images</summary>
+            <div class="editor-image-grid rejected-images">
+              ${rejected.length ? rejected.slice(0, 24).map((img, index) => renderRejectedImage(img, index)).join('') : '<p class="muted">No rejected images were returned.</p>'}
+            </div>
+          </details>
+        `)}
+
+        ${section('product-pricing', 'Pricing & inventory', 'Commercial fields are shown before SEO/metafields because they are core product creation data.', `
+          <div class="field-grid three">
+            ${field('Price', 'price', draft.price || '', 'number', 'Retail price in GBP.')}
+            ${field('Compare-at price', 'compareAtPrice', draft.compareAtPrice || '', 'number', 'Optional crossed-out price.')}
+            ${field('Cost per item', 'cost', draft.cost || '', 'number', 'Your landed/product cost.')}
+            ${field('SKU', 'sku', draft.sku || '', 'text', 'Stock keeping unit.')}
+            ${field('Barcode / GTIN', 'barcode', draft.barcode || '', 'text', 'Optional barcode.')}
+            ${field('Quantity', 'quantity', draft.quantity || 1, 'number', 'Initial stock quantity for draft context.')}
+            ${field('Weight', 'weight', draft.weight || '', 'number', 'Shipping weight.')}
+            ${field('Weight unit', 'weightUnit', draft.weightUnit || 'g', 'select', 'Weight unit.', ['g','kg','oz','lb'])}
+          </div>
+        `)}
+
+        ${section('product-seo', 'SEO preview and override', 'The page title, meta description and URL are visible here. Truncation is flagged before approval.', `
+          <div class="field-grid two">
+            ${field('SEO page title', 'seoTitle', draft.seo?.title || '', 'text', 'Appears in search results and browser title.')}
+            ${field('SEO meta description', 'seoDescription', draft.seo?.description || '', 'textarea', 'Search result description. Keep it readable and complete.')}
+          </div>
+          ${renderSearchPreview(draft)}
+        `)}
+
+        ${section('product-metafields', 'Metafields and flavour profile', 'Metafields are editable boxes, not raw JSON. Rich text fields render as larger text areas.', `
+          <div class="field-grid three">
+            ${field('Flavour', 'nutrition.productFlavour', nutrition.productFlavour || '', 'text', 'Used for core product flavour.')}
+            ${field('Flavour family', 'nutrition.flavourFamily', nutrition.flavourFamily || '', 'text', 'Fruit, candy, cola, etc.')}
+            ${field('Sweetness', 'nutrition.sweetness', nutrition.sweetness ?? '', 'number', '1-5 scale.')}
+            ${field('Sourness', 'nutrition.sourness', nutrition.sourness ?? '', 'number', '1-5 scale.')}
+            ${field('Servings', 'nutrition.servings', nutrition.servings ?? '', 'number', 'Servings per tub/pack.')}
+            ${field('Caffeine mg per serving', 'nutrition.caffeineMgPerServing', nutrition.caffeineMgPerServing ?? '', 'number', 'Leave blank only if genuinely unknown.')}
+            ${field('Formula version', 'nutrition.formulaVersion', nutrition.formulaVersion || '', 'text', 'Formula / version when visible.')}
+            ${field('Allergen', 'nutrition.allergen', nutrition.allergen || '', 'text', 'Known allergen text.')}
+            ${field('Flavour profile', 'nutrition.flavourProfile', nutrition.flavourProfile || '', 'textarea', 'Short flavour profile.')}
+          </div>
+          <div class="metafield-toolbar"><strong>Editable metafield plan</strong><button type="button" class="secondary-btn compact" data-add-metafield>Add metafield</button></div>
+          <div class="metafield-list" data-metafield-list>
+            ${metafields.length ? metafields.map((meta, index) => renderMetafield(meta, index)).join('') : '<p class="muted">No metafields found. Add any required core fields manually before approving.</p>'}
+          </div>
+        `)}
+
+        ${section('product-validation', 'Validation and debug', 'Use this to see exactly why a product is not ready. Raw AI output is folded away for developer checks only.', `
+          <div class="validation-list">
+            ${(item.validation?.issues || []).length ? item.validation.issues.map((issue) => `<div class="validation-issue">${escapeHtml(issue)}</div>`).join('') : '<div class="validation-issue good">Backend validation has no issues.</div>'}
+            ${clientIssues.length ? clientIssues.map((issue) => `<div class="validation-issue warning">${escapeHtml(issue)}</div>`).join('') : '<div class="validation-issue good">Frontend review checks have no obvious issues.</div>'}
+          </div>
+          <details class="foldout debug-foldout">
+            <summary>Raw AI / developer debug JSON</summary>
+            <pre class="codebox">${escapeHtml(JSON.stringify({ draft, nutrition, metafieldPlan: item.metafieldPlan || [], selectedImages: item.selectedImages || [], rejectedImages: item.rejectedImages || [], extractedData: item.extractedData || {}, aiEnrichment: item.aiEnrichment || {} }, null, 2))}</pre>
+          </details>
+        `)}
+      </section>
+
+      <aside class="editor-inspector">
+        <div class="sticky-card">
+          <h3>Review actions</h3>
+          <p class="muted">Save overrides first, then approve once the product reads correctly.</p>
+          <button type="button" class="primary-btn full" data-save-item>Save overrides</button>
+          <button type="button" class="secondary-btn full" data-approve-current>Approve item</button>
+          <button type="button" class="secondary-btn full" data-rescan-current>Rescan item</button>
+          <div class="save-status" data-save-status></div>
+          <hr>
+          <h4>Source confidence</h4>
+          <p class="muted">${confidence ? `${confidence}%` : 'Unavailable'} · ${escapeHtml(item.sourceUrl || item.originalInput || 'Manual item')}</p>
+        </div>
+      </aside>
+    </div>`;
+  }
+
+  function section(id, title, help, body) {
+    return `<article class="editor-section" id="${escapeAttr(id)}"><div class="section-title"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(help)}</p></div>${body}</article>`;
+  }
+
+  function field(label, name, value, type = 'text', help = '', options = []) {
+    const common = `data-field="${escapeAttr(name)}"`;
+    const safeValue = value === undefined || value === null ? '' : String(value);
+    let control;
+    if (type === 'textarea') {
+      control = `<textarea ${common} rows="7">${escapeHtml(safeValue)}</textarea>`;
+    } else if (type === 'select') {
+      control = `<select ${common}>${options.map((option) => `<option value="${escapeAttr(option)}" ${String(option) === safeValue ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}</select>`;
+    } else {
+      const inputType = type === 'number' ? 'number' : 'text';
+      const step = type === 'number' ? ' step="any"' : '';
+      control = `<input ${common} type="${inputType}"${step} value="${escapeAttr(safeValue)}">`;
+    }
+    return `<label class="editor-field"><span>${escapeHtml(label)}</span>${control}${help ? `<small>${escapeHtml(help)}</small>` : ''}</label>`;
+  }
+
+  function renderSearchPreview(draft = {}) {
+    const title = draft.seo?.title || draft.title || 'SEO title missing';
+    const description = draft.seo?.description || 'SEO description missing';
+    const handle = draft.handle || 'product-url-handle';
+    const flagged = looksTruncated(description);
+    return `<div class="search-preview ${flagged ? 'warning' : ''}">
+      <span>Search preview</span>
+      <strong>${escapeHtml(title)}</strong>
+      <small>gamingnectar.com/products/${escapeHtml(handle)}</small>
+      <p>${escapeHtml(description)}</p>
+      ${flagged ? '<em>Possible truncation detected. Rewrite this before approval.</em>' : ''}
+    </div>`;
+  }
+
+  function renderAiEvidence(item = {}) {
+    const enrichment = item.aiEnrichment || {};
+    const summary = enrichment.summary || enrichment.reason || enrichment.source || item.extractedData?.description || '';
+    return `<div class="evidence-card"><strong>AI/source evidence</strong><p>${escapeHtml(summary || 'No readable evidence was stored for this field. Treat the content as unverified until checked.')}</p></div>`;
+  }
+
+  function renderSelectedImage(img = {}, index = 0) {
+    return `<div class="editor-image-card" data-image-index="${index}">
+      <img src="${escapeAttr(img.src || '')}" alt="${escapeAttr(img.alt || '')}">
+      <label>Alt text<input data-image-alt="${index}" value="${escapeAttr(img.alt || '')}"></label>
+      <small>${escapeHtml(img.reason || img.source || 'Selected product image')}</small>
+      <div class="image-actions">
+        <button type="button" class="secondary-btn compact" data-move-image="${index}" data-direction="up">↑</button>
+        <button type="button" class="secondary-btn compact" data-move-image="${index}" data-direction="down">↓</button>
+        <button type="button" class="secondary-btn compact danger" data-remove-image="${index}">Remove</button>
       </div>
     </div>`;
-    $('item-dialog').showModal();
+  }
+
+  function renderRejectedImage(img = {}, index = 0) {
+    return `<div class="editor-image-card possible" data-rejected-index="${index}">
+      <img src="${escapeAttr(img.src || '')}" alt="${escapeAttr(img.alt || '')}">
+      <small>${escapeHtml(img.rejectReason || img.reason || 'Possible image')}</small>
+      <button type="button" class="secondary-btn compact" data-use-rejected-image="${index}">Use image</button>
+    </div>`;
+  }
+
+  function renderMetafield(meta = {}, index = 0) {
+    const isRich = /rich_text|multi_line|json/i.test(meta.type || '');
+    return `<div class="metafield-card" data-metafield-index="${index}">
+      <div class="metafield-head">
+        <strong>${escapeHtml(meta.label || `${meta.namespace || 'custom'}.${meta.key || 'field'}`)}</strong>
+        <button type="button" class="secondary-btn compact danger" data-remove-metafield="${index}">Remove</button>
+      </div>
+      <div class="field-grid four">
+        ${field('Namespace', `metafields.${index}.namespace`, meta.namespace || 'custom', 'text', '')}
+        ${field('Key', `metafields.${index}.key`, meta.key || '', 'text', '')}
+        ${field('Type', `metafields.${index}.type`, meta.type || 'single_line_text_field', 'text', '')}
+        ${field('Label', `metafields.${index}.label`, meta.label || '', 'text', '')}
+      </div>
+      ${field('Value', `metafields.${index}.value`, meta.value || '', isRich ? 'textarea' : 'text', meta.source ? `Source: ${meta.source}${meta.confidence ? ` · Confidence: ${Math.round(Number(meta.confidence) * 100)}%` : ''}` : '')}
+    </div>`;
+  }
+
+  function bindEditorEvents(itemId) {
+    const body = $('dialog-body');
+    body.querySelector('[data-save-item]')?.addEventListener('click', () => saveCurrentItem(itemId).catch((e) => setEditorStatus(e.message, true)));
+    body.querySelector('[data-approve-current]')?.addEventListener('click', () => approveItem(itemId).catch((e) => setEditorStatus(e.message, true)));
+    body.querySelector('[data-rescan-current]')?.addEventListener('click', () => rescanItem(itemId).catch((e) => setEditorStatus(e.message, true)));
+    body.querySelector('[data-add-metafield]')?.addEventListener('click', () => addMetafieldCard());
+    body.querySelectorAll('[data-use-rejected-image]').forEach((button) => button.addEventListener('click', () => useRejectedImage(Number(button.dataset.useRejectedImage))));
+    body.querySelectorAll('[data-remove-image]').forEach((button) => button.addEventListener('click', () => removeSelectedImage(Number(button.dataset.removeImage))));
+    body.querySelectorAll('[data-move-image]').forEach((button) => button.addEventListener('click', () => moveSelectedImage(Number(button.dataset.moveImage), button.dataset.direction)));
+    body.querySelectorAll('[data-remove-metafield]').forEach((button) => button.addEventListener('click', () => button.closest('.metafield-card')?.remove()));
+  }
+
+  function currentSelectedImages() {
+    const item = findItem(state.activeItemId);
+    const selected = item?.selectedImages?.length ? item.selectedImages : item?.draft?.images || [];
+    return selected.map((img, index) => ({
+      ...img,
+      src: img.src || '',
+      alt: $('dialog-body').querySelector(`[data-image-alt="${index}"]`)?.value || img.alt || item?.draft?.title || '',
+    })).filter((img) => img.src);
+  }
+
+  function rerenderActiveEditor() {
+    if (state.activeItemId) viewItem(state.activeItemId, { keepOpen: true });
+  }
+
+  function useRejectedImage(index) {
+    const item = findItem(state.activeItemId);
+    if (!item) return;
+    const img = item.rejectedImages?.[index];
+    if (!img?.src) return;
+    const selected = currentSelectedImages();
+    item.selectedImages = [...selected, { ...img, selected: true, rejected: false, rejectReason: '' }];
+    item.rejectedImages = (item.rejectedImages || []).filter((_, i) => i !== index);
+    item.draft = { ...(item.draft || {}), images: item.selectedImages };
+    rerenderActiveEditor();
+  }
+
+  function removeSelectedImage(index) {
+    const item = findItem(state.activeItemId);
+    if (!item) return;
+    const selected = currentSelectedImages();
+    const removed = selected[index];
+    item.selectedImages = selected.filter((_, i) => i !== index);
+    if (removed) item.rejectedImages = [{ ...removed, rejected: true, selected: false, rejectReason: 'Manually removed' }, ...(item.rejectedImages || [])];
+    item.draft = { ...(item.draft || {}), images: item.selectedImages };
+    rerenderActiveEditor();
+  }
+
+  function moveSelectedImage(index, direction) {
+    const item = findItem(state.activeItemId);
+    if (!item) return;
+    const selected = currentSelectedImages();
+    const nextIndex = direction === 'up' ? index - 1 : index + 1;
+    if (nextIndex < 0 || nextIndex >= selected.length) return;
+    [selected[index], selected[nextIndex]] = [selected[nextIndex], selected[index]];
+    item.selectedImages = selected;
+    item.draft = { ...(item.draft || {}), images: item.selectedImages };
+    rerenderActiveEditor();
+  }
+
+  function addMetafieldCard() {
+    const list = $('dialog-body').querySelector('[data-metafield-list]');
+    const index = list.querySelectorAll('.metafield-card').length;
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = renderMetafield({ namespace: 'custom', key: '', type: 'single_line_text_field', label: '', value: '', source: 'manual' }, index);
+    const card = wrapper.firstElementChild;
+    list.appendChild(card);
+    card.querySelector('[data-remove-metafield]')?.addEventListener('click', () => card.remove());
+  }
+
+  function readField(name) {
+    const el = $('dialog-body').querySelector(`[data-field="${cssEscape(name)}"]`);
+    return el ? el.value : '';
+  }
+
+  function readNumberField(name) {
+    const value = readField(name);
+    return value === '' ? '' : Number(value);
+  }
+
+  function readMetafields() {
+    return Array.from($('dialog-body').querySelectorAll('.metafield-card')).map((card) => {
+      const fieldValue = (suffix) => {
+        const field = Array.from(card.querySelectorAll('[data-field]')).find((el) => String(el.dataset.field || '').endsWith(`.${suffix}`));
+        return field?.value || '';
+      };
+      return {
+        namespace: fieldValue('namespace').trim(),
+        key: fieldValue('key').trim(),
+        type: fieldValue('type').trim() || 'single_line_text_field',
+        label: fieldValue('label').trim(),
+        value: fieldValue('value'),
+        source: 'manual_review',
+        confidence: 1,
+      };
+    }).filter((meta) => meta.namespace && meta.key && meta.value !== '');
+  }
+
+  async function saveCurrentItem(itemId) {
+    const selectedImages = currentSelectedImages();
+    const draft = {
+      title: readField('title'),
+      handle: readField('handle'),
+      descriptionHtml: readField('descriptionHtml'),
+      vendor: readField('vendor'),
+      productType: readField('productType'),
+      productCategory: readField('productCategory'),
+      themeTemplate: readField('themeTemplate'),
+      collections: parseCsv(readField('collections')),
+      recommendedTags: parseCsv(readField('recommendedTags')),
+      tags: parseCsv(readField('tags')),
+      status: readField('status') || 'draft',
+      price: readField('price'),
+      compareAtPrice: readField('compareAtPrice'),
+      cost: readField('cost'),
+      sku: readField('sku'),
+      barcode: readField('barcode'),
+      quantity: readNumberField('quantity') || 1,
+      weight: readField('weight'),
+      weightUnit: readField('weightUnit') || 'g',
+      images: selectedImages,
+      seo: { title: readField('seoTitle'), description: readField('seoDescription') },
+      metafields: readMetafields(),
+    };
+    const nutrition = {
+      productFlavour: readField('nutrition.productFlavour'),
+      flavourFamily: readField('nutrition.flavourFamily'),
+      sweetness: readNumberField('nutrition.sweetness'),
+      sourness: readNumberField('nutrition.sourness'),
+      servings: readNumberField('nutrition.servings'),
+      caffeineMgPerServing: readNumberField('nutrition.caffeineMgPerServing'),
+      formulaVersion: readField('nutrition.formulaVersion'),
+      allergen: readField('nutrition.allergen'),
+      flavourProfile: readField('nutrition.flavourProfile'),
+    };
+    setEditorStatus('Saving overrides…');
+    const data = await api(`/batches/${state.batch._id}/items/${itemId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ draft, nutrition, selectedImages, metafieldPlan: draft.metafields }),
+    });
+    state.batch = data.batch;
+    renderBatch();
+    setEditorStatus('Saved. Validation has been refreshed.');
+    viewItem(itemId, { keepOpen: true });
+  }
+
+  function setEditorStatus(message, isError = false) {
+    const el = $('dialog-body').querySelector('[data-save-status]');
+    if (!el) return;
+    el.textContent = message;
+    el.className = `save-status ${isError ? 'error' : ''}`;
+  }
+
+  function stripHtml(value = '') {
+    return String(value || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function looksTruncated(value = '') {
+    const text = String(value || '').trim();
+    if (!text) return false;
+    const words = text.split(/\s+/);
+    const lastWord = words[words.length - 1] || '';
+    return (text.length > 135 && !/[.!?)]$/.test(text)) || (text.length > 45 && lastWord.length <= 2 && !/[.!?)]$/.test(text));
+  }
+
+  function getClientValidationIssues(item = {}) {
+    const draft = item.draft || {};
+    const nutrition = item.nutrition || {};
+    const issues = [];
+    if (!stripHtml(draft.descriptionHtml)) issues.push('Description is blank or not visible.');
+    if (!draft.productCategory) issues.push('Shopify category is missing.');
+    if (!draft.price) issues.push('Price is missing.');
+    if (!draft.handle) issues.push('URL handle is missing.');
+    if (!draft.seo?.title) issues.push('SEO title is missing.');
+    if (!draft.seo?.description) issues.push('SEO description is missing.');
+    if (looksTruncated(draft.seo?.description)) issues.push('SEO description looks truncated or unfinished.');
+    if (!item.selectedImages?.length && !draft.images?.length) issues.push('Main product image has not been selected.');
+    if (!draft.metafields?.length && !item.metafieldPlan?.length) issues.push('No metafields are ready for review.');
+    if (nutrition.caffeineMgPerServing === undefined || nutrition.caffeineMgPerServing === null || nutrition.caffeineMgPerServing === '') issues.push('Caffeine is unknown; confirm whether this is caffeine-free or missing data.');
+    return issues;
+  }
+
+  function cssEscape(value) {
+    if (window.CSS?.escape) return window.CSS.escape(value);
+    return String(value || '').replace(/"/g, '\\"');
   }
 
   function escapeHtml(value = '') { return String(value).replace(/[&<>"']/g, (m) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m])); }

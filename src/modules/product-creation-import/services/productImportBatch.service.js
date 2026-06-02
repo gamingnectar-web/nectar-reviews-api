@@ -6,7 +6,7 @@ const { createShopifyProductFromDraft } = require('./shopifyProduct.service');
 const { scoreAndSelectProductImages } = require('./imageCandidateScoring.service');
 const { extractNutritionAndProductProfile } = require('./nutritionProfileExtractor.service');
 const { applyProfileToDraft, profileToMetafields } = require('./metafieldSchemaRegistry.service');
-const { cleanText, cleanUrl, makeLineId, parseTags } = require('../utils/safe');
+const { cleanText, cleanUrl, makeLineId, parseTags, normaliseMetafields } = require('../utils/safe');
 
 function asArray(value) {
   if (Array.isArray(value)) return value;
@@ -105,16 +105,39 @@ function mergeDefaultsIntoDraft(draft = {}, defaults = {}) {
   });
 }
 
+function plainTextFromHtml(value = '') {
+  return String(value || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function looksTruncated(value = '') {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  const words = text.split(/\s+/);
+  const lastWord = words[words.length - 1] || '';
+  return (text.length > 135 && !/[.!?)]$/.test(text)) || (text.length > 45 && lastWord.length <= 2 && !/[.!?)]$/.test(text));
+}
+
 function validateDraft(draft = {}, item = {}) {
-  const issues = [];
-  if (!draft.title || /^imported product$/i.test(draft.title)) issues.push('Product title needs review.');
-  if (!draft.images?.length) issues.push('No selected product images.');
-  if (!draft.seo?.title || !draft.seo?.description) issues.push('SEO title/description missing.');
-  if (!draft.productType) issues.push('Product type missing.');
-  if (!draft.vendor) issues.push('Vendor/brand missing.');
-  if (!draft.metafields?.length) issues.push('No standardised profile/nutrition metafields extracted.');
-  const status = issues.length ? (issues.length >= 3 ? 'blocked' : 'warning') : 'ready';
-  return { status, issues, itemId: item.itemId };
+  const blockers = [];
+  const warnings = [];
+  const nutrition = item.nutrition || {};
+  if (!draft.title || /^imported product$/i.test(draft.title)) blockers.push('Product title needs review.');
+  if (!draft.images?.length) blockers.push('No selected product images.');
+  if (!draft.productType) blockers.push('Product type missing.');
+  if (!draft.vendor) blockers.push('Vendor/brand missing.');
+
+  if (!plainTextFromHtml(draft.descriptionHtml)) warnings.push('Product description is missing or empty.');
+  if (!draft.productCategory) warnings.push('Shopify product category missing.');
+  if (!draft.price) warnings.push('Price missing.');
+  if (!draft.handle) warnings.push('URL handle missing.');
+  if (!draft.seo?.title || !draft.seo?.description) warnings.push('SEO title/description missing.');
+  if (looksTruncated(draft.seo?.description)) warnings.push('SEO description looks truncated or unfinished.');
+  if (!draft.metafields?.length && !item.metafieldPlan?.length) warnings.push('No standardised profile/nutrition metafields extracted.');
+  if (nutrition.caffeineMgPerServing === undefined || nutrition.caffeineMgPerServing === null || nutrition.caffeineMgPerServing === '') warnings.push('Caffeine value is unknown; confirm caffeine-free vs missing data.');
+
+  const issues = [...blockers, ...warnings];
+  const status = blockers.length ? 'blocked' : (warnings.length ? 'warning' : 'ready');
+  return { status, issues, blockers, warnings, itemId: item.itemId };
 }
 
 async function createBatch({ shopDomain, name = '', defaults = {}, links = [], manualItems = [] }) {
@@ -271,8 +294,15 @@ async function updateBatchItem({ shopDomain, batchId, itemId, patch = {} }) {
     throw error;
   }
   if (patch.draft) {
-    const draft = normaliseDraftProduct({ ...(item.draft || {}), ...patch.draft });
+    const existingDraft = item.draft || {};
+    const mergedDraft = {
+      ...existingDraft,
+      ...patch.draft,
+      seo: { ...(existingDraft.seo || {}), ...(patch.draft.seo || {}) },
+    };
+    const draft = normaliseDraftProduct(mergedDraft);
     item.draft = draft;
+    if (Array.isArray(patch.draft.metafields)) item.metafieldPlan = normaliseMetafields(patch.draft.metafields);
     item.title = draft.title;
     item.vendor = draft.vendor;
     item.productType = draft.productType;
@@ -282,8 +312,15 @@ async function updateBatchItem({ shopDomain, batchId, itemId, patch = {} }) {
   }
   if (patch.nutrition) {
     item.nutrition = { ...(item.nutrition || {}), ...patch.nutrition };
-    item.metafieldPlan = profileToMetafields(item.nutrition);
+    const profileMetafields = profileToMetafields(item.nutrition);
     item.draft = applyProfileToDraft(item.draft || {}, item.nutrition);
+    item.metafieldPlan = normaliseMetafields([...(item.metafieldPlan || []), ...profileMetafields, ...(item.draft?.metafields || [])]);
+    item.draft = normaliseDraftProduct({ ...(item.draft || {}), metafields: item.metafieldPlan });
+    item.validation = validateDraft(item.draft, item);
+  }
+  if (Array.isArray(patch.metafieldPlan)) {
+    item.metafieldPlan = normaliseMetafields(patch.metafieldPlan);
+    item.draft = normaliseDraftProduct({ ...(item.draft || {}), metafields: item.metafieldPlan });
     item.validation = validateDraft(item.draft, item);
   }
   if (Array.isArray(patch.selectedImages)) {
