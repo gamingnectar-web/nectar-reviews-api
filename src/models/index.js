@@ -131,6 +131,12 @@ const settingsSchema = new mongoose.Schema({
     supportButtonText: { type: String, default: 'Contact customer service' },
     missingOrderKeywords: { type: [String], default: ['missing', 'not arrived', 'not received', 'lost', 'missing item', 'wrong item', 'damaged'] },
   },
+  fontOverrides: {
+    reviews: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    loyalty: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    cartRewards: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    general: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  },
   reviewAutomation: {
     enabled: { type: Boolean, default: true },
     mode: { type: String, enum: ['native', 'flow', 'manual'], default: 'native' },

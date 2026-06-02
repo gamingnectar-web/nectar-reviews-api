@@ -144,6 +144,12 @@ function cleanTemplateDesign(raw = {}) {
     bgColor: cleanText(design.bgColor || '#f3f4f6', 40),
     cardColor: cleanText(design.cardColor || '#ffffff', 40),
     heading: cleanText(design.heading || 'How did we do?', 180),
+    headingAlign: ['left', 'center', 'right'].includes(design.headingAlign) ? design.headingAlign : 'center',
+    headingWeight: ['300', '400', '600', '700', '800'].includes(String(design.headingWeight || '')) ? String(design.headingWeight) : '700',
+    headingFont: cleanText(design.headingFont || 'Arial,Helvetica,sans-serif', 220),
+    introAlign: ['left', 'center', 'right'].includes(design.introAlign) ? design.introAlign : 'center',
+    bodyAlign: ['left', 'center', 'right'].includes(design.bodyAlign) ? design.bodyAlign : 'center',
+    customFonts: (Array.isArray(design.customFonts) ? design.customFonts : []).map((font) => ({ name: cleanText(font.name || '', 120), url: cleanText(font.url || '', 1000) })).filter((font) => font.name || font.url).slice(0, 50),
     intro: cleanText(design.intro || 'Hi {{ customerName }}', 240),
     body: cleanText(design.body || '', 1000),
     signoff: cleanText(design.signoff || '', 260),
@@ -155,13 +161,25 @@ function cleanTemplateDesign(raw = {}) {
     showTopStars: design.showTopStars !== false,
     pageHandle: cleanText(design.pageHandle || 'leave-review', 120),
     productShowStars: design.productShowStars !== false,
-    productStarPosition: ['above_button', 'between', 'under_title'].includes(design.productStarPosition) ? design.productStarPosition : 'above_button',
+    productStarPosition: ['above_button', 'between', 'under_title', 'custom'].includes(design.productStarPosition) ? design.productStarPosition : 'above_button',
     productTitleWeight: ['400', '600', '700', '800'].includes(String(design.productTitleWeight || '')) ? String(design.productTitleWeight) : '700',
     productShowId: design.productShowId !== false,
-    productImageSize: clampNumber(design.productImageSize, 36, 96, 58),
-    productRowAlign: ['left', 'compact'].includes(design.productRowAlign) ? design.productRowAlign : 'left',
+    productImageSize: clampNumber(design.productImageSize, 36, 120, 58),
+    productRowAlign: ['left', 'compact', 'stacked'].includes(design.productRowAlign) ? design.productRowAlign : 'left',
+    productElementOrder: (Array.isArray(design.productElementOrder) ? design.productElementOrder : String(design.productElementOrder || 'image,title,id,stars,button').split(',')).map((item) => cleanText(item, 30)).filter((item) => ['image','title','id','stars','button'].includes(item)).slice(0, 8),
     delayDays: clampNumber(design.delayDays, 0, 365, 14),
   };
+}
+
+
+function cleanFontOverrides(value = []) {
+  return (Array.isArray(value) ? value : [])
+    .map((font) => ({
+      name: cleanText(font.name || '', 120),
+      url: cleanText(font.url || '', 1000),
+    }))
+    .filter((font) => font.name && /^https:\/\/fonts\.googleapis\.com\//i.test(font.url))
+    .slice(0, 50);
 }
 
 function cleanTemplateSections(value = []) {
@@ -1105,6 +1123,33 @@ router.delete('/email-settings', async (req, res, next) => {
   try {
     await EmailProviderSettings.deleteOne({ shopDomain: shopDomainFromReq(req) });
     return res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+
+router.get('/email-font-overrides', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const area = cleanTemplateArea(req.query.area || 'reviews');
+    const settings = await Settings.findOne({ shopDomain }).lean();
+    const fonts = settings?.fontOverrides?.[area] || [];
+    return res.json({ ok: true, area, fonts: cleanFontOverrides(fonts) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/email-font-overrides', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const area = cleanTemplateArea(req.body.area || 'reviews');
+    const fonts = cleanFontOverrides(req.body.fonts || []);
+    const update = { [`fontOverrides.${area}`]: fonts };
+    await Settings.findOneAndUpdate({ shopDomain }, { $set: update, $setOnInsert: { shopDomain } }, { upsert: true, new: true, setDefaultsOnInsert: true });
+    return res.json({ ok: true, area, fonts });
   } catch (error) {
     next(error);
   }

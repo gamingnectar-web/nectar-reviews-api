@@ -11,6 +11,8 @@
   let hiddenModuleIds = [];
   let providerProfiles = [];
   let emailTemplates = [];
+  let selectedEmailTemplateId = '';
+  let fontOverrides = [];
 
   const BUILT_IN_MODULES = [
     { id: 'notice', name: 'Notice box', title: 'Before you review', text: 'A quick note before you review: your feedback helps other customers choose confidently.', bgColor: '#f8fafc', borderColor: '#e5e7eb', borderWidth: 1, radius: 12, padding: 14, buttonText: '', buttonUrl: '' },
@@ -82,11 +84,22 @@
   }
 
   const EMAIL_LAYOUT_PRESETS = {
-    classic: { label: 'Classic review request', headingAlign: 'center', headingWeight: '700', productRowAlign: 'left', productStarPosition: 'above_button', productShowStars: true, productShowId: true, productImageSize: 58, showTopStars: true },
-    product_first: { label: 'Product-first', headingAlign: 'center', headingWeight: '800', productRowAlign: 'compact', productStarPosition: 'under_title', productShowStars: true, productShowId: false, productImageSize: 68, showTopStars: false },
-    clean_minimal: { label: 'Clean minimal', headingAlign: 'left', headingWeight: '600', productRowAlign: 'left', productStarPosition: 'above_button', productShowStars: false, productShowId: false, productImageSize: 48, showTopStars: false },
-    support_first: { label: 'Support-first', headingAlign: 'center', headingWeight: '700', productRowAlign: 'left', productStarPosition: 'between', productShowStars: true, productShowId: false, productImageSize: 56, showTopStars: true }
+    classic: { label: 'Classic review request', description: 'Balanced order button, top stars and product list.', headingAlign: 'center', headingWeight: '700', introAlign: 'center', bodyAlign: 'center', productRowAlign: 'left', productStarPosition: 'above_button', productShowStars: true, productShowId: true, productImageSize: 58, showTopStars: true, productElementOrder: ['image','title','id','stars','button'], accentColor:'#111827', bgColor:'#f3f4f6', cardColor:'#ffffff' },
+    product_first: { label: 'Product-first layout', description: 'Shows products as the hero action and removes product IDs.', headingAlign: 'center', headingWeight: '800', introAlign: 'center', bodyAlign: 'center', productRowAlign: 'compact', productStarPosition: 'under_title', productShowStars: true, productShowId: false, productImageSize: 68, showTopStars: false, productElementOrder: ['image','title','stars','button'], accentColor:'#111827', bgColor:'#f8fafc', cardColor:'#ffffff' },
+    clean_minimal: { label: 'Clean minimal', description: 'Quieter email with fewer visual elements and no product stars.', headingAlign: 'left', headingWeight: '600', introAlign: 'left', bodyAlign: 'left', productRowAlign: 'left', productStarPosition: 'above_button', productShowStars: false, productShowId: false, productImageSize: 48, showTopStars: false, productElementOrder: ['image','title','button'], accentColor:'#111827', bgColor:'#f7f9fc', cardColor:'#ffffff' },
+    support_first: { label: 'Support-first', description: 'More service-led tone with the help module highlighted.', headingAlign: 'center', headingWeight: '700', introAlign: 'center', bodyAlign: 'center', productRowAlign: 'left', productStarPosition: 'between', productShowStars: true, productShowId: false, productImageSize: 56, showTopStars: true, productElementOrder: ['image','title','stars','button'], accentColor:'#111827', bgColor:'#f3f4f6', cardColor:'#ffffff' },
+    premium_card: { label: 'Premium card', description: 'Large product images, strong title and polished review actions.', headingAlign: 'center', headingWeight: '800', introAlign: 'center', bodyAlign: 'center', productRowAlign: 'left', productStarPosition: 'between', productShowStars: true, productShowId: false, productImageSize: 78, showTopStars: true, productElementOrder: ['image','title','stars','button'], accentColor:'#111827', bgColor:'#eef2f7', cardColor:'#ffffff' },
+    mobile_compact: { label: 'Mobile compact', description: 'Shorter rows designed for small screens and quicker scanning.', headingAlign: 'center', headingWeight: '700', introAlign: 'center', bodyAlign: 'center', productRowAlign: 'compact', productStarPosition: 'under_title', productShowStars: true, productShowId: false, productImageSize: 46, showTopStars: false, productElementOrder: ['title','stars','button'], accentColor:'#111827', bgColor:'#f8fafc', cardColor:'#ffffff' },
+    editorial_story: { label: 'Editorial story', description: 'Softer copy-first layout with products as a secondary proof point.', headingAlign: 'left', headingWeight: '700', introAlign: 'left', bodyAlign: 'left', productRowAlign: 'left', productStarPosition: 'above_button', productShowStars: true, productShowId: false, productImageSize: 54, showTopStars: true, productElementOrder: ['image','title','button','stars'], accentColor:'#111827', bgColor:'#fff7ed', cardColor:'#ffffff' }
   };
+
+  const PRODUCT_LAYOUT_ELEMENTS = [
+    { id: 'image', label: 'Image' },
+    { id: 'title', label: 'Title' },
+    { id: 'id', label: 'Product ID' },
+    { id: 'stars', label: 'Stars' },
+    { id: 'button', label: 'Button' },
+  ];
 
   function el(id) { return document.getElementById(id); }
   function val(id, fallback = '') { const node = el(id); return node ? ((node.value || '').trim() || fallback) : fallback; }
@@ -272,8 +285,141 @@
       .msg-product-display-card .msg-two{align-items:end}.msg-page-search-results{display:grid;gap:8px;margin-top:8px}.msg-page-result{width:100%;border:1px solid #e5e7eb;background:#fff;border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;gap:12px;align-items:center;text-align:left;cursor:pointer}.msg-page-result:hover{border-color:#111827;box-shadow:0 8px 22px rgba(15,23,42,.08)}.msg-page-result span{color:#667085;font-size:12px}.msg-card{box-shadow:0 12px 30px rgba(15,23,42,.04)}.msg-btn,.msg-template-actions .msg-btn,.msg-color-picker{transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease}.msg-btn:hover,.msg-color-picker:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(15,23,42,.08)}
       @media(max-width:1100px){.msg-header{flex-direction:column}.msg-flow-card{min-width:0}.msg-grid{grid-template-columns:1fr}.msg-preview-head{flex-direction:column;align-items:stretch}}@media(max-width:650px){.msg-two,.msg-analytics{grid-template-columns:1fr}.flow-product-search{grid-template-columns:1fr}.flow-product-row{grid-template-columns:auto 44px 1fr}.flow-product-row button{grid-column:1/-1}.msg-tabs{overflow:auto;flex-wrap:nowrap}.msg-tab{white-space:nowrap}}
       .msg-layout-row{align-items:end}.msg-product-display-card{border-color:#dbeafe!important;background:linear-gradient(180deg,#fff,#f8fbff)!important}.msg-color-picker{display:flex!important;align-items:center!important;gap:10px!important;width:100%!important;min-height:44px!important;border:1px solid #d0d5dd!important;border-radius:14px!important;background:#fff!important;padding:8px 12px!important;color:#111827!important;font-weight:900!important;box-shadow:0 1px 2px rgba(15,23,42,.04)!important}.msg-color-swatch{width:26px!important;height:26px!important;border-radius:999px!important;border:1px solid #d0d5dd!important;box-shadow:inset 0 0 0 2px rgba(255,255,255,.7)!important}.msg-template-card{display:grid!important;gap:12px!important}.msg-template-meta span{font-size:11px!important;font-weight:850!important}.msg-preview-card{overflow:clip!important}.msg-preview-stage .msg-preview-wrap table{box-shadow:0 18px 42px rgba(15,23,42,.08)!important}.msg-page-result{display:flex;width:100%;justify-content:space-between;gap:12px;align-items:center;border:1px solid #e5e7eb;background:#fff;border-radius:12px;padding:10px 12px;margin-top:8px;text-align:left;cursor:pointer}.msg-page-result span{color:#667085;font-size:12px}.msg-modal-kicker{display:inline-flex;background:#eef2ff;color:#3730a3;border-radius:999px;padding:4px 9px;font-size:11px;font-weight:950;text-transform:uppercase;letter-spacing:.04em}.msg-color-modal-card input[type=color]{width:100%;height:48px;border:1px solid #d0d5dd;border-radius:14px;padding:5px;background:#fff}.msg-advanced-colour{border:1px solid #e5e7eb;border-radius:14px;padding:10px 12px;background:#f8fafc}.msg-advanced-colour summary{font-weight:900;cursor:pointer}.msg-advanced-colour input{margin-top:10px!important}
+
+      .msg-subtabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}.msg-subtab{border:1px solid #d0d5dd;background:#fff;border-radius:999px;padding:9px 13px;font-weight:900;cursor:pointer;color:#475467}.msg-subtab.active{background:#111827;color:#fff;border-color:#111827}.msg-module-subpane{display:none}.msg-module-subpane.active{display:block}.msg-template-library-wide{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}.msg-template-card.selected{border-color:#111827!important;box-shadow:0 0 0 3px rgba(17,24,39,.08)!important}.msg-template-render-card{padding:0!important;overflow:hidden}.msg-template-render-head{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:20px;border-bottom:1px solid #e5e7eb}.msg-template-render-stage{background:#f4f6f8;padding:22px;overflow:auto}.msg-template-render-frame{max-width:760px;margin:0 auto}.msg-template-render-frame.mobile{max-width:390px;border:12px solid #111827;border-radius:30px;background:#fff;overflow:hidden}.msg-layout-gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:12px 0}.msg-layout-card{border:1px solid #d9e0ea;background:#fff;border-radius:16px;padding:12px;text-align:left;cursor:pointer}.msg-layout-card.active{border-color:#111827;box-shadow:0 0 0 3px rgba(17,24,39,.08)}.msg-layout-card strong{display:block;font-size:13px}.msg-layout-card span{display:block;color:#667085;font-size:12px;line-height:1.35;margin-top:4px}.msg-product-layout-designer{border:1px dashed #cfd5dd;background:#f8fafc;border-radius:16px;padding:14px;margin:12px 0}.msg-product-layout-dropzone{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.msg-product-layout-chip{display:inline-flex;gap:8px;align-items:center;border:1px solid #d0d5dd;background:#fff;border-radius:999px;padding:9px 12px;font-weight:900;cursor:grab}.msg-product-layout-chip.dragging{opacity:.45}.msg-product-layout-chip .drag{color:#667085}.msg-font-list{display:grid;gap:10px;margin-top:12px}.msg-font-row{display:flex;justify-content:space-between;gap:10px;align-items:center;border:1px solid #e5e7eb;border-radius:14px;background:#fbfdff;padding:12px}.msg-font-row small{display:block;color:#667085;margin-top:3px;word-break:break-all}.msg-typography-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}@media(max-width:760px){.msg-typography-grid{grid-template-columns:1fr}.msg-template-render-head{display:block}.msg-template-library-wide{grid-template-columns:1fr}}
     `;
     document.head.appendChild(style);
+  }
+
+  function renderLayoutGallery() {
+    const box = el('msg-layout-gallery');
+    if (!box) return;
+    const active = val('msg-layout-preset', 'classic');
+    box.innerHTML = Object.entries(EMAIL_LAYOUT_PRESETS).map(([key, preset]) => `<button type="button" class="msg-layout-card ${key === active ? 'active' : ''}" data-layout-card="${escapeHtml(key)}"><strong>${escapeHtml(preset.label || key)}</strong><span>${escapeHtml(preset.description || 'Responsive email layout')}</span></button>`).join('');
+    box.querySelectorAll('[data-layout-card]').forEach((btn)=>btn.addEventListener('click',()=>{ if(el('msg-layout-preset')) el('msg-layout-preset').value = btn.dataset.layoutCard; applyEmailLayoutPreset(btn.dataset.layoutCard); renderLayoutGallery(); }));
+  }
+
+  function fontStorageKey() { return storageKey('font_overrides'); }
+  function loadFontOverrides() {
+    try { fontOverrides = JSON.parse(localStorage.getItem(fontStorageKey()) || '[]'); } catch (_) { fontOverrides = []; }
+    fontOverrides = (Array.isArray(fontOverrides) ? fontOverrides : []).filter((font) => font && (font.name || font.url)).slice(0, 50);
+    injectFontOverrides();
+    renderFontOverrides();
+    refreshFontSelectOptions();
+  }
+  function saveFontOverrides() {
+    localStorage.setItem(fontStorageKey(), JSON.stringify(fontOverrides.slice(0, 50)));
+    injectFontOverrides();
+    renderFontOverrides();
+    refreshFontSelectOptions();
+    securedFetch('/admin/email-font-overrides', { method: 'PATCH', body: JSON.stringify({ area: 'reviews', fonts: fontOverrides.slice(0, 50) }) }).catch((error)=>console.warn('Font override save skipped:', error.message));
+    updatePreview();
+  }
+
+  async function loadFontOverridesFromServer() {
+    try {
+      const result = await securedFetch('/admin/email-font-overrides?area=reviews');
+      if (Array.isArray(result.fonts)) {
+        fontOverrides = result.fonts.slice(0, 50);
+        localStorage.setItem(fontStorageKey(), JSON.stringify(fontOverrides));
+        injectFontOverrides();
+        renderFontOverrides();
+        refreshFontSelectOptions();
+        updatePreview();
+      }
+    } catch (error) {
+      console.warn('Font override server load skipped:', error.message);
+    }
+  }
+  function injectFontOverrides() {
+    document.querySelectorAll('link[data-nectar-font-override="true"]').forEach((node) => node.remove());
+    fontOverrides.forEach((font) => {
+      const url = String(font.url || '').trim();
+      if (!url || !/^https:\/\/fonts\.googleapis\.com\//i.test(url)) return;
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = url;
+      link.dataset.nectarFontOverride = 'true';
+      document.head.appendChild(link);
+    });
+  }
+  function refreshFontSelectOptions() {
+    const select = el('msg-heading-font');
+    if (!select) return;
+    const current = select.value || 'Arial,Helvetica,sans-serif';
+    select.querySelectorAll('option[data-custom-font="true"]').forEach((option) => option.remove());
+    fontOverrides.forEach((font) => {
+      const name = String(font.name || '').trim();
+      if (!name) return;
+      const option = document.createElement('option');
+      option.dataset.customFont = 'true';
+      option.value = `'${name}', Arial, sans-serif`;
+      option.textContent = `${name} (custom)`;
+      select.appendChild(option);
+    });
+    if (Array.from(select.options).some((option) => option.value === current)) select.value = current;
+  }
+  function renderFontOverrides() {
+    const box = el('msg-font-override-list');
+    if (!box) return;
+    if (!fontOverrides.length) { box.innerHTML = '<div class="msg-help">No custom Google fonts added yet. Paste a Google Fonts stylesheet link and give it a font-family name.</div>'; return; }
+    box.innerHTML = fontOverrides.map((font, index) => `<div class="msg-font-row"><span><strong>${escapeHtml(font.name || 'Custom font')}</strong><small>${escapeHtml(font.url || '')}</small></span><button type="button" class="msg-btn secondary danger" data-remove-font="${index}">Remove</button></div>`).join('');
+    box.querySelectorAll('[data-remove-font]').forEach((btn)=>btn.addEventListener('click',()=>{ fontOverrides.splice(Number(btn.dataset.removeFont),1); saveFontOverrides(); }));
+  }
+  function addFontOverride() {
+    const name = val('msg-font-name');
+    const url = val('msg-font-url');
+    if (!name || !url) return showToast('Add both a font family name and a Google Fonts link.');
+    if (!/^https:\/\/fonts\.googleapis\.com\//i.test(url)) return showToast('Use a Google Fonts CSS link that starts with https://fonts.googleapis.com/');
+    const existing = fontOverrides.find((font) => String(font.name).toLowerCase() === name.toLowerCase());
+    if (existing) { existing.url = url; } else { fontOverrides.push({ name, url }); }
+    if (el('msg-font-name')) el('msg-font-name').value = '';
+    if (el('msg-font-url')) el('msg-font-url').value = '';
+    saveFontOverrides();
+    showToast('Font override saved');
+  }
+
+  function productElementOrderFromInput() {
+    const raw = val('msg-product-element-order', 'image,title,id,stars,button');
+    const allowed = PRODUCT_LAYOUT_ELEMENTS.map((item) => item.id);
+    const order = raw.split(',').map((item) => item.trim()).filter((item) => allowed.includes(item));
+    allowed.forEach((item) => { if (!order.includes(item)) order.push(item); });
+    return order;
+  }
+  function setProductElementOrder(order = []) {
+    const allowed = PRODUCT_LAYOUT_ELEMENTS.map((item) => item.id);
+    const clean = order.filter((item) => allowed.includes(item));
+    allowed.forEach((item) => { if (!clean.includes(item)) clean.push(item); });
+    const input = el('msg-product-element-order');
+    if (input) input.value = clean.join(',');
+    renderProductLayoutDesigner();
+    renderLayoutGallery();
+    updatePreview();
+  }
+  function productLayoutControlsHtml() {
+    return `<div class="msg-card msg-product-display-card"><h3>Product card layout</h3><p>Customise only the product card area used inside review emails. Drag the elements into the order you want customers to see.</p><input id="msg-product-element-order" type="hidden" value="image,title,id,stars,button"><div id="msg-product-layout-designer" class="msg-product-layout-designer"></div><div class="msg-two"><div><label>Show product stars</label><select id="msg-product-show-stars"><option value="true" selected>Show stars</option><option value="false">Hide stars</option></select></div><div><label>Star position</label><select id="msg-product-star-position"><option value="above_button" selected>Above button</option><option value="between">Between title and button</option><option value="under_title">Under product title</option><option value="custom">Use dragged order</option></select></div></div><div class="msg-two"><div><label>Product title weight</label><select id="msg-product-title-weight"><option value="400">Regular</option><option value="600">Semi bold</option><option value="700" selected>Bold</option><option value="800">Extra bold</option></select></div><div><label>Show product ID</label><select id="msg-product-show-id"><option value="true" selected>Show product ID</option><option value="false">Hide product ID</option></select></div></div><div class="msg-two"><div><label>Product image size</label><input id="msg-product-image-size" type="number" min="36" max="120" value="58"></div><div><label>Product row alignment</label><select id="msg-product-row-align"><option value="left" selected>Left image, title, button</option><option value="compact">Compact centred title</option><option value="stacked">Stacked mobile-first</option></select></div></div><div class="msg-help">VIP layout controls affect product cards only. The wider email heading/copy still uses the Brand & layout and Email copy panels.</div></div>`;
+  }
+  function renderProductLayoutDesigner() {
+    const box = el('msg-product-layout-designer');
+    if (!box) return;
+    const order = productElementOrderFromInput();
+    box.innerHTML = `<div class="msg-product-layout-dropzone">${order.map((id, index) => { const item = PRODUCT_LAYOUT_ELEMENTS.find((entry) => entry.id === id); return `<button type="button" draggable="true" class="msg-product-layout-chip" data-product-layout-chip="${escapeHtml(id)}" data-product-layout-index="${index}"><span class="drag">☰</span>${escapeHtml(item?.label || id)}</button>`; }).join('')}</div><p class="msg-field-hint">Drag to reorder. The Preview updates instantly. Hidden fields such as Product ID are ignored when disabled.</p>`;
+    box.querySelectorAll('[data-product-layout-chip]').forEach((chip)=>{
+      chip.addEventListener('dragstart',(event)=>{ event.dataTransfer.setData('text/plain', chip.dataset.productLayoutIndex || '0'); chip.classList.add('dragging'); });
+      chip.addEventListener('dragend',()=>chip.classList.remove('dragging'));
+      chip.addEventListener('dragover',(event)=>event.preventDefault());
+      chip.addEventListener('drop',(event)=>{ event.preventDefault(); const from=Number(event.dataTransfer.getData('text/plain')); const to=Number(chip.dataset.productLayoutIndex); const current=productElementOrderFromInput(); if(Number.isNaN(from)||Number.isNaN(to)||from===to)return; const [moved]=current.splice(from,1); current.splice(to,0,moved); setProductElementOrder(current); });
+    });
+  }
+
+  function templateLibraryPreviewHtml(template) {
+    const previousSections = emailSections.slice();
+    const templateSections = Array.isArray(template?.sections) ? template.sections.map((section)=>({ ...section })) : [];
+    const d = template?.design || {};
+    emailSections.splice(0, emailSections.length, ...templateSections);
+    const preview = buildRenderedTestEmailHtml({ ...opts(), ...d, subject: template?.subject || d.subject || opts().subject });
+    emailSections.splice(0, emailSections.length, ...previousSections);
+    return preview;
   }
 
   function markup() {
@@ -288,6 +434,7 @@
         </div>
         <div class="msg-tabs" role="tablist">
           <button type="button" class="msg-tab active" data-msg-tab="builder">Email Builder</button>
+          <button type="button" class="msg-tab" data-msg-tab="templates">Templates</button>
           <button type="button" class="msg-tab" data-msg-tab="tester">Review Page Tester</button>
           <button type="button" class="msg-tab" data-msg-tab="delivery">Email Delivery</button>
           <button type="button" class="msg-tab" data-msg-tab="analytics">Analytics</button>
@@ -298,15 +445,20 @@
         <section id="msg-pane-builder" class="msg-pane active">
           <div class="msg-grid msg-builder-grid">
             <div class="msg-stack">
-              <div class="msg-card"><h3>Brand & layout</h3><p>Start with a premade layout, then customise colours, typography and product rows.</p><div class="msg-two"><div><label>Email layout preset</label><select id="msg-layout-preset"><option value="classic">Classic review request</option><option value="product_first">Product-first layout</option><option value="clean_minimal">Clean minimal</option><option value="support_first">Support-first</option></select></div><div><label>Apply preset</label><button type="button" id="msg-apply-layout-preset" class="msg-btn secondary full">Apply layout</button></div></div><label>Brand logo URL</label><input id="msg-logo" type="url" placeholder="https://cdn.shopify.com/.../logo.png"><div class="msg-two"><div><label>Button colour</label><input id="msg-color" class="msg-hidden-color-input" type="text" value="#111827"><button type="button" class="msg-color-picker" data-color-picker-for="msg-color"><span class="msg-color-swatch"></span><span class="msg-color-label">Colour selected</span></button></div><div><label>Button radius</label><input id="msg-button-radius" type="number" min="0" max="40" value="8"></div></div><div class="msg-two"><div><label>Email background</label><input id="msg-bg-color" class="msg-hidden-color-input" type="text" value="#f3f4f6"><button type="button" class="msg-color-picker" data-color-picker-for="msg-bg-color"><span class="msg-color-swatch"></span><span class="msg-color-label">Colour selected</span></button></div><div><label>Email card</label><input id="msg-card-color" class="msg-hidden-color-input" type="text" value="#ffffff"><button type="button" class="msg-color-picker" data-color-picker-for="msg-card-color"><span class="msg-color-swatch"></span><span class="msg-color-label">Colour selected</span></button></div></div><div class="msg-two"><div><label>Star colour</label><input id="msg-star-color" class="msg-hidden-color-input" type="text" value="#f5b301"><button type="button" class="msg-color-picker" data-color-picker-for="msg-star-color"><span class="msg-color-swatch"></span><span class="msg-color-label">Colour selected</span></button></div><div><label>Top star section</label><select id="msg-show-top-stars"><option value="true" selected>Show default stars</option><option value="false">Hide default stars</option></select></div></div></div>
-              <div class="msg-card"><h3>Email copy</h3><label>Subject line</label><input id="msg-subject" type="text" value="How was your recent order?"><label>Heading</label><input id="msg-heading" type="text" value="How did we do?"><div class="msg-typography-grid"><div><label>Title alignment</label><select id="msg-heading-align"><option value="left">Left</option><option value="center" selected>Centre</option><option value="right">Right</option></select></div><div><label>Title weight</label><select id="msg-heading-weight"><option value="300">Slim</option><option value="400">Regular</option><option value="600">Semi bold</option><option value="700" selected>Bold</option><option value="800">Extra bold</option></select></div><div><label>Font family</label><select id="msg-heading-font"><option value="Arial,Helvetica,sans-serif">Arial</option><option value="Verdana,Geneva,sans-serif">Verdana</option><option value="Georgia,serif">Georgia</option><option value="Trebuchet MS,Arial,sans-serif">Trebuchet</option><option value="Inter,Arial,sans-serif">Inter-style</option></select></div></div><label>Intro line</label><input id="msg-intro" type="text" value='Hi {{ order.customer.firstName | default: "there" }}'><label>Body</label><textarea id="msg-body">We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?</textarea><label>Sign-off</label><input id="msg-signoff" type="text" value="Your feedback helps other customers make confident choices."></div><div class="msg-card"><h3>Review email templates</h3><p>Save this email design as a reusable template. Mark one template as Primary Reviews so live native review emails use it.</p><label>Template name</label><input id="msg-email-template-name" type="text" value="Reviews primary request"><div class="msg-actions"><button type="button" id="msg-save-email-template" class="msg-btn secondary">Save template</button><button type="button" id="msg-save-primary-template" class="msg-btn">Save & make primary</button></div><div id="msg-email-template-list" class="msg-template-list" style="margin-top:12px;"><div class="msg-help">Loading saved email templates...</div></div></div><div class="msg-card"><h3>Email sections</h3><p>Add simple extra blocks before or after the products without editing code.</p><div class="msg-builder-section-controls"><div class="msg-input-action"><select id="msg-section-template"></select><button type="button" id="msg-add-section" class="msg-btn secondary">Add section</button></div><div id="msg-section-list" class="msg-section-list-wide"></div></div></div>
-              <div class="msg-card msg-link-compact"><h3>Review link defaults</h3><div class="msg-two"><div><label>Link mode</label><select id="msg-link-mode"><option value="both">Order and products</option><option value="order">Order only</option><option value="products">Product buttons only</option></select></div><div><label>Review page handle</label><div class="msg-page-handle-control"><input id="msg-page-handle" type="text" value="leave-review"><button type="button" id="msg-refresh-page-status" class="msg-page-status-chip" title="Check page"><span class="msg-page-status-dot">?</span><span class="msg-page-status-copy">Not checked</span></button></div></div></div><div id="msg-review-page-status" class="msg-page-status-card compact"><div><strong>Review page not checked yet</strong><p>We will verify /pages/leave-review exists before live emails use it.</p></div></div><div class="msg-two"><div><label>Main button text</label><input id="msg-main-button-text" type="text" value="Review Your Order"></div><div><label>Product button text</label><input id="msg-product-button-text" type="text" value="Review This Item"></div></div><div class="msg-two"><div><label>Wait after fulfilment</label><select id="msg-delay-days"><option value="7">7 days</option><option value="10">10 days</option><option value="14" selected>14 days</option><option value="21">21 days</option><option value="30">30 days</option></select></div><div><label>Flow action</label><input value="Send email" readonly></div></div><div class="msg-help">Advanced conditional wording now lives in the Settings tab.</div></div><div class="msg-card msg-product-display-card"><h3>Product row display</h3><p>Control how purchased products appear inside the review request email.</p><div class="msg-two"><div><label>Show product stars</label><select id="msg-product-show-stars"><option value="true" selected>Show stars</option><option value="false">Hide stars</option></select></div><div><label>Star position</label><select id="msg-product-star-position"><option value="above_button" selected>Above button</option><option value="between">Between title and button</option><option value="under_title">Under product title</option></select></div></div><div class="msg-two"><div><label>Product title weight</label><select id="msg-product-title-weight"><option value="400">Regular</option><option value="600">Semi bold</option><option value="700" selected>Bold</option><option value="800">Extra bold</option></select></div><div><label>Show product ID</label><select id="msg-product-show-id"><option value="true" selected>Show product ID</option><option value="false">Hide product ID</option></select></div></div><div class="msg-two"><div><label>Product image size</label><input id="msg-product-image-size" type="number" min="36" max="96" value="58"></div><div><label>Product row alignment</label><select id="msg-product-row-align"><option value="left" selected>Left image, title, button</option><option value="compact">Compact centred title</option></select></div></div></div>
+              <div class="msg-card"><h3>Brand & layout</h3><p>Start with a premade layout, then customise colours, typography and product rows.</p><div class="msg-two"><div><label>Email layout preset</label><select id="msg-layout-preset"><option value="classic">Classic review request</option><option value="product_first">Product-first layout</option><option value="clean_minimal">Clean minimal</option><option value="support_first">Support-first</option><option value="premium_card">Premium card</option><option value="mobile_compact">Mobile compact</option><option value="editorial_story">Editorial story</option></select></div><div><label>Apply preset</label><button type="button" id="msg-apply-layout-preset" class="msg-btn secondary full">Apply layout</button></div></div><div id="msg-layout-gallery" class="msg-layout-gallery"></div><label>Brand logo URL</label><input id="msg-logo" type="url" placeholder="https://cdn.shopify.com/.../logo.png"><div class="msg-two"><div><label>Button colour</label><input id="msg-color" class="msg-hidden-color-input" type="text" value="#111827"><button type="button" class="msg-color-picker" data-color-picker-for="msg-color"><span class="msg-color-swatch"></span><span class="msg-color-label">Colour selected</span></button></div><div><label>Button radius</label><input id="msg-button-radius" type="number" min="0" max="40" value="8"></div></div><div class="msg-two"><div><label>Email background</label><input id="msg-bg-color" class="msg-hidden-color-input" type="text" value="#f3f4f6"><button type="button" class="msg-color-picker" data-color-picker-for="msg-bg-color"><span class="msg-color-swatch"></span><span class="msg-color-label">Colour selected</span></button></div><div><label>Email card</label><input id="msg-card-color" class="msg-hidden-color-input" type="text" value="#ffffff"><button type="button" class="msg-color-picker" data-color-picker-for="msg-card-color"><span class="msg-color-swatch"></span><span class="msg-color-label">Colour selected</span></button></div></div><div class="msg-two"><div><label>Star colour</label><input id="msg-star-color" class="msg-hidden-color-input" type="text" value="#f5b301"><button type="button" class="msg-color-picker" data-color-picker-for="msg-star-color"><span class="msg-color-swatch"></span><span class="msg-color-label">Colour selected</span></button></div><div><label>Top star section</label><select id="msg-show-top-stars"><option value="true" selected>Show default stars</option><option value="false">Hide default stars</option></select></div></div></div>
+              <div class="msg-card"><h3>Email copy</h3><label>Subject line</label><input id="msg-subject" type="text" value="How was your recent order?"><label>Heading</label><input id="msg-heading" type="text" value="How did we do?"><div class="msg-typography-grid"><div><label>Title alignment</label><select id="msg-heading-align"><option value="left">Left</option><option value="center" selected>Centre</option><option value="right">Right</option></select></div><div><label>Title weight</label><select id="msg-heading-weight"><option value="300">Slim</option><option value="400">Regular</option><option value="600">Semi bold</option><option value="700" selected>Bold</option><option value="800">Extra bold</option></select></div><div><label>Font family</label><select id="msg-heading-font"><option value="Arial,Helvetica,sans-serif">Arial</option><option value="Verdana,Geneva,sans-serif">Verdana</option><option value="Georgia,serif">Georgia</option><option value="Trebuchet MS,Arial,sans-serif">Trebuchet</option><option value="Inter,Arial,sans-serif">Inter-style</option></select></div></div><div class="msg-two"><div><label>Intro line</label><input id="msg-intro" type="text" value='Hi {{ order.customer.firstName | default: "there" }}'></div><div><label>Intro alignment</label><select id="msg-intro-align"><option value="left">Left</option><option value="center" selected>Centre</option><option value="right">Right</option></select></div></div><label>Body</label><textarea id="msg-body">We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?</textarea><label>Body alignment</label><select id="msg-body-align"><option value="left">Left</option><option value="center" selected>Centre</option><option value="right">Right</option></select><label>Sign-off</label><input id="msg-signoff" type="text" value="Your feedback helps other customers make confident choices."></div><div class="msg-card"><h3>Review email templates</h3><p>Save this email design as a reusable template. Mark one template as Primary Reviews so live native review emails use it.</p><label>Template name</label><input id="msg-email-template-name" type="text" value="Reviews primary request"><div class="msg-actions"><button type="button" id="msg-save-email-template" class="msg-btn secondary">Save template</button><button type="button" id="msg-save-primary-template" class="msg-btn">Save & make primary</button></div><div id="msg-email-template-list" class="msg-template-list" style="margin-top:12px;"><div class="msg-help">Loading saved email templates...</div></div></div><div class="msg-card"><h3>Email sections</h3><p>Add simple extra blocks before or after the products without editing code.</p><div class="msg-builder-section-controls"><div class="msg-input-action"><select id="msg-section-template"></select><button type="button" id="msg-add-section" class="msg-btn secondary">Add section</button></div><div id="msg-section-list" class="msg-section-list-wide"></div></div></div>
+              <div class="msg-card msg-link-compact"><h3>Review link defaults</h3><div class="msg-two"><div><label>Link mode</label><select id="msg-link-mode"><option value="both">Order and products</option><option value="order">Order only</option><option value="products">Product buttons only</option></select></div><div><label>Review page handle</label><div class="msg-page-handle-control"><input id="msg-page-handle" type="text" value="leave-review"><button type="button" id="msg-refresh-page-status" class="msg-page-status-chip" title="Check page"><span class="msg-page-status-dot">?</span><span class="msg-page-status-copy">Not checked</span></button></div></div></div><div id="msg-review-page-status" class="msg-page-status-card compact"><div><strong>Review page not checked yet</strong><p>We will verify /pages/leave-review exists before live emails use it.</p></div></div><div class="msg-two"><div><label>Main button text</label><input id="msg-main-button-text" type="text" value="Review Your Order"></div><div><label>Product button text</label><input id="msg-product-button-text" type="text" value="Review This Item"></div></div><div class="msg-two"><div><label>Wait after fulfilment</label><select id="msg-delay-days"><option value="7">7 days</option><option value="10">10 days</option><option value="14" selected>14 days</option><option value="21">21 days</option><option value="30">30 days</option></select></div><div><label>Flow action</label><input value="Send email" readonly></div></div><div class="msg-help">Advanced conditional wording now lives in the Settings tab.</div></div><div class="msg-card"><h3>Product card layout</h3><p>Product-card controls now live under Modules → Product layout, so the builder stays focused on copy, brand and saved templates.</p><div class="msg-actions"><button type="button" class="msg-btn secondary" data-open-product-layout>Open product layout controls</button></div></div>
             </div>
             <div class="msg-stack msg-preview-column">
               <div class="msg-card msg-preview-card"><div class="msg-preview-head"><div><h3>Customer email preview</h3><p>Compact live preview. Open it large when checking the final layout.</p></div><div class="msg-preview-tools"><button type="button" id="msg-preview-popout" class="msg-btn secondary msg-preview-popout">Full preview</button><div class="msg-toggle"><button type="button" id="msg-preview-desktop" class="active" data-preview="desktop">Desktop</button><button type="button" id="msg-preview-mobile" data-preview="mobile">Mobile</button></div></div></div><div class="msg-preview-stage"><div id="msg-preview-wrap" class="msg-preview-wrap"><div id="msg-email-preview"></div></div></div></div>
 
             </div>
           </div>
+        </section>
+
+        <section id="msg-pane-templates" class="msg-pane">
+          <div class="msg-card"><h3>Email template library</h3><p>Saved email designs appear here. Select a template to load it into the builder and render a full-width preview below.</p><div id="msg-email-template-library" class="msg-template-library-wide"><div class="msg-help">Loading saved email templates...</div></div></div>
+          <div class="msg-card msg-template-render-card"><div class="msg-template-render-head"><div><h3>Selected template render</h3><p>Use this full-width preview to check exactly what has been saved.</p></div><div class="msg-actions"><button type="button" id="msg-template-render-mobile" class="msg-btn secondary">Mobile width</button><button type="button" id="msg-template-render-desktop" class="msg-btn secondary">Desktop width</button></div></div><div class="msg-template-render-stage"><div id="msg-selected-template-render" class="msg-template-render-frame"><div class="msg-help">Select a saved template above to render it here.</div></div></div></div>
         </section>
 
         <section id="msg-pane-tester" class="msg-pane">
@@ -331,16 +483,20 @@
           <div class="msg-card"><h3>Campaign analytics</h3><p>Unique open/click tracking by campaign, including test emails.</p><div id="msg-analytics" class="msg-analytics"><div><span>Sent</span><strong>0</strong></div><div><span>Open rate</span><strong>0%</strong></div><div><span>Click rate</span><strong>0%</strong></div></div><div class="msg-analytics-toolbar"><label><input id="msg-analytics-include-tests" type="checkbox"> Include test/fake emails</label><button type="button" id="msg-analytics-refresh" class="msg-btn secondary">Refresh analytics</button></div><div id="msg-analytics-breakdown" class="msg-link-rule-list" style="margin-top:16px;"></div><div class="msg-analytics-tabs"><button class="msg-analytics-tab active" data-analytics-list="recipients" type="button">Recipients</button><button class="msg-analytics-tab" data-analytics-list="sent" type="button">Sent</button><button class="msg-analytics-tab" data-analytics-list="opened" type="button">Opened</button><button class="msg-analytics-tab" data-analytics-list="clicked" type="button">Clicked</button><button class="msg-analytics-tab" data-analytics-list="reviewed" type="button">Reviewed</button></div><div id="msg-analytics-list" class="msg-analytics-list"></div><p class="msg-analytics-note">Open rates are based on unique recipient tokens. Re-opening the same email does not increase the rate.</p></div>
         </section>
         <section id="msg-pane-modules" class="msg-pane">
-          <div class="msg-modules-stack">
-            <div class="msg-card"><h3>Create email module</h3><p>Build reusable content blocks that appear as options in the Email Builder. Use your own names, copy, border, radius, button and layout settings.</p><div class="msg-module-form-grid"><div><label>Module name</label><input id="msg-module-name" type="text" placeholder="e.g. Delivery notice"></div><div><label>Internal type</label><select id="msg-module-position"><option value="before">Before products</option><option value="after">After products</option></select></div></div><label>Title</label><input id="msg-module-title" type="text" placeholder="A quick note"><label>Description</label><textarea id="msg-module-text" placeholder="Write the message customers should see."></textarea><div class="msg-module-form-grid"><div><label>Button text</label><input id="msg-module-button-text" type="text" placeholder="Optional"></div><div><label>Button URL or page</label><div class="msg-module-link-grid"><select id="msg-module-link-type"><option value="external">External URL</option><option value="internal">Internal Shopify page/path</option><option value="support_modal">Review page support modal</option></select><input id="msg-module-button-url" type="text" placeholder="/pages/contact or https://..."><button type="button" id="msg-module-search-page" class="msg-btn secondary">Find page</button></div><span class="msg-field-hint">Internal links can be searched from Shopify pages/collections, or set to the review-page support modal.</span><div id="msg-module-page-results" class="msg-page-search-results"></div></div></div><div class="msg-module-style-grid"><label>Background<input id="msg-module-bg" class="msg-hidden-color-input" type="text" value="none"><button type="button" class="msg-color-picker" data-color-picker-for="msg-module-bg"><span class="msg-color-swatch"></span><span class="msg-color-label">None / transparent</span></button></label><label>Border<input id="msg-module-border" class="msg-hidden-color-input" type="text" value="#e5e7eb"><button type="button" class="msg-color-picker" data-color-picker-for="msg-module-border"><span class="msg-color-swatch"></span><span class="msg-color-label">Colour selected</span></button></label><label>Thickness<input id="msg-module-border-width" type="number" min="0" max="8" value="1"></label><label>Radius<input id="msg-module-radius" type="number" min="0" max="32" value="14"></label><label>Padding<input id="msg-module-padding" type="number" min="8" max="36" value="16"></label></div><div class="msg-actions"><button type="button" id="msg-save-module" class="msg-btn">Save Module</button><button type="button" id="msg-clear-module" class="msg-btn secondary">Clear</button></div></div>
-            <div class="msg-card"><h3>Module library</h3><p>Saved modules appear in the Email Builder dropdown and can be inserted without squeezing more controls into the widget area.</p><div id="msg-module-library" class="msg-module-library"></div></div>
+          <div class="msg-subtabs"><button type="button" class="msg-subtab active" data-msg-module-tab="product-layout">Product layout</button><button type="button" class="msg-subtab" data-msg-module-tab="content-modules">Modules</button></div>
+          <div id="msg-module-subtab-product-layout" class="msg-module-subpane active">${productLayoutControlsHtml()}<div class="msg-card"><h3>Product-card workflow</h3><p>This is the VIP product-card layout editor. Drag the elements, decide what appears, and keep it separate from regular message modules.</p></div></div>
+          <div id="msg-module-subtab-content-modules" class="msg-module-subpane">
+            <div class="msg-modules-stack">
+              <div class="msg-card"><h3>Create email module</h3><p>Build reusable content blocks that appear as options in the Email Builder. Use your own names, copy, border, radius, button and layout settings.</p><div class="msg-module-form-grid"><div><label>Module name</label><input id="msg-module-name" type="text" placeholder="e.g. Delivery notice"></div><div><label>Internal type</label><select id="msg-module-position"><option value="before">Before products</option><option value="after">After products</option></select></div></div><label>Title</label><input id="msg-module-title" type="text" placeholder="A quick note"><label>Description</label><textarea id="msg-module-text" placeholder="Write the message customers should see."></textarea><div class="msg-module-form-grid"><div><label>Button text</label><input id="msg-module-button-text" type="text" placeholder="Optional"></div><div><label>Button URL or page</label><div class="msg-module-link-grid"><select id="msg-module-link-type"><option value="external">External URL</option><option value="internal">Internal Shopify page/path</option><option value="support_modal">Review page support modal</option></select><input id="msg-module-button-url" type="text" placeholder="/pages/contact or https://..."><button type="button" id="msg-module-search-page" class="msg-btn secondary">Find page</button></div><span class="msg-field-hint">Internal links can be searched from Shopify pages/collections, or set to the review-page support modal.</span><div id="msg-module-page-results" class="msg-page-search-results"></div></div></div><div class="msg-module-style-grid"><label>Background<input id="msg-module-bg" class="msg-hidden-color-input" type="text" value="none"><button type="button" class="msg-color-picker" data-color-picker-for="msg-module-bg"><span class="msg-color-swatch"></span><span class="msg-color-label">None / transparent</span></button></label><label>Border<input id="msg-module-border" class="msg-hidden-color-input" type="text" value="#e5e7eb"><button type="button" class="msg-color-picker" data-color-picker-for="msg-module-border"><span class="msg-color-swatch"></span><span class="msg-color-label">Colour selected</span></button></label><label>Thickness<input id="msg-module-border-width" type="number" min="0" max="8" value="1"></label><label>Radius<input id="msg-module-radius" type="number" min="0" max="32" value="14"></label><label>Padding<input id="msg-module-padding" type="number" min="8" max="36" value="16"></label></div><div class="msg-actions"><button type="button" id="msg-save-module" class="msg-btn">Save Module</button><button type="button" id="msg-clear-module" class="msg-btn secondary">Clear</button></div></div>
+              <div class="msg-card"><h3>Module library</h3><p>Saved modules appear in the Email Builder dropdown and can be inserted without squeezing more controls into the widget area.</p><div id="msg-module-library" class="msg-module-library"></div></div>
+            </div>
           </div>
         </section>
         <section id="msg-pane-settings" class="msg-pane">
           <div class="msg-grid msg-settings-grid">
             <div class="msg-stack">
               <div class="msg-card"><h3>Review button wording rules</h3><p>These only change button text. Delivery timing is controlled by the native scheduler so customers are not asked to review before delivery.</p><div class="msg-help"><strong>Recommended live rule:</strong> Settings → Reviews Launch Checklist should show <b>Delivery tag gate: delivered</b>. Nectar then waits until Shopify order tag <code>delivered</code> exists before starting the 14-day timer.</div><div class="msg-link-rule-row"><div><label>Check</label><select id="msg-link-rule-type"><option value="tag">Product tag</option><option value="metafield">Product metafield</option><option value="order">Order number / name</option><option value="order_value">Order value</option><option value="order_tag">Order tag</option></select></div><div><label>Value</label><input id="msg-link-rule-condition" type="text" placeholder="e.g. Snowboard, #1001, VIP"></div><div><label>Use button text</label><input id="msg-link-rule-text" type="text" placeholder="Review this board"></div><button type="button" id="msg-add-link-rule" class="msg-btn secondary">Add wording rule</button></div><div id="msg-link-rule-list" class="msg-link-rule-list"></div></div>
-              <div class="msg-card"><h3>Shopify Flow guidance</h3><p>Paste the HTML on the right into a Shopify Flow “Send email” action with HTML enabled.</p><div class="msg-help">Recommended flow: Order fulfilled → Wait <span id="msg-delay-preview-settings">14</span> days → Send email.</div></div>
+              <div class="msg-card"><h3>Shopify Flow guidance</h3><p>Paste the HTML on the right into a Shopify Flow “Send email” action with HTML enabled.</p><div class="msg-help">Recommended flow: Order fulfilled → Wait <span id="msg-delay-preview-settings">14</span> days → Send email.</div></div><div class="msg-card"><h3>Font overrides</h3><p>Add Google Fonts used by this store, then select them in the Email Builder font-family dropdown. You can add unlimited font links.</p><div class="msg-two"><div><label>Font family name</label><input id="msg-font-name" type="text" placeholder="e.g. Poppins"></div><div><label>Google Fonts CSS link</label><input id="msg-font-url" type="url" placeholder="https://fonts.googleapis.com/css2?family=Poppins..."></div></div><div class="msg-actions"><button type="button" id="msg-add-font-override" class="msg-btn secondary">Add font</button></div><div id="msg-font-override-list" class="msg-font-list"></div></div>
             </div>
             <div class="msg-card msg-code-card" style="padding:0;"><details class="msg-collapsible-code"><summary><div>Copy Shopify Flow HTML<br><span>Open only when you need to paste code into Shopify Flow.</span></div><button type="button" id="msg-copy-code-btn" class="msg-btn">Copy Code</button></summary><textarea id="msg-code-output" class="msg-code" spellcheck="false" readonly></textarea></details></div>
           </div>
@@ -587,16 +743,40 @@
   }
 
   function renderEmailTemplates() {
-    const box = el('msg-email-template-list');
-    if (!box) return;
+    const compactBox = el('msg-email-template-list');
+    const libraryBox = el('msg-email-template-library');
+    const empty = '<div class="msg-help">No saved email templates yet. Save this design, then mark one as Primary Reviews.</div>';
     if (!emailTemplates.length) {
-      box.innerHTML = '<div class="msg-help">No saved email templates yet. Save this design, then mark one as Primary Reviews.</div>';
+      if (compactBox) compactBox.innerHTML = empty;
+      if (libraryBox) libraryBox.innerHTML = empty;
+      renderSelectedEmailTemplate();
       return;
     }
-    box.innerHTML = emailTemplates.map((t) => `<div class="msg-template-card"><div class="msg-template-top"><div><strong>${escapeHtml(t.name || 'Template')}</strong><div class="msg-template-meta"><span>${t.isPrimary ? '✅ Primary Reviews' : 'Saved'}</span><span>${escapeHtml(t.subject || '')}</span><span>${escapeHtml(t.updatedAt ? new Date(t.updatedAt).toLocaleString() : '')}</span></div></div><button type="button" class="msg-template-remove" data-delete-email-template="${escapeHtml(t._id)}" title="Delete template">×</button></div><div class="msg-template-actions"><button type="button" class="msg-btn secondary" data-load-email-template="${escapeHtml(t._id)}">Load</button>${t.isPrimary ? '' : `<button type="button" class="msg-btn" data-primary-email-template="${escapeHtml(t._id)}">Make primary</button>`}</div></div>`).join('');
-    box.querySelectorAll('[data-load-email-template]').forEach((btn)=>btn.addEventListener('click',()=>loadEmailTemplate(btn.dataset.loadEmailTemplate)));
-    box.querySelectorAll('[data-primary-email-template]').forEach((btn)=>btn.addEventListener('click',()=>setPrimaryEmailTemplate(btn.dataset.primaryEmailTemplate)));
-    box.querySelectorAll('[data-delete-email-template]').forEach((btn)=>btn.addEventListener('click',()=>deleteEmailTemplate(btn.dataset.deleteEmailTemplate)));
+    const cardHtml = (t, mode = 'compact') => `<div class="msg-template-card ${String(t._id) === String(selectedEmailTemplateId) ? 'selected' : ''}" data-template-card="${escapeHtml(t._id)}"><div class="msg-template-top"><div><strong>${escapeHtml(t.name || 'Template')}</strong><div class="msg-template-meta"><span>${t.isPrimary ? '✅ Primary Reviews' : 'Saved'}</span><span>${escapeHtml(t.subject || '')}</span><span>${escapeHtml(t.design?.layoutPreset || 'custom')}</span><span>${escapeHtml(t.updatedAt ? new Date(t.updatedAt).toLocaleString() : '')}</span></div></div><button type="button" class="msg-template-remove" data-delete-email-template="${escapeHtml(t._id)}" title="Delete template">×</button></div><div class="msg-template-actions"><button type="button" class="msg-btn secondary" data-load-email-template="${escapeHtml(t._id)}">Load</button><button type="button" class="msg-btn secondary" data-preview-email-template="${escapeHtml(t._id)}">Preview</button>${t.isPrimary ? '' : `<button type="button" class="msg-btn" data-primary-email-template="${escapeHtml(t._id)}">Make primary</button>`}</div></div>`;
+    if (compactBox) compactBox.innerHTML = emailTemplates.slice(0, 3).map((t)=>cardHtml(t, 'compact')).join('') + `<button type="button" class="msg-btn secondary" data-open-template-tab>Open full template library</button>`;
+    if (libraryBox) libraryBox.innerHTML = emailTemplates.map((t)=>cardHtml(t, 'library')).join('');
+    document.querySelectorAll('[data-load-email-template]').forEach((btn)=>btn.addEventListener('click',()=>loadEmailTemplate(btn.dataset.loadEmailTemplate)));
+    document.querySelectorAll('[data-preview-email-template],[data-template-card]').forEach((node)=>node.addEventListener('click',(event)=>{ if (event.target.closest('[data-delete-email-template],[data-primary-email-template],[data-load-email-template]')) return; selectEmailTemplate(node.dataset.previewEmailTemplate || node.dataset.templateCard); }));
+    document.querySelectorAll('[data-primary-email-template]').forEach((btn)=>btn.addEventListener('click',()=>setPrimaryEmailTemplate(btn.dataset.primaryEmailTemplate)));
+    document.querySelectorAll('[data-delete-email-template]').forEach((btn)=>btn.addEventListener('click',(event)=>{ event.stopPropagation(); deleteEmailTemplate(btn.dataset.deleteEmailTemplate); }));
+    document.querySelector('[data-open-template-tab]')?.addEventListener('click',()=>switchPane('templates'));
+    if (!selectedEmailTemplateId || !emailTemplates.some((t)=>String(t._id) === String(selectedEmailTemplateId))) selectedEmailTemplateId = String(emailTemplates[0]?._id || '');
+    renderSelectedEmailTemplate();
+  }
+
+  function selectEmailTemplate(id) {
+    selectedEmailTemplateId = String(id || '');
+    renderEmailTemplates();
+    const t = emailTemplates.find((item)=>String(item._id) === selectedEmailTemplateId);
+    if (t) showToast(`Previewing ${t.name || 'template'}`);
+  }
+
+  function renderSelectedEmailTemplate() {
+    const frame = el('msg-selected-template-render');
+    if (!frame) return;
+    const t = emailTemplates.find((item)=>String(item._id) === String(selectedEmailTemplateId));
+    if (!t) { frame.classList.remove('mobile'); frame.innerHTML = '<div class="msg-help">Select a saved template above to render it here.</div>'; return; }
+    frame.innerHTML = templateLibraryPreviewHtml(t);
   }
 
   async function loadEmailTemplates() {
@@ -605,8 +785,9 @@
       emailTemplates = result.templates || [];
       renderEmailTemplates();
     } catch (error) {
-      const box = el('msg-email-template-list');
-      if (box) box.innerHTML = `<div class="msg-help">Could not load saved templates: ${escapeHtml(error.message || '')}</div>`;
+      const msg = `<div class="msg-help">Could not load saved templates: ${escapeHtml(error.message || '')}</div>`;
+      if (el('msg-email-template-list')) el('msg-email-template-list').innerHTML = msg;
+      if (el('msg-email-template-library')) el('msg-email-template-library').innerHTML = msg;
     }
   }
 
@@ -647,10 +828,14 @@
     if (el('msg-button-radius')) el('msg-button-radius').value = d.buttonRadius ?? 8;
     if (el('msg-bg-color')) el('msg-bg-color').value = d.bgColor || '#f3f4f6';
     if (el('msg-card-color')) el('msg-card-color').value = d.cardColor || '#ffffff';
+    if (Array.isArray(d.customFonts) && d.customFonts.length) { fontOverrides = d.customFonts.slice(0, 50); saveFontOverrides(); }
     if (el('msg-heading')) el('msg-heading').value = d.heading || 'How did we do?';
     if (el('msg-heading-align')) el('msg-heading-align').value = d.headingAlign || 'center';
     if (el('msg-heading-weight')) el('msg-heading-weight').value = d.headingWeight || '700';
+    refreshFontSelectOptions();
     if (el('msg-heading-font')) el('msg-heading-font').value = d.headingFont || 'Arial,Helvetica,sans-serif';
+    if (el('msg-intro-align')) el('msg-intro-align').value = d.introAlign || 'center';
+    if (el('msg-body-align')) el('msg-body-align').value = d.bodyAlign || 'center';
     if (el('msg-intro')) el('msg-intro').value = d.intro || 'Hi {{ order.customer.firstName | default: "there" }}';
     if (el('msg-body')) el('msg-body').value = d.body || '';
     if (el('msg-signoff')) el('msg-signoff').value = d.signoff || '';
@@ -665,9 +850,14 @@
     if (el('msg-product-show-id')) el('msg-product-show-id').value = String(d.productShowId !== false);
     if (el('msg-product-image-size')) el('msg-product-image-size').value = d.productImageSize || 58;
     if (el('msg-product-row-align')) el('msg-product-row-align').value = d.productRowAlign || 'left';
+    if (el('msg-product-element-order')) el('msg-product-element-order').value = Array.isArray(d.productElementOrder) ? d.productElementOrder.join(',') : (d.productElementOrder || 'image,title,id,stars,button');
+    renderProductLayoutDesigner();
+    selectedEmailTemplateId = String(t._id || selectedEmailTemplateId || '');
     emailSections.splice(0, emailSections.length, ...((t.sections || []).map((section)=>({ ...section, id: section.id || uid('section') }))));
     renderEmailSections();
     updatePreview();
+    renderLayoutGallery();
+    renderEmailTemplates();
     showToast('Template loaded');
   }
 
@@ -826,14 +1016,22 @@
     const set = (id, value) => { const node = el(id); if (node && value !== undefined) node.value = String(value); };
     set('msg-heading-align', preset.headingAlign);
     set('msg-heading-weight', preset.headingWeight);
+    set('msg-intro-align', preset.introAlign);
+    set('msg-body-align', preset.bodyAlign);
+    if (preset.accentColor) set('msg-color', preset.accentColor);
+    if (preset.bgColor) set('msg-bg-color', preset.bgColor);
+    if (preset.cardColor) set('msg-card-color', preset.cardColor);
+    if (preset.productElementOrder) set('msg-product-element-order', preset.productElementOrder.join(','));
     set('msg-product-row-align', preset.productRowAlign);
     set('msg-product-star-position', preset.productStarPosition);
     set('msg-product-show-stars', preset.productShowStars !== false);
     set('msg-product-show-id', preset.productShowId !== false);
     set('msg-product-image-size', preset.productImageSize);
     set('msg-show-top-stars', preset.showTopStars !== false);
+    renderProductLayoutDesigner();
     refreshAllColorButtons();
     updatePreview();
+    renderLayoutGallery();
     showToast(`Applied ${preset.label || 'email layout'} preset`);
   }
 
@@ -850,6 +1048,9 @@
       headingAlign: ['left','center','right'].includes(val('msg-heading-align','center')) ? val('msg-heading-align','center') : 'center',
       headingWeight: ['300','400','600','700','800'].includes(val('msg-heading-weight','700')) ? val('msg-heading-weight','700') : '700',
       headingFont: val('msg-heading-font', 'Arial,Helvetica,sans-serif'),
+      introAlign: ['left','center','right'].includes(val('msg-intro-align','center')) ? val('msg-intro-align','center') : 'center',
+      bodyAlign: ['left','center','right'].includes(val('msg-body-align','center')) ? val('msg-body-align','center') : 'center',
+      customFonts: fontOverrides.slice(0, 50),
       intro: val('msg-intro', 'Hi {{ order.customer.firstName | default: "there" }}'),
       body: val('msg-body', "We hope you're loving your recent purchase. Could you take 60 seconds to leave a quick review?"),
       signoff: val('msg-signoff', 'Your feedback helps other customers make confident choices.'),
@@ -860,11 +1061,12 @@
       starColor: el('msg-star-color')?.value || '#f5b301',
       showTopStars: val('msg-show-top-stars', 'true') !== 'false',
       productShowStars: val('msg-product-show-stars', 'true') !== 'false',
-      productStarPosition: ['above_button','between','under_title'].includes(val('msg-product-star-position','above_button')) ? val('msg-product-star-position','above_button') : 'above_button',
+      productStarPosition: ['above_button','between','under_title','custom'].includes(val('msg-product-star-position','above_button')) ? val('msg-product-star-position','above_button') : 'above_button',
       productTitleWeight: ['400','600','700','800'].includes(val('msg-product-title-weight','700')) ? val('msg-product-title-weight','700') : '700',
       productShowId: val('msg-product-show-id', 'true') !== 'false',
-      productImageSize: Math.max(36, Math.min(96, Number(val('msg-product-image-size','58')) || 58)),
-      productRowAlign: ['left','compact'].includes(val('msg-product-row-align','left')) ? val('msg-product-row-align','left') : 'left',
+      productImageSize: Math.max(36, Math.min(120, Number(val('msg-product-image-size','58')) || 58)),
+      productRowAlign: ['left','compact','stacked'].includes(val('msg-product-row-align','left')) ? val('msg-product-row-align','left') : 'left',
+      productElementOrder: productElementOrderFromInput(),
       pageHandle,
       delayDays: val('msg-delay-days', '14'),
     };
@@ -929,7 +1131,8 @@
     const logoHtml = o.logo ? `<tr><td align="center" style="padding:0 0 18px 0;"><img src="${escapeHtml(o.logo)}" alt="" style="max-width:160px;height:auto;display:block;"></td></tr>` : '';
     const beforeSections = renderEmailSectionRows('before', context);
     const afterSections = renderEmailSectionRows('after', context);
-    return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:${o.bgColor};margin:0;padding:0;width:100%;"><tr><td align="center" style="padding:28px 12px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:620px;background:${o.cardColor};border-radius:16px;overflow:hidden;"><tr><td style="padding:34px 26px;font-family:Arial,Helvetica,sans-serif;text-align:center;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${logoHtml}<tr><td align="${escapeHtml(o.headingAlign || 'center')}" style="padding:0 0 12px 0;"><h1 style="margin:0;color:#111827;font-size:28px;line-height:1.25;font-weight:${escapeHtml(o.headingWeight || '700')};font-family:${escapeHtml(o.headingFont || 'Arial,Helvetica,sans-serif')};text-align:${escapeHtml(o.headingAlign || 'center')};">${escapeHtml(o.heading)}</h1></td></tr><tr><td align="center" style="padding:0 0 10px 0;"><p style="margin:0;color:#4b5563;font-size:16px;line-height:1.6;">${o.intro}</p></td></tr><tr><td align="center" style="padding:0 0 12px 0;"><p style="margin:0;color:#4b5563;font-size:16px;line-height:1.6;">${escapeHtml(o.body)}</p></td></tr>${beforeSections}${inner}${afterSections}<tr><td align="center" style="padding:24px 0 0 0;"><p style="margin:0;color:#6b7280;font-size:13px;line-height:1.5;">${escapeHtml(o.signoff)}</p></td></tr><tr><td align="center" style="padding:20px 0 0 0;"><p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;">${escapeHtml(o.footerLabel || 'Sent by {{ shop.name }}.')} </p></td></tr>${footerExtra}</table></td></tr></table></td></tr></table>`;
+    const fontFamily = escapeHtml(o.headingFont || 'Arial,Helvetica,sans-serif');
+    return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:${o.bgColor};margin:0;padding:0;width:100%;"><tr><td align="center" style="padding:28px 12px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:620px;background:${o.cardColor};border-radius:16px;overflow:hidden;"><tr><td style="padding:34px 26px;font-family:${fontFamily};text-align:center;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${logoHtml}<tr><td align="${escapeHtml(o.headingAlign || 'center')}" style="padding:0 0 12px 0;"><h1 style="margin:0;color:#111827;font-size:28px;line-height:1.25;font-weight:${escapeHtml(o.headingWeight || '700')};font-family:${fontFamily};text-align:${escapeHtml(o.headingAlign || 'center')};">${escapeHtml(o.heading)}</h1></td></tr><tr><td align="${escapeHtml(o.introAlign || 'center')}" style="padding:0 0 10px 0;"><p style="margin:0;color:#4b5563;font-size:16px;line-height:1.6;text-align:${escapeHtml(o.introAlign || 'center')};">${o.intro}</p></td></tr><tr><td align="${escapeHtml(o.bodyAlign || 'center')}" style="padding:0 0 12px 0;"><p style="margin:0;color:#4b5563;font-size:16px;line-height:1.6;text-align:${escapeHtml(o.bodyAlign || 'center')};">${escapeHtml(o.body)}</p></td></tr>${beforeSections}${inner}${afterSections}<tr><td align="center" style="padding:24px 0 0 0;"><p style="margin:0;color:#6b7280;font-size:13px;line-height:1.5;">${escapeHtml(o.signoff)}</p></td></tr><tr><td align="center" style="padding:20px 0 0 0;"><p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;">${escapeHtml(o.footerLabel || 'Sent by {{ shop.name }}.')} </p></td></tr>${footerExtra}</table></td></tr></table></td></tr></table>`;
   }
 
   function productStars(starColor) {
@@ -942,22 +1145,39 @@
   }
 
   function productRowEmailHtml({ o, product = {}, url = '#', flow = false }) {
-    const size = Math.max(36, Math.min(96, Number(o.productImageSize || 58)));
+    const size = Math.max(36, Math.min(120, Number(o.productImageSize || 58)));
     const titleWeight = String(o.productTitleWeight || '700');
     const title = flow ? '{{ line_item.title }}' : escapeHtml(product.title || 'Product');
     const productId = flow ? '{{ line_item.product.id }}' : escapeHtml(product.id || '');
     const img = flow
-      ? `<div style="width:${size}px;height:${size}px;border-radius:10px;background:#eef2f7;overflow:hidden;"><img src="{{ line_item.image | image_url: width: ${size * 2} }}" width="${size}" height="${size}" alt="" style="display:block;width:${size}px;height:${size}px;object-fit:cover;border:0;"></div>`
+      ? `<img src="{{ line_item.image | image_url: width: ${size * 2} }}" width="${size}" height="${size}" alt="" style="display:block;width:${size}px;height:${size}px;object-fit:cover;border-radius:10px;background:#eef2f7;border:0;">`
       : (product.image ? `<img src="${escapeHtml(product.image)}" width="${size}" height="${size}" alt="" style="display:block;width:${size}px;height:${size}px;object-fit:cover;border-radius:10px;background:#eef2f7;border:0;">` : `<div style="width:${size}px;height:${size}px;border-radius:10px;background:#eef2f7;"></div>`);
-    const stars = o.productShowStars ? `<div style="${o.productStarPosition === 'under_title' ? 'margin-top:5px;' : 'margin-bottom:8px;'}">${productStars(o.starColor || '#f5b301')}</div>` : '';
+    const stars = o.productShowStars ? `<div style="margin:6px 0;color:${escapeHtml(o.starColor || '#f5b301')};font-size:18px;letter-spacing:2px;line-height:1;">★★★★★</div>` : '';
     const idLine = o.productShowId ? `<div style="font-size:12px;color:#667085;font-weight:normal;margin-top:3px;">Product ID: ${productId}</div>` : '';
     const buttonText = flow ? escapeHtml(o.productButtonText || 'Review This Item') : escapeHtml(buttonTextForProduct(product, o));
-    const button = `<a href="${url}" style="display:inline-block;background:${o.accentColor};color:#ffffff;text-decoration:none;font-size:13px;font-weight:bold;padding:9px 13px;border-radius:${o.buttonRadius}px;white-space:nowrap;">${buttonText}</a>`;
-    const titleBlock = `<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px;font-weight:${escapeHtml(titleWeight)};line-height:1.35;">${title}${idLine}${o.productStarPosition === 'under_title' ? stars : ''}</div>`;
-    const rightContent = o.productStarPosition === 'above_button' ? `${stars}${button}` : `${button}`;
-    const middleContent = o.productStarPosition === 'between' ? `${stars}` : '';
-    return `<tr><td style="padding:12px 0;border-top:1px solid #e5e7eb;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td width="${size}" style="padding-right:12px;vertical-align:middle;">${img}</td><td style="vertical-align:middle;padding-right:12px;text-align:${o.productRowAlign === 'compact' ? 'center' : 'left'};">${titleBlock}${middleContent}</td><td align="right" style="vertical-align:middle;white-space:nowrap;">${rightContent}</td></tr></table></td></tr>`;
+    const button = `<a href="${url}" style="display:inline-block;background:${escapeHtml(o.accentColor)};color:#ffffff;text-decoration:none;font-size:13px;font-weight:bold;padding:9px 13px;border-radius:${o.buttonRadius}px;white-space:nowrap;">${buttonText}</a>`;
+    const titleHtml = `<div style="font-family:${escapeHtml(o.headingFont || 'Arial,Helvetica,sans-serif')};color:#111827;font-size:14px;font-weight:${escapeHtml(titleWeight)};line-height:1.35;">${title}</div>`;
+    const map = { image: img, title: titleHtml, id: idLine, stars, button };
+    let order = Array.isArray(o.productElementOrder) ? o.productElementOrder : productElementOrderFromInput();
+    if (o.productStarPosition !== 'custom') {
+      order = ['image','title'];
+      if (o.productShowId) order.push('id');
+      if (o.productStarPosition === 'under_title' && o.productShowStars) order.push('stars');
+      order.push('button');
+      if (o.productStarPosition === 'above_button' && o.productShowStars) order = ['image','title'].concat(o.productShowId ? ['id'] : [], ['stars','button']);
+      if (o.productStarPosition === 'between' && o.productShowStars) order = ['image','title'].concat(o.productShowId ? ['id'] : [], ['stars','button']);
+    }
+    const visible = order.filter((key) => key !== 'id' || o.productShowId).filter((key) => key !== 'stars' || o.productShowStars).filter((key) => map[key]);
+    const imageFirst = visible[0] === 'image';
+    const align = o.productRowAlign === 'compact' || o.productRowAlign === 'stacked' ? 'center' : 'left';
+    const content = visible.filter((key) => key !== 'image').map((key) => `<div style="margin:4px 0;">${map[key]}</div>`).join('');
+    if (o.productRowAlign === 'stacked' || !imageFirst) {
+      const imageBlock = visible.includes('image') ? `<div style="margin:0 0 10px 0;">${img}</div>` : '';
+      return `<tr><td style="padding:14px 0;border-top:1px solid #e5e7eb;text-align:${align};">${imageBlock}${content}</td></tr>`;
+    }
+    return `<tr><td style="padding:12px 0;border-top:1px solid #e5e7eb;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td width="${size}" style="padding-right:12px;vertical-align:middle;">${img}</td><td style="vertical-align:middle;text-align:${align};">${content}</td></tr></table></td></tr>`;
   }
+
 
   function buildFlowEmailHtml(o) {
     const starColor = '#f5b301';
@@ -1388,6 +1608,11 @@
     el('msg-send-fake-order-email')?.addEventListener('click', () => sendFullFakeOrderEmail().catch((error)=>showToast(error.message || 'Could not send full fake-order email')));
     el('msg-apply-layout-preset')?.addEventListener('click', () => applyEmailLayoutPreset(val('msg-layout-preset', 'classic')));
     el('msg-layout-preset')?.addEventListener('change', () => applyEmailLayoutPreset(val('msg-layout-preset', 'classic')));
+    el('msg-template-render-mobile')?.addEventListener('click', () => el('msg-selected-template-render')?.classList.add('mobile'));
+    el('msg-template-render-desktop')?.addEventListener('click', () => el('msg-selected-template-render')?.classList.remove('mobile'));
+    el('msg-add-font-override')?.addEventListener('click', addFontOverride);
+    document.querySelectorAll('[data-msg-module-tab]').forEach((btn)=>btn.addEventListener('click',()=>{ document.querySelectorAll('[data-msg-module-tab]').forEach((b)=>b.classList.toggle('active', b===btn)); document.querySelectorAll('#msg-pane-modules .msg-module-subpane').forEach((pane)=>pane.classList.toggle('active', pane.id === `msg-module-subtab-${btn.dataset.msgModuleTab}`)); }));
+    document.querySelector('[data-open-product-layout]')?.addEventListener('click',()=>{ switchPane('modules'); document.querySelector('[data-msg-module-tab="product-layout"]')?.click(); });
     el('msg-refresh-page-status')?.addEventListener('click', () => loadReviewPageStatus());
     el('msg-page-handle')?.addEventListener('input', () => scheduleReviewPageStatusCheck());
     el('msg-template-modal-close')?.addEventListener('click', closeTemplateModal);
@@ -1426,6 +1651,9 @@
     mountEl.innerHTML = markup();
     bind();
     addSampleProducts();
+    loadFontOverrides();
+    loadFontOverridesFromServer();
+    renderProductLayoutDesigner();
     updatePreview();
     refreshAllColorButtons();
     loadTemplates();

@@ -270,6 +270,8 @@ function renderTemplateReviewEmail({ template, shopDomain, shopName, customerNam
   const headingAlign = ['left', 'center', 'right'].includes(design.headingAlign) ? design.headingAlign : 'center';
   const headingWeight = ['300', '400', '600', '700', '800'].includes(String(design.headingWeight || '')) ? String(design.headingWeight) : '700';
   const headingFont = design.headingFont || 'Arial,Helvetica,sans-serif';
+  const introAlign = ['left', 'center', 'right'].includes(design.introAlign) ? design.introAlign : 'center';
+  const bodyAlign = ['left', 'center', 'right'].includes(design.bodyAlign) ? design.bodyAlign : 'center';
   const intro = templateText(design.intro || 'Hi {{ customerName }}', context);
   const body = templateText(design.body || 'We hope you are loving your recent purchase. Could you take 60 seconds to leave a quick review?', context);
   const signoff = templateText(design.signoff || 'Your feedback helps other customers make confident choices.', context);
@@ -278,11 +280,16 @@ function renderTemplateReviewEmail({ template, shopDomain, shopName, customerNam
   const starColor = design.starColor || '#f5b301';
   const showTopStars = design.showTopStars !== false;
   const productShowStars = design.productShowStars !== false;
-  const productStarPosition = ['above_button', 'between', 'under_title'].includes(design.productStarPosition) ? design.productStarPosition : 'above_button';
+  const productStarPosition = ['above_button', 'between', 'under_title', 'custom'].includes(design.productStarPosition) ? design.productStarPosition : 'above_button';
   const productTitleWeight = ['400', '600', '700', '800'].includes(String(design.productTitleWeight || '')) ? String(design.productTitleWeight) : '700';
   const productShowId = design.productShowId !== false;
-  const productImageSize = clampTemplateNumber(design.productImageSize, 58, 36, 96);
-  const productRowAlign = ['left', 'compact'].includes(design.productRowAlign) ? design.productRowAlign : 'left';
+  const productImageSize = clampTemplateNumber(design.productImageSize, 58, 36, 120);
+  const productRowAlign = ['left', 'compact', 'stacked'].includes(design.productRowAlign) ? design.productRowAlign : 'left';
+  const allowedOrder = ['image', 'title', 'id', 'stars', 'button'];
+  const productElementOrder = (Array.isArray(design.productElementOrder) ? design.productElementOrder : String(design.productElementOrder || 'image,title,id,stars,button').split(','))
+    .map((item) => String(item || '').trim())
+    .filter((item) => allowedOrder.includes(item));
+  allowedOrder.forEach((item) => { if (!productElementOrder.includes(item)) productElementOrder.push(item); });
   const linkMode = ['order', 'products', 'both'].includes(design.linkMode) ? design.linkMode : 'both';
   const logo = design.logo || '';
   const sections = Array.isArray(template?.sections) ? template.sections : [];
@@ -290,10 +297,36 @@ function renderTemplateReviewEmail({ template, shopDomain, shopName, customerNam
   const afterSections = sections.filter((s) => (s.position || 'after') !== 'before').map((section) => sectionHtml(section, context)).join('');
   const logoHtml = logo ? `<tr><td align="center" style="padding:0 0 18px 0;"><img src="${escapeEmailHtml(logo)}" alt="" style="max-width:160px;height:auto;display:block;"></td></tr>` : '';
   const orderButton = `<tr><td align="center" style="padding:18px 0 14px 0;"><a href="${escapeEmailHtml(reviewUrl)}" style="display:inline-block;background:${escapeEmailHtml(accentColor)};color:#ffffff;text-decoration:none;font-size:16px;font-weight:bold;padding:14px 24px;border-radius:${buttonRadius}px;">${escapeEmailHtml(mainButtonText)}</a></td></tr>`;
-  const productRows = products.length ? `<tr><td style="padding:18px 0 0 0;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${products.slice(0, 12).map((product) => { const stars = productShowStars ? `<div style="${productStarPosition === 'under_title' ? 'margin-top:5px;' : 'margin-bottom:8px;'}color:${escapeEmailHtml(starColor)};font-size:18px;letter-spacing:2px;">★★★★★</div>` : ''; const idLine = productShowId ? `<div style="font-size:12px;color:#667085;font-weight:normal;margin-top:3px;">Product ID: ${escapeEmailHtml(product.productId || product.id || '')}</div>` : ''; const titleBlock = `<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:14px;font-weight:${escapeEmailHtml(productTitleWeight)};line-height:1.35;">${escapeEmailHtml(product.title || 'Purchased product')}${idLine}${productStarPosition === 'under_title' ? stars : ''}</div>`; const button = `<a href="${escapeEmailHtml(reviewUrl)}" style="display:inline-block;background:${escapeEmailHtml(accentColor)};color:#ffffff;text-decoration:none;font-size:13px;font-weight:bold;padding:9px 13px;border-radius:${buttonRadius}px;white-space:nowrap;">${escapeEmailHtml(productButtonText)}</a>`; const img = product.image ? `<img src="${escapeEmailHtml(product.image)}" width="${productImageSize}" height="${productImageSize}" alt="" style="display:block;width:${productImageSize}px;height:${productImageSize}px;object-fit:cover;border-radius:10px;background:#eef2f7;border:0;">` : `<div style="width:${productImageSize}px;height:${productImageSize}px;border-radius:10px;background:#eef2f7;"></div>`; const middle = productStarPosition === 'between' ? stars : ''; const right = productStarPosition === 'above_button' ? `${stars}${button}` : button; return `<tr><td style="padding:12px 0;border-top:1px solid #e5e7eb;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td width="${productImageSize}" style="padding-right:12px;vertical-align:middle;">${img}</td><td style="vertical-align:middle;padding-right:12px;text-align:${productRowAlign === 'compact' ? 'center' : 'left'};">${titleBlock}${middle}</td><td align="right" style="vertical-align:middle;white-space:nowrap;">${right}</td></tr></table></td></tr>`; }).join('')}</table></td></tr>` : '';
+  const starHtml = `<div style="margin:6px 0;color:${escapeEmailHtml(starColor)};font-size:18px;letter-spacing:2px;line-height:1;">★★★★★</div>`;
+  const productRowHtml = (product = {}) => {
+    const titleHtml = `<div style="font-family:${escapeEmailHtml(headingFont)};color:#111827;font-size:14px;font-weight:${escapeEmailHtml(productTitleWeight)};line-height:1.35;">${escapeEmailHtml(product.title || 'Purchased product')}</div>`;
+    const idHtml = productShowId ? `<div style="font-size:12px;color:#667085;font-weight:normal;margin-top:3px;">Product ID: ${escapeEmailHtml(product.productId || product.id || '')}</div>` : '';
+    const imgHtml = product.image ? `<img src="${escapeEmailHtml(product.image)}" width="${productImageSize}" height="${productImageSize}" alt="" style="display:block;width:${productImageSize}px;height:${productImageSize}px;object-fit:cover;border-radius:10px;background:#eef2f7;border:0;">` : `<div style="width:${productImageSize}px;height:${productImageSize}px;border-radius:10px;background:#eef2f7;"></div>`;
+    const buttonHtml = `<a href="${escapeEmailHtml(reviewUrl)}" style="display:inline-block;background:${escapeEmailHtml(accentColor)};color:#ffffff;text-decoration:none;font-size:13px;font-weight:bold;padding:9px 13px;border-radius:${buttonRadius}px;white-space:nowrap;">${escapeEmailHtml(productButtonText)}</a>`;
+    const map = { image: imgHtml, title: titleHtml, id: idHtml, stars: productShowStars ? starHtml : '', button: buttonHtml };
+    let order = productElementOrder.slice();
+    if (productStarPosition !== 'custom') {
+      order = ['image', 'title'];
+      if (productShowId) order.push('id');
+      if (productShowStars) {
+        if (productStarPosition === 'under_title' || productStarPosition === 'between' || productStarPosition === 'above_button') order.push('stars');
+      }
+      order.push('button');
+    }
+    const visible = order.filter((key) => key !== 'id' || productShowId).filter((key) => key !== 'stars' || productShowStars).filter((key) => map[key]);
+    const align = productRowAlign === 'compact' || productRowAlign === 'stacked' ? 'center' : 'left';
+    const content = visible.filter((key) => key !== 'image').map((key) => `<div style="margin:4px 0;">${map[key]}</div>`).join('');
+    const imageFirst = visible[0] === 'image';
+    if (productRowAlign === 'stacked' || !imageFirst) {
+      const imageBlock = visible.includes('image') ? `<div style="margin:0 0 10px 0;">${imgHtml}</div>` : '';
+      return `<tr><td style="padding:14px 0;border-top:1px solid #e5e7eb;text-align:${align};">${imageBlock}${content}</td></tr>`;
+    }
+    return `<tr><td style="padding:12px 0;border-top:1px solid #e5e7eb;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td width="${productImageSize}" style="padding-right:12px;vertical-align:middle;">${imgHtml}</td><td style="vertical-align:middle;text-align:${align};">${content}</td></tr></table></td></tr>`;
+  };
+  const productRows = products.length ? `<tr><td style="padding:18px 0 0 0;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${products.slice(0, 12).map(productRowHtml).join('')}</table></td></tr>` : '';
   const topStars = showTopStars ? `<tr><td align="center" style="padding:0 0 12px 0;"><span style="display:inline-block;color:${escapeEmailHtml(starColor)};font-size:18px;letter-spacing:2px;line-height:1;white-space:nowrap;">★★★★★</span></td></tr>` : '';
   const links = linkMode === 'order' ? orderButton + topStars : linkMode === 'products' ? topStars + (productRows || orderButton) : orderButton + topStars + productRows;
-  return `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.55;color:#111827;background:${escapeEmailHtml(bgColor)};padding:28px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:640px;background:${escapeEmailHtml(cardColor)};border:1px solid #e5e7eb;border-radius:18px;padding:28px;text-align:center;"><tr><td>${logoHtml}<h1 style="margin:0 0 12px;font-size:28px;line-height:1.15;text-align:${escapeEmailHtml(headingAlign)};font-weight:${escapeEmailHtml(headingWeight)};font-family:${escapeEmailHtml(headingFont)};">${escapeEmailHtml(heading)}</h1><p style="margin:0 0 10px;color:#4b5563;">${escapeEmailHtml(intro)}</p><p style="margin:0 0 16px;color:#4b5563;">${escapeEmailHtml(body)}</p><p style="margin:0 0 14px;color:#667085;font-size:13px;">Order: <strong>${escapeEmailHtml(orderId || 'recent order')}</strong></p><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${beforeSections}${links}${afterSections}</table><p style="margin:22px 0 0;color:#667085;font-size:13px;">${escapeEmailHtml(signoff)}</p><p style="margin:18px 0 0;color:#98a2b3;font-size:12px;">Sent by ${escapeEmailHtml(shopName || friendlyShopDisplayName(shopDomain))}. This review link is unique to your order.</p></td></tr></table></td></tr></table></div>`;
+  return `<div style="font-family:${escapeEmailHtml(headingFont)};line-height:1.55;color:#111827;background:${escapeEmailHtml(bgColor)};padding:28px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:640px;background:${escapeEmailHtml(cardColor)};border:1px solid #e5e7eb;border-radius:18px;padding:28px;text-align:center;"><tr><td>${logoHtml}<h1 style="margin:0 0 12px;font-size:28px;line-height:1.15;text-align:${escapeEmailHtml(headingAlign)};font-weight:${escapeEmailHtml(headingWeight)};font-family:${escapeEmailHtml(headingFont)};">${escapeEmailHtml(heading)}</h1><p style="margin:0 0 10px;color:#4b5563;text-align:${escapeEmailHtml(introAlign)};">${escapeEmailHtml(intro)}</p><p style="margin:0 0 16px;color:#4b5563;text-align:${escapeEmailHtml(bodyAlign)};">${escapeEmailHtml(body)}</p><p style="margin:0 0 14px;color:#667085;font-size:13px;">Order: <strong>${escapeEmailHtml(orderId || 'recent order')}</strong></p><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${beforeSections}${links}${afterSections}</table><p style="margin:22px 0 0;color:#667085;font-size:13px;">${escapeEmailHtml(signoff)}</p><p style="margin:18px 0 0;color:#98a2b3;font-size:12px;">Sent by ${escapeEmailHtml(shopName || friendlyShopDisplayName(shopDomain))}. This review link is unique to your order.</p></td></tr></table></td></tr></table></div>`;
 }
 
 async function sendReviewRequestJob(job) {
