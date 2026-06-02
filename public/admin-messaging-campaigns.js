@@ -105,6 +105,7 @@
 
   function el(id) { return document.getElementById(id); }
   function val(id, fallback = '') { const node = el(id); return node ? ((node.value || '').trim() || fallback) : fallback; }
+  function setControlValue(id, value) { const node = el(id); if (node && value !== undefined && value !== null) node.value = String(value); }
   function uid(prefix = 'id') { return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`; }
   function purposeLabel(value) { return ({ reviews: 'Reviews', loyalty: 'Loyalty', cartRewards: 'Cart Rewards', general: 'General' }[value] || value || 'General'); }
 
@@ -549,23 +550,30 @@
     const t = productLayoutTemplates.find((item) => String(item._id) === String(id));
     if (!t) return;
     const d = t.design || {};
-    if (el('msg-product-layout-template-name')) el('msg-product-layout-template-name').value = t.name || 'Product card layout';
+    setControlValue('msg-product-layout-template-name', t.name || 'Product card layout');
     if (d.productLayoutZones) setProductLayoutZones(d.productLayoutZones, { refresh: false });
-    if (d.productElementOrder) set('msg-product-element-order', Array.isArray(d.productElementOrder) ? d.productElementOrder.join(',') : d.productElementOrder);
-    set('msg-product-show-stars', d.productShowStars !== false);
-    set('msg-product-star-position', d.productStarPosition || 'custom');
-    set('msg-product-title-weight', d.productTitleWeight || '700');
-    set('msg-product-show-id', d.productShowId !== false);
-    set('msg-product-image-size', d.productImageSize || 58);
-    set('msg-product-row-align', d.productRowAlign || 'left');
-    if (d.starColor) set('msg-star-color', d.starColor);
-    if (d.accentColor) set('msg-color', d.accentColor);
-    if (d.buttonRadius !== undefined) set('msg-button-radius', d.buttonRadius);
+    if (d.productElementOrder) setControlValue('msg-product-element-order', Array.isArray(d.productElementOrder) ? d.productElementOrder.join(',') : d.productElementOrder);
+    setControlValue('msg-product-show-stars', d.productShowStars !== false);
+    setControlValue('msg-product-star-position', d.productStarPosition || 'custom');
+    setControlValue('msg-product-title-weight', d.productTitleWeight || '700');
+    setControlValue('msg-product-show-id', d.productShowId !== false);
+    setControlValue('msg-product-image-size', d.productImageSize || 58);
+    setControlValue('msg-product-row-align', d.productRowAlign || 'left');
+    if (d.starColor) setControlValue('msg-star-color', d.starColor);
+    if (d.accentColor) setControlValue('msg-color', d.accentColor);
+    if (d.buttonRadius !== undefined) setControlValue('msg-button-radius', d.buttonRadius);
     selectedProductLayoutTemplateId = String(id || '');
     refreshAllColorButtons();
     renderProductLayoutDesigner();
     renderProductLayoutTemplateList();
     updatePreview();
+    showToast(`${t.name || 'Product-card layout'} applied to the email builder`);
+  }
+
+  function clearProductLayoutTemplate() {
+    selectedProductLayoutTemplateId = '';
+    renderProductLayoutTemplateList();
+    showToast('Product-card layout unpinned. Current controls stay editable.');
   }
   async function deleteProductLayoutTemplate(id) {
     if (!confirm('Delete this product-card layout?')) return;
@@ -580,8 +588,9 @@
       box.innerHTML = '<div class="msg-help">No saved product-card layouts yet. Name the current layout and save it to reuse later.</div>';
       return;
     }
-    box.innerHTML = `<div class="msg-product-layout-template-grid">${productLayoutTemplates.map((t) => `<div class="msg-product-layout-template-card ${String(t._id) === String(selectedProductLayoutTemplateId) ? 'selected' : ''}"><div class="msg-template-top"><div><strong>${escapeHtml(t.name || 'Product card layout')}</strong><div class="msg-template-meta"><span>${escapeHtml(t.updatedAt ? new Date(t.updatedAt).toLocaleString() : '')}</span></div></div><button type="button" class="msg-template-remove" data-delete-product-layout="${escapeHtml(t._id)}">×</button></div><div class="msg-product-layout-template-thumb">${productLayoutThumbnailHtml({ ...opts(), ...(t.design || {}) })}</div><div class="msg-template-actions"><button type="button" class="msg-btn secondary" data-apply-product-layout="${escapeHtml(t._id)}">Apply layout</button></div></div>`).join('')}</div>`;
+    box.innerHTML = `<div class="msg-product-layout-template-grid">${productLayoutTemplates.map((t) => { const active = String(t._id) === String(selectedProductLayoutTemplateId); return `<div class="msg-product-layout-template-card ${active ? 'selected' : ''}"><div class="msg-template-top"><div><strong>${escapeHtml(t.name || 'Product card layout')}</strong><div class="msg-template-meta"><span>${escapeHtml(t.updatedAt ? new Date(t.updatedAt).toLocaleString() : '')}</span>${active ? '<span>Applied to builder</span>' : ''}</div></div><button type="button" class="msg-template-remove" data-delete-product-layout="${escapeHtml(t._id)}">×</button></div><div class="msg-product-layout-template-thumb">${productLayoutThumbnailHtml({ ...opts(), ...(t.design || {}) })}</div><div class="msg-template-actions"><button type="button" class="msg-btn ${active ? 'danger' : 'secondary'}" data-${active ? 'clear' : 'apply'}-product-layout="${escapeHtml(t._id)}">${active ? 'Remove from builder' : 'Apply layout'}</button></div></div>`; }).join('')}</div>`;
     box.querySelectorAll('[data-apply-product-layout]').forEach((btn) => btn.addEventListener('click', () => applyProductLayoutTemplate(btn.dataset.applyProductLayout)));
+    box.querySelectorAll('[data-clear-product-layout]').forEach((btn) => btn.addEventListener('click', () => clearProductLayoutTemplate()));
     box.querySelectorAll('[data-delete-product-layout]').forEach((btn) => btn.addEventListener('click', (event) => { event.stopPropagation(); deleteProductLayoutTemplate(btn.dataset.deleteProductLayout); }));
   }
 
@@ -1187,7 +1196,7 @@
 
   function applyEmailLayoutPreset(presetName) {
     const preset = EMAIL_LAYOUT_PRESETS[presetName || val('msg-layout-preset', 'classic')] || EMAIL_LAYOUT_PRESETS.classic;
-    const set = (id, value) => { const node = el(id); if (node && value !== undefined) node.value = String(value); };
+    const set = setControlValue;
     set('msg-heading-align', preset.headingAlign);
     set('msg-heading-weight', preset.headingWeight);
     set('msg-intro-align', preset.introAlign);
@@ -1243,6 +1252,7 @@
       productRowAlign: ['left','compact','stacked'].includes(val('msg-product-row-align','left')) ? val('msg-product-row-align','left') : 'left',
       productElementOrder: productElementOrderFromInput(false),
       productLayoutZones: productLayoutZonesFromInput(),
+      productLayoutTemplateId: selectedProductLayoutTemplateId || '',
       pageHandle,
       delayDays: val('msg-delay-days', '14'),
     };

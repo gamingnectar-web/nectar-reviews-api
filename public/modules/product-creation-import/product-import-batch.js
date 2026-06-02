@@ -150,7 +150,11 @@
 
   async function scanBatch() {
     if (!state.batch?._id) return;
-    setBusy('Scanning queued products. Large batches may process for a while in the current request…');
+    setBusy('Scanning products with AI enrichment… each row will pulse while it is being refreshed.');
+    (state.batch.items || []).forEach((item) => {
+      if (!['created', 'creating'].includes(item.status)) item.status = 'scanning';
+    });
+    renderBatch();
     const data = await api(`/batches/${state.batch._id}/scan`, { method: 'POST', body: JSON.stringify({ processAll: true, useAi: true }) });
     state.batch = data.batch;
     setBusy(`Scan complete. Processed ${data.processed || 0}; remaining ${data.remaining || 0}.`);
@@ -191,7 +195,7 @@
     const image = item.selectedImages?.[0]?.src || item.draft?.images?.[0]?.src || '';
     const issues = item.validation?.issues || [];
     const validationStatus = item.validation?.status || 'unchecked';
-    return `<div class="item-row">
+    return `<div class="item-row ${escapeAttr(item.status || '')}">
       <div>${image ? `<img src="${escapeAttr(image)}" alt="">` : '<span class="badge blocked">No image</span>'}</div>
       <div class="item-title"><strong>${escapeHtml(item.draft?.title || item.title || item.originalInput || 'Queued product')}</strong><small>${escapeHtml(item.sourceUrl || item.originalInput || '')}</small>${issues.length ? `<small class="issue-preview">${escapeHtml(issues.slice(0, 2).join(' · '))}${issues.length > 2 ? ` +${issues.length - 2} more` : ''}</small>` : ''}</div>
       <span class="badge ${escapeAttr(item.status || '')}">${escapeHtml(item.status || 'queued')}</span>
@@ -215,7 +219,9 @@
   }
 
   async function rescanItem(itemId) {
-    setBusy('Rescanning product…');
+    setBusy('Rescanning product with AI enrichment…');
+    const item = findItem(itemId);
+    if (item) { item.status = 'scanning'; renderBatch(); }
     const data = await api(`/batches/${state.batch._id}/scan`, { method: 'POST', body: JSON.stringify({ itemIds: [itemId], processAll: true, useAi: true }) });
     state.batch = data.batch;
     setBusy('Product rescan complete.');
@@ -303,7 +309,7 @@
             <span class="muted">These are excluded from the main media roster and written to the Ingredients Label metafield.</span>
           </div>
           <div class="editor-image-grid label-images" data-label-images>
-            ${supplementLabels.length ? supplementLabels.map((img, index) => renderLabelImage(img, index)).join('') : '<p class="muted">No label image detected. Use “Use as label” on any image below if the supplement facts panel appears.</p>'}
+            ${supplementLabels.length ? supplementLabels.map((img, index) => renderLabelImage(img, index)).join('') : '<p class="muted">No label image detected. Use “Use as label” on any image below if the supplement facts panel appears. Press Save overrides to persist this to the batch.</p>'}
           </div>
           <details class="foldout" open>
             <summary>Rejected / possible images</summary>
@@ -565,6 +571,10 @@
     if (state.activeItemId) viewItem(state.activeItemId, { keepOpen: true });
   }
 
+  function markImageChangePending() {
+    setTimeout(() => setEditorStatus('Image selection changed. Press Save overrides to persist this to the batch.'), 0);
+  }
+
   function useRejectedImage(index) {
     const item = findItem(state.activeItemId);
     if (!item) return;
@@ -574,6 +584,7 @@
     item.selectedImages = [...selected, { ...img, selected: true, rejected: false, rejectReason: '' }];
     item.rejectedImages = (item.rejectedImages || []).filter((_, i) => i !== index);
     item.draft = { ...(item.draft || {}), images: item.selectedImages };
+    markImageChangePending();
     rerenderActiveEditor();
   }
 
@@ -587,6 +598,7 @@
     item.selectedImages = selected.filter((_, i) => i !== index);
     item.supplementLabelImages = [...currentLabelImages(), { ...img, role: 'supplement_label', selected: false, rejected: true, rejectReason: 'supplement-label-metafield' }];
     item.draft = { ...(item.draft || {}), images: item.selectedImages };
+    markImageChangePending();
     rerenderActiveEditor();
   }
 
@@ -597,6 +609,7 @@
     if (!img?.src) return;
     item.supplementLabelImages = [...currentLabelImages(), { ...img, role: 'supplement_label', selected: false, rejected: true, rejectReason: 'supplement-label-metafield' }];
     item.rejectedImages = (item.rejectedImages || []).filter((_, i) => i !== index);
+    markImageChangePending();
     rerenderActiveEditor();
   }
 
@@ -607,6 +620,7 @@
     const removed = labels[index];
     item.supplementLabelImages = labels.filter((_, i) => i !== index);
     if (removed) item.rejectedImages = [{ ...removed, rejected: true, selected: false, rejectReason: 'Manually removed label' }, ...(item.rejectedImages || [])];
+    markImageChangePending();
     rerenderActiveEditor();
   }
 
@@ -619,6 +633,7 @@
     item.supplementLabelImages = labels.filter((_, i) => i !== index);
     item.selectedImages = [...currentSelectedImages(), { ...img, role: 'product_image', selected: true, rejected: false, rejectReason: '' }];
     item.draft = { ...(item.draft || {}), images: item.selectedImages };
+    markImageChangePending();
     rerenderActiveEditor();
   }
 
@@ -630,6 +645,7 @@
     item.selectedImages = selected.filter((_, i) => i !== index);
     if (removed) item.rejectedImages = [{ ...removed, rejected: true, selected: false, rejectReason: 'Manually removed' }, ...(item.rejectedImages || [])];
     item.draft = { ...(item.draft || {}), images: item.selectedImages };
+    markImageChangePending();
     rerenderActiveEditor();
   }
 
@@ -642,6 +658,7 @@
     [selected[index], selected[nextIndex]] = [selected[nextIndex], selected[index]];
     item.selectedImages = selected;
     item.draft = { ...(item.draft || {}), images: item.selectedImages };
+    markImageChangePending();
     rerenderActiveEditor();
   }
 

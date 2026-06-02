@@ -63,7 +63,7 @@ function imageContextScore({ image, title = '', sourceUrl = '', index = 0 }) {
   }
 
   if (index === 0) { score += 6; reasons.push('First image candidate'); }
-  if (/supplement\s*facts|nutrition\s*facts|nutritional|ingredients?\s*(label|panel|info|facts)|facts\s*panel|serving\s*size|amount\s*per\s*serving/i.test(haystack)) {
+  if (/supplement\s*facts|nutrition\s*facts|nutritional|ingredients?\s*(label|panel|info|facts)|facts\s*panel|serving\s*size|amount\s*per\s*serving|\bSFF\b|[_-]SFF[_.-]|supp[_-]?facts/i.test(haystack)) {
     score -= 55;
     reasons.push('Nutrition/ingredients label candidate');
     rejects.push('supplement-label-metafield');

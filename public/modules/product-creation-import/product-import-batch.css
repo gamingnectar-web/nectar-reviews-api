@@ -347,3 +347,26 @@ textarea { resize: vertical; }
   margin-top: 8px;
 }
 .suggestion-row small { color: var(--muted); font-weight: 650; }
+
+.item-row.scanning {
+  position: relative;
+  overflow: hidden;
+  border-color: #b2ddff;
+  background: linear-gradient(90deg, #ffffff 0%, #f5fbff 45%, #ffffff 100%);
+}
+.item-row.scanning::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(0, 91, 211, .14), transparent);
+  animation: pci-scan-sweep 1.35s infinite;
+  pointer-events: none;
+}
+.item-row.scanning .badge.scanning {
+  background: #eff8ff;
+  color: #175cd3;
+}
+@keyframes pci-scan-sweep {
+  to { transform: translateX(100%); }
+}

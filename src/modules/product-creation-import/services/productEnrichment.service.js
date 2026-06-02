@@ -151,7 +151,7 @@ function makeMerchantSeo({ draft = {}, settings = {} }) {
   const seoLocation = titleLocationForSeo(draft.handleLocation || settings.handleRules?.location || 'uk');
   const handleLocation = locationForHandle(draft.handleLocation || settings.handleRules?.location || 'uk');
   const safeProductName = stripFormatFromProductName(productName, format);
-  const seoTitle = cleanText([vendor, safeProductName, format, seoLocation].filter(Boolean).join(' - '), 70);
+  const seoTitle = cleanText([vendor, safeProductName, format, seoLocation].filter(Boolean).join(' - '), 120);
   const handle = slugifyLoose([vendor, safeProductName, format, handleLocation].filter(Boolean).join('-'));
   const flavour = cleanText((draft.metafields || []).find((mf) => mf.namespace === 'core' && mf.key === 'product_flavour')?.value || '', 80);
   const flavourProfile = cleanText((draft.metafields || []).find((mf) => mf.namespace === 'core' && mf.key === 'flavour_profile')?.value || '', 120);
@@ -171,12 +171,24 @@ function valueKey(value = '') {
   return cleanText(value, 180).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+function compactValueKey(value = '') {
+  return valueKey(value).replace(/\s+/g, '');
+}
+
+function optionValue(item = {}, key = 'value') {
+  return cleanText(item[key] || item.title || item.handle || item.vendor || item.productType || item.template || item.tag || item.category || (typeof item === 'string' ? item : ''), 180);
+}
+
 function exactSiteValue(value = '', options = [], key = 'value') {
   const raw = cleanText(value, 180);
   if (!raw) return '';
   const rawKey = valueKey(raw);
-  const found = (options || []).find((item) => valueKey(item[key] || item.title || item.handle || item.vendor || item.productType || item.template || item.tag || item.category || '') === rawKey);
-  return found ? cleanText(found[key] || found.title || found.handle || found.vendor || found.productType || found.template || found.tag || found.category || raw, 180) : raw;
+  const rawCompact = compactValueKey(raw);
+  const found = (options || []).find((item) => {
+    const candidate = optionValue(item, key);
+    return valueKey(candidate) === rawKey || compactValueKey(candidate) === rawCompact;
+  });
+  return found ? optionValue(found, key) : raw;
 }
 
 function filterToExistingTags(values = [], siteTags = []) {
@@ -206,7 +218,7 @@ async function aiSuggestProductProfile({ draft, metadata }) {
 metafields must be an array of {namespace,key,type,value,confidence,source}. Include these core metafields when relevant: core.formula_version, core.grouped_profiles, core.sourness, core.sweetness, core.flavour_profile.
 
 Rules:
-- Preserve merchant terminology from existing tags/metafield names.
+- Preserve merchant terminology from existing vendors, collections, templates, tags and metafield names. Do not invent collection/tag names.
 - For G Fuel drinks/tubs/consumable drink products only, estimate Formula Version, sweetness, sourness and flavour profile from the product title, description and URL content.
 - Do not add core.formula_version, core.grouped_profiles, core.sourness, core.sweetness or core.flavour_profile for accessories, lunch boxes, shakers, cases, apparel, insurance, or non-consumable merchandise.
 - core.sourness and core.sweetness must be string numbers from "1" to "5" only: 1 = very low, 3 = medium, 5 = very high. Do not use words like low/medium/high for these two fields.

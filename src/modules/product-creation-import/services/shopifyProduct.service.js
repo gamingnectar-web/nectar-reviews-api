@@ -32,11 +32,14 @@ function inventoryItemGid(id = '') {
 }
 
 function scopeSet(scopeString = '') {
-  return new Set(String(scopeString || '').split(',').map((scope) => scope.trim()).filter(Boolean));
+  return new Set(String(scopeString || '')
+    .split(/[\s,]+/)
+    .map((scope) => scope.trim())
+    .filter(Boolean));
 }
 
 function missingScopes(scopeString = '', required = REQUIRED_PRODUCT_IMPORT_SCOPES) {
-  const scopes = scopeSet(scopeString || env.shopifyScopes || '');
+  const scopes = scopeSet([scopeString, env.shopifyScopes || ''].filter(Boolean).join(','));
   return required.filter((scope) => !scopes.has(scope));
 }
 
@@ -128,10 +131,13 @@ async function shopifyGraphqlOptional(args) {
 
 async function getStoredScopes(shopDomain) {
   const normalizedShop = getShopifyStoreUrl(shopDomain);
-  if (!normalizedShop) return '';
+  if (!normalizedShop) return env.shopifyScopes || '';
   try {
     const shop = await Shop.findOne({ shopDomain: normalizedShop }).select('scopes').lean();
-    return shop?.scopes || env.shopifyScopes || '';
+    // Shopify stores the scopes captured at install time, but Render/env may already
+    // have been updated before a reinstall. Combine both so the health banner does
+    // not falsely report scopes as missing when SHOPIFY_SCOPES already includes them.
+    return [shop?.scopes || '', env.shopifyScopes || ''].filter(Boolean).join(',');
   } catch (_) {
     return env.shopifyScopes || '';
   }

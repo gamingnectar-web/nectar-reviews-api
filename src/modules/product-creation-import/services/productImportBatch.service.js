@@ -170,11 +170,12 @@ function applyMerchantSeoPattern(draft = {}, defaults = {}) {
   const format = inferFormat(draft, normalisedDefaults);
   const seoLocation = normaliseLocationForSeo(draft.handleLocation || normalisedDefaults.handleLocation || 'uk');
   const handleLocation = normaliseLocationForHandle(draft.handleLocation || normalisedDefaults.handleLocation || 'uk');
-  const title = cleanText([vendor, productName, format, seoLocation].filter(Boolean).join(' - '), 70);
-  const handle = slugify([vendor, productName, format, handleLocation].filter(Boolean).join('-'));
+  const safeProductName = productName || stripVendor(draft.name || draft.handle || '', vendor) || draft.title || 'Product';
+  const title = cleanText([vendor, safeProductName, format, seoLocation].filter(Boolean).join(' - '), 120);
+  const handle = slugify([vendor, safeProductName, format, handleLocation].filter(Boolean).join('-'));
   const flavour = cleanText((draft.metafields || []).find((mf) => mf.namespace === 'core' && mf.key === 'product_flavour')?.value || '', 100);
   const profile = cleanText((draft.metafields || []).find((mf) => mf.namespace === 'core' && mf.key === 'flavour_profile')?.value || '', 120);
-  const lead = [vendor, productName, format].filter(Boolean).join(' ');
+  const lead = [vendor, safeProductName || productName, format].filter(Boolean).join(' ');
   const flavourLine = flavour && !new RegExp(`\\b${flavour.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(lead)
     ? `Flavour: ${flavour}.`
     : (profile ? completeSentence(profile) : '');
@@ -371,11 +372,19 @@ async function scanBatch({ shopDomain, batchId, itemIds = [], limit = 20, proces
   const { batch } = await getBatch({ shopDomain, batchId });
   const wanted = new Set(asArray(itemIds));
   const candidates = batch.items.filter((item) => {
+    if (item.status === 'created' || item.status === 'creating') return false;
     if (wanted.size) return wanted.has(item.itemId);
-    return ['queued', 'failed', 'needs_review'].includes(item.status) && item.status !== 'created';
+    if (processAll) return ['queued', 'failed', 'needs_review', 'analysed', 'approved'].includes(item.status) || item.approvalStatus !== 'approved';
+    return ['queued', 'failed', 'needs_review'].includes(item.status);
   });
   const selected = processAll ? candidates : candidates.slice(0, Math.max(1, Number(limit) || 20));
   batch.status = 'analysing';
+  selected.forEach((item) => {
+    item.status = 'scanning';
+    item.error = '';
+    item.updatedAt = new Date();
+  });
+  refreshBatchSummary(batch);
   await batch.save();
 
   const results = [];

@@ -33,6 +33,33 @@ function firstText(text, patterns = []) {
   return '';
 }
 
+
+function titleCasePhrase(value = '') {
+  return cleanText(value, 120).replace(/\b\w/g, (char) => char.toUpperCase()).replace(/\bAnd\b/g, '&');
+}
+
+const GFUEL_FLAVOUR_ALIASES = [
+  { aliases: [/\bsharingan\b/i], flavour: 'Pomegranate Green Tea', family: ['Pomegranate', 'Tea'], profile: 'Pomegranate • Green Tea', sweetness: 3, sourness: 3 },
+  { aliases: [/\btornado\b/i], flavour: 'Orange Creamsicle', family: ['Citrus', 'Vanilla'], profile: 'Orange Creamsicle • Citrus Cream', sweetness: 4, sourness: 2 },
+  { aliases: [/f\W*s\W*up/i, /\bfsu\b/i, /vox\s*machina/i], flavour: 'Peach Orange Raspberry', family: ['Peach', 'Citrus', 'Berry'], profile: 'Peach • Orange • Raspberry', sweetness: 4, sourness: 3 },
+  { aliases: [/\bjump\s*scare\b/i], flavour: 'White Cran Strawberry', family: ['Berry'], profile: 'White Cranberry • Strawberry', sweetness: 3, sourness: 3 },
+  { aliases: [/\bawakening\b/i, /p30th\s*awakening/i], flavour: 'White Grape Lime', family: ['Grape', 'Citrus'], profile: 'White Grape • Lime', sweetness: 3, sourness: 3 },
+  { aliases: [/\bdimension\s*drip\b/i], flavour: 'Grape & Strawberry', family: ['Grape', 'Berry'], profile: 'Grape • Strawberry', sweetness: 4, sourness: 2 },
+];
+
+function knownGfuelAliasProfile(text = '') {
+  const source = String(text || '');
+  return GFUEL_FLAVOUR_ALIASES.find((entry) => entry.aliases.some((pattern) => pattern.test(source))) || null;
+}
+
+function isGfuelEnergyDraft(draft = {}, text = '') {
+  const haystack = `${draft.vendor || ''} ${draft.productType || ''} ${draft.title || ''} ${text || ''}`.toLowerCase();
+  if (!/g\s*fuel|gfuel/.test(haystack)) return false;
+  if (/hydration/.test(haystack)) return false;
+  if (/shaker|cup|bottle|lunch\s*box|sticker|hat|shirt|hoodie|keychain/.test(haystack) && !/servings?|formula|energy|powder|tub|caffeine/.test(haystack)) return false;
+  return /energy|formula|powder|tub|servings?|collector/.test(haystack);
+}
+
 function inferFlavourFromTitle(title = '') {
   let value = cleanText(title, 140)
     .replace(/\b(g\s*fuel|gfuel|energy formula|hydration formula|hydration|tub|can|cans|collector'?s? box|bundle|powder|drink mix|40 servings?|30 servings?)\b/ig, ' ')
@@ -60,7 +87,7 @@ function flavourFamilies(text = '') {
 function inferKnownFlavourPhrase(text = '') {
   const haystack = ` ${String(text || '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').toLowerCase()} `;
   const known = [
-    'pomegranate green tea', 'orange creamsicle', 'peach rings', 'blue raspberry', 'sour blue chug rug', 'rainbow sherbet',
+    'pomegranate green tea', 'white cran strawberry', 'white cranberry strawberry', 'white grape lime', 'peach orange raspberry', 'grape strawberry', 'grape and strawberry', 'orange creamsicle', 'peach rings', 'blue raspberry', 'sour blue chug rug', 'rainbow sherbet',
     'snow cone', 'tropical rain', 'strawberry banana', 'watermelon limeade', 'lemon lime',
     'cherry limeade', 'green apple', 'pink lemonade', 'mango lemonade', 'mango peach',
     'strawberry shortcake', 'cotton candy', 'bubble gum', 'sour cherry', 'sour grape',
@@ -73,6 +100,8 @@ function inferKnownFlavourPhrase(text = '') {
 
 function inferFlavourFromText(title = '', text = '') {
   const combined = `${title} ${text}`;
+  const alias = knownGfuelAliasProfile(combined);
+  if (alias?.flavour) return alias.flavour;
   const explicit = inferKnownFlavourPhrase(combined);
   if (explicit) return explicit;
   const cleaned = cleanText(text, 5000);
@@ -93,10 +122,11 @@ function inferFlavourFromText(title = '', text = '') {
   return inferFlavourFromTitle(title);
 }
 
-function inferFormulaVersion(text = '') {
+function inferFormulaVersion(text = '', draft = {}) {
   const lower = String(text || '').toLowerCase();
   if (/gf[-\s]*en\s*2\.0|gf[-\s]*en2\.0|en\s*2\.0|en2\.0|energy\s*2\.0|2\.0\s*formula|formula\s*2\.0|new\s*&\s*improved\s*energy\s*formula/i.test(lower)) return 'GF-EN2.0';
   if (/hydration\s*formula|gf[-\s]*hy/i.test(lower)) return 'GF-HY';
+  if (isGfuelEnergyDraft(draft, text)) return 'GF-EN2.0';
   if (/energy\s*formula|gf[-\s]*en\b/i.test(lower)) return 'GF-EN';
   return '';
 }
@@ -128,7 +158,8 @@ function heuristicProfileFromDraft(draft = {}) {
     JSON.stringify(draft.raw || {}).slice(0, 2000),
   ].filter(Boolean).join(' '), 12000);
   const title = cleanText(draft.title || '', 220);
-  const flavour = inferFlavourFromText(title, text);
+  const aliasProfile = knownGfuelAliasProfile(`${title} ${text}`);
+  const flavour = aliasProfile?.flavour || inferFlavourFromText(title, text);
   const lower = text.toLowerCase();
   const labels = [];
   const warnings = [];
@@ -144,10 +175,10 @@ function heuristicProfileFromDraft(draft = {}) {
     /(?:servings?|serves|serving\s*count)\D{0,25}(\d{1,3})/i,
     /(\d{1,3})\s*(?:servings?|serves)\b/i,
   ]);
-  const caffeine = /caffeine\s*free|zero\s*caffeine/i.test(lower) ? 0 : firstNumber(text, [
+  const caffeine = /caffeine\s*free|zero\s*caffeine/i.test(lower) ? 0 : (firstNumber(text, [
     /(?:caffeine)\D{0,35}(\d{1,4})\s*mg/i,
     /(\d{1,4})\s*mg\s*(?:of\s*)?caffeine/i,
-  ]);
+  ]) ?? (isGfuelEnergyDraft(draft, text) ? 140 : null));
   const sugar = /sugar\s*free|zero\s*sugar/i.test(lower) ? 0 : firstNumber(text, [
     /(?:sugar|sugars)\D{0,25}(\d+(?:\.\d+)?)\s*g/i,
     /(\d+(?:\.\d+)?)\s*g\s*(?:of\s*)?sugar/i,
@@ -165,11 +196,11 @@ function heuristicProfileFromDraft(draft = {}) {
 
   return {
     productFlavour: flavour,
-    flavourFamily: flavourFamilies(`${title} ${text}`),
-    flavourProfile: flavour ? `${flavour} flavour profile.` : '',
-    formulaVersion: inferFormulaVersion(text),
-    sweetness: inferSweetness(`${title} ${text}`),
-    sourness: inferSourness(`${title} ${text}`),
+    flavourFamily: aliasProfile?.family || flavourFamilies(`${title} ${text}`),
+    flavourProfile: aliasProfile?.profile || (flavour ? `${flavour} flavour profile.` : ''),
+    formulaVersion: inferFormulaVersion(text, draft),
+    sweetness: aliasProfile?.sweetness || inferSweetness(`${title} ${text}`),
+    sourness: aliasProfile?.sourness || inferSourness(`${title} ${text}`),
     servings: servings ?? '',
     servingSize,
     caloriesPerServing: calories ?? '',
@@ -190,6 +221,11 @@ function mergeProfiles(base = {}, ai = {}) {
   Object.entries(ai || {}).forEach(([key, value]) => {
     if (value === undefined || value === null || value === '') return;
     if (Array.isArray(value) && !value.length) return;
+    if (key === 'productFlavour') {
+      const candidate = cleanText(value, 120);
+      const titleLike = cleanText(base.productFlavour || '', 120);
+      if (/collector'?s? box|sharingan|tornado|jump scare|awakening|dimension drip/i.test(candidate) && titleLike && !/collector'?s? box/i.test(titleLike)) return;
+    }
     merged[key] = value;
   });
   merged.confidence = Math.max(Number(base.confidence || 0), Number(ai.confidence || 0));
@@ -209,10 +245,11 @@ async function aiProfileFromDraft(draft = {}) {
   const prompt = `Return ONLY valid JSON for a Shopify drink/consumable product import. Extract or infer conservatively.
 Keys: productFlavour, flavourFamily, flavourProfile, formulaVersion, sweetness, sourness, servings, servingSize, caloriesPerServing, caffeineMgPerServing, sugarGPerServing, carbsGPerServing, sodiumMgPerServing, labels, warnings, supplementLabelImage, ingredientsLabelImage, confidence, needsReview, source.
 Rules:
-- productFlavour must be the actual flavour/taste (for example Pomegranate Green Tea or Orange Creamsicle), never the product/collab/character name or Collector's Box title. Leave it blank if not explicit.
+- productFlavour must be the actual flavour/taste (for example Pomegranate Green Tea or Orange Creamsicle), never the product/collab/character name or Collector's Box title. Use known G FUEL aliases when obvious: Sharingan = Pomegranate Green Tea; Tornado = Orange Creamsicle; F*** S*** UP / Vox Machina = Peach Orange Raspberry; Jump Scare = White Cran Strawberry; Awakening = White Grape Lime; Dimension Drip = Grape & Strawberry. Leave it blank only if genuinely unknown.
 - sweetness and sourness are numbers 1-5 only.
 - Use image reading when supplied to extract visible caffeine, calories/kcal, sugar, servings and supplement/ingredients label information.
-- caffeine/calories/servings/sugar must be numeric only when visible on the page or visible in supplied images, or extremely standard for the clearly identified product line. Otherwise use empty string.
+- caffeine/calories/servings/sugar must be numeric only when visible on the page or visible in supplied images, or extremely standard for the clearly identified product line. For G FUEL Energy Formula powder/tubs, caffeine is normally 140mg unless the page says caffeine-free or hydration. Otherwise use empty string.
+- For G FUEL Energy Formula 2.0 / New & Improved Energy Formula / 40 serving tubs, formulaVersion should be GF-EN2.0.
 - If a supplement facts / nutrition facts / ingredients label image is visible, return its URL in supplementLabelImage or ingredientsLabelImage.
 - labels/warnings must be short reusable filter labels.
 - Keep confidence under 0.75 when nutrition is inferred rather than explicit.

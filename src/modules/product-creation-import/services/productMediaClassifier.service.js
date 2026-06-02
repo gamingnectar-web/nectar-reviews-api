@@ -10,7 +10,7 @@ function imageRoleFromText(image = {}) {
     .filter(Boolean)
     .join(' ')
     .toLowerCase();
-  if (/supplement\s*facts|nutrition\s*facts|nutritional|ingredients?\s*(label|panel|info|facts)|label\s*(image|panel)|facts\s*panel|back\s*label|serving\s*size|amount\s*per\s*serving/i.test(haystack)) {
+  if (/supplement\s*facts|nutrition\s*facts|nutritional|ingredients?\s*(label|panel|info|facts)|label\s*(image|panel)|facts\s*panel|back\s*label|serving\s*size|amount\s*per\s*serving|\bSFF\b|[_-]SFF[_.-]|supp[_-]?facts/i.test(haystack)) {
     return { role: 'supplement_label', confidence: 0.82, reason: 'Looks like a supplement/nutrition/ingredients label image.' };
   }
   if (/lifestyle|fitness|gaming|study|work|person|model|ugc|influencer|holding|drinking/i.test(haystack)) {
