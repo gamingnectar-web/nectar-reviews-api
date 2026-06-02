@@ -566,11 +566,6 @@ router.post('/reviews/bulk', async (req, res, next) => {
     const incoming = Array.isArray(req.body.reviews) ? req.body.reviews : [];
     if (!incoming.length) return res.status(400).json({ error: 'No reviews supplied.' });
     if (incoming.length > 50) return res.status(400).json({ error: 'Bulk review limit is 50 at a time.' });
-    const existingReview = await Review.findOne(duplicateReviewBase({ shopDomain, email, orderId: cleanText(req.body.orderId, 120), itemId })).lean();
-    if (existingReview) {
-      return res.status(409).json({ error: 'You have already reviewed this product.', alreadyReviewed: true, reviewedItemIds: [itemId] });
-    }
-
     const reviewToken = cleanText(req.body.reviewToken || req.query.token, 3000);
     const isTest = isTestSubmission(req.body, req.query);
     const submissionEmail = cleanEmail(req.body.email);

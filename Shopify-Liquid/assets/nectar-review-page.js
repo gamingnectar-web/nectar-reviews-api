@@ -458,7 +458,7 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (error) {
       console.error(error);
-      alert('Something went wrong while submitting the reviews.');
+      alert(error?.message || 'Something went wrong while submitting the reviews.');
       ui.submit.disabled = false;
       ui.submit.textContent = 'Submit All Reviews';
     }
