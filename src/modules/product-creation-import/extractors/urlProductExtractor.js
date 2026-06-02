@@ -150,11 +150,11 @@ function imageFromJsonLd(value, baseUrl) {
   if (!value) return [];
   if (typeof value === 'string') {
     const src = absolutizeUrl(value, baseUrl);
-    return src ? [{ src, alt: '' }] : [];
+    return src ? [{ src, alt: '', source: 'json-ld-product-image' }] : [];
   }
   if (Array.isArray(value)) return value.flatMap((item) => imageFromJsonLd(item, baseUrl));
   if (typeof value === 'object') {
-    return [value.url, value.contentUrl, value.src].map((item) => absolutizeUrl(item, baseUrl)).filter(Boolean).map((src) => ({ src, alt: cleanText(value.caption || value.name || value.alt || '', 180) }));
+    return [value.url, value.contentUrl, value.src].map((item) => absolutizeUrl(item, baseUrl)).filter(Boolean).map((src) => ({ src, alt: cleanText(value.caption || value.name || value.alt || '', 180), source: 'json-ld-product-image' }));
   }
   return [];
 }
@@ -256,7 +256,7 @@ function extractHtmlImageCandidates(html, baseUrl) {
   const metaSelectors = ['og:image', 'og:image:secure_url', 'twitter:image', 'twitter:image:src', 'product:image'];
   metaSelectors.forEach((selector) => metaContents(html, selector).forEach((url) => {
     const src = absolutizeUrl(url, baseUrl);
-    if (src) images.push({ src, alt: '' });
+    if (src) images.push({ src, alt: '', source: selector });
   }));
 
   const imgRe = /<img\b[^>]*(?:src|data-src|data-original|data-zoom-image|data-image)=["']([^"']+)["'][^>]*>/gi;
@@ -268,7 +268,7 @@ function extractHtmlImageCandidates(html, baseUrl) {
     const cls = (tag.match(/class=["']([^"']*)["']/i) || [])[1] || '';
     const scoreText = `${src} ${alt} ${cls}`.toLowerCase();
     const isLikelyProduct = /(product|gallery|media|main|zoom|packshot|thumbnail|image)/i.test(scoreText);
-    if (src && isLikelyProduct && !/logo|icon|sprite|avatar|payment|trust|badge/i.test(scoreText)) images.push({ src, alt: cleanText(alt, 180) });
+    if (src && isLikelyProduct && !/logo|icon|sprite|avatar|payment|trust|badge/i.test(scoreText)) images.push({ src, alt: cleanText(alt, 180), source: cleanText(cls || 'img-tag', 80) });
   }
 
   const srcsetRe = /(?:srcset|data-srcset)=["']([^"']+)["']/gi;
@@ -276,7 +276,7 @@ function extractHtmlImageCandidates(html, baseUrl) {
     String(match[1] || '').split(',').forEach((part) => {
       const url = part.trim().split(/\s+/)[0];
       const absolute = absolutizeUrl(url, baseUrl);
-      if (absolute) images.push({ src: absolute, alt: '' });
+      if (absolute) images.push({ src: absolute, alt: '', source: 'srcset' });
     });
   }
 
@@ -344,7 +344,7 @@ async function extractProductFromUrl(url) {
   return {
     ...draft,
     confidence: product.name ? 0.86 : (title ? 0.55 : 0.25),
-    rawExtract: { jsonLdProductFound: Boolean(product.name), jsonLdCandidateCount: productMatch.candidates || 0, jsonLdMatchScore: Number(productMatch.score || 0).toFixed(2), sourceUrl, imageCount: draft.images.length, imageDedupe: 'canonical-url-highest-quality', barcodeSource: extractedBarcode ? (product.gtin || product.gtin13 || product.gtin12 ? 'json-ld' : 'page-text') : '', weightSource: weightInfo.source },
+    rawExtract: { jsonLdProductFound: Boolean(product.name), jsonLdCandidateCount: productMatch.candidates || 0, jsonLdMatchScore: Number(productMatch.score || 0).toFixed(2), sourceUrl, pageTitle, productTitle, description, pageTextSample: cleanText(pageText, 12000), imageCount: draft.images.length, imageDedupe: 'canonical-url-highest-quality', barcodeSource: extractedBarcode ? (product.gtin || product.gtin13 || product.gtin12 ? 'json-ld' : 'page-text') : '', weightSource: weightInfo.source },
   };
 }
 

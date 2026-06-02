@@ -57,6 +57,43 @@ function flavourFamilies(text = '') {
   return Array.from(new Set(matches)).slice(0, 6);
 }
 
+function inferKnownFlavourPhrase(text = '') {
+  const haystack = ` ${String(text || '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').toLowerCase()} `;
+  const known = [
+    'orange creamsicle', 'peach rings', 'blue raspberry', 'sour blue chug rug', 'rainbow sherbet',
+    'snow cone', 'tropical rain', 'strawberry banana', 'watermelon limeade', 'lemon lime',
+    'cherry limeade', 'green apple', 'pink lemonade', 'mango lemonade', 'mango peach',
+    'strawberry shortcake', 'cotton candy', 'bubble gum', 'sour cherry', 'sour grape',
+    'citrus cream', 'citrus lemonade', 'raspberry iced tea', 'peach iced tea', 'pineapple coconut',
+  ];
+  const found = known.find((phrase) => haystack.includes(` ${phrase} `));
+  if (!found) return '';
+  return found.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function inferFlavourFromText(title = '', text = '') {
+  const explicit = inferKnownFlavourPhrase(`${title} ${text}`);
+  if (explicit) return explicit;
+  const cleaned = cleanText(text, 5000);
+  const patterns = [
+    /(?:flavo[u]?r|taste|profile)\D{0,25}([A-Za-z][A-Za-z '&-]{2,50})(?:[.!?\n]|$)/i,
+    /(?:orange|peach|mango|blue\s*raspberry|raspberry|strawberry|watermelon|lemon|lime|cherry|grape|apple|cola|vanilla|coconut|pineapple)[A-Za-z\s'&-]{0,35}/i,
+  ];
+  for (const pattern of patterns) {
+    const match = cleaned.match(pattern);
+    if (match) return cleanText(match[1] || match[0], 80).replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+  return inferFlavourFromTitle(title);
+}
+
+function inferFormulaVersion(text = '') {
+  const lower = String(text || '').toLowerCase();
+  if (/gf[-\s]*en\s*2\.0|gf[-\s]*en2\.0|en\s*2\.0|en2\.0|energy\s*2\.0|2\.0\s*formula|formula\s*2\.0|new\s*&\s*improved\s*energy\s*formula/i.test(lower)) return 'GF-EN2.0';
+  if (/hydration\s*formula|gf[-\s]*hy/i.test(lower)) return 'GF-HY';
+  if (/energy\s*formula|gf[-\s]*en\b/i.test(lower)) return 'GF-EN';
+  return '';
+}
+
 function inferSweetness(text = '') {
   const lower = String(text || '').toLowerCase();
   if (/sour|tart|citrus|lemon|lime|cranberry/.test(lower) && !/sweet/.test(lower)) return 3;
@@ -83,7 +120,7 @@ function heuristicProfileFromDraft(draft = {}) {
     JSON.stringify(draft.raw || {}).slice(0, 2000),
   ].filter(Boolean).join(' '), 12000);
   const title = cleanText(draft.title || '', 220);
-  const flavour = inferFlavourFromTitle(title);
+  const flavour = inferFlavourFromText(title, text);
   const lower = text.toLowerCase();
   const labels = [];
   const warnings = [];
@@ -122,6 +159,7 @@ function heuristicProfileFromDraft(draft = {}) {
     productFlavour: flavour,
     flavourFamily: flavourFamilies(`${title} ${text}`),
     flavourProfile: flavour ? `${flavour} flavour profile.` : '',
+    formulaVersion: inferFormulaVersion(text),
     sweetness: inferSweetness(`${title} ${text}`),
     sourness: inferSourness(`${title} ${text}`),
     servings: servings ?? '',
@@ -161,13 +199,22 @@ async function aiProfileFromDraft(draft = {}) {
   if (!apiKey) return null;
   const model = process.env.OPENAI_PRODUCT_IMPORT_MODEL || process.env.OPENAI_MODULE_MODEL || 'gpt-4.1-mini';
   const prompt = `Return ONLY valid JSON for a Shopify drink/consumable product import. Extract or infer conservatively.
-Keys: productFlavour, flavourFamily, flavourProfile, sweetness, sourness, servings, servingSize, caloriesPerServing, caffeineMgPerServing, sugarGPerServing, carbsGPerServing, sodiumMgPerServing, labels, warnings, confidence, needsReview, source.
+Keys: productFlavour, flavourFamily, flavourProfile, formulaVersion, sweetness, sourness, servings, servingSize, caloriesPerServing, caffeineMgPerServing, sugarGPerServing, carbsGPerServing, sodiumMgPerServing, labels, warnings, supplementLabelImage, ingredientsLabelImage, confidence, needsReview, source.
 Rules:
 - sweetness and sourness are numbers 1-5 only.
-- caffeine/calories/servings/sugar must be numeric only when visible or very strongly implied by product line conventions. Otherwise use empty string.
+- Use image reading when supplied to extract visible caffeine, calories/kcal, sugar, servings and supplement/ingredients label information.
+- caffeine/calories/servings/sugar must be numeric only when visible on the page or visible in supplied images, or extremely standard for the clearly identified product line. Otherwise use empty string.
+- If a supplement facts / nutrition facts / ingredients label image is visible, return its URL in supplementLabelImage or ingredientsLabelImage.
 - labels/warnings must be short reusable filter labels.
 - Keep confidence under 0.75 when nutrition is inferred rather than explicit.
 Product draft: ${JSON.stringify({ title: draft.title, vendor: draft.vendor, productType: draft.productType, sourceUrl: draft.sourceUrl, descriptionHtml: draft.descriptionHtml, raw: draft.raw }).slice(0, 7000)}`;
+
+  const images = (Array.isArray(draft.images) ? draft.images : [])
+    .map((image) => ({ src: image.src || image.url || '', alt: image.alt || '', role: image.role || '' }))
+    .filter((image) => /^https?:\/\//i.test(image.src))
+    .slice(0, 10);
+  const userContent = [{ type: 'text', text: `${prompt}\nCandidate image URLs for visual extraction: ${JSON.stringify(images).slice(0, 3000)}` }];
+  images.forEach((image) => userContent.push({ type: 'image_url', image_url: { url: image.src, detail: 'low' } }));
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -177,8 +224,8 @@ Product draft: ${JSON.stringify({ title: draft.title, vendor: draft.vendor, prod
       temperature: 0.1,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: 'You extract standardised ecommerce nutrition and flavour profile data. Output JSON only.' },
-        { role: 'user', content: prompt },
+        { role: 'system', content: 'You extract standardised ecommerce nutrition and flavour profile data from text and supplied product images. Output JSON only.' },
+        { role: 'user', content: userContent },
       ],
     }),
   });

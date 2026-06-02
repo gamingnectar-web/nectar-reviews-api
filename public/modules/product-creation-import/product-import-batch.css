@@ -293,3 +293,21 @@ textarea { resize: vertical; }
   .editor-image-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .item-dialog { width: calc(100% - 12px); height: calc(100vh - 12px); }
 }
+
+.label-toolbar {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border);
+}
+.label-images {
+  margin-bottom: 14px;
+}
+.editor-image-card.label-card {
+  border-color: #fedf89;
+  background: #fffcf5;
+}
+.editor-image-card.label-card small::before {
+  content: "Metafield media: ";
+  font-weight: 900;
+  color: var(--orange);
+}

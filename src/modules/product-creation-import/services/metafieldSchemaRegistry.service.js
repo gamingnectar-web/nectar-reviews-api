@@ -4,6 +4,7 @@ const PRODUCT_IMPORT_PROFILE_SCHEMA = {
   product_flavour: { namespace: 'core', key: 'product_flavour', type: 'single_line_text_field', label: 'Product Flavour' },
   flavour_family: { namespace: 'core', key: 'flavour_family', type: 'single_line_text_field', label: 'Flavour Family' },
   flavour_profile: { namespace: 'core', key: 'flavour_profile', type: 'single_line_text_field', label: 'Flavour Profile' },
+  formula_version: { namespace: 'core', key: 'formula_version', type: 'single_line_text_field', label: 'Formula Version' },
   sweetness: { namespace: 'core', key: 'sweetness', type: 'single_line_text_field', label: 'Sweetness', allowed: ['1', '2', '3', '4', '5'] },
   sourness: { namespace: 'core', key: 'sourness', type: 'single_line_text_field', label: 'Sourness', allowed: ['1', '2', '3', '4', '5'] },
   servings: { namespace: 'nutrition', key: 'servings', type: 'number_integer', label: 'Servings' },
@@ -15,6 +16,7 @@ const PRODUCT_IMPORT_PROFILE_SCHEMA = {
   sodium_mg_per_serving: { namespace: 'nutrition', key: 'sodium_mg_per_serving', type: 'number_integer', label: 'Sodium MG Per Serving' },
   dietary_labels: { namespace: 'nutrition', key: 'dietary_labels', type: 'single_line_text_field', label: 'Dietary Labels' },
   warning_labels: { namespace: 'nutrition', key: 'warning_labels', type: 'single_line_text_field', label: 'Warning Labels' },
+  ingredients_label: { namespace: 'custom', key: 'ingredients_label', type: 'single_line_text_field', label: 'Ingredients Label' },
 };
 
 function valuePresent(value) {
@@ -74,6 +76,7 @@ function profileToMetafields(profile = {}) {
     buildMetafield('product_flavour', profile.productFlavour || profile.product_flavour || profile.flavour, source, confidence),
     buildMetafield('flavour_family', profile.flavourFamily || profile.flavour_family, source, confidence),
     buildMetafield('flavour_profile', profile.flavourProfile || profile.flavour_profile, source, confidence),
+    buildMetafield('formula_version', profile.formulaVersion || profile.formula_version, source, confidence),
     buildMetafield('sweetness', profile.sweetness, source, confidence),
     buildMetafield('sourness', profile.sourness, source, confidence),
     buildMetafield('servings', profile.servings, source, confidence),
@@ -85,6 +88,7 @@ function profileToMetafields(profile = {}) {
     buildMetafield('sodium_mg_per_serving', profile.sodiumMgPerServing || profile.sodium_mg_per_serving, source, confidence),
     buildMetafield('dietary_labels', profile.labels || profile.dietaryLabels || profile.dietary_labels, source, confidence),
     buildMetafield('warning_labels', profile.warnings || profile.warningLabels || profile.warning_labels, source, confidence),
+    buildMetafield('ingredients_label', profile.ingredientsLabelImage || profile.ingredients_label_image || profile.supplementLabelImage || profile.supplement_label_image, source, confidence),
   ].filter(Boolean));
 }
 

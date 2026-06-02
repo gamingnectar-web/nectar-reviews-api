@@ -33,6 +33,7 @@ const batchItemSchema = new mongoose.Schema({
   imageCandidates: { type: [imageCandidateSchema], default: [] },
   selectedImages: { type: [imageCandidateSchema], default: [] },
   rejectedImages: { type: [imageCandidateSchema], default: [] },
+  supplementLabelImages: { type: [imageCandidateSchema], default: [] },
   validation: {
     status: { type: String, enum: ['unchecked', 'ready', 'warning', 'blocked'], default: 'unchecked' },
     issues: { type: [String], default: [] },

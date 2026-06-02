@@ -83,11 +83,59 @@ function normaliseCoreGaugeMetafields(items = []) {
   });
 }
 
+function stripVendorFromTitle(title = '', vendor = '') {
+  let next = cleanText(title || '', 220);
+  const vendorText = cleanText(vendor || '', 120);
+  if (!vendorText) return next;
+  const escaped = vendorText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*');
+  next = next.replace(new RegExp(`^${escaped}\\s*[-–—:|•]*\\s*`, 'i'), '').trim();
+  if (/^g\s*fuel/i.test(vendorText)) next = next.replace(/^g\s*fuel\s*[-–—:|•]*\s*/i, '').trim();
+  return next || cleanText(title || '', 220);
+}
+
+function titleCaseLocation(value = '') {
+  const raw = cleanText(value || '', 80);
+  if (!raw) return 'UK Stock';
+  if (/^uk$/i.test(raw)) return 'UK Stock';
+  if (/stock/i.test(raw)) return raw.replace(/\buk\b/i, 'UK');
+  return `${raw.replace(/\buk\b/i, 'UK')} Stock`;
+}
+
+function inferProductFormat(draft = {}, settings = {}) {
+  const rules = settings.handleRules || {};
+  const explicit = cleanText(draft.handleFormat || draft.productFormat || rules.format || '', 100);
+  const text = [draft.title, draft.productType, draft.descriptionHtml, parseTags(draft.recommendedTags).join(' ')].filter(Boolean).join(' ').toLowerCase();
+  if (explicit && !/^tub$/i.test(explicit)) return explicit;
+  if (/collector|collectible/.test(text) && /box/.test(text)) return 'Collector Box';
+  if (/hydration/.test(text)) return /tub|powder|servings?/.test(text) ? 'Hydration Powder Tub' : 'Hydration Drink';
+  if (/can\b|cans\b|case/.test(text)) return 'Energy Drink Can';
+  if (/sachet|stick|single\s*serve/.test(text)) return 'Energy Drink Sachet';
+  if (/shaker|cup|bottle/.test(text)) return 'Shaker Cup';
+  if (/energy|formula|powder|tub|servings?/.test(text) || /^g\s*fuel$/i.test(draft.vendor || '')) return 'Energy Drink Powder Tub';
+  return explicit || draft.productType || 'Product';
+}
+
+function makeMerchantSeo({ draft = {}, settings = {} }) {
+  const vendor = cleanText(draft.vendor || '', 80);
+  const productName = stripVendorFromTitle(draft.title || '', vendor);
+  const format = inferProductFormat(draft, settings);
+  const location = titleCaseLocation(draft.handleLocation || settings.handleRules?.location || 'uk');
+  const seoTitle = cleanText([vendor, productName].filter(Boolean).join(' ') + (format ? ` • ${format}` : '') + (location ? ` • ${location}` : ''), 70);
+  const lead = `${[vendor, productName].filter(Boolean).join(' ')} ${format}`.trim();
+  const flavourText = cleanText((draft.metafields || []).find((mf) => mf.namespace === 'core' && mf.key === 'flavour_profile')?.value || '', 120);
+  const seoDescription = cleanText([
+    `Buy ${lead}${location ? ` from Gaming Nectar with ${location}` : ' from Gaming Nectar'}.`,
+    flavourText ? flavourText.replace(/[.!?]?$/, '.') : '',
+    'Fast UK dispatch available.'
+  ].filter(Boolean).join(' '), 160);
+  return { title: seoTitle || draft.seo?.title || draft.title, description: seoDescription || draft.seo?.description || draft.title };
+}
+
 async function aiSuggestProductProfile({ draft, metadata }) {
   const apiKey = process.env.OPENAI_API_KEY || '';
   if (!apiKey) return null;
   const model = process.env.OPENAI_PRODUCT_IMPORT_MODEL || process.env.OPENAI_MODULE_MODEL || 'gpt-4.1-mini';
-  const prompt = `You are enriching a Shopify product draft. Return ONLY valid JSON with keys: handle, productType, themeTemplate, collections, recommendedTags, metafields, weight, weightUnit, notes.
+  const prompt = `You are enriching a Shopify product draft. Return ONLY valid JSON with keys: handle, productType, productCategory, themeTemplate, collections, recommendedTags, seoTitle, seoDescription, metafields, weight, weightUnit, notes.
 
 metafields must be an array of {namespace,key,type,value,confidence,source}. Include these core metafields when relevant: core.formula_version, core.grouped_profiles, core.sourness, core.sweetness, core.flavour_profile.
 
@@ -97,13 +145,15 @@ Rules:
 - Do not add core.formula_version, core.grouped_profiles, core.sourness, core.sweetness or core.flavour_profile for accessories, lunch boxes, shakers, cases, apparel, insurance, or non-consumable merchandise.
 - core.sourness and core.sweetness must be string numbers from "1" to "5" only: 1 = very low, 3 = medium, 5 = very high. Do not use words like low/medium/high for these two fields.
 - Do not invent SKU, barcode or paid price. Only suggest weight if it is explicit in the page/title/description or clearly visible in provided content.
-- Suggest an SEO-safe handle matching the title.
+- Build SEO in the merchant pattern: vendor + product name + product format + location. For example: G FUEL Tornado • Energy Drink Powder Tub • UK Stock.
+- Build URL handles in the same merchant pattern: vendor-product-name-product-format-location.
+- Product format should be human readable, e.g. Energy Drink Powder Tub, Collector Box, Shaker Cup, Hydration Powder Tub.
 - Keep confidence below 0.75 when the answer is inferred from flavour names rather than explicit content.
 
 Existing tag examples for click-to-add suggestions only: ${(metadata.tags || []).slice(0, 80).map((item) => item.tag || item).join(', ')}
 Metafield definitions: ${(metadata.metafieldDefinitions || []).slice(0, 80).map((item) => `${item.namespace}.${item.key} (${item.name || item.type})`).join(', ')}
 Metafield mapping rules: ${JSON.stringify((metadata.settings?.metafieldMappingRules || []).filter((rule) => rule.enabled !== false).slice(0, 80)).slice(0, 4000)}
-Product draft: ${JSON.stringify({ title: draft.title, vendor: draft.vendor, productType: draft.productType, tags: draft.tags, sourceUrl: draft.sourceUrl, descriptionHtml: draft.descriptionHtml, handle: draft.handle, weight: draft.weight, weightUnit: draft.weightUnit, likelyDrinkProduct: isLikelyDrinkProduct(draft), clearlyNonDrinkProduct: isClearlyNonDrinkProduct(draft) }).slice(0, 7000)}`;
+Product draft: ${JSON.stringify({ title: draft.title, vendor: draft.vendor, productType: draft.productType, productCategory: draft.productCategory, tags: draft.tags, sourceUrl: draft.sourceUrl, descriptionHtml: draft.descriptionHtml, handle: draft.handle, handleFormat: draft.handleFormat, handleLocation: draft.handleLocation, weight: draft.weight, weightUnit: draft.weightUnit, images: (draft.images || []).slice(0, 10).map((img) => ({ src: img.src, alt: img.alt, role: img.role })), raw: draft.raw, likelyDrinkProduct: isLikelyDrinkProduct(draft), clearlyNonDrinkProduct: isClearlyNonDrinkProduct(draft) }).slice(0, 9000)}`;
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -177,16 +227,19 @@ async function suggestProductProfile({ shopDomain, draft }) {
     ...normalised,
     handle: cleanText(ai?.handle || normalised.handle || slugify(normalised.title), 180),
     productType: cleanText(ai?.productType || normalised.productType || '', 120),
+    productCategory: cleanText(ai?.productCategory || normalised.productCategory || '', 180),
     tags: normalised.tags,
     recommendedTags,
     themeTemplate: cleanText(ai?.themeTemplate || normalised.themeTemplate || '', 80),
     collections: Array.from(new Set([...(normalised.collections || []), ...parseTags(ai?.collections || [])])).slice(0, 40),
     metafields: suggestedMetafields,
   }, metadata.settings || {});
+  const merchantSeo = makeMerchantSeo({ draft: settingsApplied, settings: metadata.settings || {} });
 
   return {
     handle: settingsApplied.handle,
     productType: settingsApplied.productType,
+    productCategory: settingsApplied.productCategory || normalised.productCategory || '',
     weight: cleanText(ai?.weight || normalised.weight || '', 40),
     weightUnit: cleanText(ai?.weightUnit || normalised.weightUnit || 'g', 10),
     vendor: settingsApplied.vendor,
@@ -196,6 +249,10 @@ async function suggestProductProfile({ shopDomain, draft }) {
     recommendedTags: settingsApplied.recommendedTags || recommendedTags,
     themeTemplate: settingsApplied.themeTemplate || normalised.themeTemplate || '',
     collections: settingsApplied.collections || normalised.collections || [],
+    seo: {
+      title: cleanText(ai?.seoTitle || ai?.seo?.title || merchantSeo.title || normalised.seo?.title || '', 70),
+      description: cleanText(ai?.seoDescription || ai?.seo?.description || merchantSeo.description || normalised.seo?.description || '', 160),
+    },
     metafields: filterMetafieldsForProductKind(settingsApplied.metafields || [], settingsApplied),
     existingProfileMatchedProducts: existing.matchedProductCount || 0,
     aiNotes: cleanText(ai?.notes || ai?.error || '', 500),
@@ -211,12 +268,14 @@ async function enrichProductDraft({ shopDomain, draft }) {
     handle: suggestion.handle || normalised.handle,
     vendor: suggestion.vendor || normalised.vendor,
     productType: suggestion.productType || normalised.productType,
+    productCategory: suggestion.productCategory || normalised.productCategory,
     themeTemplate: suggestion.themeTemplate || normalised.themeTemplate,
     collections: suggestion.collections || normalised.collections,
     recommendedTags: suggestion.recommendedTags || normalised.recommendedTags,
     weight: suggestion.weight || normalised.weight,
     weightUnit: suggestion.weightUnit || normalised.weightUnit,
     sku: suggestion.sku || normalised.sku,
+    seo: suggestion.seo || normalised.seo || {},
     tags: normalised.tags,
     recommendedTags: suggestion.recommendedTags || normalised.recommendedTags || [],
     metafields: normaliseCoreGaugeMetafields(filterMetafieldsForProductKind(mergeMetafields(normalised.metafields || [], suggestion.metafields || []), normalised)),

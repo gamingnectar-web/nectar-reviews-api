@@ -63,6 +63,11 @@ function imageContextScore({ image, title = '', sourceUrl = '', index = 0 }) {
   }
 
   if (index === 0) { score += 6; reasons.push('First image candidate'); }
+  if (/supplement\s*facts|nutrition\s*facts|nutritional|ingredients?\s*(label|panel|info|facts)|facts\s*panel|serving\s*size|amount\s*per\s*serving/i.test(haystack)) {
+    score -= 55;
+    reasons.push('Nutrition/ingredients label candidate');
+    rejects.push('supplement-label-metafield');
+  }
   if (/logo|icon|sprite|avatar|payment|trust|badge|footer|header|social|facebook|instagram|tiktok|visa|mastercard|klarna|paypal/i.test(haystack)) {
     score -= 120;
     rejects.push('logo/icon/payment/trust/social image');

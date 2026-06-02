@@ -5,6 +5,10 @@ const { matchInvoiceLinesToShopify, applyMatchesToImportDoc } = require('./servi
 const { createShopifyProductFromDraft, assignImportLineToProduct } = require('./services/shopifyProduct.service');
 const { normaliseDraftProduct } = require('./services/normaliseProduct.service');
 const { enrichProductDraft, getProductImportMetadata, suggestProductProfile } = require('./services/productEnrichment.service');
+const { scoreAndSelectProductImages } = require('./services/imageCandidateScoring.service');
+const { refineImagePlanWithAi } = require('./services/productMediaClassifier.service');
+const { extractNutritionAndProductProfile } = require('./services/nutritionProfileExtractor.service');
+const { applyProfileToDraft, profileToMetafields, mergeMetafields } = require('./services/metafieldSchemaRegistry.service');
 const { suggestedRetailFromCost, toMoney, cleanText } = require('./utils/safe');
 const { getProductImportSettings, saveProductImportSettings } = require('./services/productImportSettings.service');
 
@@ -112,6 +116,32 @@ function lineIsStockForPo(line = {}) {
   return treatment.includeInPurchaseOrder && treatment.poLineType === 'stock';
 }
 
+
+function supplementLabelMetafields(images = []) {
+  const first = (images || []).find((image) => image?.src);
+  if (!first) return [];
+  return [{ namespace: 'custom', key: 'ingredients_label', type: 'single_line_text_field', label: 'Ingredients Label', value: first.src, source: 'supplement-label-image', confidence: Number(first.roleConfidence || 0.8) }];
+}
+
+async function enrichImportDraftFully({ shopDomain, draft, useAi = true }) {
+  let normalised = normaliseDraftProduct(draft || {});
+  const baseImagePlan = scoreAndSelectProductImages({ images: normalised.images || [], title: normalised.title, sourceUrl: normalised.sourceUrl, maxSelected: 8 });
+  const imagePlan = await refineImagePlanWithAi({ imagePlan: baseImagePlan, title: normalised.title, sourceUrl: normalised.sourceUrl, useAi });
+  const profileDraft = { ...normalised, images: imagePlan.candidates.slice(0, 10).map((image) => ({ src: image.src, alt: image.alt, role: image.role || '', reason: image.roleReason || image.reason || '' })) };
+  const profile = await extractNutritionAndProductProfile({ draft: profileDraft, useAi });
+  const supplementImages = imagePlan.supplementLabelImages || [];
+  if (!profile.ingredientsLabelImage && !profile.supplementLabelImage && supplementImages[0]?.src) profile.ingredientsLabelImage = supplementImages[0].src;
+  normalised.images = imagePlan.selected.map((image) => ({ src: image.src, alt: image.alt || normalised.title, role: image.role || '', reason: image.roleReason || image.reason || '' }));
+  normalised = applyProfileToDraft(normalised, profile);
+  normalised.metafields = mergeMetafields(normalised.metafields || [], profileToMetafields(profile), supplementLabelMetafields(supplementImages));
+  normalised = await enrichProductDraft({ shopDomain, draft: normalised });
+  normalised = applyProfileToDraft(normalised, profile);
+  normalised.images = imagePlan.selected.map((image) => ({ src: image.src, alt: image.alt || normalised.title, role: image.role || '', reason: image.roleReason || image.reason || '' }));
+  normalised.metafields = mergeMetafields(normalised.metafields || [], profileToMetafields(profile), supplementLabelMetafields(supplementImages));
+  normalised.enrichment = { ...(normalised.enrichment || {}), nutritionProfile: profile, supplementLabelImages: supplementImages };
+  return normaliseDraftProduct(normalised);
+}
+
 function lineToPoLine(line = {}) {
   const match = line.match || {};
   const quantity = Number(line.quantity || 1) || 1;
@@ -155,7 +185,7 @@ function lineToPoLine(line = {}) {
 
 async function scanUrlAndSave({ shopDomain, url }) {
   const extracted = await extractProductFromUrl(url);
-  const draft = await enrichProductDraft({ shopDomain, draft: extracted });
+  const draft = await enrichImportDraftFully({ shopDomain, draft: extracted, useAi: true });
   const doc = await ProductCreationImport.create({ shopDomain, type: 'url', status: 'analysed', sourceUrl: draft.sourceUrl, confidence: draft.confidence, draft });
   return { import: doc, draft };
 }
@@ -214,7 +244,7 @@ async function matchImportLines({ shopDomain, importId, lines }) {
 }
 
 async function saveManualDraft({ shopDomain, draft }) {
-  const normalised = await enrichProductDraft({ shopDomain, draft: { ...draft, source: draft?.source || 'manual' } });
+  const normalised = await enrichImportDraftFully({ shopDomain, draft: { ...draft, source: draft?.source || 'manual' }, useAi: true });
   const doc = await ProductCreationImport.create({ shopDomain, type: 'manual', status: 'draft', sourceUrl: normalised.sourceUrl, draft: normalised, confidence: 1 });
   return { import: doc, draft: normalised };
 }

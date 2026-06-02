@@ -204,7 +204,10 @@ function codeFrom(value = '', length = 6) {
 
 function applyHandleRules(draft = {}, settings = {}) {
   const rules = settings.handleRules || DEFAULT_SETTINGS.handleRules;
-  if (draft.handle && !rules.overwriteExistingHandle) return draft.handle;
+  const currentHandle = draft.handle || '';
+  const titleHandle = slugify(draft.title || '');
+  const patternLooksMerchantManaged = String(rules.pattern || '').includes('{vendor}') || String(rules.pattern || '').includes('{format}') || String(rules.pattern || '').includes('{location}');
+  if (currentHandle && !rules.overwriteExistingHandle && currentHandle !== titleHandle && !patternLooksMerchantManaged) return currentHandle;
   const separator = rules.separator || '-';
   const maxLength = Math.max(40, Math.min(Number(rules.maxLength) || 180, 240));
   const tokens = {

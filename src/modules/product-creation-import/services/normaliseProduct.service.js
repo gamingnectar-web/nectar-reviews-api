@@ -48,7 +48,13 @@ function normaliseImage(image, title, index = 0) {
     return url ? { src: url, alt: fallbackAlt } : null;
   }
   const src = cleanUrl(image.src || image.url || image.originalSource || '');
-  return src ? { src, alt: cleanText(image.alt || image.description || fallbackAlt, 180) } : null;
+  return src ? {
+    src,
+    alt: cleanText(image.alt || image.description || fallbackAlt, 180),
+    ...(image.role ? { role: cleanText(image.role, 80) } : {}),
+    ...(image.reason ? { reason: cleanText(image.reason, 240) } : {}),
+    ...(image.source ? { source: cleanText(image.source, 120) } : {}),
+  } : null;
 }
 
 function dedupeImagesByCanonicalUrl(images = []) {

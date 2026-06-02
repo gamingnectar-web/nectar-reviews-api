@@ -27,6 +27,8 @@
       productType: $('default-product-type').value,
       productCategory: $('default-product-category').value,
       themeTemplate: $('default-template').value,
+      handleFormat: $('default-format')?.value || '',
+      handleLocation: $('default-location')?.value || '',
       collections: csv('default-collections'),
       recommendedTags: csv('default-tags'),
       currency: 'GBP',
@@ -181,6 +183,7 @@
     const nutrition = item.nutrition || {};
     const selected = item.selectedImages?.length ? item.selectedImages : draft.images || [];
     const rejected = item.rejectedImages || [];
+    const supplementLabels = item.supplementLabelImages || [];
     const metafields = item.metafieldPlan?.length ? item.metafieldPlan : draft.metafields || [];
     const clientIssues = getClientValidationIssues(item);
     const confidence = Math.round(Number(item.confidence || item.aiEnrichment?.confidence || 0) * 100);
@@ -233,7 +236,14 @@
             <span class="muted">First selected image becomes the main Shopify image.</span>
           </div>
           <div class="editor-image-grid selected-images" data-selected-images>
-            ${selected.length ? selected.map((img, index) => renderSelectedImage(img, index)).join('') : '<p class="muted">No selected images. Choose from possible images below or paste image URLs in the JSON/debug panel.</p>'}
+            ${selected.length ? selected.map((img, index) => renderSelectedImage(img, index)).join('') : '<p class="muted">No selected images. Choose from possible images below.</p>'}
+          </div>
+          <div class="media-toolbar label-toolbar">
+            <strong>Ingredients / supplement label image</strong>
+            <span class="muted">These are excluded from the main media roster and written to the Ingredients Label metafield.</span>
+          </div>
+          <div class="editor-image-grid label-images" data-label-images>
+            ${supplementLabels.length ? supplementLabels.map((img, index) => renderLabelImage(img, index)).join('') : '<p class="muted">No label image detected. Use “Use as label” on any image below if the supplement facts panel appears.</p>'}
           </div>
           <details class="foldout" open>
             <summary>Rejected / possible images</summary>
@@ -273,6 +283,7 @@
             ${field('Servings', 'nutrition.servings', nutrition.servings ?? '', 'number', 'Servings per tub/pack.')}
             ${field('Caffeine mg per serving', 'nutrition.caffeineMgPerServing', nutrition.caffeineMgPerServing ?? '', 'number', 'Leave blank only if genuinely unknown.')}
             ${field('Formula version', 'nutrition.formulaVersion', nutrition.formulaVersion || '', 'text', 'Formula / version when visible.')}
+            ${field('Ingredients label image', 'nutrition.ingredientsLabelImage', nutrition.ingredientsLabelImage || nutrition.supplementLabelImage || (supplementLabels[0]?.src || ''), 'text', 'Image URL saved to the Ingredients Label metafield.')}
             ${field('Allergen', 'nutrition.allergen', nutrition.allergen || '', 'text', 'Known allergen text.')}
             ${field('Flavour profile', 'nutrition.flavourProfile', nutrition.flavourProfile || '', 'textarea', 'Short flavour profile.')}
           </div>
@@ -289,7 +300,7 @@
           </div>
           <details class="foldout debug-foldout">
             <summary>Raw AI / developer debug JSON</summary>
-            <pre class="codebox">${escapeHtml(JSON.stringify({ draft, nutrition, metafieldPlan: item.metafieldPlan || [], selectedImages: item.selectedImages || [], rejectedImages: item.rejectedImages || [], extractedData: item.extractedData || {}, aiEnrichment: item.aiEnrichment || {} }, null, 2))}</pre>
+            <pre class="codebox">${escapeHtml(JSON.stringify({ draft, nutrition, metafieldPlan: item.metafieldPlan || [], selectedImages: item.selectedImages || [], supplementLabelImages: item.supplementLabelImages || [], rejectedImages: item.rejectedImages || [], extractedData: item.extractedData || {}, aiEnrichment: item.aiEnrichment || {} }, null, 2))}</pre>
           </details>
         `)}
       </section>
@@ -358,6 +369,7 @@
       <div class="image-actions">
         <button type="button" class="secondary-btn compact" data-move-image="${index}" data-direction="up">↑</button>
         <button type="button" class="secondary-btn compact" data-move-image="${index}" data-direction="down">↓</button>
+        <button type="button" class="secondary-btn compact" data-mark-label="${index}">Use as label</button>
         <button type="button" class="secondary-btn compact danger" data-remove-image="${index}">Remove</button>
       </div>
     </div>`;
@@ -366,8 +378,21 @@
   function renderRejectedImage(img = {}, index = 0) {
     return `<div class="editor-image-card possible" data-rejected-index="${index}">
       <img src="${escapeAttr(img.src || '')}" alt="${escapeAttr(img.alt || '')}">
-      <small>${escapeHtml(img.rejectReason || img.reason || 'Possible image')}</small>
+      <small>${escapeHtml(img.rejectReason || img.roleReason || img.reason || 'Possible image')}</small>
       <button type="button" class="secondary-btn compact" data-use-rejected-image="${index}">Use image</button>
+      <button type="button" class="secondary-btn compact" data-use-rejected-label="${index}">Use as label</button>
+    </div>`;
+  }
+
+  function renderLabelImage(img = {}, index = 0) {
+    return `<div class="editor-image-card label-card" data-label-index="${index}">
+      <img src="${escapeAttr(img.src || '')}" alt="${escapeAttr(img.alt || '')}">
+      <label>Alt text<input data-label-alt="${index}" value="${escapeAttr(img.alt || '')}"></label>
+      <small>${escapeHtml(img.roleReason || img.reason || 'Ingredients / supplement label image')}</small>
+      <div class="image-actions">
+        <button type="button" class="secondary-btn compact" data-label-to-product="${index}">Move to product media</button>
+        <button type="button" class="secondary-btn compact danger" data-remove-label="${index}">Remove label</button>
+      </div>
     </div>`;
   }
 
@@ -395,6 +420,10 @@
     body.querySelector('[data-rescan-current]')?.addEventListener('click', () => rescanItem(itemId).catch((e) => setEditorStatus(e.message, true)));
     body.querySelector('[data-add-metafield]')?.addEventListener('click', () => addMetafieldCard());
     body.querySelectorAll('[data-use-rejected-image]').forEach((button) => button.addEventListener('click', () => useRejectedImage(Number(button.dataset.useRejectedImage))));
+    body.querySelectorAll('[data-use-rejected-label]').forEach((button) => button.addEventListener('click', () => useRejectedAsLabel(Number(button.dataset.useRejectedLabel))));
+    body.querySelectorAll('[data-mark-label]').forEach((button) => button.addEventListener('click', () => markSelectedAsLabel(Number(button.dataset.markLabel))));
+    body.querySelectorAll('[data-remove-label]').forEach((button) => button.addEventListener('click', () => removeLabelImage(Number(button.dataset.removeLabel))));
+    body.querySelectorAll('[data-label-to-product]').forEach((button) => button.addEventListener('click', () => labelToProduct(Number(button.dataset.labelToProduct))));
     body.querySelectorAll('[data-remove-image]').forEach((button) => button.addEventListener('click', () => removeSelectedImage(Number(button.dataset.removeImage))));
     body.querySelectorAll('[data-move-image]').forEach((button) => button.addEventListener('click', () => moveSelectedImage(Number(button.dataset.moveImage), button.dataset.direction)));
     body.querySelectorAll('[data-remove-metafield]').forEach((button) => button.addEventListener('click', () => button.closest('.metafield-card')?.remove()));
@@ -410,6 +439,21 @@
     })).filter((img) => img.src);
   }
 
+
+  function currentLabelImages() {
+    const item = findItem(state.activeItemId);
+    const labels = item?.supplementLabelImages || [];
+    return labels.map((img, index) => ({
+      ...img,
+      src: img.src || '',
+      alt: $('dialog-body').querySelector(`[data-label-alt="${index}"]`)?.value || img.alt || item?.draft?.title || '',
+      role: 'supplement_label',
+      rejected: true,
+      selected: false,
+      rejectReason: 'supplement-label-metafield',
+    })).filter((img) => img.src);
+  }
+
   function rerenderActiveEditor() {
     if (state.activeItemId) viewItem(state.activeItemId, { keepOpen: true });
   }
@@ -422,6 +466,51 @@
     const selected = currentSelectedImages();
     item.selectedImages = [...selected, { ...img, selected: true, rejected: false, rejectReason: '' }];
     item.rejectedImages = (item.rejectedImages || []).filter((_, i) => i !== index);
+    item.draft = { ...(item.draft || {}), images: item.selectedImages };
+    rerenderActiveEditor();
+  }
+
+
+  function markSelectedAsLabel(index) {
+    const item = findItem(state.activeItemId);
+    if (!item) return;
+    const selected = currentSelectedImages();
+    const img = selected[index];
+    if (!img?.src) return;
+    item.selectedImages = selected.filter((_, i) => i !== index);
+    item.supplementLabelImages = [...currentLabelImages(), { ...img, role: 'supplement_label', selected: false, rejected: true, rejectReason: 'supplement-label-metafield' }];
+    item.draft = { ...(item.draft || {}), images: item.selectedImages };
+    rerenderActiveEditor();
+  }
+
+  function useRejectedAsLabel(index) {
+    const item = findItem(state.activeItemId);
+    if (!item) return;
+    const img = item.rejectedImages?.[index];
+    if (!img?.src) return;
+    item.supplementLabelImages = [...currentLabelImages(), { ...img, role: 'supplement_label', selected: false, rejected: true, rejectReason: 'supplement-label-metafield' }];
+    item.rejectedImages = (item.rejectedImages || []).filter((_, i) => i !== index);
+    rerenderActiveEditor();
+  }
+
+  function removeLabelImage(index) {
+    const item = findItem(state.activeItemId);
+    if (!item) return;
+    const labels = currentLabelImages();
+    const removed = labels[index];
+    item.supplementLabelImages = labels.filter((_, i) => i !== index);
+    if (removed) item.rejectedImages = [{ ...removed, rejected: true, selected: false, rejectReason: 'Manually removed label' }, ...(item.rejectedImages || [])];
+    rerenderActiveEditor();
+  }
+
+  function labelToProduct(index) {
+    const item = findItem(state.activeItemId);
+    if (!item) return;
+    const labels = currentLabelImages();
+    const img = labels[index];
+    if (!img?.src) return;
+    item.supplementLabelImages = labels.filter((_, i) => i !== index);
+    item.selectedImages = [...currentSelectedImages(), { ...img, role: 'product_image', selected: true, rejected: false, rejectReason: '' }];
     item.draft = { ...(item.draft || {}), images: item.selectedImages };
     rerenderActiveEditor();
   }
@@ -489,6 +578,7 @@
 
   async function saveCurrentItem(itemId) {
     const selectedImages = currentSelectedImages();
+    const supplementLabelImages = currentLabelImages();
     const draft = {
       title: readField('title'),
       handle: readField('handle'),
@@ -521,13 +611,14 @@
       servings: readNumberField('nutrition.servings'),
       caffeineMgPerServing: readNumberField('nutrition.caffeineMgPerServing'),
       formulaVersion: readField('nutrition.formulaVersion'),
+      ingredientsLabelImage: readField('nutrition.ingredientsLabelImage') || supplementLabelImages[0]?.src || '',
       allergen: readField('nutrition.allergen'),
       flavourProfile: readField('nutrition.flavourProfile'),
     };
     setEditorStatus('Saving overrides…');
     const data = await api(`/batches/${state.batch._id}/items/${itemId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ draft, nutrition, selectedImages, metafieldPlan: draft.metafields }),
+      body: JSON.stringify({ draft, nutrition, selectedImages, supplementLabelImages, metafieldPlan: draft.metafields }),
     });
     state.batch = data.batch;
     renderBatch();

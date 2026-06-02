@@ -4,8 +4,9 @@ const { normaliseDraftProduct } = require('./normaliseProduct.service');
 const { enrichProductDraft } = require('./productEnrichment.service');
 const { createShopifyProductFromDraft } = require('./shopifyProduct.service');
 const { scoreAndSelectProductImages } = require('./imageCandidateScoring.service');
+const { refineImagePlanWithAi } = require('./productMediaClassifier.service');
 const { extractNutritionAndProductProfile } = require('./nutritionProfileExtractor.service');
-const { applyProfileToDraft, profileToMetafields } = require('./metafieldSchemaRegistry.service');
+const { applyProfileToDraft, profileToMetafields, mergeMetafields } = require('./metafieldSchemaRegistry.service');
 const { cleanText, cleanUrl, makeLineId, parseTags, normaliseMetafields } = require('../utils/safe');
 
 function asArray(value) {
@@ -63,6 +64,7 @@ function buildBatchItem({ url = {}, manual = {}, index = 0, defaults = {} }) {
     imageCandidates: [],
     selectedImages: [],
     rejectedImages: [],
+    supplementLabelImages: [],
     validation: { status: 'unchecked', issues: [] },
     error: '',
     updatedAt: new Date(),
@@ -103,6 +105,35 @@ function mergeDefaultsIntoDraft(draft = {}, defaults = {}) {
     handleFormat: draft.handleFormat || normalisedDefaults.handleFormat || '',
     handleLocation: draft.handleLocation || normalisedDefaults.handleLocation || '',
   });
+}
+
+function applyLockedBatchDefaults(draft = {}, defaults = {}) {
+  const normalisedDefaults = cleanDefaults(defaults);
+  const next = { ...draft };
+  // Values deliberately selected before a batch should win over supplier page guesses.
+  if (normalisedDefaults.vendor || normalisedDefaults.brand) next.vendor = normalisedDefaults.vendor || normalisedDefaults.brand;
+  if (normalisedDefaults.productType) next.productType = normalisedDefaults.productType;
+  if (normalisedDefaults.productCategory) next.productCategory = normalisedDefaults.productCategory;
+  if (normalisedDefaults.themeTemplate) next.themeTemplate = normalisedDefaults.themeTemplate;
+  if (normalisedDefaults.handleFormat) next.handleFormat = normalisedDefaults.handleFormat;
+  if (normalisedDefaults.handleLocation) next.handleLocation = normalisedDefaults.handleLocation;
+  next.collections = Array.from(new Set([...(draft.collections || []), ...(normalisedDefaults.collections || [])])).slice(0, 40);
+  next.recommendedTags = Array.from(new Set([...(draft.recommendedTags || []), ...(normalisedDefaults.recommendedTags || [])])).slice(0, 40);
+  return normaliseDraftProduct(next);
+}
+
+function supplementLabelMetafields(images = []) {
+  const first = (images || []).find((image) => image?.src);
+  if (!first) return [];
+  return [{
+    namespace: 'custom',
+    key: 'ingredients_label',
+    type: 'single_line_text_field',
+    label: 'Ingredients Label',
+    value: first.src,
+    source: 'supplement-label-image',
+    confidence: Number(first.roleConfidence || 0.8),
+  }];
 }
 
 function plainTextFromHtml(value = '') {
@@ -225,14 +256,25 @@ async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
     draft = mergeDefaultsIntoDraft(item.draft || { title: item.title, source: 'manual' }, defaults);
   }
 
-  const imagePlan = scoreAndSelectProductImages({ images: draft.images || [], title: draft.title, sourceUrl: draft.sourceUrl || item.sourceUrl, maxSelected: 8 });
-  draft.images = imagePlan.selected.map((image) => ({ src: image.src, alt: image.alt }));
+  draft = applyLockedBatchDefaults(draft, defaults);
+  const baseImagePlan = scoreAndSelectProductImages({ images: draft.images || [], title: draft.title, sourceUrl: draft.sourceUrl || item.sourceUrl, maxSelected: 8 });
+  const imagePlan = await refineImagePlanWithAi({ imagePlan: baseImagePlan, title: draft.title, sourceUrl: draft.sourceUrl || item.sourceUrl, useAi });
+  const aiProfileDraft = {
+    ...draft,
+    images: imagePlan.candidates.slice(0, 10).map((image) => ({ src: image.src, alt: image.alt, role: image.role || '', reason: image.roleReason || image.reason || '' })),
+  };
 
-  const profile = await extractNutritionAndProductProfile({ draft, useAi });
+  const profile = await extractNutritionAndProductProfile({ draft: aiProfileDraft, useAi });
+  const supplementImages = imagePlan.supplementLabelImages || [];
+  if (!profile.ingredientsLabelImage && !profile.supplementLabelImage && supplementImages[0]?.src) profile.ingredientsLabelImage = supplementImages[0].src;
+  draft.images = imagePlan.selected.map((image) => ({ src: image.src, alt: image.alt || draft.title, role: image.role || '', reason: image.roleReason || image.reason || '' }));
   draft = applyProfileToDraft(draft, profile);
+  draft.metafields = mergeMetafields(draft.metafields || [], supplementLabelMetafields(supplementImages));
   draft = await enrichProductDraft({ shopDomain, draft });
+  draft = applyLockedBatchDefaults(draft, defaults);
   draft = applyProfileToDraft(draft, profile);
-  draft.images = imagePlan.selected.map((image) => ({ src: image.src, alt: image.alt || draft.title }));
+  draft.metafields = mergeMetafields(draft.metafields || [], supplementLabelMetafields(supplementImages));
+  draft.images = imagePlan.selected.map((image) => ({ src: image.src, alt: image.alt || draft.title, role: image.role || '', reason: image.roleReason || image.reason || '' }));
 
   item.title = draft.title;
   item.vendor = draft.vendor;
@@ -242,10 +284,11 @@ async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
   item.draft = draft;
   item.nutrition = profile;
   item.aiEnrichment = draft.enrichment || {};
-  item.metafieldPlan = profileToMetafields(profile);
+  item.metafieldPlan = normaliseMetafields(mergeMetafields(profileToMetafields(profile), draft.metafields || [], supplementLabelMetafields(supplementImages)));
   item.imageCandidates = imagePlan.candidates;
   item.selectedImages = imagePlan.selected;
   item.rejectedImages = imagePlan.rejected;
+  item.supplementLabelImages = supplementImages;
   item.validation = validateDraft(draft, item);
   item.status = item.validation.status === 'ready' ? 'analysed' : 'needs_review';
   item.scannedAt = new Date();
@@ -326,6 +369,13 @@ async function updateBatchItem({ shopDomain, batchId, itemId, patch = {} }) {
   if (Array.isArray(patch.selectedImages)) {
     item.selectedImages = patch.selectedImages;
     item.draft = normaliseDraftProduct({ ...(item.draft || {}), images: patch.selectedImages });
+    item.validation = validateDraft(item.draft, item);
+  }
+  if (Array.isArray(patch.supplementLabelImages)) {
+    item.supplementLabelImages = patch.supplementLabelImages;
+    const supplementMetas = supplementLabelMetafields(item.supplementLabelImages || []);
+    item.metafieldPlan = normaliseMetafields(mergeMetafields(item.metafieldPlan || [], supplementMetas));
+    item.draft = normaliseDraftProduct({ ...(item.draft || {}), metafields: item.metafieldPlan });
     item.validation = validateDraft(item.draft, item);
   }
   if (patch.status) item.status = cleanText(patch.status, 40);
