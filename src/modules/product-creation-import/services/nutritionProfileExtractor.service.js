@@ -47,11 +47,11 @@ function flavourFamilies(text = '') {
   const haystack = String(text || '').toLowerCase();
   const matches = [];
   const families = [
-    ['Peach', /peach/], ['Candy', /candy|rings|gummy|bubblegum|sherbet|sour\s*strips/],
+    ['Peach', /peach/], ['Pomegranate', /pomegranate/], ['Candy', /candy|rings|gummy|bubblegum|sherbet|sour\s*strips/],
     ['Berry', /berry|blueberry|raspberry|strawberry|blackberry/], ['Citrus', /citrus|orange|lemon|lime|grapefruit/],
     ['Tropical', /tropical|pineapple|mango|guava|passion\s*fruit|coconut/], ['Cherry', /cherry/],
     ['Grape', /grape/], ['Apple', /apple/], ['Watermelon', /watermelon/], ['Cola', /cola/],
-    ['Lemonade', /lemonade/], ['Tea', /tea/], ['Vanilla', /vanilla/], ['Chocolate', /chocolate/],
+    ['Lemonade', /lemonade/], ['Tea', /green\s*tea|iced\s*tea|\btea\b/], ['Vanilla', /vanilla/], ['Chocolate', /chocolate/],
   ];
   families.forEach(([label, re]) => { if (re.test(haystack)) matches.push(label); });
   return Array.from(new Set(matches)).slice(0, 6);
@@ -60,11 +60,11 @@ function flavourFamilies(text = '') {
 function inferKnownFlavourPhrase(text = '') {
   const haystack = ` ${String(text || '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').toLowerCase()} `;
   const known = [
-    'orange creamsicle', 'peach rings', 'blue raspberry', 'sour blue chug rug', 'rainbow sherbet',
+    'pomegranate green tea', 'orange creamsicle', 'peach rings', 'blue raspberry', 'sour blue chug rug', 'rainbow sherbet',
     'snow cone', 'tropical rain', 'strawberry banana', 'watermelon limeade', 'lemon lime',
     'cherry limeade', 'green apple', 'pink lemonade', 'mango lemonade', 'mango peach',
     'strawberry shortcake', 'cotton candy', 'bubble gum', 'sour cherry', 'sour grape',
-    'citrus cream', 'citrus lemonade', 'raspberry iced tea', 'peach iced tea', 'pineapple coconut',
+    'citrus cream', 'citrus lemonade', 'raspberry iced tea', 'peach iced tea', 'pineapple coconut', 'white peach', 'green tea',
   ];
   const found = known.find((phrase) => haystack.includes(` ${phrase} `));
   if (!found) return '';
@@ -72,17 +72,24 @@ function inferKnownFlavourPhrase(text = '') {
 }
 
 function inferFlavourFromText(title = '', text = '') {
-  const explicit = inferKnownFlavourPhrase(`${title} ${text}`);
+  const combined = `${title} ${text}`;
+  const explicit = inferKnownFlavourPhrase(combined);
   if (explicit) return explicit;
   const cleaned = cleanText(text, 5000);
   const patterns = [
-    /(?:flavo[u]?r|taste|profile)\D{0,25}([A-Za-z][A-Za-z '&-]{2,50})(?:[.!?\n]|$)/i,
-    /(?:orange|peach|mango|blue\s*raspberry|raspberry|strawberry|watermelon|lemon|lime|cherry|grape|apple|cola|vanilla|coconut|pineapple)[A-Za-z\s'&-]{0,35}/i,
+    /(?:flavo[u]?r|taste|profile)\D{0,35}([A-Za-z][A-Za-z '&-]{2,60})(?:[.!?\n]|$)/i,
+    /(?:pomegranate\s*green\s*tea|orange\s*creamsicle|white\s*peach|green\s*tea|peach\s*rings|blue\s*raspberry|strawberry\s*banana|watermelon\s*limeade|cherry\s*limeade|mango\s*lemonade|sour\s*grape|sour\s*cherry)/i,
+    /(?:orange|pomegranate|peach|mango|blue\s*raspberry|raspberry|strawberry|watermelon|lemon|lime|cherry|grape|apple|cola|vanilla|coconut|pineapple)[A-Za-z\s'&-]{0,35}/i,
   ];
   for (const pattern of patterns) {
     const match = cleaned.match(pattern);
-    if (match) return cleanText(match[1] || match[0], 80).replace(/\b\w/g, (char) => char.toUpperCase());
+    if (match) {
+      const candidate = cleanText(match[1] || match[0], 80).replace(/\b\w/g, (char) => char.toUpperCase());
+      if (!/collector'?s?\s*box|shaker|sticker|limited|official|inspired|energy\s*tub/i.test(candidate)) return candidate;
+    }
   }
+  // Do not use character/collab/product names as flavour for collector boxes.
+  if (/collector'?s?\s*box|collectible|shaker|sticker|bundle/i.test(`${title} ${cleaned}`)) return '';
   return inferFlavourFromTitle(title);
 }
 
@@ -96,7 +103,7 @@ function inferFormulaVersion(text = '') {
 
 function inferSweetness(text = '') {
   const lower = String(text || '').toLowerCase();
-  if (/sour|tart|citrus|lemon|lime|cranberry/.test(lower) && !/sweet/.test(lower)) return 3;
+  if (/sour|tart|citrus|lemon|lime|cranberry|pomegranate/.test(lower) && !/sweet/.test(lower)) return 3;
   if (/candy|gummy|rings|bubblegum|cotton\s*candy|sherbet|vanilla|cola|sweet/.test(lower)) return 4;
   if (/unsweetened|not\s*sweet/.test(lower)) return 1;
   return 3;
@@ -106,6 +113,7 @@ function inferSourness(text = '') {
   const lower = String(text || '').toLowerCase();
   if (/extreme\s*sour|very\s*sour|super\s*sour/.test(lower)) return 5;
   if (/sour|tart|lemon|lime|citrus|green\s*apple/.test(lower)) return 4;
+  if (/pomegranate|green\s*tea/.test(lower)) return 3;
   if (/peach\s*rings|candy|berry|grape|cola/.test(lower)) return 2;
   return 2;
 }
@@ -201,13 +209,14 @@ async function aiProfileFromDraft(draft = {}) {
   const prompt = `Return ONLY valid JSON for a Shopify drink/consumable product import. Extract or infer conservatively.
 Keys: productFlavour, flavourFamily, flavourProfile, formulaVersion, sweetness, sourness, servings, servingSize, caloriesPerServing, caffeineMgPerServing, sugarGPerServing, carbsGPerServing, sodiumMgPerServing, labels, warnings, supplementLabelImage, ingredientsLabelImage, confidence, needsReview, source.
 Rules:
+- productFlavour must be the actual flavour/taste (for example Pomegranate Green Tea or Orange Creamsicle), never the product/collab/character name or Collector's Box title. Leave it blank if not explicit.
 - sweetness and sourness are numbers 1-5 only.
 - Use image reading when supplied to extract visible caffeine, calories/kcal, sugar, servings and supplement/ingredients label information.
 - caffeine/calories/servings/sugar must be numeric only when visible on the page or visible in supplied images, or extremely standard for the clearly identified product line. Otherwise use empty string.
 - If a supplement facts / nutrition facts / ingredients label image is visible, return its URL in supplementLabelImage or ingredientsLabelImage.
 - labels/warnings must be short reusable filter labels.
 - Keep confidence under 0.75 when nutrition is inferred rather than explicit.
-Product draft: ${JSON.stringify({ title: draft.title, vendor: draft.vendor, productType: draft.productType, sourceUrl: draft.sourceUrl, descriptionHtml: draft.descriptionHtml, raw: draft.raw }).slice(0, 7000)}`;
+Product draft: ${JSON.stringify({ title: draft.title, vendor: draft.vendor, productType: draft.productType, sourceUrl: draft.sourceUrl, descriptionHtml: draft.descriptionHtml, raw: draft.raw, images: (draft.images || []).slice(0, 12).map((img) => ({ src: img.src, alt: img.alt, role: img.role, reason: img.reason })) }).slice(0, 9000)}`;
 
   const images = (Array.isArray(draft.images) ? draft.images : [])
     .map((image) => ({ src: image.src || image.url || '', alt: image.alt || '', role: image.role || '' }))

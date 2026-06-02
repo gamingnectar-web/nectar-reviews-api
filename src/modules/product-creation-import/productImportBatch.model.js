@@ -10,6 +10,10 @@ const imageCandidateSchema = new mongoose.Schema({
   rejectReason: { type: String, default: '' },
   canonicalKey: { type: String, default: '' },
   source: { type: String, default: '' },
+  originalIndex: { type: Number, default: 0 },
+  role: { type: String, default: '' },
+  roleConfidence: { type: Number, default: 0 },
+  roleReason: { type: String, default: '' },
 }, { _id: false });
 
 const batchItemSchema = new mongoose.Schema({
@@ -34,6 +38,7 @@ const batchItemSchema = new mongoose.Schema({
   selectedImages: { type: [imageCandidateSchema], default: [] },
   rejectedImages: { type: [imageCandidateSchema], default: [] },
   supplementLabelImages: { type: [imageCandidateSchema], default: [] },
+  suggestions: { type: mongoose.Schema.Types.Mixed, default: {} },
   validation: {
     status: { type: String, enum: ['unchecked', 'ready', 'warning', 'blocked'], default: 'unchecked' },
     issues: { type: [String], default: [] },

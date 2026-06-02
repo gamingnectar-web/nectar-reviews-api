@@ -107,14 +107,11 @@ function mergeMetafields(...groups) {
 
 function applyProfileToDraft(draft = {}, profile = {}) {
   const profileMetafields = profileToMetafields(profile);
-  const recommendedTags = Array.from(new Set([
-    ...(draft.recommendedTags || []),
-    ...parseTags(profile.labels || []),
-    ...parseTags(profile.flavourFamily || []),
-  ])).slice(0, 40);
   return {
     ...draft,
-    recommendedTags,
+    // Keep profile labels/flavour families in metafields only. Tags should come
+    // from merchant-approved site tags, not from free-text AI/profile extraction.
+    recommendedTags: Array.from(new Set(parseTags(draft.recommendedTags || []))).slice(0, 40),
     metafields: mergeMetafields(draft.metafields || [], profileMetafields),
   };
 }

@@ -194,14 +194,18 @@ function imageQualityScore(item = {}) {
 
 function dedupeImageCandidates(items = []) {
   const best = new Map();
-  for (const raw of items || []) {
-    const item = typeof raw === 'string' ? { src: raw, alt: '' } : { src: raw.src || raw.url || '', alt: raw.alt || '' };
-    if (!isProbablyImageUrl(item.src)) continue;
+  (items || []).forEach((raw, index) => {
+    const item = typeof raw === 'string' ? { src: raw, alt: '' } : { src: raw.src || raw.url || '', alt: raw.alt || '', source: raw.source || '' };
+    if (!isProbablyImageUrl(item.src)) return;
     const key = canonicalImageKey(item.src);
     const current = best.get(key);
-    if (!current || imageQualityScore(item) > imageQualityScore(current)) best.set(key, item);
-  }
-  return Array.from(best.values()).sort((a, b) => imageQualityScore(b) - imageQualityScore(a)).slice(0, 50);
+    const candidate = { ...item, originalIndex: current?.originalIndex ?? index };
+    // Keep the best quality URL for duplicates, but preserve the product page's
+    // first-seen order. Supplier galleries generally expose images in the order
+    // merchants expect them to appear in Shopify.
+    if (!current || imageQualityScore(candidate) > imageQualityScore(current)) best.set(key, candidate);
+  });
+  return Array.from(best.values()).sort((a, b) => (a.originalIndex ?? 9999) - (b.originalIndex ?? 9999)).slice(0, 50);
 }
 
 
@@ -337,7 +341,7 @@ async function extractProductFromUrl(url) {
     weight: weightInfo.weight,
     weightUnit: weightInfo.weightUnit,
     images: imageCandidates,
-    tags: ['url-import'],
+    tags: [],
     seo: { title, description },
   });
 

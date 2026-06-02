@@ -311,3 +311,39 @@ textarea { resize: vertical; }
   font-weight: 900;
   color: var(--orange);
 }
+
+.option-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: -4px 0 8px;
+}
+.option-pill {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #f8fafc;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 850;
+  color: #344054;
+  cursor: pointer;
+}
+.option-pill:hover { background: #eef2ff; border-color: #c7d7fe; }
+.suggestion-box {
+  border: 1px solid #d0d5dd;
+  border-radius: 14px;
+  background: #fbfdff;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+.suggestion-box > strong { display: block; margin-bottom: 8px; }
+.suggestion-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  border-top: 1px solid #eef2f7;
+  padding-top: 8px;
+  margin-top: 8px;
+}
+.suggestion-row small { color: var(--muted); font-weight: 650; }

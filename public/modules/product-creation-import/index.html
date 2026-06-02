@@ -26,15 +26,15 @@
         <p class="muted">These are locked across every product in this batch where provided, so supplier pages cannot overwrite your chosen vendor/category/template.</p>
         <div class="form-grid">
           <label>Batch name<input id="batch-name" placeholder="G FUEL May supplier import"></label>
-          <label>Supplier / brand<input id="default-supplier" placeholder="G FUEL"></label>
-          <label>Vendor<input id="default-vendor" placeholder="G FUEL"></label>
-          <label>Product type<input id="default-product-type" placeholder="Energy Drink / Hydration / Tub"></label>
-          <label>Product category<input id="default-product-category" placeholder="Food, Beverages & Tobacco > Beverages"></label>
-          <label>Theme template<input id="default-template" placeholder="gfuel"></label>
+          <label>Supplier / brand<input id="default-supplier" list="vendor-options" placeholder="G FUEL"></label>
+          <label>Vendor<input id="default-vendor" list="vendor-options" placeholder="Choose exact Shopify vendor"></label>
+          <label>Product type<input id="default-product-type" list="product-type-options" placeholder="Choose existing Shopify product type"></label>
+          <label>Product category<input id="default-product-category" list="product-category-options" placeholder="Choose existing category/type hint"></label>
+          <label>Theme template<input id="default-template" list="template-options" placeholder="Choose existing template"></label>
           <label>SEO/product format<input id="default-format" placeholder="Energy Drink Powder Tub"></label>
           <label>SEO/location<input id="default-location" placeholder="UK Stock"></label>
-          <label>Collections<input id="default-collections" placeholder="gfuel, energy-drinks, new-arrivals"></label>
-          <label>Suggested tags<input id="default-tags" placeholder="Sugar Free, Caffeinated"></label>
+          <label>Collections<input id="default-collections" list="collection-options" placeholder="Pick existing collection handles/names only"></label>
+          <label>Suggested tags<input id="default-tags" list="tag-options" placeholder="Existing tags only; not auto-applied"></label>
         </div>
       </article>
 
@@ -79,6 +79,12 @@
     <div id="dialog-body"></div>
   </dialog>
 
+  <datalist id="vendor-options"></datalist>
+  <datalist id="product-type-options"></datalist>
+  <datalist id="product-category-options"></datalist>
+  <datalist id="template-options"></datalist>
+  <datalist id="collection-options"></datalist>
+  <datalist id="tag-options"></datalist>
   <script src="./product-import-batch.js"></script>
 </body>
 </html>

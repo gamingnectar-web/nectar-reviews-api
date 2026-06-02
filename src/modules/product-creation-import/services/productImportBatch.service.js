@@ -7,7 +7,7 @@ const { scoreAndSelectProductImages } = require('./imageCandidateScoring.service
 const { refineImagePlanWithAi } = require('./productMediaClassifier.service');
 const { extractNutritionAndProductProfile } = require('./nutritionProfileExtractor.service');
 const { applyProfileToDraft, profileToMetafields, mergeMetafields } = require('./metafieldSchemaRegistry.service');
-const { cleanText, cleanUrl, makeLineId, parseTags, normaliseMetafields } = require('../utils/safe');
+const { cleanText, cleanUrl, makeLineId, parseTags, normaliseMetafields, slugify } = require('../utils/safe');
 
 function asArray(value) {
   if (Array.isArray(value)) return value;
@@ -110,16 +110,85 @@ function mergeDefaultsIntoDraft(draft = {}, defaults = {}) {
 function applyLockedBatchDefaults(draft = {}, defaults = {}) {
   const normalisedDefaults = cleanDefaults(defaults);
   const next = { ...draft };
-  // Values deliberately selected before a batch should win over supplier page guesses.
+  // Values deliberately selected before a batch are source-of-truth. Supplier
+  // pages and AI may suggest, but they cannot silently rewrite these fields.
   if (normalisedDefaults.vendor || normalisedDefaults.brand) next.vendor = normalisedDefaults.vendor || normalisedDefaults.brand;
   if (normalisedDefaults.productType) next.productType = normalisedDefaults.productType;
   if (normalisedDefaults.productCategory) next.productCategory = normalisedDefaults.productCategory;
   if (normalisedDefaults.themeTemplate) next.themeTemplate = normalisedDefaults.themeTemplate;
   if (normalisedDefaults.handleFormat) next.handleFormat = normalisedDefaults.handleFormat;
   if (normalisedDefaults.handleLocation) next.handleLocation = normalisedDefaults.handleLocation;
-  next.collections = Array.from(new Set([...(draft.collections || []), ...(normalisedDefaults.collections || [])])).slice(0, 40);
-  next.recommendedTags = Array.from(new Set([...(draft.recommendedTags || []), ...(normalisedDefaults.recommendedTags || [])])).slice(0, 40);
+  if (normalisedDefaults.collections.length) next.collections = normalisedDefaults.collections;
+  // These are suggestions only. They should never be copied into draft.tags
+  // unless the merchant explicitly approves them in the review editor.
+  next.recommendedTags = Array.from(new Set([...(normalisedDefaults.recommendedTags || []), ...(draft.recommendedTags || [])])).slice(0, 40);
+  next.tags = Array.from(new Set(parseTags(draft.tags || []).filter((tag) => !/^url-import$|^product-import$|^invoice-import$/i.test(tag)))).slice(0, 40);
   return normaliseDraftProduct(next);
+}
+
+function normaliseLocationForSeo(value = '') {
+  const raw = cleanText(value || '', 80);
+  if (!raw) return 'UK Stock';
+  if (/^uk$/i.test(raw)) return 'UK Stock';
+  if (/stock/i.test(raw)) return raw.replace(/\buk\b/i, 'UK');
+  return `${raw.replace(/\buk\b/i, 'UK')} Stock`;
+}
+
+function normaliseLocationForHandle(value = '') {
+  const raw = cleanText(value || '', 80);
+  if (!raw) return 'uk';
+  if (/^uk\s*stock$/i.test(raw)) return 'uk';
+  return raw;
+}
+
+function stripVendor(title = '', vendor = '') {
+  let next = cleanText(title || '', 220);
+  const vendorText = cleanText(vendor || '', 120);
+  if (!vendorText) return next;
+  const escaped = vendorText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*');
+  next = next.replace(new RegExp(`^${escaped}\\s*[-–—:|•]*\\s*`, 'i'), '').trim();
+  if (/^g\s*fuel/i.test(vendorText)) next = next.replace(/^g\s*fuel\s*[-–—:|•]*\s*/i, '').trim();
+  return next || cleanText(title || '', 220);
+}
+
+function inferFormat(draft = {}, defaults = {}) {
+  const explicit = cleanText(defaults.handleFormat || draft.handleFormat || '', 120);
+  const text = [draft.title, draft.productType, draft.descriptionHtml].filter(Boolean).join(' ').toLowerCase();
+  if (/collector|collectible/.test(text) && /box/.test(text)) return 'Collector Box';
+  return explicit || draft.productType || 'Product';
+}
+
+function completeSentence(value = '') {
+  const text = cleanText(value || '', 155).replace(/[,:;\s]+$/, '');
+  return text ? (/[.!?)]$/.test(text) ? text : `${text}.`) : '';
+}
+
+function applyMerchantSeoPattern(draft = {}, defaults = {}) {
+  const normalisedDefaults = cleanDefaults(defaults);
+  const vendor = cleanText(draft.vendor || normalisedDefaults.vendor || normalisedDefaults.brand || '', 120);
+  const productName = stripVendor(draft.title || '', vendor);
+  const format = inferFormat(draft, normalisedDefaults);
+  const seoLocation = normaliseLocationForSeo(draft.handleLocation || normalisedDefaults.handleLocation || 'uk');
+  const handleLocation = normaliseLocationForHandle(draft.handleLocation || normalisedDefaults.handleLocation || 'uk');
+  const title = cleanText([vendor, productName, format, seoLocation].filter(Boolean).join(' - '), 70);
+  const handle = slugify([vendor, productName, format, handleLocation].filter(Boolean).join('-'));
+  const flavour = cleanText((draft.metafields || []).find((mf) => mf.namespace === 'core' && mf.key === 'product_flavour')?.value || '', 100);
+  const profile = cleanText((draft.metafields || []).find((mf) => mf.namespace === 'core' && mf.key === 'flavour_profile')?.value || '', 120);
+  const lead = [vendor, productName, format].filter(Boolean).join(' ');
+  const flavourLine = flavour && !new RegExp(`\\b${flavour.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(lead)
+    ? `Flavour: ${flavour}.`
+    : (profile ? completeSentence(profile) : '');
+  const description = completeSentence([
+    `Buy ${lead} from Gaming Nectar with ${seoLocation}`,
+    flavourLine,
+    'Fast UK dispatch available.'
+  ].filter(Boolean).join('. '));
+  return normaliseDraftProduct({
+    ...draft,
+    vendor,
+    handle,
+    seo: { title, description },
+  });
 }
 
 function supplementLabelMetafields(images = []) {
@@ -256,7 +325,7 @@ async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
     draft = mergeDefaultsIntoDraft(item.draft || { title: item.title, source: 'manual' }, defaults);
   }
 
-  draft = applyLockedBatchDefaults(draft, defaults);
+  draft = applyMerchantSeoPattern(applyLockedBatchDefaults(draft, defaults), defaults);
   const baseImagePlan = scoreAndSelectProductImages({ images: draft.images || [], title: draft.title, sourceUrl: draft.sourceUrl || item.sourceUrl, maxSelected: 8 });
   const imagePlan = await refineImagePlanWithAi({ imagePlan: baseImagePlan, title: draft.title, sourceUrl: draft.sourceUrl || item.sourceUrl, useAi });
   const aiProfileDraft = {
@@ -271,10 +340,11 @@ async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
   draft = applyProfileToDraft(draft, profile);
   draft.metafields = mergeMetafields(draft.metafields || [], supplementLabelMetafields(supplementImages));
   draft = await enrichProductDraft({ shopDomain, draft });
-  draft = applyLockedBatchDefaults(draft, defaults);
+  draft = applyMerchantSeoPattern(applyLockedBatchDefaults(draft, defaults), defaults);
   draft = applyProfileToDraft(draft, profile);
   draft.metafields = mergeMetafields(draft.metafields || [], supplementLabelMetafields(supplementImages));
-  draft.images = imagePlan.selected.map((image) => ({ src: image.src, alt: image.alt || draft.title, role: image.role || '', reason: image.roleReason || image.reason || '' }));
+  draft.images = imagePlan.selected.map((image) => ({ src: image.src, alt: image.alt || draft.title, role: image.role || '', reason: image.roleReason || image.reason || '', originalIndex: image.originalIndex || 0 }));
+  draft = applyMerchantSeoPattern(applyLockedBatchDefaults(draft, defaults), defaults);
 
   item.title = draft.title;
   item.vendor = draft.vendor;
@@ -284,6 +354,7 @@ async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
   item.draft = draft;
   item.nutrition = profile;
   item.aiEnrichment = draft.enrichment || {};
+  item.suggestions = draft.suggestions || draft.enrichment?.suggestions || {};
   item.metafieldPlan = normaliseMetafields(mergeMetafields(profileToMetafields(profile), draft.metafields || [], supplementLabelMetafields(supplementImages)));
   item.imageCandidates = imagePlan.candidates;
   item.selectedImages = imagePlan.selected;
@@ -351,6 +422,7 @@ async function updateBatchItem({ shopDomain, batchId, itemId, patch = {} }) {
     item.productType = draft.productType;
     item.productCategory = draft.productCategory;
     item.templateSuffix = draft.themeTemplate || '';
+    item.suggestions = draft.suggestions || item.suggestions || {};
     item.validation = validateDraft(draft, item);
   }
   if (patch.nutrition) {

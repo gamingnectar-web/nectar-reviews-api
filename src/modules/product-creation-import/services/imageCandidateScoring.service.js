@@ -105,12 +105,15 @@ function scoreAndSelectProductImages({ images = [], title = '', sourceUrl = '', 
       rejectReason: scored.rejectReason,
       canonicalKey: canonicalImageKey(src),
       source: cleanText(raw?.source || '', 80),
+      originalIndex: Number.isFinite(Number(raw?.originalIndex)) ? Number(raw.originalIndex) : index,
     };
     const existing = bestByKey.get(item.canonicalKey);
-    if (!existing || item.score > existing.score) bestByKey.set(item.canonicalKey, item);
+    if (!existing || item.score > existing.score) {
+      bestByKey.set(item.canonicalKey, { ...item, originalIndex: existing?.originalIndex ?? item.originalIndex });
+    }
   });
 
-  const candidates = Array.from(bestByKey.values()).sort((a, b) => b.score - a.score);
+  const candidates = Array.from(bestByKey.values()).sort((a, b) => (a.originalIndex ?? 9999) - (b.originalIndex ?? 9999));
   const selected = candidates.filter((item) => !item.rejected && item.score >= 20).slice(0, Math.max(1, Number(maxSelected) || 8));
   selected.forEach((item) => { item.selected = true; });
   const selectedKeys = new Set(selected.map((item) => item.canonicalKey));

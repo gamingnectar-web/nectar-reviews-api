@@ -607,6 +607,111 @@ async function listRecentlyUsedProductVendors({ shopDomain, limit = 250 }) {
   return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).map(([vendor, count]) => ({ vendor, count })).slice(0, 120);
 }
 
+async function listRecentlyUsedProductTypes({ shopDomain, limit = 250 }) {
+  const data = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products.json?limit=${Math.min(Number(limit) || 250, 250)}&fields=id,product_type`, { shopDomain });
+  if (!data) return [];
+  const counts = new Map();
+  (data.products || []).forEach((product) => {
+    const productType = cleanText(product.product_type || '', 120);
+    if (productType) counts.set(productType, (counts.get(productType) || 0) + 1);
+  });
+  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).map(([productType, count]) => ({ productType, count })).slice(0, 120);
+}
+
+async function listRecentlyUsedThemeTemplates({ shopDomain, limit = 250 }) {
+  const data = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products.json?limit=${Math.min(Number(limit) || 250, 250)}&fields=id,template_suffix`, { shopDomain });
+  const counts = new Map();
+  (data?.products || []).forEach((product) => {
+    const template = cleanText(product.template_suffix || 'default', 80).replace(/^product\./i, '') || 'default';
+    if (template) counts.set(template, (counts.get(template) || 0) + 1);
+  });
+  const fromProducts = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).map(([template, count]) => ({ template, count }));
+  const hints = listThemeTemplateHints().map((template) => ({ template: template.replace(/^product\./i, ''), count: 0 }));
+  const seen = new Set();
+  return [...fromProducts, ...hints].filter((item) => {
+    const key = item.template.toLowerCase();
+    if (!item.template || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 80);
+}
+
+async function listProductCategoryHints({ shopDomain, limit = 250 }) {
+  // Shopify's standard category taxonomy is not exposed cleanly through the REST
+  // product list for every API version. Use existing product types/categories as
+  // merchant-specific hints instead of inventing taxonomy strings.
+  const productTypes = await listRecentlyUsedProductTypes({ shopDomain, limit });
+  return productTypes.map((item) => ({ category: item.productType, count: item.count }));
+}
+
+function textTokensForMatch(value = '') {
+  return new Set(cleanText(value, 300).toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(/\s+/).filter((word) => word.length > 2 && !['the','and','for','with','from','product','box','tub','drink','energy','powder','collector','collectors'].includes(word)));
+}
+
+function commercialMatchScore(product = {}, draft = {}) {
+  let score = 0;
+  const vendor = String(draft.vendor || '').toLowerCase();
+  const productType = String(draft.productType || '').toLowerCase();
+  if (vendor && String(product.vendor || '').toLowerCase() === vendor) score += 30;
+  if (productType && String(product.product_type || '').toLowerCase() === productType) score += 20;
+  const titleTokens = textTokensForMatch(draft.title || '');
+  const otherTokens = textTokensForMatch(product.title || '');
+  const overlap = Array.from(titleTokens).filter((token) => otherTokens.has(token)).length;
+  score += Math.min(25, overlap * 8);
+  const haystack = `${product.title || ''} ${product.product_type || ''} ${product.tags || ''}`.toLowerCase();
+  const draftText = `${draft.title || ''} ${draft.productType || ''} ${draft.handleFormat || ''}`.toLowerCase();
+  if (/collector/.test(draftText) && /collector/.test(haystack)) score += 20;
+  if (/tub|powder|serving/.test(draftText) && /tub|powder|serving/.test(haystack)) score += 10;
+  return score;
+}
+
+function modalValue(values = []) {
+  const counts = new Map();
+  values.filter((value) => value !== undefined && value !== null && String(value).trim() !== '').forEach((value) => {
+    const key = String(value).trim();
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+}
+
+function skuPatternSuggestion(existingSkus = [], title = '', vendor = '') {
+  const examples = existingSkus.map((sku) => cleanText(sku, 80)).filter(Boolean);
+  if (!examples.length) return '';
+  const upperVendor = cleanText(vendor, 40).replace(/[^a-z0-9]/gi, '').toUpperCase();
+  const slug = cleanText(title, 80).toUpperCase().replace(/&/g, 'AND').replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const first = examples[0];
+  const prefixMatch = first.match(/^([A-Z0-9]{2,12})[-_]/i);
+  const prefix = prefixMatch?.[1] || upperVendor || '';
+  if (!prefix || !slug) return '';
+  return `${prefix}-${slug}`.slice(0, 80);
+}
+
+async function getCommercialSuggestionsFromExistingProducts({ shopDomain, draft = {}, limit = 250 }) {
+  const data = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products.json?limit=${Math.min(Number(limit) || 250, 250)}&fields=id,title,handle,vendor,product_type,tags,variants`, { shopDomain });
+  if (!data) return {};
+  const candidates = (data.products || [])
+    .map((product) => ({ product, score: commercialMatchScore(product, draft) }))
+    .filter((row) => row.score >= 30)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 12)
+    .map((row) => row.product);
+  if (!candidates.length) return {};
+  const variants = candidates.map((product) => product.variants?.[0] || {}).filter(Boolean);
+  const price = modalValue(variants.map((variant) => variant.price));
+  const compareAtPrice = modalValue(variants.map((variant) => variant.compare_at_price));
+  const barcode = modalValue(variants.map((variant) => variant.barcode));
+  const sku = skuPatternSuggestion(variants.map((variant) => variant.sku), draft.title || '', draft.vendor || '');
+  const weightGrams = modalValue(variants.map((variant) => variant.grams).filter((grams) => Number(grams) > 0));
+  const sourceProducts = candidates.slice(0, 5).map((product) => ({ title: product.title || '', handle: product.handle || '', vendor: product.vendor || '', productType: product.product_type || '' }));
+  return {
+    price: price ? { value: price, confidence: 0.78, source: 'similar Shopify products', sourceProducts } : null,
+    compareAtPrice: compareAtPrice ? { value: compareAtPrice, confidence: 0.72, source: 'similar Shopify products', sourceProducts } : null,
+    barcode: barcode ? { value: barcode, confidence: 0.7, source: 'similar Shopify products', sourceProducts } : null,
+    sku: sku ? { value: sku, confidence: 0.45, source: 'pattern from similar Shopify SKUs', sourceProducts } : null,
+    weight: weightGrams ? { value: String(weightGrams), weightUnit: 'g', confidence: 0.72, source: 'similar Shopify products', sourceProducts } : null,
+  };
+}
+
 async function getProductMetafieldDefinitions({ shopDomain }) {
   const query = `query ProductMetafieldDefinitions($first: Int!) {
     metafieldDefinitions(first: $first, ownerType: PRODUCT) {
@@ -706,6 +811,10 @@ module.exports = {
   shopifyGraphql,
   listRecentlyUsedProductTags,
   listRecentlyUsedProductVendors,
+  listRecentlyUsedProductTypes,
+  listRecentlyUsedThemeTemplates,
+  listProductCategoryHints,
+  getCommercialSuggestionsFromExistingProducts,
   getProductMetafieldDefinitions,
   getProfileValuesFromExistingProducts,
   listShopifyCollections,

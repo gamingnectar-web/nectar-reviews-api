@@ -43,10 +43,11 @@ async function aiClassifyImageRoles({ title = '', sourceUrl = '', images = [] })
   })).filter((image) => image.src);
   if (!indexed.length) return [];
 
-  const prompt = `Classify Shopify product import images. Return ONLY JSON: {"images":[{"index":0,"role":"product_image|infographic|lifestyle|supplement_label|logo_or_badge","confidence":0.0,"reason":"short"}]}.
+  const prompt = `Classify Shopify product import images by visually inspecting every supplied image. Return ONLY JSON: {"images":[{"index":0,"role":"product_image|infographic|lifestyle|supplement_label|logo_or_badge","confidence":0.0,"reason":"short"}]}.
 
 Important rules:
-- A supplement facts / nutrition facts / ingredients label image must be role "supplement_label" and must NOT be treated as normal product media.
+- A white/black nutrition table, Supplement Facts panel, ingredients label, or amount-per-serving panel must be role "supplement_label" even when the URL/alt text is generic.
+- A supplement facts / nutrition facts / ingredients label image must NOT be treated as normal product media.
 - Product packshots, tub renders, box renders and product benefit cards can stay as product_image or infographic.
 - Lifestyle/person images are lifestyle.
 - Logo/icon/payment/trust images are logo_or_badge.
@@ -57,7 +58,7 @@ Indexed candidates: ${JSON.stringify(indexed.map((item) => ({ index: item.index,
 
   const content = [{ type: 'text', text: prompt }];
   indexed.forEach((image) => {
-    content.push({ type: 'image_url', image_url: { url: image.src, detail: 'low' } });
+    content.push({ type: 'image_url', image_url: { url: image.src, detail: 'high' } });
   });
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {

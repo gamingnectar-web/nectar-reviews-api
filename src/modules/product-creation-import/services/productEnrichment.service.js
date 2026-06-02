@@ -1,6 +1,6 @@
 const { cleanText, slugify, normaliseMetafields, parseTags } = require('../utils/safe');
 const { normaliseDraftProduct } = require('./normaliseProduct.service');
-const { listRecentlyUsedProductTags, listRecentlyUsedProductVendors, getProductMetafieldDefinitions, getProfileValuesFromExistingProducts, listShopifyCollections, listProductSeoExamples, listThemeTemplateHints } = require('./shopifyProduct.service');
+const { listRecentlyUsedProductTags, listRecentlyUsedProductVendors, listRecentlyUsedProductTypes, listRecentlyUsedThemeTemplates, listProductCategoryHints, getProductMetafieldDefinitions, getProfileValuesFromExistingProducts, getCommercialSuggestionsFromExistingProducts, listShopifyCollections, listProductSeoExamples, listThemeTemplateHints } = require('./shopifyProduct.service');
 const { getProductImportSettings, applySettingsToDraft } = require('./productImportSettings.service');
 
 const CORE_PROFILE_METAFIELDS = [
@@ -105,8 +105,8 @@ function inferProductFormat(draft = {}, settings = {}) {
   const rules = settings.handleRules || {};
   const explicit = cleanText(draft.handleFormat || draft.productFormat || rules.format || '', 100);
   const text = [draft.title, draft.productType, draft.descriptionHtml, parseTags(draft.recommendedTags).join(' ')].filter(Boolean).join(' ').toLowerCase();
-  if (explicit && !/^tub$/i.test(explicit)) return explicit;
   if (/collector|collectible/.test(text) && /box/.test(text)) return 'Collector Box';
+  if (explicit && !/^tub$/i.test(explicit)) return explicit;
   if (/hydration/.test(text)) return /tub|powder|servings?/.test(text) ? 'Hydration Powder Tub' : 'Hydration Drink';
   if (/can\b|cans\b|case/.test(text)) return 'Energy Drink Can';
   if (/sachet|stick|single\s*serve/.test(text)) return 'Energy Drink Sachet';
@@ -115,20 +115,86 @@ function inferProductFormat(draft = {}, settings = {}) {
   return explicit || draft.productType || 'Product';
 }
 
+function slugifyLoose(value = '') {
+  return cleanText(value, 180).toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').replace(/-{2,}/g, '');
+}
+
+function titleLocationForSeo(value = '') {
+  const raw = cleanText(value || '', 80);
+  if (!raw) return 'UK Stock';
+  if (/^uk$/i.test(raw)) return 'UK Stock';
+  return titleCaseLocation(raw);
+}
+
+function locationForHandle(value = '') {
+  const raw = cleanText(value || '', 80);
+  if (!raw) return 'uk';
+  if (/^uk\s*stock$/i.test(raw)) return 'uk';
+  return raw;
+}
+
+function stripFormatFromProductName(productName = '', format = '') {
+  let next = cleanText(productName, 180);
+  if (!next || !format) return next;
+  const words = format.split(/\s+/).filter((word) => word.length > 2).map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (!words.length) return next;
+  // Avoid silly repetition such as "Sharingan Collector's Box - Collector Box".
+  if (/collector/i.test(format) && /collector'?s?\s*box/i.test(next)) return next;
+  if (/energy\s*drink\s*powder\s*tub/i.test(format) && /\btub\b|powder|energy/i.test(next)) return next;
+  return next;
+}
+
 function makeMerchantSeo({ draft = {}, settings = {} }) {
   const vendor = cleanText(draft.vendor || '', 80);
   const productName = stripVendorFromTitle(draft.title || '', vendor);
   const format = inferProductFormat(draft, settings);
-  const location = titleCaseLocation(draft.handleLocation || settings.handleRules?.location || 'uk');
-  const seoTitle = cleanText([vendor, productName].filter(Boolean).join(' ') + (format ? ` • ${format}` : '') + (location ? ` • ${location}` : ''), 70);
-  const lead = `${[vendor, productName].filter(Boolean).join(' ')} ${format}`.trim();
-  const flavourText = cleanText((draft.metafields || []).find((mf) => mf.namespace === 'core' && mf.key === 'flavour_profile')?.value || '', 120);
-  const seoDescription = cleanText([
-    `Buy ${lead}${location ? ` from Gaming Nectar with ${location}` : ' from Gaming Nectar'}.`,
-    flavourText ? flavourText.replace(/[.!?]?$/, '.') : '',
+  const seoLocation = titleLocationForSeo(draft.handleLocation || settings.handleRules?.location || 'uk');
+  const handleLocation = locationForHandle(draft.handleLocation || settings.handleRules?.location || 'uk');
+  const safeProductName = stripFormatFromProductName(productName, format);
+  const seoTitle = cleanText([vendor, safeProductName, format, seoLocation].filter(Boolean).join(' - '), 70);
+  const handle = slugifyLoose([vendor, safeProductName, format, handleLocation].filter(Boolean).join('-'));
+  const flavour = cleanText((draft.metafields || []).find((mf) => mf.namespace === 'core' && mf.key === 'product_flavour')?.value || '', 80);
+  const flavourProfile = cleanText((draft.metafields || []).find((mf) => mf.namespace === 'core' && mf.key === 'flavour_profile')?.value || '', 120);
+  const lead = [vendor, safeProductName, format].filter(Boolean).join(' ');
+  const flavourSentence = flavour && !new RegExp(`\\b${flavour.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(lead)
+    ? `Flavour: ${flavour}.`
+    : (flavourProfile ? flavourProfile.replace(/[.!?]?$/, '.') : '');
+  const description = cleanText([
+    `Buy ${lead} from Gaming Nectar with ${seoLocation}.`,
+    flavourSentence,
     'Fast UK dispatch available.'
-  ].filter(Boolean).join(' '), 160);
-  return { title: seoTitle || draft.seo?.title || draft.title, description: seoDescription || draft.seo?.description || draft.title };
+  ].filter(Boolean).join(' '), 155).replace(/[,:;\s]+$/, '.');
+  return { title: seoTitle || draft.seo?.title || draft.title, description, handle };
+}
+
+function valueKey(value = '') {
+  return cleanText(value, 180).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function exactSiteValue(value = '', options = [], key = 'value') {
+  const raw = cleanText(value, 180);
+  if (!raw) return '';
+  const rawKey = valueKey(raw);
+  const found = (options || []).find((item) => valueKey(item[key] || item.title || item.handle || item.vendor || item.productType || item.template || item.tag || item.category || '') === rawKey);
+  return found ? cleanText(found[key] || found.title || found.handle || found.vendor || found.productType || found.template || found.tag || found.category || raw, 180) : raw;
+}
+
+function filterToExistingTags(values = [], siteTags = []) {
+  const byKey = new Map((siteTags || []).map((item) => [valueKey(item.tag || item), cleanText(item.tag || item, 80)]));
+  return Array.from(new Set(parseTags(values).map((tag) => byKey.get(valueKey(tag))).filter(Boolean))).slice(0, 40);
+}
+
+function filterToExistingCollections(values = [], collections = [], allowUserDefaults = []) {
+  const byKey = new Map();
+  (collections || []).forEach((collection) => {
+    if (collection.title) byKey.set(valueKey(collection.title), collection.handle || collection.title);
+    if (collection.handle) byKey.set(valueKey(collection.handle), collection.handle);
+  });
+  const userDefaults = new Set(parseTags(allowUserDefaults).map(valueKey));
+  return Array.from(new Set(parseTags(values).map((value) => {
+    const key = valueKey(value);
+    return byKey.get(key) || (userDefaults.has(key) ? cleanText(value, 80) : '');
+  }).filter(Boolean))).slice(0, 40);
 }
 
 async function aiSuggestProductProfile({ draft, metadata }) {
@@ -175,9 +241,12 @@ Product draft: ${JSON.stringify({ title: draft.title, vendor: draft.vendor, prod
 }
 
 async function getProductImportMetadata({ shopDomain }) {
-  const [tags, vendors, metafieldDefinitions, settings, collections, seoExamples] = await Promise.all([
+  const [tags, vendors, productTypes, themeTemplates, productCategories, metafieldDefinitions, settings, collections, seoExamples] = await Promise.all([
     listRecentlyUsedProductTags({ shopDomain }),
     listRecentlyUsedProductVendors({ shopDomain }),
+    listRecentlyUsedProductTypes({ shopDomain }).catch(() => []),
+    listRecentlyUsedThemeTemplates({ shopDomain }).catch(() => listThemeTemplateHints().map((template) => ({ template }))),
+    listProductCategoryHints({ shopDomain }).catch(() => []),
     getProductMetafieldDefinitions({ shopDomain }),
     getProductImportSettings({ shopDomain }),
     listShopifyCollections({ shopDomain }).catch(() => []),
@@ -190,12 +259,14 @@ async function getProductImportMetadata({ shopDomain }) {
   return {
     tags,
     vendors,
+    productTypes,
+    productCategories,
     settings,
     metafieldDefinitions: Array.from(byKey.values()),
     coreProfileMetafields: CORE_PROFILE_METAFIELDS,
     collections,
     seoExamples,
-    themeTemplates: listThemeTemplateHints(),
+    themeTemplates,
   };
 }
 
@@ -211,10 +282,14 @@ async function suggestProductProfile({ shopDomain, draft }) {
   });
   const ai = await aiSuggestProductProfile({ draft: normalised, metadata });
 
-  const recommendedTags = Array.from(new Set([
+  // Tags and collections must align to the merchant's site. AI can suggest, but it
+  // cannot create random collection/tag names or auto-apply url-import/product-import.
+  const recommendedTags = filterToExistingTags([
     ...parseTags(normalised.recommendedTags || []),
     ...parseTags(ai?.recommendedTags || ai?.tags || []),
-  ])).slice(0, 40);
+  ], metadata.tags || []);
+  const aiCollections = filterToExistingCollections(parseTags(ai?.collections || []), metadata.collections || [], []);
+  const allowedCollections = filterToExistingCollections([...(normalised.collections || []), ...aiCollections], metadata.collections || [], normalised.collections || []);
 
   const mergedMetafields = mergeMetafields(
     filterMetafieldsForProductKind(existing.metafields || [], normalised),
@@ -225,35 +300,37 @@ async function suggestProductProfile({ shopDomain, draft }) {
 
   const settingsApplied = applySettingsToDraft({
     ...normalised,
-    handle: cleanText(ai?.handle || normalised.handle || slugify(normalised.title), 180),
-    productType: cleanText(ai?.productType || normalised.productType || '', 120),
-    productCategory: cleanText(ai?.productCategory || normalised.productCategory || '', 180),
+    handle: normalised.handle || slugify(normalised.title),
+    productType: normalised.productType || cleanText(ai?.productType || '', 120),
+    productCategory: normalised.productCategory || cleanText(ai?.productCategory || '', 180),
     tags: normalised.tags,
     recommendedTags,
-    themeTemplate: cleanText(ai?.themeTemplate || normalised.themeTemplate || '', 80),
-    collections: Array.from(new Set([...(normalised.collections || []), ...parseTags(ai?.collections || [])])).slice(0, 40),
+    themeTemplate: normalised.themeTemplate || cleanText(ai?.themeTemplate || '', 80),
+    collections: allowedCollections,
     metafields: suggestedMetafields,
   }, metadata.settings || {});
+  const commercialSuggestions = await getCommercialSuggestionsFromExistingProducts({ shopDomain, draft: settingsApplied }).catch(() => ({}));
   const merchantSeo = makeMerchantSeo({ draft: settingsApplied, settings: metadata.settings || {} });
 
   return {
-    handle: settingsApplied.handle,
-    productType: settingsApplied.productType,
+    handle: merchantSeo.handle || settingsApplied.handle,
+    productType: exactSiteValue(settingsApplied.productType, metadata.productTypes || [], 'productType'),
     productCategory: settingsApplied.productCategory || normalised.productCategory || '',
-    weight: cleanText(ai?.weight || normalised.weight || '', 40),
-    weightUnit: cleanText(ai?.weightUnit || normalised.weightUnit || 'g', 10),
-    vendor: settingsApplied.vendor,
-    sku: settingsApplied.sku,
+    weight: cleanText(ai?.weight || normalised.weight || commercialSuggestions.weight?.value || '', 40),
+    weightUnit: cleanText(ai?.weightUnit || normalised.weightUnit || commercialSuggestions.weight?.weightUnit || 'g', 10),
+    vendor: exactSiteValue(settingsApplied.vendor, metadata.vendors || [], 'vendor'),
+    sku: settingsApplied.sku || normalised.sku || '',
     title: settingsApplied.title,
     tags: normalised.tags,
     recommendedTags: settingsApplied.recommendedTags || recommendedTags,
     themeTemplate: settingsApplied.themeTemplate || normalised.themeTemplate || '',
     collections: settingsApplied.collections || normalised.collections || [],
     seo: {
-      title: cleanText(ai?.seoTitle || ai?.seo?.title || merchantSeo.title || normalised.seo?.title || '', 70),
-      description: cleanText(ai?.seoDescription || ai?.seo?.description || merchantSeo.description || normalised.seo?.description || '', 160),
+      title: cleanText(merchantSeo.title || normalised.seo?.title || '', 70),
+      description: cleanText(merchantSeo.description || normalised.seo?.description || '', 155).replace(/[,:;\s]+$/, '.'),
     },
     metafields: filterMetafieldsForProductKind(settingsApplied.metafields || [], settingsApplied),
+    suggestions: commercialSuggestions,
     existingProfileMatchedProducts: existing.matchedProductCount || 0,
     aiNotes: cleanText(ai?.notes || ai?.error || '', 500),
   };
@@ -276,6 +353,7 @@ async function enrichProductDraft({ shopDomain, draft }) {
     weightUnit: suggestion.weightUnit || normalised.weightUnit,
     sku: suggestion.sku || normalised.sku,
     seo: suggestion.seo || normalised.seo || {},
+    suggestions: suggestion.suggestions || normalised.suggestions || {},
     tags: normalised.tags,
     recommendedTags: suggestion.recommendedTags || normalised.recommendedTags || [],
     metafields: normaliseCoreGaugeMetafields(filterMetafieldsForProductKind(mergeMetafields(normalised.metafields || [], suggestion.metafields || []), normalised)),

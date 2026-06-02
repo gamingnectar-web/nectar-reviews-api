@@ -1,5 +1,5 @@
 (() => {
-  const state = { batch: null, batches: [], activeItemId: '' };
+  const state = { batch: null, batches: [], activeItemId: '', metadata: {} };
   const $ = (id) => document.getElementById(id);
   const params = new URLSearchParams(window.location.search);
   const parentShopDomain = (() => {
@@ -14,6 +14,66 @@
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(json.error || json.message || `Request failed (${res.status})`);
     return json;
+  }
+
+  function optionLabel(item = {}, keys = []) {
+    for (const key of keys) {
+      const value = item?.[key];
+      if (value) return String(value);
+    }
+    return typeof item === 'string' ? item : '';
+  }
+
+  function setDatalist(id, values = []) {
+    const el = $(id);
+    if (!el) return;
+    const seen = new Set();
+    el.innerHTML = values.map((value) => String(value || '').trim()).filter((value) => {
+      const key = value.toLowerCase();
+      if (!value || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 250).map((value) => `<option value="${escapeAttr(value)}"></option>`).join('');
+  }
+
+  function populateMetadataControls() {
+    const meta = state.metadata || {};
+    setDatalist('vendor-options', (meta.vendors || []).map((item) => optionLabel(item, ['vendor'])));
+    setDatalist('product-type-options', (meta.productTypes || []).map((item) => optionLabel(item, ['productType'])));
+    setDatalist('product-category-options', (meta.productCategories || []).map((item) => optionLabel(item, ['category', 'productType'])));
+    setDatalist('template-options', (meta.themeTemplates || []).map((item) => optionLabel(item, ['template'])));
+    setDatalist('collection-options', (meta.collections || []).flatMap((item) => [item.handle, item.title]).filter(Boolean));
+    setDatalist('tag-options', (meta.tags || []).map((item) => optionLabel(item, ['tag'])));
+  }
+
+  async function loadMetadata() {
+    if (!shopDomain) return;
+    try {
+      state.metadata = await api('/metadata');
+      populateMetadataControls();
+    } catch (error) {
+      state.metadata = {};
+    }
+  }
+
+  function listForField(name = '') {
+    if (/vendor/i.test(name)) return 'vendor-options';
+    if (/productType/i.test(name)) return 'product-type-options';
+    if (/productCategory/i.test(name)) return 'product-category-options';
+    if (/themeTemplate/i.test(name)) return 'template-options';
+    if (/collections/i.test(name)) return 'collection-options';
+    if (/tags/i.test(name)) return 'tag-options';
+    return '';
+  }
+
+  function siteOptionPills(kind = '') {
+    const meta = state.metadata || {};
+    const values = kind === 'collections'
+      ? (meta.collections || []).map((item) => item.handle || item.title).filter(Boolean)
+      : (kind === 'tags' || kind === 'recommended-tags')
+        ? (meta.tags || []).map((item) => item.tag).filter(Boolean)
+        : [];
+    return values.slice(0, 18).map((value) => `<button type="button" class="option-pill" data-append-${kind}="${escapeAttr(value)}">${escapeHtml(value)}</button>`).join('');
   }
 
   function csv(id) { return ($(id)?.value || '').split(',').map((x) => x.trim()).filter(Boolean); }
@@ -218,9 +278,9 @@
             ${field('Product type', 'productType', draft.productType || item.productType || '', 'text', 'Your Shopify product type.')}
             ${field('Shopify category', 'productCategory', draft.productCategory || item.productCategory || '', 'text', 'Taxonomy/category for the product.')}
             ${field('Theme template', 'themeTemplate', draft.themeTemplate || item.templateSuffix || '', 'text', 'Template suffix only, e.g. gfuel.')}
-            ${field('Collections', 'collections', joinCsv(draft.collections), 'text', 'Comma-separated collection handles/names.')}
-            ${field('Suggested tags', 'recommendedTags', joinCsv(draft.recommendedTags), 'text', 'Suggestions only. Tags below are the ones actually saved.')}
-            ${field('Approved Shopify tags', 'tags', joinCsv(draft.tags), 'text', 'Comma-separated tags to apply. Nothing is added unless it is here.')}
+            ${field('Collections', 'collections', joinCsv(draft.collections), 'text', 'Comma-separated collection handles/names. Use existing Shopify collection names/handles.')}<div class="option-pills">${siteOptionPills('collections')}</div>
+            ${field('Suggested tags', 'recommendedTags', joinCsv(draft.recommendedTags), 'text', 'Suggestions only, drawn from existing site tags where possible. Tags below are the ones actually saved.')}<div class="option-pills">${siteOptionPills('recommended-tags')}</div>
+            ${field('Approved Shopify tags', 'tags', joinCsv(draft.tags), 'text', 'Comma-separated tags to apply. Nothing is added unless it is here.')}<div class="option-pills">${siteOptionPills('tags')}</div>
             ${field('Product status', 'status', draft.status || 'draft', 'select', 'Shopify product status.', ['draft','active','archived'])}
           </div>
         `)}
@@ -254,6 +314,7 @@
         `)}
 
         ${section('product-pricing', 'Pricing & inventory', 'Commercial fields are shown before SEO/metafields because they are core product creation data.', `
+          ${renderCommercialSuggestions(item)}
           <div class="field-grid three">
             ${field('Price', 'price', draft.price || '', 'number', 'Retail price in GBP.')}
             ${field('Compare-at price', 'compareAtPrice', draft.compareAtPrice || '', 'number', 'Optional crossed-out price.')}
@@ -266,7 +327,7 @@
           </div>
         `)}
 
-        ${section('product-seo', 'SEO preview and override', 'The page title, meta description and URL are visible here. Truncation is flagged before approval.', `
+        ${section('product-seo', 'SEO preview and override', 'The importer rewrites SEO into your merchant pattern: vendor - product name - product format - location. Truncation is flagged before approval.', `
           <div class="field-grid two">
             ${field('SEO page title', 'seoTitle', draft.seo?.title || '', 'text', 'Appears in search results and browser title.')}
             ${field('SEO meta description', 'seoDescription', draft.seo?.description || '', 'textarea', 'Search result description. Keep it readable and complete.')}
@@ -321,6 +382,27 @@
     </div>`;
   }
 
+  function renderCommercialSuggestions(item = {}) {
+    const suggestions = item.suggestions || item.draft?.suggestions || item.aiEnrichment?.suggestions || {};
+    const rows = [
+      ['price', 'Price', 'price'],
+      ['compareAtPrice', 'Compare-at price', 'compareAtPrice'],
+      ['weight', 'Weight', 'weight'],
+      ['sku', 'SKU', 'sku'],
+      ['barcode', 'Barcode', 'barcode'],
+    ].map(([key, label, fieldName]) => {
+      const suggestion = suggestions[key];
+      const value = suggestion?.value || '';
+      if (!value) return '';
+      const weightUnit = key === 'weight' && suggestion.weightUnit ? ` ${suggestion.weightUnit}` : '';
+      const source = suggestion.source || 'similar Shopify products';
+      const confidence = suggestion.confidence ? `${Math.round(Number(suggestion.confidence) * 100)}%` : '';
+      return `<div class="suggestion-row"><div><strong>${escapeHtml(label)} suggestion:</strong> ${escapeHtml(value)}${escapeHtml(weightUnit)}<br><small>${escapeHtml(source)}${confidence ? ` · ${escapeHtml(confidence)}` : ''}</small></div><button type="button" class="secondary-btn compact" data-apply-suggestion="${escapeAttr(fieldName)}" data-suggestion-value="${escapeAttr(value)}" data-suggestion-unit="${escapeAttr(suggestion.weightUnit || '')}">Apply</button></div>`;
+    }).filter(Boolean).join('');
+    if (!rows) return '<div class="suggestion-box muted">No pricing/SKU/weight suggestions found from similar Shopify products. Leave blank unless you can verify them.</div>';
+    return `<div class="suggestion-box"><strong>Suggestions from your existing Shopify catalogue</strong>${rows}</div>`;
+  }
+
   function section(id, title, help, body) {
     return `<article class="editor-section" id="${escapeAttr(id)}"><div class="section-title"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(help)}</p></div>${body}</article>`;
   }
@@ -336,7 +418,9 @@
     } else {
       const inputType = type === 'number' ? 'number' : 'text';
       const step = type === 'number' ? ' step="any"' : '';
-      control = `<input ${common} type="${inputType}"${step} value="${escapeAttr(safeValue)}">`;
+      const listId = inputType === 'text' ? listForField(name) : '';
+      const listAttr = listId ? ` list="${escapeAttr(listId)}"` : '';
+      control = `<input ${common} type="${inputType}"${step}${listAttr} value="${escapeAttr(safeValue)}">`;
     }
     return `<label class="editor-field"><span>${escapeHtml(label)}</span>${control}${help ? `<small>${escapeHtml(help)}</small>` : ''}</label>`;
   }
@@ -427,6 +511,29 @@
     body.querySelectorAll('[data-remove-image]').forEach((button) => button.addEventListener('click', () => removeSelectedImage(Number(button.dataset.removeImage))));
     body.querySelectorAll('[data-move-image]').forEach((button) => button.addEventListener('click', () => moveSelectedImage(Number(button.dataset.moveImage), button.dataset.direction)));
     body.querySelectorAll('[data-remove-metafield]').forEach((button) => button.addEventListener('click', () => button.closest('.metafield-card')?.remove()));
+    body.querySelectorAll('[data-append-collections]').forEach((button) => button.addEventListener('click', () => appendCsvField('collections', button.dataset.appendCollections)));
+    body.querySelectorAll('[data-append-recommended-tags]').forEach((button) => button.addEventListener('click', () => appendCsvField('recommendedTags', button.dataset.appendRecommendedTags)));
+    body.querySelectorAll('[data-append-tags]').forEach((button) => button.addEventListener('click', () => appendCsvField('tags', button.dataset.appendTags)));
+    body.querySelectorAll('[data-apply-suggestion]').forEach((button) => button.addEventListener('click', () => applySuggestion(button.dataset.applySuggestion, button.dataset.suggestionValue, button.dataset.suggestionUnit)));
+  }
+
+  function appendCsvField(fieldName, value) {
+    if (!value) return;
+    const el = $('dialog-body').querySelector(`[data-field="${cssEscape(fieldName)}"]`);
+    if (!el) return;
+    const values = parseCsv(el.value);
+    if (!values.some((item) => item.toLowerCase() === String(value).toLowerCase())) values.push(value);
+    el.value = joinCsv(values);
+  }
+
+  function applySuggestion(fieldName, value, unit = '') {
+    const body = $('dialog-body');
+    const el = body.querySelector(`[data-field="${cssEscape(fieldName)}"]`);
+    if (el) el.value = value || '';
+    if (fieldName === 'weight' && unit) {
+      const unitEl = body.querySelector(`[data-field="weightUnit"]`);
+      if (unitEl) unitEl.value = unit;
+    }
   }
 
   function currentSelectedImages() {
@@ -677,5 +784,5 @@
   $('create-drafts').addEventListener('click', () => createDrafts().catch((e) => setBusy(e.message)));
   $('refresh-batches').addEventListener('click', () => loadRecentBatches().catch((e) => setBusy(e.message)));
   $('close-dialog').addEventListener('click', () => $('item-dialog').close());
-  loadRecentBatches().catch((e) => { $('recent-batches').innerHTML = `<p class="muted">${escapeHtml(e.message)}</p>`; });
+  Promise.all([loadMetadata(), loadRecentBatches()]).catch((e) => { $('recent-batches').innerHTML = `<p class="muted">${escapeHtml(e.message)}</p>`; });
 })();
