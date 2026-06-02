@@ -150,6 +150,9 @@ function cleanTemplateDesign(raw = {}) {
     linkMode: ['both', 'order', 'products'].includes(design.linkMode) ? design.linkMode : 'both',
     mainButtonText: cleanText(design.mainButtonText || 'Review Your Order', 80),
     productButtonText: cleanText(design.productButtonText || 'Review This Item', 80),
+    layoutPreset: cleanText(design.layoutPreset || 'classic', 60),
+    starColor: cleanText(design.starColor || '#f5b301', 40),
+    showTopStars: design.showTopStars !== false,
     pageHandle: cleanText(design.pageHandle || 'leave-review', 120),
     productShowStars: design.productShowStars !== false,
     productStarPosition: ['above_button', 'between', 'under_title'].includes(design.productStarPosition) ? design.productStarPosition : 'above_button',
@@ -1206,6 +1209,17 @@ router.delete('/email-templates/:id', async (req, res, next) => {
 });
 
 
+function cleanSimplePageHtml(value, fallback = '') {
+  const raw = String(value || fallback || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/on\w+=['"][^'"]*['"]/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(/\u0000/g, '')
+    .trim();
+  return raw.slice(0, 20000);
+}
+
 async function generateReviewPageSeoContent({ shopDomain, type = 'leave_review', handle = 'leave-review' }) {
   const fallback = type === 'all_reviews'
     ? {
@@ -1234,7 +1248,7 @@ async function generateReviewPageSeoContent({ shopDomain, type = 'leave_review',
     const parsed = JSON.parse(json.choices?.[0]?.message?.content || '{}');
     return {
       title: cleanText(parsed.title || fallback.title, 180),
-      body_html: cleanText(parsed.body_html || fallback.body_html, 20000),
+      body_html: cleanSimplePageHtml(parsed.body_html || fallback.body_html, fallback.body_html),
       meta_title: cleanText(parsed.meta_title || fallback.meta_title, 180),
       meta_description: cleanText(parsed.meta_description || fallback.meta_description, 320),
       source: 'openai',
@@ -1346,10 +1360,8 @@ router.post('/storefront-pages/create', async (req, res, next) => {
         handle,
         body_html: generated.body_html,
         published: true,
-        metafields: [
-          { namespace: 'nectar', key: 'seo_title', type: 'single_line_text_field', value: generated.meta_title },
-          { namespace: 'nectar', key: 'seo_description', type: 'multi_line_text_field', value: generated.meta_description },
-        ],
+        metafields_global_title_tag: generated.meta_title,
+        metafields_global_description_tag: generated.meta_description,
       },
     };
     const created = await shopifyFetch(`/admin/api/${env.shopifyApiVersion}/pages.json`, { shopDomain, method: 'POST', body: JSON.stringify(body) });
@@ -1357,7 +1369,7 @@ router.post('/storefront-pages/create', async (req, res, next) => {
     return res.status(201).json({ ok: true, created: true, source: generated.source, warning: generated.warning || '', page: { id: String(page.id || ''), title: page.title || generated.title, handle: page.handle || handle, url: `https://${shopDomain}/pages/${page.handle || handle}`, published: Boolean(page.published_at) }, message: `Created /pages/${page.handle || handle}. Add the Nectar theme/app block if required.` });
   } catch (error) {
     if (error.code === 'SHOPIFY_REINSTALL_REQUIRED' || error.status === 401 || error.status === 403) {
-      error.message = `${error.message}. To create Shopify pages, add read_content and write_content scopes, run shopify app deploy, then reconnect the app.`;
+      error.message = `${error.message}. To create Shopify pages, add read_content, write_content and read_online_store_pages scopes, run shopify app deploy, then reconnect/reinstall the app.`;
     }
     next(error);
   }
@@ -1820,7 +1832,7 @@ function buildWebhookRegistry({ shopDomain, shop, inspection, updateStored = fal
     const receivedAt = lastReceivedByTopic[expected.topic] || null;
     const receivedCount = Number(receiptCountsByTopic[expected.topic] || 0);
     const received = Boolean(receivedAt || receivedCount);
-    const status = verified ? 'verified' : received ? 'received' : storedReady ? 'manual_ready' : missing ? 'missing' : unknown ? 'manual_unverified' : 'missing';
+    const status = verified ? 'verified' : received ? 'received' : storedReady ? 'manual_unverified' : missing ? 'missing' : unknown ? 'manual_unverified' : 'missing';
     return {
       key: isFulfilled ? 'orders_fulfilled' : expected.topic.replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '').toLowerCase(),
       name: isFulfilled ? 'Order fulfillment' : expected.topic === 'orders/updated' ? 'Order update' : expected.topic,
@@ -1860,7 +1872,7 @@ function buildWebhookRegistry({ shopDomain, shop, inspection, updateStored = fal
   const verifiedCount = webhooks.filter((item) => item.verifiedInShopify).length;
   const receivedCount = webhooks.filter((item) => item.receivedByNectar).length;
   const missingCount = webhooks.filter((item) => item.status === 'missing').length;
-  const operationalCount = webhooks.filter((item) => item.verifiedInShopify || item.receivedByNectar || storedReady).length;
+  const operationalCount = webhooks.filter((item) => item.verifiedInShopify || item.receivedByNectar).length;
   return {
     ok: operationalCount === webhooks.length,
     shopDomain,
@@ -1877,13 +1889,13 @@ function buildWebhookRegistry({ shopDomain, shop, inspection, updateStored = fal
       operationalCount,
       missingCount,
       storedReady,
-      status: verifiedCount === webhooks.length ? 'verified' : receivedCount === webhooks.length ? 'received' : storedReady ? 'manual_ready' : missingCount ? 'attention' : 'unknown',
+      status: verifiedCount === webhooks.length ? 'verified' : receivedCount === webhooks.length ? 'received' : storedReady ? 'manual_unverified' : missingCount ? 'attention' : 'unknown',
       message: verifiedCount === webhooks.length
         ? 'All expected review webhooks are visible in Shopify and match Nectar endpoints.'
         : receivedCount === webhooks.length
           ? 'Nectar has received both review webhook events. Manual setup is working.'
           : storedReady
-            ? 'Manual webhook setup is finalised in Nectar. Send Shopify test notifications to prove both events reach Nectar.'
+            ? 'Manual webhook setup is finalised in Nectar, but it is not live-verified yet. Refresh from Shopify or send Shopify test notifications to prove both events reach Nectar.'
             : 'Manual webhook setup is not finalised yet. Create the two Shopify webhooks, then finalise manual setup.',
     },
     webhooks,
@@ -1907,14 +1919,14 @@ async function inspectAndOptionallyPersistWebhookRegistry(shopDomain, { persist 
     await Shop.findOneAndUpdate({ shopDomain }, {
       $set: {
         'modules.reviews.enabled': true,
-        'modules.reviews.webhookInstalledAt': verified ? now : (registry.summary.storedReady ? (registry.stored.installedAt || now) : null),
+        'modules.reviews.webhookInstalledAt': verified ? now : null,
         'modules.reviews.webhookSource': verified ? 'shopify_api_verified' : (registry.summary.storedReady ? registry.stored.source || 'manual_shopify_admin_confirmation' : 'not_verified'),
         'modules.reviews.webhookMode': verified ? 'verified' : (registry.stored.mode || 'manual'),
         'modules.reviews.webhookTopics': registry.webhooks.map((hook) => hook.topic),
         'modules.reviews.webhookAddresses': registry.webhooks.map((hook) => hook.address),
         'modules.reviews.webhookAddress': registry.webhooks.find((hook) => hook.topic === 'orders/fulfilled')?.address || '',
         'modules.reviews.webhookTopic': 'orders/fulfilled',
-        'modules.reviews.webhookVerificationStatus': verified ? 'verified' : (registry.summary.storedReady ? 'manual_ready' : (registry.readAvailable ? 'missing_or_mismatched' : 'manual_unverified')),
+        'modules.reviews.webhookVerificationStatus': verified ? 'verified' : (registry.summary.storedReady ? 'manual_unverified' : (registry.readAvailable ? 'missing_or_mismatched' : 'manual_unverified')),
         'modules.reviews.webhookVerificationCheckedAt': now,
         'modules.reviews.webhookInspectionResults': registry.webhooks,
       },
@@ -1963,8 +1975,7 @@ router.post('/review-automation/confirm-manual-webhook', async (req, res, next) 
 
     const now = new Date();
     const verificationStatus = inspection.ok ? 'verified' : (inspection.skipped ? 'manual_unverified' : 'manual_confirmed_not_verified');
-    const canTrustManualAsReady = Boolean(inspection.ok || inspection.skipped);
-
+    
     const existingSettings = await Settings.findOne({ shopDomain }).lean().catch(() => null);
     const existingAuto = existingSettings?.reviewAutomation || {};
     const settingsSet = {};
@@ -1992,7 +2003,7 @@ router.post('/review-automation/confirm-manual-webhook', async (req, res, next) 
       {
         $set: {
           'modules.reviews.enabled': true,
-          'modules.reviews.webhookInstalledAt': now,
+          'modules.reviews.webhookInstalledAt': inspection.ok ? now : null,
           'modules.reviews.webhookManualConfirmedAt': now,
           'modules.reviews.webhookSource': 'manual_shopify_admin_confirmation',
           'modules.reviews.webhookMode': 'manual',
@@ -2357,8 +2368,9 @@ router.get('/review-launch-checklist', async (req, res, next) => {
     const nativeReady = Boolean(auto.enabled !== false && auto.nativeEnabled !== false && emailReady && tokenReady);
     const webhookMeta = shop?.modules?.reviews || {};
     const webhookVerificationStatus = webhookMeta.webhookVerificationStatus || '';
-    const webhookProblem = ['failed', 'missing_or_mismatched', 'manual_confirmed_not_verified'].includes(webhookVerificationStatus);
-    const webhookReady = Boolean(webhookMeta.webhookInstalledAt) && !webhookProblem;
+    const webhookProblem = ['failed', 'missing_or_mismatched', 'manual_confirmed_not_verified', 'manual_unverified'].includes(webhookVerificationStatus);
+    const webhookReceivedReady = Boolean(webhookMeta.lastOrdersFulfilledWebhookAt && webhookMeta.lastOrdersUpdatedWebhookAt);
+    const webhookReady = (webhookVerificationStatus === 'verified' || webhookReceivedReady) && !webhookProblem;
     const webhookManual = webhookMeta.webhookSource === 'manual_shopify_admin_confirmation';
     const latestJob = recentJobs[0] || null;
 
@@ -2401,9 +2413,9 @@ router.get('/review-launch-checklist', async (req, res, next) => {
         status: webhookReady ? 'ready' : (oauthReady ? 'warning' : 'blocked'),
         detail: webhookReady
           ? (webhookManual
-            ? `Manual Shopify webhooks have been finalised in Nectar${webhookVerificationStatus ? ` (${webhookVerificationStatus})` : ''}.`
+            ? `Manual Shopify webhooks are working${webhookReceivedReady ? ' because Nectar received both expected events' : ''}.`
             : `Webhook registered${webhookMeta.webhookTopic ? ` for ${webhookMeta.webhookTopic}` : ''}.`)
-          : 'Webhook is not marked as registered yet. Fake-order tests still work, but live fulfilled orders will not schedule emails.',
+          : 'Webhook setup is not live-verified yet. Manual finalise stores the setup, but Refresh from Shopify or a Shopify test notification must prove the events reach Nectar.',
         action: webhookReady ? '' : 'Click Register now, or use Finalise manual setup if you created the webhooks in Shopify Admin.',
         target: 'v-review-launch:register-webhook',
       },
