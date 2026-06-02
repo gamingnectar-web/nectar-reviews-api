@@ -4,6 +4,8 @@ const { listRecentlyUsedProductTags, listRecentlyUsedProductVendors, listRecentl
 const { getProductImportSettings, applySettingsToDraft } = require('./productImportSettings.service');
 
 const CORE_PROFILE_METAFIELDS = [
+  { namespace: 'core', key: 'product_flavour', name: 'Product Flavour', type: 'single_line_text_field', help: 'The actual flavour shown on the supplier/product page, e.g. Pomegranate Green Tea.' },
+  { namespace: 'core', key: 'flavour_family', name: 'Flavour Family', type: 'single_line_text_field', help: 'Reusable flavour grouping, e.g. Citrus, Berry, Tea.' },
   { namespace: 'core', key: 'formula_version', name: 'Formula Version', type: 'single_line_text_field', help: 'Used to decide which product-line/formula profile this product belongs to.' },
   { namespace: 'core', key: 'grouped_profiles', name: 'Grouped Profiles', type: 'single_line_text_field', help: 'Reusable grouped flavour/profile labels.' },
   { namespace: 'core', key: 'sourness', name: 'Sourness', type: 'single_line_text_field', help: '1 to 5 gauge where 1 is not sour and 5 is very sour.' },
@@ -11,7 +13,7 @@ const CORE_PROFILE_METAFIELDS = [
   { namespace: 'core', key: 'flavour_profile', name: 'Flavour Profile', type: 'single_line_text_field', help: 'Plain-English flavour description.' },
 ];
 
-const CORE_PROFILE_KEYS = new Set(['core.formula_version', 'core.grouped_profiles', 'core.sourness', 'core.sweetness', 'core.flavour_profile']);
+const CORE_PROFILE_KEYS = new Set(['core.product_flavour', 'core.flavour_family', 'core.formula_version', 'core.grouped_profiles', 'core.sourness', 'core.sweetness', 'core.flavour_profile']);
 
 function draftSearchText(draft = {}) {
   return [
@@ -135,13 +137,28 @@ function locationForHandle(value = '') {
 
 function stripFormatFromProductName(productName = '', format = '') {
   let next = cleanText(productName, 180);
-  if (!next || !format) return next;
-  const words = format.split(/\s+/).filter((word) => word.length > 2).map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  if (!words.length) return next;
-  // Avoid silly repetition such as "Sharingan Collector's Box - Collector Box".
-  if (/collector/i.test(format) && /collector'?s?\s*box/i.test(next)) return next;
-  if (/energy\s*drink\s*powder\s*tub/i.test(format) && /\btub\b|powder|energy/i.test(next)) return next;
-  return next;
+  const fmt = cleanText(format, 120).toLowerCase();
+  if (!next || !fmt) return next;
+
+  if (/collector/.test(fmt)) {
+    next = next
+      .replace(/\bcollector'?s?\s*box\b/ig, '')
+      .replace(/\bcollectible\s*box\b/ig, '')
+      .replace(/\bbundle\b/ig, '')
+      .replace(/[-–—:|•]+$/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
+
+  if (/energy\s*drink\s*powder\s*tub|powder\s*tub|\btub\b/.test(fmt)) {
+    next = next
+      .replace(/\b(energy\s*formula|energy\s*drink|powder\s*tub|drink\s*powder\s*tub|tub|40\s*servings?|30\s*servings?)\b/ig, '')
+      .replace(/[-–—:|•]+$/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
+
+  return next || cleanText(productName, 180);
 }
 
 function makeMerchantSeo({ draft = {}, settings = {} }) {
@@ -215,12 +232,12 @@ async function aiSuggestProductProfile({ draft, metadata }) {
   const model = process.env.OPENAI_PRODUCT_IMPORT_MODEL || process.env.OPENAI_MODULE_MODEL || 'gpt-4.1-mini';
   const prompt = `You are enriching a Shopify product draft. Return ONLY valid JSON with keys: handle, productType, productCategory, themeTemplate, collections, recommendedTags, seoTitle, seoDescription, metafields, weight, weightUnit, notes.
 
-metafields must be an array of {namespace,key,type,value,confidence,source}. Include these core metafields when relevant: core.formula_version, core.grouped_profiles, core.sourness, core.sweetness, core.flavour_profile.
+metafields must be an array of {namespace,key,type,value,confidence,source}. Include these core metafields when relevant: core.product_flavour, core.flavour_family, core.formula_version, core.grouped_profiles, core.sourness, core.sweetness, core.flavour_profile.
 
 Rules:
 - Preserve merchant terminology from existing vendors, collections, templates, tags and metafield names. Do not invent collection/tag names.
-- For G Fuel drinks/tubs/consumable drink products only, estimate Formula Version, sweetness, sourness and flavour profile from the product title, description and URL content.
-- Do not add core.formula_version, core.grouped_profiles, core.sourness, core.sweetness or core.flavour_profile for accessories, lunch boxes, shakers, cases, apparel, insurance, or non-consumable merchandise.
+- For G Fuel drinks/tubs/consumable drink products only, extract the actual product flavour from the page/options/title/description, then estimate Formula Version, sweetness, sourness and flavour profile.
+- Do not add core.product_flavour, core.flavour_family, core.formula_version, core.grouped_profiles, core.sourness, core.sweetness or core.flavour_profile for accessories, lunch boxes, shakers, cases, apparel, insurance, or non-consumable merchandise.
 - core.sourness and core.sweetness must be string numbers from "1" to "5" only: 1 = very low, 3 = medium, 5 = very high. Do not use words like low/medium/high for these two fields.
 - Do not invent SKU, barcode or paid price. Only suggest weight if it is explicit in the page/title/description or clearly visible in provided content.
 - Build SEO in the merchant pattern: vendor + product name + product format + location. For example: G FUEL Tornado • Energy Drink Powder Tub • UK Stock.

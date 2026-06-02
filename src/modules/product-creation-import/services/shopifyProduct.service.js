@@ -735,6 +735,8 @@ async function getProductMetafieldDefinitions({ shopDomain }) {
   const data = await shopifyGraphqlOptional({ shopDomain, query, variables: { first: 100 } });
   const nodes = data?.metafieldDefinitions?.nodes || [];
   const coreFallback = [
+    { namespace: 'core', key: 'product_flavour', name: 'Product Flavour', type: { name: 'single_line_text_field' } },
+    { namespace: 'core', key: 'flavour_family', name: 'Flavour Family', type: { name: 'single_line_text_field' } },
     { namespace: 'core', key: 'formula_version', name: 'Formula Version', type: { name: 'single_line_text_field' } },
     { namespace: 'core', key: 'grouped_profiles', name: 'Grouped Profiles', type: { name: 'single_line_text_field' } },
     { namespace: 'core', key: 'sourness', name: 'Sourness', type: { name: 'single_line_text_field' } },

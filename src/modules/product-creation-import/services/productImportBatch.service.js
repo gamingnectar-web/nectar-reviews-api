@@ -158,6 +158,30 @@ function inferFormat(draft = {}, defaults = {}) {
   return explicit || draft.productType || 'Product';
 }
 
+function stripFormatTokenFromName(productName = '', format = '') {
+  let next = cleanText(productName, 180);
+  const fmt = cleanText(format, 120).toLowerCase();
+  if (!next || !fmt) return next;
+  if (/collector/.test(fmt)) {
+    next = next
+      .replace(/\bcollector'?s?\s*box\b/ig, '')
+      .replace(/\bcollectible\s*box\b/ig, '')
+      .replace(/\bbundle\b/ig, '')
+      .replace(/[-–—:|•]+$/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
+  if (/energy\s*drink\s*powder\s*tub|powder\s*tub|\btub\b/.test(fmt)) {
+    next = next
+      .replace(/\b(energy\s*formula|energy\s*drink|powder\s*tub|drink\s*powder\s*tub|tub|40\s*servings?|30\s*servings?)\b/ig, '')
+      .replace(/[-–—:|•]+$/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
+  return next || cleanText(productName, 180);
+}
+
+
 function completeSentence(value = '') {
   const text = cleanText(value || '', 155).replace(/[,:;\s]+$/, '');
   return text ? (/[.!?)]$/.test(text) ? text : `${text}.`) : '';
@@ -170,7 +194,8 @@ function applyMerchantSeoPattern(draft = {}, defaults = {}) {
   const format = inferFormat(draft, normalisedDefaults);
   const seoLocation = normaliseLocationForSeo(draft.handleLocation || normalisedDefaults.handleLocation || 'uk');
   const handleLocation = normaliseLocationForHandle(draft.handleLocation || normalisedDefaults.handleLocation || 'uk');
-  const safeProductName = productName || stripVendor(draft.name || draft.handle || '', vendor) || draft.title || 'Product';
+  const rawProductName = productName || stripVendor(draft.name || draft.handle || '', vendor) || draft.title || 'Product';
+  const safeProductName = stripFormatTokenFromName(rawProductName, format);
   const title = cleanText([vendor, safeProductName, format, seoLocation].filter(Boolean).join(' - '), 120);
   const handle = slugify([vendor, safeProductName, format, handleLocation].filter(Boolean).join('-'));
   const flavour = cleanText((draft.metafields || []).find((mf) => mf.namespace === 'core' && mf.key === 'product_flavour')?.value || '', 100);
@@ -311,6 +336,10 @@ async function addBatchItems({ shopDomain, batchId, links = [], manualItems = []
   return { batch, added: newItems.length };
 }
 
+function byPageImageOrder(images = []) {
+  return [...(images || [])].sort((a, b) => (a.originalIndex ?? 9999) - (b.originalIndex ?? 9999));
+}
+
 async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
   item.status = 'scanning';
   item.error = '';
@@ -337,14 +366,14 @@ async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
   const profile = await extractNutritionAndProductProfile({ draft: aiProfileDraft, useAi });
   const supplementImages = imagePlan.supplementLabelImages || [];
   if (!profile.ingredientsLabelImage && !profile.supplementLabelImage && supplementImages[0]?.src) profile.ingredientsLabelImage = supplementImages[0].src;
-  draft.images = imagePlan.selected.map((image) => ({ src: image.src, alt: image.alt || draft.title, role: image.role || '', reason: image.roleReason || image.reason || '' }));
+  draft.images = byPageImageOrder(imagePlan.selected).map((image) => ({ src: image.src, alt: image.alt || draft.title, role: image.role || '', reason: image.roleReason || image.reason || '', originalIndex: image.originalIndex ?? 0 }));
   draft = applyProfileToDraft(draft, profile);
   draft.metafields = mergeMetafields(draft.metafields || [], supplementLabelMetafields(supplementImages));
   draft = await enrichProductDraft({ shopDomain, draft });
   draft = applyMerchantSeoPattern(applyLockedBatchDefaults(draft, defaults), defaults);
   draft = applyProfileToDraft(draft, profile);
   draft.metafields = mergeMetafields(draft.metafields || [], supplementLabelMetafields(supplementImages));
-  draft.images = imagePlan.selected.map((image) => ({ src: image.src, alt: image.alt || draft.title, role: image.role || '', reason: image.roleReason || image.reason || '', originalIndex: image.originalIndex || 0 }));
+  draft.images = byPageImageOrder(imagePlan.selected).map((image) => ({ src: image.src, alt: image.alt || draft.title, role: image.role || '', reason: image.roleReason || image.reason || '', originalIndex: image.originalIndex ?? 0 }));
   draft = applyMerchantSeoPattern(applyLockedBatchDefaults(draft, defaults), defaults);
 
   item.title = draft.title;
@@ -357,10 +386,10 @@ async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
   item.aiEnrichment = draft.enrichment || {};
   item.suggestions = draft.suggestions || draft.enrichment?.suggestions || {};
   item.metafieldPlan = normaliseMetafields(mergeMetafields(profileToMetafields(profile), draft.metafields || [], supplementLabelMetafields(supplementImages)));
-  item.imageCandidates = imagePlan.candidates;
-  item.selectedImages = imagePlan.selected;
-  item.rejectedImages = imagePlan.rejected;
-  item.supplementLabelImages = supplementImages;
+  item.imageCandidates = byPageImageOrder(imagePlan.candidates);
+  item.selectedImages = byPageImageOrder(imagePlan.selected);
+  item.rejectedImages = byPageImageOrder(imagePlan.rejected);
+  item.supplementLabelImages = byPageImageOrder(supplementImages);
   item.validation = validateDraft(draft, item);
   item.status = item.validation.status === 'ready' ? 'analysed' : 'needs_review';
   item.scannedAt = new Date();

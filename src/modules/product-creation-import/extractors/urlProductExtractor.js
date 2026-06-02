@@ -324,6 +324,8 @@ async function extractProductFromUrl(url) {
   ]).map((image, index) => ({
     src: image.src,
     alt: cleanText(image.alt || `${title || 'Product'} image ${index + 1}`, 180),
+    source: cleanText(image.source || '', 80),
+    originalIndex: Number.isFinite(Number(image.originalIndex)) ? Number(image.originalIndex) : index,
   }));
   const weightInfo = extractWeightFromAny(product, pageText);
   const extractedBarcode = product.gtin13 || product.gtin14 || product.gtin12 || product.gtin8 || product.gtin || extractBarcodeFromText(pageText) || '';

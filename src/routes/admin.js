@@ -1321,12 +1321,126 @@ function normalisePageHandle(value = '') {
   return raw.replace(/^\/pages\//, '').replace(/^pages\//, '').replace(/^\//, '').replace(/\/$/, '').replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'leave-review';
 }
 
+
+function pageHandleAliases(handle) {
+  const clean = normalisePageHandle(handle);
+  const aliases = new Set([clean]);
+  if (clean === 'leave-review') aliases.add('leave-a-review');
+  if (clean === 'leave-a-review') aliases.add('leave-review');
+  if (clean.includes('-a-')) aliases.add(clean.replace(/-a-/g, '-'));
+  return Array.from(aliases).filter(Boolean);
+}
+
+function normalisePublicHost(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/.*$/, '')
+    .replace(/\.$/, '')
+    .toLowerCase();
+}
+
+async function storefrontDomainCandidates(shopDomain) {
+  const domains = new Set();
+  const add = (value) => { const host = normalisePublicHost(value); if (host) domains.add(host); };
+  add(shopDomain);
+  add(env.shopifyStoreUrl);
+
+  // When possible, prefer the shop's primary storefront domain over the myshopify host.
+  // Public page checks against myshopify can falsely 404 if the live theme/page only resolves on the primary domain.
+  try {
+    const data = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/shop.json`, { shopDomain });
+    const shop = data?.shop || {};
+    add(shop.primary_domain?.host || shop.primary_domain?.url || shop.primary_domain?.ssl_enabled_domain);
+    add(shop.domain);
+    add(shop.myshopify_domain);
+  } catch (_) {}
+
+  const list = Array.from(domains);
+  const primaryFirst = list.sort((a, b) => {
+    const aMy = a.includes('.myshopify.com') ? 1 : 0;
+    const bMy = b.includes('.myshopify.com') ? 1 : 0;
+    return aMy - bMy;
+  });
+  return primaryFirst.length ? primaryFirst : [normalisePublicHost(shopDomain)].filter(Boolean);
+}
+
+async function findShopifyPageByAdmin(shopDomain, aliases) {
+  let adminAvailable = false;
+  let adminError = '';
+
+  for (const alias of aliases) {
+    try {
+      const pageData = await shopifyFetch(`/admin/api/${env.shopifyApiVersion}/pages.json?handle=${encodeURIComponent(alias)}&limit=1`, { shopDomain });
+      if (pageData && Array.isArray(pageData.pages)) {
+        adminAvailable = true;
+        const page = pageData.pages.find((item) => String(item.handle || '').toLowerCase() === alias) || pageData.pages[0] || null;
+        if (page) return { page, matchedHandle: String(page.handle || alias), adminAvailable, adminError };
+      }
+    } catch (error) {
+      if (error.code === 'SHOPIFY_REINSTALL_REQUIRED' || error.status === 401 || error.status === 403) {
+        adminError = error.message || 'Shopify Admin page scope is not available.';
+        return { page: null, matchedHandle: '', adminAvailable: false, adminError };
+      }
+      adminError = error.message || adminError;
+    }
+  }
+
+  // Some shops/API versions do not filter pages by handle consistently. Fall back to scanning a page list.
+  if (adminAvailable) {
+    try {
+      const pageData = await shopifyFetch(`/admin/api/${env.shopifyApiVersion}/pages.json?limit=250`, { shopDomain });
+      const pages = Array.isArray(pageData?.pages) ? pageData.pages : [];
+      const page = pages.find((item) => aliases.includes(String(item.handle || '').toLowerCase()));
+      if (page) return { page, matchedHandle: String(page.handle || '').toLowerCase(), adminAvailable: true, adminError };
+    } catch (error) {
+      adminError = error.message || adminError;
+    }
+  }
+
+  return { page: null, matchedHandle: '', adminAvailable, adminError };
+}
+
+async function checkPublicStorefrontPage(domains, aliases) {
+  const attempts = [];
+  if (typeof fetch !== 'function') return { verified: false, attempts, statusCode: 0, url: '' };
+
+  for (const host of domains) {
+    for (const handle of aliases) {
+      const url = `https://${host}/pages/${handle}`;
+      try {
+        const response = await fetch(url, { method: 'GET', redirect: 'follow', signal: AbortSignal.timeout(7000) });
+        const contentType = response.headers.get('content-type') || '';
+        const attempt = { url, handle, host, statusCode: response.status, ok: response.ok };
+        attempts.push(attempt);
+        if (response.ok && contentType.includes('text/html')) {
+          const html = (await response.text()).slice(0, 120000).toLowerCase();
+          const obviousMissing = response.url && /\/404($|[/?#])/.test(response.url.toLowerCase())
+            || html.includes('template-404')
+            || (html.includes('404') && (html.includes('page not found') || html.includes('not found')));
+          if (!obviousMissing) {
+            return { verified: true, attempts, statusCode: response.status, url, matchedHandle: handle, host };
+          }
+        }
+      } catch (error) {
+        attempts.push({ url, handle, host, error: error.message || 'storefront check failed' });
+      }
+    }
+  }
+
+  const last = attempts[attempts.length - 1] || {};
+  return { verified: false, attempts, statusCode: last.statusCode || 0, url: last.url || '' };
+}
+
 async function checkShopifyStorefrontPage(shopDomain, handle, label = 'Storefront page') {
   const cleanHandle = normalisePageHandle(handle);
-  const publicUrl = `https://${shopDomain}/pages/${cleanHandle}`;
+  const aliases = pageHandleAliases(cleanHandle);
+  const domains = await storefrontDomainCandidates(shopDomain);
+  const publicUrl = `https://${domains[0] || shopDomain}/pages/${cleanHandle}`;
   const expected = {
     label,
     handle: cleanHandle,
+    aliases,
     url: publicUrl,
     status: 'missing',
     adminVerified: false,
@@ -1339,53 +1453,56 @@ async function checkShopifyStorefrontPage(shopDomain, handle, label = 'Storefron
     checkedAt: new Date(),
   };
 
-  try {
-    const pageData = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/pages.json?handle=${encodeURIComponent(cleanHandle)}&limit=1`, { shopDomain });
-    if (pageData && Array.isArray(pageData.pages)) {
-      expected.adminAvailable = true;
-      const page = pageData.pages.find((item) => String(item.handle || '').toLowerCase() === cleanHandle) || pageData.pages[0] || null;
-      if (page) {
-        expected.adminVerified = true;
-        expected.pageId = String(page.id || '');
-        expected.title = page.title || label;
-        expected.published = Boolean(page.published_at || page.publishedAt);
-        expected.status = expected.published ? 'ready' : 'warning';
-        expected.detail = expected.published
-          ? `${label} exists in Shopify and is published.`
-          : `${label} exists in Shopify but is not published yet.`;
-        return expected;
-      }
-    }
-  } catch (_) {}
+  const admin = await findShopifyPageByAdmin(shopDomain, aliases);
+  expected.adminAvailable = Boolean(admin.adminAvailable);
+  if (admin.adminError) expected.adminError = admin.adminError;
 
-  try {
-    if (typeof fetch === 'function') {
-      const response = await fetch(publicUrl, { method: 'GET', redirect: 'follow', signal: AbortSignal.timeout(7000) });
-      expected.publicStatusCode = response.status;
-      const contentType = response.headers.get('content-type') || '';
-      if (response.ok && contentType.includes('text/html')) {
-        const html = (await response.text()).slice(0, 120000).toLowerCase();
-        const obviousMissing = html.includes('404') && (html.includes('page not found') || html.includes('not found'));
-        if (!obviousMissing) {
-          expected.publicVerified = true;
-          expected.published = true;
-          expected.status = 'ready';
-          expected.detail = `${label} is reachable on the storefront.`;
-          return expected;
-        }
-      }
-      expected.detail = response.status === 401 || response.status === 403
-        ? `${label} could not be verified publicly, possibly because the store is password-protected. Add read_online_store_pages to the app scopes for Admin verification.`
-        : `${label} was not found at ${publicUrl}.`;
-      expected.status = response.status === 401 || response.status === 403 ? 'warning' : 'missing';
+  if (admin.page) {
+    const page = admin.page;
+    expected.adminVerified = true;
+    expected.pageId = String(page.id || '');
+    expected.title = page.title || label;
+    expected.handle = String(page.handle || cleanHandle).toLowerCase();
+    expected.url = `https://${domains[0] || shopDomain}/pages/${expected.handle}`;
+    expected.published = Boolean(page.published_at || page.publishedAt || page.published);
+    expected.status = expected.published ? 'ready' : 'warning';
+    expected.detail = expected.published
+      ? `${label} exists in Shopify and is published.`
+      : `${label} exists in Shopify but is not published yet.`;
+    if (expected.handle !== cleanHandle) {
+      expected.status = 'warning';
+      expected.detail += ` It was found at /pages/${expected.handle}, but the current email handle is /pages/${cleanHandle}. Update the handle field before sending.`;
     }
-  } catch (error) {
-    expected.status = expected.adminAvailable ? 'missing' : 'warning';
-    expected.detail = `Could not verify ${label}: ${error.message || 'storefront check failed'}.`;
+    return expected;
   }
 
+  const publicCheck = await checkPublicStorefrontPage(domains, aliases);
+  expected.publicStatusCode = publicCheck.statusCode;
+  expected.publicAttempts = publicCheck.attempts;
+
+  if (publicCheck.verified) {
+    expected.publicVerified = true;
+    expected.published = true;
+    expected.status = publicCheck.matchedHandle === cleanHandle ? 'ready' : 'warning';
+    expected.url = publicCheck.url || expected.url;
+    expected.detail = publicCheck.matchedHandle === cleanHandle
+      ? `${label} is reachable on the storefront.`
+      : `${label} is reachable at /pages/${publicCheck.matchedHandle}, but the current email handle is /pages/${cleanHandle}. Update the handle field before sending.`;
+    return expected;
+  }
+
+  if (!expected.adminAvailable) {
+    expected.status = 'warning';
+    expected.detail = `${label} could not be verified from Shopify Admin because the installed token does not appear to have page-read access. I will not treat this as missing from a public storefront check alone. Emails and saved templates can still use /pages/${cleanHandle}; reconnect after adding read_content/write_content/read_online_store_pages if you want automatic verification and page creation.`;
+    return expected;
+  }
+
+  const lastUrl = publicCheck.url || publicUrl;
+  expected.detail = `${label} was not found in Shopify Admin for handle /pages/${cleanHandle}${aliases.length > 1 ? ` or alias /pages/${aliases.find((a) => a !== cleanHandle)}` : ''}. Last storefront check: ${lastUrl}.`;
+  expected.status = 'missing';
   return expected;
 }
+
 
 
 router.get('/shopify-pages/search', async (req, res, next) => {
@@ -1410,7 +1527,15 @@ router.post('/storefront-pages/create', async (req, res, next) => {
     const type = ['leave_review', 'all_reviews'].includes(req.body?.type) ? req.body.type : 'leave_review';
     const handle = normalisePageHandle(req.body?.handle || (type === 'all_reviews' ? 'reviews' : 'leave-review'));
     const existing = await checkShopifyStorefrontPage(shopDomain, handle, type === 'all_reviews' ? 'All Reviews page' : 'Leave Review page');
-    if (existing.adminVerified) return res.json({ ok: true, created: false, page: existing, message: `/pages/${handle} already exists.` });
+    if (existing.adminVerified || existing.publicVerified || existing.status === 'ready') {
+      return res.json({ ok: true, created: false, page: existing, message: `/pages/${existing.handle || handle} already exists or is reachable.` });
+    }
+    if (!existing.adminAvailable && existing.status === 'warning') {
+      return res.status(409).json({
+        error: `Nectar could not prove /pages/${handle} is missing because Shopify page-read scope is not available. Reconnect with read_content/write_content/read_online_store_pages, or keep using the existing handle if you already created the page in Shopify.`,
+        page: existing,
+      });
+    }
     const generated = await generateReviewPageSeoContent({ shopDomain, type, handle });
     const body = {
       page: {

@@ -1,5 +1,5 @@
 (() => {
-  const state = { batch: null, batches: [], activeItemId: '', metadata: {} };
+  const state = { batch: null, batches: [], activeItemId: '', metadata: {}, activeScanningItemId: '', completedScanIds: new Set(), rejectedSuggestions: {} };
   const $ = (id) => document.getElementById(id);
   const params = new URLSearchParams(window.location.search);
   const parentShopDomain = (() => {
@@ -150,14 +150,24 @@
 
   async function scanBatch() {
     if (!state.batch?._id) return;
-    setBusy('Scanning products with AI enrichment… each row will pulse while it is being refreshed.');
-    (state.batch.items || []).forEach((item) => {
-      if (!['created', 'creating'].includes(item.status)) item.status = 'scanning';
-    });
-    renderBatch();
-    const data = await api(`/batches/${state.batch._id}/scan`, { method: 'POST', body: JSON.stringify({ processAll: true, useAi: true }) });
-    state.batch = data.batch;
-    setBusy(`Scan complete. Processed ${data.processed || 0}; remaining ${data.remaining || 0}.`);
+    const rows = (state.batch.items || []).filter((item) => !['created', 'creating'].includes(item.status));
+    if (!rows.length) return setBusy('Nothing to scan.');
+    state.completedScanIds = new Set();
+    setBusy(`Scanning ${rows.length} product(s) one by one… rows pulse while their AI/profile data is being refreshed.`);
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      state.activeScanningItemId = row.itemId;
+      const local = findItem(row.itemId);
+      if (local) local.status = 'scanning';
+      setBusy(`Scanning ${index + 1}/${rows.length}: ${row.draft?.title || row.title || row.sourceUrl || 'product'}…`);
+      renderBatch();
+      const data = await api(`/batches/${state.batch._id}/scan`, { method: 'POST', body: JSON.stringify({ itemIds: [row.itemId], processAll: true, useAi: true }) });
+      state.batch = data.batch;
+      state.completedScanIds.add(row.itemId);
+      renderBatch();
+    }
+    state.activeScanningItemId = '';
+    setBusy(`Scan complete. Processed ${rows.length} product(s).`);
     renderBatch();
   }
 
@@ -195,7 +205,8 @@
     const image = item.selectedImages?.[0]?.src || item.draft?.images?.[0]?.src || '';
     const issues = item.validation?.issues || [];
     const validationStatus = item.validation?.status || 'unchecked';
-    return `<div class="item-row ${escapeAttr(item.status || '')}">
+    const scanClass = state.activeScanningItemId === item.itemId ? 'actively-scanning' : (state.completedScanIds?.has?.(item.itemId) ? 'scan-complete' : '');
+    return `<div class="item-row ${escapeAttr(item.status || '')} ${escapeAttr(scanClass)}">
       <div>${image ? `<img src="${escapeAttr(image)}" alt="">` : '<span class="badge blocked">No image</span>'}</div>
       <div class="item-title"><strong>${escapeHtml(item.draft?.title || item.title || item.originalInput || 'Queued product')}</strong><small>${escapeHtml(item.sourceUrl || item.originalInput || '')}</small>${issues.length ? `<small class="issue-preview">${escapeHtml(issues.slice(0, 2).join(' · '))}${issues.length > 2 ? ` +${issues.length - 2} more` : ''}</small>` : ''}</div>
       <span class="badge ${escapeAttr(item.status || '')}">${escapeHtml(item.status || 'queued')}</span>
@@ -220,10 +231,13 @@
 
   async function rescanItem(itemId) {
     setBusy('Rescanning product with AI enrichment…');
+    state.activeScanningItemId = itemId;
     const item = findItem(itemId);
     if (item) { item.status = 'scanning'; renderBatch(); }
     const data = await api(`/batches/${state.batch._id}/scan`, { method: 'POST', body: JSON.stringify({ itemIds: [itemId], processAll: true, useAi: true }) });
     state.batch = data.batch;
+    state.completedScanIds.add(itemId);
+    state.activeScanningItemId = '';
     setBusy('Product rescan complete.');
     renderBatch();
     if ($('item-dialog')?.open && state.activeItemId === itemId) viewItem(itemId, { keepOpen: true });
@@ -390,6 +404,7 @@
 
   function renderCommercialSuggestions(item = {}) {
     const suggestions = item.suggestions || item.draft?.suggestions || item.aiEnrichment?.suggestions || {};
+    const rejected = state.rejectedSuggestions[item.itemId] || new Set();
     const rows = [
       ['price', 'Price', 'price'],
       ['compareAtPrice', 'Compare-at price', 'compareAtPrice'],
@@ -399,14 +414,17 @@
     ].map(([key, label, fieldName]) => {
       const suggestion = suggestions[key];
       const value = suggestion?.value || '';
-      if (!value) return '';
+      if (!value || rejected.has(fieldName)) return '';
       const weightUnit = key === 'weight' && suggestion.weightUnit ? ` ${suggestion.weightUnit}` : '';
       const source = suggestion.source || 'similar Shopify products';
       const confidence = suggestion.confidence ? `${Math.round(Number(suggestion.confidence) * 100)}%` : '';
-      return `<div class="suggestion-row"><div><strong>${escapeHtml(label)} suggestion:</strong> ${escapeHtml(value)}${escapeHtml(weightUnit)}<br><small>${escapeHtml(source)}${confidence ? ` · ${escapeHtml(confidence)}` : ''}</small></div><button type="button" class="secondary-btn compact" data-apply-suggestion="${escapeAttr(fieldName)}" data-suggestion-value="${escapeAttr(value)}" data-suggestion-unit="${escapeAttr(suggestion.weightUnit || '')}">Apply</button></div>`;
+      const examples = Array.isArray(suggestion.sourceProducts) && suggestion.sourceProducts.length
+        ? `<small class="suggestion-examples">Based on: ${escapeHtml(suggestion.sourceProducts.slice(0, 3).map((p) => p.title || p.handle).filter(Boolean).join(' · '))}</small>`
+        : '';
+      return `<div class="suggestion-row amber" data-suggestion-row="${escapeAttr(fieldName)}"><div><strong>${escapeHtml(label)} suggestion:</strong> ${escapeHtml(value)}${escapeHtml(weightUnit)}<br><small>${escapeHtml(source)}${confidence ? ` · ${escapeHtml(confidence)}` : ''}</small>${examples}</div><div class="suggestion-actions"><button type="button" class="suggestion-accept" title="Accept suggestion" data-apply-suggestion="${escapeAttr(fieldName)}" data-suggestion-value="${escapeAttr(value)}" data-suggestion-unit="${escapeAttr(suggestion.weightUnit || '')}">✓</button><button type="button" class="suggestion-reject" title="Reject suggestion" data-reject-suggestion="${escapeAttr(fieldName)}">✕</button></div></div>`;
     }).filter(Boolean).join('');
     if (!rows) return '<div class="suggestion-box muted">No pricing/SKU/weight suggestions found from similar Shopify products. Leave blank unless you can verify them.</div>';
-    return `<div class="suggestion-box"><strong>Suggestions from your existing Shopify catalogue</strong>${rows}</div>`;
+    return `<div class="suggestion-box"><strong>Suggestions from your existing Shopify catalogue</strong><p class="muted">Amber suggestions are not applied until you tick them. Reject with the red cross if they are wrong.</p>${rows}</div>`;
   }
 
   function section(id, title, help, body) {
@@ -521,6 +539,7 @@
     body.querySelectorAll('[data-append-recommended-tags]').forEach((button) => button.addEventListener('click', () => appendCsvField('recommendedTags', button.dataset.appendRecommendedTags)));
     body.querySelectorAll('[data-append-tags]').forEach((button) => button.addEventListener('click', () => appendCsvField('tags', button.dataset.appendTags)));
     body.querySelectorAll('[data-apply-suggestion]').forEach((button) => button.addEventListener('click', () => applySuggestion(button.dataset.applySuggestion, button.dataset.suggestionValue, button.dataset.suggestionUnit)));
+    body.querySelectorAll('[data-reject-suggestion]').forEach((button) => button.addEventListener('click', () => rejectSuggestion(button.dataset.rejectSuggestion)));
   }
 
   function appendCsvField(fieldName, value) {
@@ -540,6 +559,18 @@
       const unitEl = body.querySelector(`[data-field="weightUnit"]`);
       if (unitEl) unitEl.value = unit;
     }
+    const row = body.querySelector(`[data-suggestion-row="${cssEscape(fieldName)}"]`);
+    if (row) row.classList.add('accepted');
+    setEditorStatus(`${fieldName} suggestion applied. Press Save overrides to persist it.`);
+  }
+
+  function rejectSuggestion(fieldName) {
+    if (!state.activeItemId || !fieldName) return;
+    if (!state.rejectedSuggestions[state.activeItemId]) state.rejectedSuggestions[state.activeItemId] = new Set();
+    state.rejectedSuggestions[state.activeItemId].add(fieldName);
+    const row = $('dialog-body').querySelector(`[data-suggestion-row="${cssEscape(fieldName)}"]`);
+    if (row) row.remove();
+    setEditorStatus(`${fieldName} suggestion rejected for this review session.`);
   }
 
   function currentSelectedImages() {

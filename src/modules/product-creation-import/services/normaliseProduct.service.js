@@ -48,12 +48,14 @@ function normaliseImage(image, title, index = 0) {
     return url ? { src: url, alt: fallbackAlt } : null;
   }
   const src = cleanUrl(image.src || image.url || image.originalSource || '');
+  const originalIndex = Number(image.originalIndex ?? image.index ?? index);
   return src ? {
     src,
     alt: cleanText(image.alt || image.description || fallbackAlt, 180),
     ...(image.role ? { role: cleanText(image.role, 80) } : {}),
     ...(image.reason ? { reason: cleanText(image.reason, 240) } : {}),
     ...(image.source ? { source: cleanText(image.source, 120) } : {}),
+    ...(Number.isFinite(originalIndex) ? { originalIndex } : {}),
   } : null;
 }
 
@@ -82,7 +84,7 @@ function dedupeImagesByCanonicalUrl(images = []) {
     const existing = best.get(key);
     if (!existing || score(item) > score(existing)) best.set(key, item);
   });
-  return Array.from(best.values());
+  return Array.from(best.values()).sort((a, b) => (a.originalIndex ?? 9999) - (b.originalIndex ?? 9999));
 }
 
 function coreMetafieldDefaults(raw = {}) {
