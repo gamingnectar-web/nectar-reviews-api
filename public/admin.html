@@ -1017,12 +1017,12 @@
       <section id="v-review-launch" class="view">
         <div class="dash-header">
           <div>
-            <h2 class="page-title">Reviews Launch Checklist</h2>
-            <p class="dash-subtitle">Use this before migrating Reviews to a live store. It checks the exact customer journey: fulfilled order → wait 14 days → review email → signed review page → Review Manager.</p>
+            <h2 class="page-title">Reviews Portal</h2>
+            <p class="dash-subtitle">Simple launch view: prove the sender works, prove Shopify orders are seen, then let the delivery timer do the rest.</p>
           </div>
           <div class="dash-actions">
             <button class="secondary-btn" type="button" onclick="window.loadReviewsLaunchChecklist?.()">Refresh checks</button>
-            <button class="primary-btn" type="button" onclick="window.runReviewLaunchFakeOrder?.()">Run fake-order test</button>
+            <button class="primary-btn" type="button" onclick="window.runReviewLaunchFakeOrder?.()">Send shop proof email</button>
           </div>
         </div>
         <div class="launch-mode-banner">
@@ -1058,7 +1058,7 @@
           <div id="all-reviews-page-setup" class="webhook-registry-wrap"><p class="muted">Loading all reviews page setup…</p></div>
         </div>
         <div class="panel launch-card">
-          <div class="settings-card-header"><div><h3>Recent review request jobs</h3><p>Shows fake-order and live-order jobs. A real go-live path should create a scheduled job first, then mark it sent after the delay.</p></div><button class="secondary-btn compact" type="button" onclick="window.loadReviewsLaunchChecklist?.()">Refresh</button></div>
+          <div class="settings-card-header"><div><h3>Recent orders and review automation</h3><p>Each row shows where the order is in the review journey. Use “Send proof to shop email” to test the exact customer email safely without emailing the customer.</p></div><button class="secondary-btn compact" type="button" onclick="window.loadReviewsLaunchChecklist?.()">Refresh</button></div>
           <div id="review-launch-jobs" class="launch-job-list"><p class="muted">No jobs loaded yet.</p></div>
         </div>
         <div class="panel launch-card launch-note">

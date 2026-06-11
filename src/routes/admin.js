@@ -259,6 +259,75 @@ async function activeEmailSettings(shopDomain) {
   return settings;
 }
 
+function lockedReviewProofRecipient(emailSettings, settings) {
+  return cleanEmail(
+    emailSettings?.replyToEmail
+    || emailSettings?.fromEmail
+    || emailSettings?.smtpUser
+    || settings?.supportSettings?.supportEmail
+    || ''
+  );
+}
+
+function sourceJobToProofOrder(sourceJob, proofEmail) {
+  const sourceOrder = sourceJob?.orderName || sourceJob?.orderId || 'ORDER';
+  const proofStamp = Date.now().toString().slice(-8);
+  const products = Array.isArray(sourceJob?.products) && sourceJob.products.length
+    ? sourceJob.products.slice(0, 20).map((product, index) => ({
+      id: cleanText(product.id || product.productId || product.handle || product.title || `proof-product-${index + 1}`, 180),
+      title: cleanText(product.title || 'Purchased product', 200),
+      handle: cleanText(product.handle || '', 200),
+      quantity: clampNumber(product.quantity || 1, 1, 999, 1),
+    }))
+    : [{ id: 'proof-product', title: 'Review proof product', quantity: 1 }];
+  return {
+    id: `NECTAR-PROOF-${proofStamp}-${String(sourceJob?._id || sourceOrder).slice(-6)}`,
+    name: `PROOF-${sourceOrder}`,
+    email: proofEmail,
+    contact_email: proofEmail,
+    customer: { first_name: 'Shop', last_name: 'Proof', email: proofEmail },
+    fulfilled_at: new Date().toISOString(),
+    tags: 'delivered, nectar-proof',
+    line_items: products,
+    delivered: true,
+  };
+}
+
+async function sendReviewProofForSourceJob({ shopDomain, sourceJob }) {
+  const [emailSettings, settings] = await Promise.all([
+    activeEmailSettings(shopDomain),
+    Settings.findOne({ shopDomain }).lean(),
+  ]);
+  const proofRecipient = lockedReviewProofRecipient(emailSettings, settings);
+  if (!proofRecipient) {
+    const error = new Error('No locked shop email is available. Save a Reviews email sender or support email first.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const proofOrder = sourceJobToProofOrder(sourceJob, proofRecipient);
+  const proofJob = await scheduleReviewRequestFromOrder({
+    shopDomain,
+    order: proofOrder,
+    source: 'admin_shop_email_order_proof',
+    delayDays: 0,
+    testMode: true,
+    webhookId: `proof-${String(sourceJob?._id || proofOrder.id)}-${Date.now()}`,
+  });
+  await ReviewRequestJob.updateOne(
+    { _id: proofJob._id },
+    { $set: { status: 'scheduled', scheduledAt: new Date(Date.now() - 5000), blockedReason: '', deliveryRequired: false, deliveredAt: new Date() } }
+  );
+  const sendResult = await sendDueReviewRequests({ limit: 1, jobId: proofJob._id });
+  const refreshed = await ReviewRequestJob.findById(proofJob._id).lean();
+  return {
+    ok: true,
+    proofRecipient,
+    sourceOrderId: sourceJob?.orderName || sourceJob?.orderId || '',
+    job: refreshed || proofJob,
+    sendResult,
+  };
+}
+
 function looksLikeEmailAddressHost(value = '') {
   const v = String(value || '').trim();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
@@ -2260,6 +2329,41 @@ router.post('/review-automation/run-due', async (req, res, next) => {
   }
 });
 
+router.post('/review-automation/jobs/:jobId/send-proof', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const sourceJob = await ReviewRequestJob.findOne({ _id: req.params.jobId, shopDomain }).lean();
+    if (!sourceJob) return res.status(404).json({ error: 'Review request job not found for this shop.' });
+    const result = await sendReviewProofForSourceJob({ shopDomain, sourceJob });
+    return res.status(201).json(result);
+  } catch (error) {
+    const publicMessage = publicEmailSendError(error);
+    return res.status(error.statusCode || 502).json({ error: publicMessage, detail: error.message || 'Shop proof email failed' });
+  }
+});
+
+router.post('/review-automation/send-proof-latest', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    let sourceJob = await ReviewRequestJob.findOne({ shopDomain, testMode: { $ne: true } }).sort({ createdAt: -1 }).lean();
+    if (!sourceJob) {
+      sourceJob = {
+        _id: `manual-${Date.now()}`,
+        orderId: `NECTAR-PROOF-SAMPLE-${Date.now().toString().slice(-6)}`,
+        orderName: 'Sample proof order',
+        customerEmail: '',
+        customerName: 'Shop Proof',
+        products: [{ id: 'sample-proof-product', title: 'Sample review proof product', quantity: 1 }],
+      };
+    }
+    const result = await sendReviewProofForSourceJob({ shopDomain, sourceJob });
+    return res.status(201).json(result);
+  } catch (error) {
+    const publicMessage = publicEmailSendError(error);
+    return res.status(error.statusCode || 502).json({ error: publicMessage, detail: error.message || 'Latest shop proof email failed' });
+  }
+});
+
 router.get('/e2e-tests', async (req, res, next) => {
   try {
     const shopDomain = shopDomainFromReq(req);
@@ -2556,6 +2660,7 @@ router.get('/review-launch-checklist', async (req, res, next) => {
     const webhookReady = (webhookVerificationStatus === 'verified' || webhookReceivedReady) && !webhookProblem;
     const webhookManual = webhookMeta.webhookSource === 'manual_shopify_admin_confirmation';
     const latestJob = recentJobs[0] || null;
+    const proofRecipient = lockedReviewProofRecipient(emailSettings, settings);
 
     const checks = [
       {
@@ -2640,6 +2745,8 @@ router.get('/review-launch-checklist', async (req, res, next) => {
         totalReviews,
         pendingReviews,
         acceptedReviews,
+        proofRecipient,
+        proofRecipientLocked: Boolean(proofRecipient),
         latestJob: latestJob ? { status: latestJob.status, orderId: latestJob.orderId, scheduledAt: latestJob.scheduledAt, sentAt: latestJob.sentAt, blockedReason: latestJob.blockedReason || latestJob.errorMessage || '' } : null,
       },
       checks,

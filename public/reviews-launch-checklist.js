@@ -49,14 +49,114 @@
     box.innerHTML = path.map((item)=>`<li>${esc(item)}</li>`).join('') || '<li>No path returned.</li>';
   }
 
+  function checkByKey(data, key) {
+    return (data?.checks || []).find((check) => check.key === key) || {};
+  }
+
+  function compactCheckLabel(check) {
+    if (!check?.status) return 'Not checked yet';
+    if (check.status === 'ready') return 'Ready';
+    if (check.status === 'warning') return 'Needs proof';
+    if (check.status === 'blocked') return 'Blocked';
+    if (check.status === 'manual') return 'Manual step';
+    return statusText(check.status);
+  }
+
+  function markTechnicalPanels() {
+    const root = document.getElementById('v-review-launch');
+    if (!root) return;
+    root.classList.add('reviews-simple-mode');
+    [
+      root.querySelector('.launch-grid'),
+      document.getElementById('review-webhook-registry')?.closest('.launch-card'),
+      document.getElementById('all-reviews-page-setup')?.closest('.launch-card'),
+      root.querySelector('.launch-note'),
+    ].filter(Boolean).forEach((node) => node.classList.add('reviews-technical-panel'));
+  }
+
+  function renderSimplePortal(data = {}) {
+    const root = document.getElementById('v-review-launch');
+    if (!root) return;
+    markTechnicalPanels();
+    const header = root.querySelector('.dash-header');
+    const title = header?.querySelector('.page-title');
+    const subtitle = header?.querySelector('.dash-subtitle');
+    if (title) title.textContent = 'Reviews Portal';
+    if (subtitle) subtitle.textContent = 'Simple launch view: prove the sender works, prove Shopify orders are seen, then let the 14-day delivery timer do the rest.';
+    const topPrimary = header?.querySelector('.dash-actions .primary-btn');
+    if (topPrimary) topPrimary.textContent = 'Send shop proof email';
+
+    let shell = document.getElementById('review-simple-shell');
+    if (!shell) {
+      shell = document.createElement('div');
+      shell.id = 'review-simple-shell';
+      header?.insertAdjacentElement('afterend', shell);
+    }
+    const summary = data.summary || {};
+    const email = checkByKey(data, 'email_provider');
+    const webhook = checkByKey(data, 'orders_fulfilled_webhook');
+    const scheduler = checkByKey(data, 'native_scheduler');
+    const links = checkByKey(data, 'signed_links');
+    const proofRecipient = summary.proofRecipient || '';
+    const blockers = Number(summary.blockers || 0);
+    const warnings = Number(summary.warnings || 0);
+    const readyCopy = blockers ? `${blockers} blocker${blockers === 1 ? '' : 's'} to fix` : warnings ? `${warnings} warning${warnings === 1 ? '' : 's'} to prove` : 'Ready to test live flow';
+    shell.innerHTML = `
+      <div class="review-simple-hero" data-ready="${esc(summary.ready ? 'ready' : 'not-ready')}">
+        <div class="review-simple-main">
+          <span class="review-simple-eyebrow">Reviews automation</span>
+          <h3>${esc(readyCopy)}</h3>
+          <p>Customers stay untouched while you test. Proof emails are locked to the saved shop email${proofRecipient ? `: ${esc(proofRecipient)}` : ''}.</p>
+          <div class="review-simple-actions">
+            <button class="primary-btn" type="button" onclick="window.sendLatestReviewProof?.()">Send shop proof email</button>
+            <button class="secondary-btn" type="button" onclick="window.toggleReviewAdvanced?.()">Show technical setup</button>
+            <button class="secondary-btn" type="button" onclick="window.goReviewLaunchTarget?.('v-msg','delivery')">Email settings</button>
+          </div>
+        </div>
+        <div class="review-simple-grid">
+          <div class="review-simple-tile" data-status="${esc(email.status || 'blocked')}"><span>Email sender</span><strong>${esc(compactCheckLabel(email))}</strong><p>${esc(email.detail || 'Save the email provider first.')}</p></div>
+          <div class="review-simple-tile" data-status="${esc(webhook.status || 'blocked')}"><span>Shopify orders</span><strong>${esc(compactCheckLabel(webhook))}</strong><p>${esc(webhook.status === 'ready' ? 'Orders can create review jobs automatically.' : 'Register or prove the order webhook.')}</p></div>
+          <div class="review-simple-tile" data-status="${esc(scheduler.status || 'blocked')}"><span>Delay timer</span><strong>${esc(Number(summary.delayDays ?? 14))} days</strong><p>${esc(scheduler.detail || 'Nectar waits after delivery before sending.')}</p></div>
+          <div class="review-simple-tile" data-status="${esc(links.status || 'blocked')}"><span>Review links</span><strong>${esc(compactCheckLabel(links))}</strong><p>One-use signed links protect verified review requests.</p></div>
+        </div>
+      </div>
+    `;
+  }
+
+  function jobStage(job) {
+    if (job.sentAt || job.status === 'sent') return 'sent';
+    if (job.scheduledAt || job.status === 'scheduled') return 'scheduled';
+    if (job.status === 'awaiting_delivery') return 'awaiting_delivery';
+    if (job.status === 'failed' || job.status === 'blocked') return 'failed';
+    return job.status || 'received';
+  }
+
   function renderJobs(jobs=[]){
     const box = document.getElementById('review-launch-jobs');
     if (!box) return;
+    const proofRecipient = lastChecklist?.summary?.proofRecipient || '';
     box.innerHTML = jobs.map((job)=>{
       const date = job.sentAt ? `Sent ${new Date(job.sentAt).toLocaleString()}` : job.scheduledAt ? `Scheduled ${new Date(job.scheduledAt).toLocaleString()}` : 'No schedule yet';
+      const stage = jobStage(job);
       const reason = job.blockedReason ? `<p class="launch-job-error">${esc(job.blockedReason)}</p>` : '';
-      return `<div class="launch-job" data-status="${esc(job.status)}"><div><strong>${esc(job.orderId || 'Order')}</strong><p>${esc(job.email || 'No email')} · ${esc(job.productCount || 0)} product(s) · ${esc(date)}</p>${reason}</div><span>${esc(job.testMode ? 'test · ' : '')}${esc(job.status || '')}</span></div>`;
-    }).join('') || '<p class="muted">No review request jobs yet. Run a fake-order test to create one without touching live orders.</p>';
+      const proofDisabled = !proofRecipient || job.testMode ? 'disabled' : '';
+      const proofTitle = proofRecipient ? `Send a safe copy to ${proofRecipient}. The customer will not be emailed.` : 'Save an email sender first.';
+      const proofButton = job.testMode ? '' : `<button class="secondary-btn compact launch-proof-btn" type="button" ${proofDisabled} title="${esc(proofTitle)}" onclick="window.sendReviewJobProof?.('${esc(job.id)}')">Send proof to shop email</button>`;
+      return `<div class="launch-job launch-job-v2" data-status="${esc(job.status)}" data-stage="${esc(stage)}">
+        <div class="launch-job-main">
+          <div class="launch-job-head"><strong>${esc(job.orderId || 'Order')}</strong><span>${esc(job.testMode ? 'TEST' : (job.status || ''))}</span></div>
+          <p>${esc(job.email || 'No customer email')} · ${esc(job.productCount || 0)} product(s) · ${esc(date)}</p>
+          ${reason}
+          <div class="launch-job-steps" aria-label="Review automation progress">
+            <b class="${['awaiting_delivery','scheduled','sent'].includes(stage) ? 'active' : ''}">Order seen</b>
+            <b class="${stage === 'awaiting_delivery' ? 'active current' : ['scheduled','sent'].includes(stage) ? 'active' : ''}">Wait for delivery</b>
+            <b class="${stage === 'scheduled' ? 'active current' : stage === 'sent' ? 'active' : ''}">14-day timer</b>
+            <b class="${stage === 'sent' ? 'active current' : ''}">Email sent</b>
+          </div>
+        </div>
+        <div class="launch-job-actions">${proofButton}</div>
+      </div>`;
+    }).join('') || '<div class="launch-empty-state"><strong>No review request jobs yet.</strong><p>Click “Send shop proof email” to create a safe sample proof without touching a customer.</p><button class="primary-btn compact" type="button" onclick="window.sendLatestReviewProof?.()">Send shop proof email</button></div>';
   }
 
 
@@ -145,6 +245,7 @@
     try {
       const data = await api('/admin/review-launch-checklist');
       lastChecklist = data;
+      renderSimplePortal(data);
       renderChecks(data.checks || []);
       renderPath(data.livePath || []);
       renderJobs(data.recentJobs || []);
@@ -222,18 +323,44 @@
     }, 120);
   };
 
-  window.runReviewLaunchFakeOrder = async function(){
-    const email = prompt('Send the fake-order review request to which email?', 'you@example.com');
-    if (!email) return;
+  window.toggleReviewAdvanced = function(){
+    const root = document.getElementById('v-review-launch');
+    if (!root) return;
+    root.classList.toggle('reviews-show-advanced');
+    const btn = document.querySelector('#review-simple-shell button[onclick*="toggleReviewAdvanced"]');
+    if (btn) btn.textContent = root.classList.contains('reviews-show-advanced') ? 'Hide technical setup' : 'Show technical setup';
+  };
+
+  window.sendReviewJobProof = async function(jobId){
+    const proofRecipient = lastChecklist?.summary?.proofRecipient || 'the saved shop email';
+    if (!jobId) return;
+    const ok = confirm(`Send a safe review-request proof for this order to ${proofRecipient}? The customer will not be emailed and the proof job will be marked as a test.`);
+    if (!ok) return;
     try {
-      const result = await api('/admin/review-automation/fake-order', { method:'POST', body: JSON.stringify({ email, sendNow: true, delayDays: 0, orderId: `NECTAR-LAUNCH-${Date.now().toString().slice(-6)}` }) });
-      toast(result.sent ? 'Fake order created and review email sent.' : 'Fake order created. Check job status below.');
+      const result = await api(`/admin/review-automation/jobs/${encodeURIComponent(jobId)}/send-proof`, { method:'POST', body: JSON.stringify({}) });
+      toast(`Proof email sent to ${result.proofRecipient || proofRecipient}.`);
       await window.loadReviewsLaunchChecklist?.();
     } catch (error) {
-      toast(error.message || 'Fake-order test failed.');
+      toast(error.message || 'Could not send the shop proof email.');
       await window.loadReviewsLaunchChecklist?.();
     }
   };
+
+  window.sendLatestReviewProof = async function(){
+    const proofRecipient = lastChecklist?.summary?.proofRecipient || 'the saved shop email';
+    const ok = confirm(`Send a safe review-request proof to ${proofRecipient}? Nectar will use the latest order job when available, otherwise a sample proof order. Customers will not be emailed.`);
+    if (!ok) return;
+    try {
+      const result = await api('/admin/review-automation/send-proof-latest', { method:'POST', body: JSON.stringify({}) });
+      toast(`Proof email sent to ${result.proofRecipient || proofRecipient}.`);
+      await window.loadReviewsLaunchChecklist?.();
+    } catch (error) {
+      toast(error.message || 'Could not send the shop proof email.');
+      await window.loadReviewsLaunchChecklist?.();
+    }
+  };
+
+  window.runReviewLaunchFakeOrder = window.sendLatestReviewProof;
 
   window.forceRunDueReviewJobs = async function(){
     try {
