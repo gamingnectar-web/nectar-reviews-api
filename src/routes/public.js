@@ -493,10 +493,24 @@ router.get('/reviews/seo-page', async (req, res, next) => {
     const match = liveReviewMatch({ shopDomain });
     if (itemId) match.itemId = { $in: itemIdCandidates(itemId) };
     if (minRating) match.rating = { $gte: minRating };
-    let rows = await Review.find(match).sort({ createdAt: -1 }).limit(500).lean();
-    if (q) {
-      rows = rows.filter((review) => [review.headline, review.comment, review.userId, review.itemId, review.sourceLabel, ...(review.productTags || [])].filter(Boolean).join(' ').toLowerCase().includes(q));
-    }
+    const baseRows = await Review.find(match).sort({ createdAt: -1 }).limit(500).lean();
+    const attrsFromReview = (review = {}) => {
+      const attrs = review.attributes && typeof review.attributes === 'object' ? (review.attributes instanceof Map ? Object.fromEntries(review.attributes) : review.attributes) : {};
+      return Object.entries(attrs).map(([key, value]) => `${cleanText(key, 80)} ${cleanText(value, 40)}`).join(' ');
+    };
+    const searchBlob = (review = {}) => [
+      review.headline,
+      review.comment,
+      review.userId,
+      review.itemId,
+      review.productTitle,
+      review.productHandle,
+      review.productUrl,
+      review.sourceLabel,
+      ...(review.productTags || []),
+      attrsFromReview(review),
+    ].filter(Boolean).join(' ').toLowerCase();
+    let rows = q ? baseRows.filter((review) => searchBlob(review).includes(q)) : baseRows.slice();
     rows = rows.slice(0, limit);
     const count = rows.length;
     const average = count ? Number((rows.reduce((sum, review) => sum + Number(review.rating || 0), 0) / count).toFixed(1)) : 0;
@@ -514,6 +528,54 @@ router.get('/reviews/seo-page', async (req, res, next) => {
         attributes.set(label, current);
       });
     });
+    const recommendationMap = new Map();
+    baseRows.filter((review) => (review.reviewScope || 'product') === 'product' && review.itemId !== '__site__').forEach((review) => {
+      const productKey = cleanText(review.productHandle || review.productTitle || review.itemId, 180);
+      if (!productKey) return;
+      const attrs = review.attributes && typeof review.attributes === 'object' ? (review.attributes instanceof Map ? Object.fromEntries(review.attributes) : review.attributes) : {};
+      const searchable = searchBlob(review);
+      const item = recommendationMap.get(productKey) || {
+        itemId: review.itemId,
+        productTitle: review.productTitle || productKey,
+        productHandle: review.productHandle || '',
+        productUrl: review.productUrl || '',
+        count: 0,
+        totalRating: 0,
+        score: 0,
+        tags: new Map(),
+        attributes: new Map(),
+        bestQuote: '',
+      };
+      item.count += 1;
+      item.totalRating += Number(review.rating || 0);
+      item.score += Number(review.rating || 0);
+      if (q && searchable.includes(q)) item.score += 12;
+      if (q && String(review.productTitle || '').toLowerCase().includes(q)) item.score += 10;
+      if (q && (review.productTags || []).join(' ').toLowerCase().includes(q)) item.score += 8;
+      (review.productTags || []).forEach((tag) => { const clean = cleanText(tag, 80); if (clean) item.tags.set(clean, (item.tags.get(clean) || 0) + 1); });
+      Object.entries(attrs).forEach(([key, value]) => {
+        const label = cleanText(key, 80);
+        if (!label) return;
+        const current = item.attributes.get(label) || { label, count: 0, total: 0 };
+        current.count += 1;
+        current.total += Number(value || 0);
+        item.attributes.set(label, current);
+      });
+      if (!item.bestQuote && review.comment) item.bestQuote = cleanText(review.comment, 180);
+      recommendationMap.set(productKey, item);
+    });
+    const recommendations = Array.from(recommendationMap.values()).map((item) => ({
+      itemId: item.itemId,
+      productTitle: item.productTitle,
+      productHandle: item.productHandle,
+      productUrl: item.productUrl,
+      count: item.count,
+      average: item.count ? Number((item.totalRating / item.count).toFixed(1)) : 0,
+      score: Number((item.score + item.count * 1.5).toFixed(2)),
+      matchedTags: Array.from(item.tags.entries()).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([label, count]) => ({ label, count })),
+      flavourProfile: Array.from(item.attributes.values()).map((attr) => ({ label: attr.label, average: attr.count ? Number((attr.total / attr.count).toFixed(1)) : 0, count: attr.count })).sort((a,b)=>b.count-a.count).slice(0,6),
+      bestQuote: item.bestQuote,
+    })).sort((a,b)=>b.score-a.score).slice(0,8);
     return res.json({
       ok: true,
       count,
@@ -522,6 +584,7 @@ router.get('/reviews/seo-page', async (req, res, next) => {
       filters: { q, minRating, itemId },
       topTags: Array.from(tags.entries()).sort((a,b)=>b[1]-a[1]).slice(0,20).map(([label,count])=>({ label, count })),
       attributeAverages: Array.from(attributes.values()).map((item)=>({ label: item.label, count: item.count, average: item.count ? Number((item.total / item.count).toFixed(1)) : 0 })).sort((a,b)=>b.count-a.count).slice(0,20),
+      recommendations,
       reviews: rows.map(normaliseReviewForPublic),
       jsonLd: {
         '@context': 'https://schema.org',

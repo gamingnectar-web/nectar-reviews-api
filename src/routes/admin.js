@@ -328,6 +328,107 @@ async function sendReviewProofForSourceJob({ shopDomain, sourceJob }) {
   };
 }
 
+
+function publicReviewRequestJob(job = {}) {
+  return {
+    id: String(job._id || ''),
+    status: job.status || '',
+    orderId: job.orderName || job.orderId || '',
+    email: job.customerEmail || '',
+    customerName: job.customerName || '',
+    productCount: Array.isArray(job.products) ? job.products.length : 0,
+    scheduledAt: job.scheduledAt || null,
+    sentAt: job.sentAt || null,
+    deliveredAt: job.deliveredAt || null,
+    delayDays: Number(job.delayDays || 0),
+    attempts: Number(job.attempts || 0),
+    blockedReason: job.blockedReason || job.errorMessage || '',
+    deliveryRequired: Boolean(job.deliveryRequired),
+    requiredDeliveryTag: job.requiredDeliveryTag || 'delivered',
+    testMode: Boolean(job.testMode),
+  };
+}
+
+function reviewJobOutstandingReason(job = {}, now = new Date()) {
+  const status = String(job.status || '').toLowerCase();
+  const scheduledAt = job.scheduledAt ? new Date(job.scheduledAt) : null;
+  if (status === 'failed') return 'failed';
+  if (status === 'blocked') return 'blocked';
+  if (status === 'awaiting_delivery') return 'awaiting_delivery';
+  if (status === 'scheduled' && scheduledAt && !Number.isNaN(scheduledAt.getTime()) && scheduledAt <= now) return 'due_now';
+  if (status === 'scheduled') return 'scheduled_future';
+  return status || 'unknown';
+}
+
+async function outstandingReviewAutomationSnapshot(shopDomain) {
+  const now = new Date();
+  const jobs = await ReviewRequestJob.find({
+    shopDomain,
+    status: { $in: ['scheduled', 'failed', 'blocked', 'awaiting_delivery'] },
+  }).sort({ status: 1, scheduledAt: 1, createdAt: -1 }).limit(80).lean();
+  const decorated = jobs.map((job) => ({ ...publicReviewRequestJob(job), outstandingReason: reviewJobOutstandingReason(job, now) }));
+  return {
+    ok: true,
+    generatedAt: now.toISOString(),
+    dueNow: decorated.filter((job) => job.outstandingReason === 'due_now').length,
+    failed: decorated.filter((job) => job.outstandingReason === 'failed').length,
+    blocked: decorated.filter((job) => job.outstandingReason === 'blocked').length,
+    awaitingDelivery: decorated.filter((job) => job.outstandingReason === 'awaiting_delivery').length,
+    scheduledFuture: decorated.filter((job) => job.outstandingReason === 'scheduled_future').length,
+    actionable: decorated.filter((job) => ['due_now', 'failed', 'blocked', 'awaiting_delivery'].includes(job.outstandingReason)).length,
+    jobs: decorated,
+  };
+}
+
+async function manualSendReviewJobToCustomer({ shopDomain, sourceJob, bypassDelivery = false }) {
+  if (!sourceJob) {
+    const error = new Error('Review request job not found for this shop.');
+    error.statusCode = 404;
+    throw error;
+  }
+  if (sourceJob.testMode) {
+    const error = new Error('This is a test job. Use Send proof to shop email instead.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (sourceJob.status === 'sent') {
+    const error = new Error('This review request has already been sent.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!sourceJob.customerEmail) {
+    const error = new Error('This order has no customer email, so it cannot be sent manually.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (sourceJob.status === 'awaiting_delivery' && !bypassDelivery) {
+    const error = new Error('This order is waiting for the delivered tag. Confirm manual delivery override before sending to the customer.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const now = new Date();
+  const update = {
+    status: 'scheduled',
+    scheduledAt: new Date(now.getTime() - 5000),
+    blockedReason: '',
+    errorMessage: '',
+    lastManualSendAt: now,
+  };
+  if (bypassDelivery || sourceJob.status === 'awaiting_delivery') {
+    update.deliveryRequired = false;
+    update.deliveredAt = sourceJob.deliveredAt || now;
+    update.manualDeliveryOverrideAt = now;
+  }
+  await ReviewRequestJob.updateOne({ _id: sourceJob._id, shopDomain }, { $set: update, $inc: { manualSendAttempts: 1 } });
+  const sendResult = await sendDueReviewRequests({ limit: 1, jobId: sourceJob._id });
+  const refreshed = await ReviewRequestJob.findById(sourceJob._id).lean();
+  return {
+    ok: true,
+    sendResult,
+    job: publicReviewRequestJob(refreshed || sourceJob),
+  };
+}
+
 function looksLikeEmailAddressHost(value = '') {
   const v = String(value || '').trim();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
@@ -2329,6 +2430,51 @@ router.post('/review-automation/run-due', async (req, res, next) => {
   }
 });
 
+router.get('/review-automation/outstanding', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const snapshot = await outstandingReviewAutomationSnapshot(shopDomain);
+    return res.json(snapshot);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/review-automation/process-outstanding', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const now = new Date();
+    const retryFailed = req.body?.retryFailed !== false;
+    let retriedFailed = 0;
+    if (retryFailed) {
+      const retry = await ReviewRequestJob.updateMany(
+        { shopDomain, status: 'failed', testMode: { $ne: true }, customerEmail: { $ne: '' } },
+        { $set: { status: 'scheduled', scheduledAt: new Date(now.getTime() - 5000), blockedReason: '', errorMessage: '', lastManualRetryAt: now }, $inc: { manualRetryCount: 1 } }
+      );
+      retriedFailed = retry.modifiedCount || 0;
+    }
+    const result = await sendDueReviewRequests({ limit: clampNumber(req.body?.limit, 1, 100, 50) });
+    const snapshot = await outstandingReviewAutomationSnapshot(shopDomain);
+    return res.json({ ok: true, retriedFailed, processed: result.count || 0, result, outstanding: snapshot });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/review-automation/jobs/:jobId/manual-send', async (req, res, next) => {
+  try {
+    if (req.body?.confirm !== true) return res.status(400).json({ error: 'Confirmation is required before emailing a customer manually.' });
+    const shopDomain = shopDomainFromReq(req);
+    const sourceJob = await ReviewRequestJob.findOne({ _id: req.params.jobId, shopDomain }).lean();
+    const result = await manualSendReviewJobToCustomer({ shopDomain, sourceJob, bypassDelivery: Boolean(req.body?.bypassDelivery) });
+    const snapshot = await outstandingReviewAutomationSnapshot(shopDomain);
+    return res.status(201).json({ ...result, outstanding: snapshot });
+  } catch (error) {
+    const publicMessage = publicEmailSendError(error);
+    return res.status(error.statusCode || 502).json({ error: publicMessage, detail: error.message || 'Manual review email send failed' });
+  }
+});
+
 router.post('/review-automation/jobs/:jobId/send-proof', async (req, res, next) => {
   try {
     const shopDomain = shopDomainFromReq(req);
@@ -2661,6 +2807,7 @@ router.get('/review-launch-checklist', async (req, res, next) => {
     const webhookManual = webhookMeta.webhookSource === 'manual_shopify_admin_confirmation';
     const latestJob = recentJobs[0] || null;
     const proofRecipient = lockedReviewProofRecipient(emailSettings, settings);
+    const outstandingSnapshot = await outstandingReviewAutomationSnapshot(shopDomain);
 
     const checks = [
       {
@@ -2748,7 +2895,13 @@ router.get('/review-launch-checklist', async (req, res, next) => {
         proofRecipient,
         proofRecipientLocked: Boolean(proofRecipient),
         latestJob: latestJob ? { status: latestJob.status, orderId: latestJob.orderId, scheduledAt: latestJob.scheduledAt, sentAt: latestJob.sentAt, blockedReason: latestJob.blockedReason || latestJob.errorMessage || '' } : null,
+        outstandingDueNow: outstandingSnapshot.dueNow,
+        outstandingFailed: outstandingSnapshot.failed,
+        outstandingBlocked: outstandingSnapshot.blocked,
+        outstandingAwaitingDelivery: outstandingSnapshot.awaitingDelivery,
+        outstandingActionable: outstandingSnapshot.actionable,
       },
+      outstanding: outstandingSnapshot,
       checks,
       webhookRegistry: buildWebhookRegistry({ shopDomain, shop, inspection: { results: webhookMeta.webhookInspectionResults || [], skipped: !webhookMeta.webhookInspectionResults?.length, checkedAt: webhookMeta.webhookVerificationCheckedAt || null } }),
       recentJobs: recentJobs.map((job) => ({

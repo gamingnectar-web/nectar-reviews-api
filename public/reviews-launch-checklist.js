@@ -111,6 +111,7 @@
             <button class="primary-btn" type="button" onclick="window.sendLatestReviewProof?.()">Send shop proof email</button>
             <button class="secondary-btn" type="button" onclick="window.toggleReviewAdvanced?.()">Show technical setup</button>
             <button class="secondary-btn" type="button" onclick="window.goReviewLaunchTarget?.('v-msg','delivery')">Email settings</button>
+            <button class="secondary-btn reviews-outstanding-main" type="button" onclick="window.openReviewOutstandingPanel?.()">${esc(outstandingLabel)}</button>
           </div>
         </div>
         <div class="review-simple-grid">
@@ -118,6 +119,7 @@
           <div class="review-simple-tile" data-status="${esc(webhook.status || 'blocked')}"><span>Shopify orders</span><strong>${esc(compactCheckLabel(webhook))}</strong><p>${esc(webhook.status === 'ready' ? 'Orders can create review jobs automatically.' : 'Register or prove the order webhook.')}</p></div>
           <div class="review-simple-tile" data-status="${esc(scheduler.status || 'blocked')}"><span>Delay timer</span><strong>${esc(Number(summary.delayDays ?? 14))} days</strong><p>${esc(scheduler.detail || 'Nectar waits after delivery before sending.')}</p></div>
           <div class="review-simple-tile" data-status="${esc(links.status || 'blocked')}"><span>Review links</span><strong>${esc(compactCheckLabel(links))}</strong><p>One-use signed links protect verified review requests.</p></div>
+          <div class="review-simple-tile review-simple-tile-wide" data-status="${outstandingActionable ? 'warning' : 'ready'}"><span>Outstanding sends</span><strong>${esc(outstandingLabel)}</strong><p>${esc(Number(outstanding.failed || 0))} failed · ${esc(Number(outstanding.dueNow || 0))} due now · ${esc(Number(outstanding.awaitingDelivery || 0))} waiting delivery</p><button class="secondary-btn compact" type="button" onclick="window.processOutstandingReviewSends?.()">Run outstanding sends</button></div>
         </div>
       </div>
     `;
@@ -142,6 +144,7 @@
       const proofDisabled = !proofRecipient || job.testMode ? 'disabled' : '';
       const proofTitle = proofRecipient ? `Send a safe copy to ${proofRecipient}. The customer will not be emailed.` : 'Save an email sender first.';
       const proofButton = job.testMode ? '' : `<button class="secondary-btn compact launch-proof-btn" type="button" ${proofDisabled} title="${esc(proofTitle)}" onclick="window.sendReviewJobProof?.('${esc(job.id)}')">Send proof to shop email</button>`;
+      const manualButton = job.testMode || job.status === 'sent' ? '' : ['failed','blocked','scheduled','awaiting_delivery'].includes(String(job.status || '')) ? `<button class="primary-btn compact launch-manual-send-btn" type="button" onclick="window.manualSendReviewJob?.('${esc(job.id)}','${esc(job.status || '')}')">${job.status === 'awaiting_delivery' ? 'Mark delivered + send' : 'Send customer now'}</button>` : '';
       return `<div class="launch-job launch-job-v2" data-status="${esc(job.status)}" data-stage="${esc(stage)}">
         <div class="launch-job-main">
           <div class="launch-job-head"><strong>${esc(job.orderId || 'Order')}</strong><span>${esc(job.testMode ? 'TEST' : (job.status || ''))}</span></div>
@@ -154,7 +157,7 @@
             <b class="${stage === 'sent' ? 'active current' : ''}">Email sent</b>
           </div>
         </div>
-        <div class="launch-job-actions">${proofButton}</div>
+        <div class="launch-job-actions">${manualButton}${proofButton}</div>
       </div>`;
     }).join('') || '<div class="launch-empty-state"><strong>No review request jobs yet.</strong><p>Click “Send shop proof email” to create a safe sample proof without touching a customer.</p><button class="primary-btn compact" type="button" onclick="window.sendLatestReviewProof?.()">Send shop proof email</button></div>';
   }

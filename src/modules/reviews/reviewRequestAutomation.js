@@ -251,8 +251,11 @@ function sectionHtml(section = {}, context = {}) {
   const radius = clampTemplateNumber(section.radius, 14, 0, 40);
   const padding = clampTemplateNumber(section.padding, 16, 4, 40);
   const borderWidth = clampTemplateNumber(section.borderWidth ?? section.borderPx, 1, 0, 8);
+  const widthPct = clampTemplateNumber(Math.round(Number(section.widthPct || 100) / 20) * 20, 100, 20, 100);
+  const heightPct = clampTemplateNumber(Math.round(Number(section.heightPct || 5) / 5) * 5, 5, 5, 40);
+  const minHeight = Math.max(0, heightPct * 4);
   if (!title && !text && !buttonText) return '';
-  return `<tr><td style="padding:12px 0 0 0;"><div style="text-align:left;background:${escapeEmailHtml(bg)};border:${borderWidth}px solid ${escapeEmailHtml(border)};border-radius:${radius}px;padding:${padding}px;color:#111827;">${title ? `<strong style="display:block;margin:0 0 6px;font-size:15px;">${escapeEmailHtml(title)}</strong>` : ''}${text ? `<p style="margin:0;color:#4b5563;font-size:14px;line-height:1.5;">${escapeEmailHtml(text)}</p>` : ''}${buttonText ? `<a href="${escapeEmailHtml(buttonUrl || context.reviewUrl || '#')}" style="display:inline-block;margin-top:10px;color:#111827;font-weight:bold;text-decoration:underline;">${escapeEmailHtml(buttonText)}</a>` : ''}</div></td></tr>`;
+  return `<tr><td style="padding:12px 0 0 0;text-align:left;"><table role="presentation" width="${widthPct}%" cellspacing="0" cellpadding="0" border="0" style="width:${widthPct}%;max-width:100%;"><tr><td style="text-align:left;background:${escapeEmailHtml(bg)};border:${borderWidth}px solid ${escapeEmailHtml(border)};border-radius:${radius}px;padding:${padding}px;color:#111827;min-height:${minHeight}px;">${title ? `<strong style="display:block;margin:0 0 6px;font-size:15px;">${escapeEmailHtml(title)}</strong>` : ''}${text ? `<p style="margin:0;color:#4b5563;font-size:14px;line-height:1.5;">${escapeEmailHtml(text)}</p>` : ''}${buttonText ? `<a href="${escapeEmailHtml(buttonUrl || context.reviewUrl || '#')}" style="display:inline-block;margin-top:10px;color:#111827;font-weight:bold;text-decoration:underline;">${escapeEmailHtml(buttonText)}</a>` : ''}</td></tr></table></td></tr>`;
 }
 
 async function findPrimaryReviewTemplate(shopDomain) {
