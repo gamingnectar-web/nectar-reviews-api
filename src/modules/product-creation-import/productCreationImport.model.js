@@ -133,7 +133,6 @@ productCreationImportSchema.index({ shopDomain: 1, 'lines.sku': 1 });
 productCreationImportSchema.index({ shopDomain: 1, 'lines.barcode': 1 });
 productCreationImportSchema.index({ shopDomain: 1, 'purchaseOrder.status': 1, createdAt: -1 });
 
-
 const skuRuleSchema = new mongoose.Schema({
   enabled: { type: Boolean, default: true },
   name: { type: String, default: '' },
@@ -148,17 +147,24 @@ const skuRuleSchema = new mongoose.Schema({
   overwriteExistingSku: { type: Boolean, default: false },
 }, { _id: false });
 
+const skuPrefixRulesSchema = new mongoose.Schema({
+  enabled: { type: Boolean, default: true },
+  mode: { type: String, enum: ['vendor_first_two', 'custom', 'none'], default: 'vendor_first_two' },
+  customPrefix: { type: String, default: '' },
+  separator: { type: String, default: '-' },
+  overwriteExistingSku: { type: Boolean, default: false },
+}, { _id: false });
+
 const conditionalRuleSchema = new mongoose.Schema({
   enabled: { type: Boolean, default: true },
   name: { type: String, default: '' },
   whenField: { type: String, default: 'title' },
   operator: { type: String, enum: ['contains', 'equals', 'starts_with', 'ends_with', 'exists'], default: 'contains' },
   value: { type: String, default: '' },
-  actionType: { type: String, enum: ['add_tag', 'set_product_type', 'set_vendor', 'set_metafield', 'title_prefix', 'title_suffix'], default: 'add_tag' },
+  actionType: { type: String, enum: ['add_tag', 'recommend_tag', 'set_product_type', 'set_vendor', 'set_metafield', 'set_theme_template', 'add_collection', 'title_prefix', 'title_suffix'], default: 'recommend_tag' },
   actionTarget: { type: String, default: '' },
   actionValue: { type: String, default: '' },
 }, { _id: false });
-
 
 const metafieldMappingRuleSchema = new mongoose.Schema({
   enabled: { type: Boolean, default: true },
@@ -184,6 +190,7 @@ const productCreationImportSettingsSchema = new mongoose.Schema({
     separator: { type: String, default: '-' },
     overwriteExistingHandle: { type: Boolean, default: false },
   },
+  skuPrefixRules: { type: skuPrefixRulesSchema, default: () => ({}) },
   skuRules: { type: [skuRuleSchema], default: [] },
   conditionalRules: { type: [conditionalRuleSchema], default: [] },
   metafieldMappingRules: { type: [metafieldMappingRuleSchema], default: [] },

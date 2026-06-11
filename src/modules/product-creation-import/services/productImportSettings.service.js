@@ -19,6 +19,13 @@ const DEFAULT_SETTINGS = {
     generateSeoAltText: true,
     dedupeByCanonicalUrl: true,
   },
+  skuPrefixRules: {
+    enabled: true,
+    mode: 'vendor_first_two',
+    customPrefix: '',
+    separator: '-',
+    overwriteExistingSku: false,
+  },
   skuRules: [
     {
       enabled: true,
@@ -76,6 +83,7 @@ function mergeDefaults(settings = {}) {
     ...settings,
     handleRules: { ...DEFAULT_SETTINGS.handleRules, ...(settings.handleRules || {}) },
     imageRules: { ...DEFAULT_SETTINGS.imageRules, ...(settings.imageRules || {}) },
+    skuPrefixRules: { ...DEFAULT_SETTINGS.skuPrefixRules, ...(settings.skuPrefixRules || {}) },
     skuRules: Array.isArray(settings.skuRules) ? settings.skuRules : DEFAULT_SETTINGS.skuRules,
     conditionalRules: Array.isArray(settings.conditionalRules) ? settings.conditionalRules : DEFAULT_SETTINGS.conditionalRules,
     metafieldMappingRules: Array.isArray(settings.metafieldMappingRules) ? settings.metafieldMappingRules : DEFAULT_SETTINGS.metafieldMappingRules,
@@ -107,6 +115,18 @@ function cleanRuleList(list = [], limit = 60) {
   }));
 }
 
+function cleanSkuPrefixRules(input = {}) {
+  const mode = ['vendor_first_two', 'custom', 'none'].includes(input.mode) ? input.mode : 'vendor_first_two';
+  const separator = cleanText(input.separator || '-', 4) || '-';
+  return {
+    enabled: input.enabled !== false && mode !== 'none',
+    mode,
+    customPrefix: cleanSkuPart(input.customPrefix || '', 14),
+    separator,
+    overwriteExistingSku: Boolean(input.overwriteExistingSku),
+  };
+}
+
 function cleanConditionalRules(list = []) {
   return (Array.isArray(list) ? list : []).slice(0, 80).map((rule) => ({
     enabled: rule.enabled !== false,
@@ -119,7 +139,6 @@ function cleanConditionalRules(list = []) {
     actionValue: cleanText(rule.actionValue || '', 500),
   }));
 }
-
 
 function cleanMetafieldMappingRules(list = []) {
   return (Array.isArray(list) ? list : []).slice(0, 150).map((rule) => ({
@@ -155,6 +174,7 @@ async function saveProductImportSettings({ shopDomain, settings = {} }) {
       generateSeoAltText: payload.imageRules?.generateSeoAltText !== false,
       dedupeByCanonicalUrl: payload.imageRules?.dedupeByCanonicalUrl !== false,
     },
+    skuPrefixRules: cleanSkuPrefixRules(payload.skuPrefixRules || {}),
     vendorPresets: Array.from(new Set((payload.vendorPresets || []).map((item) => cleanText(item, 120)).filter(Boolean))).slice(0, 200),
     skuRules: cleanRuleList(payload.skuRules),
     conditionalRules: cleanConditionalRules(payload.conditionalRules),
@@ -200,6 +220,37 @@ function titleCode(title = '') {
 function codeFrom(value = '', length = 6) {
   const code = cleanText(value, 80).replace(/[^a-z0-9]/gi, '').toUpperCase();
   return code.slice(0, length) || 'GEN';
+}
+
+function cleanSkuPart(value = '', max = 80) {
+  return cleanText(value || '', max)
+    .replace(/[^a-z0-9_-]/gi, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toUpperCase()
+    .slice(0, max);
+}
+
+function vendorFirstTwo(vendor = '') {
+  return cleanText(vendor || '', 80).replace(/[^a-z0-9]/gi, '').slice(0, 2).toUpperCase();
+}
+
+function applyImportedSkuPrefix(draft = {}, settings = {}) {
+  const rules = { ...DEFAULT_SETTINGS.skuPrefixRules, ...(settings.skuPrefixRules || {}) };
+  const raw = cleanSkuPart(draft.sku || draft.supplierSku || draft.supplierProductCode || '');
+  if (!raw) return '';
+  if (rules.enabled === false || rules.mode === 'none') return raw;
+  if (raw.includes('-') && !rules.overwriteExistingSku) {
+    const firstPart = raw.split('-')[0];
+    if (firstPart && firstPart.length <= 14 && !/^SKU$/i.test(firstPart)) return raw;
+  }
+  const prefix = rules.mode === 'custom'
+    ? cleanSkuPart(rules.customPrefix || '', 14)
+    : (cleanSkuPart(rules.customPrefix || '', 14) || vendorFirstTwo(draft.vendor));
+  if (!prefix) return raw;
+  if (raw === prefix || raw.startsWith(`${prefix}-`) || raw.startsWith(prefix)) return raw;
+  const separator = cleanText(rules.separator || '-', 4) || '-';
+  return `${prefix}${separator}${raw}`.replace(/-{2,}/g, '-').slice(0, 80);
 }
 
 function applyHandleRules(draft = {}, settings = {}) {
@@ -290,7 +341,6 @@ function applySkuRules(draft = {}, settings = {}) {
   return sku;
 }
 
-
 function ruleMatchesDraft(rule = {}, draft = {}) {
   const tags = parseTags(draft.tags).join(', ').toLowerCase();
   const checks = [
@@ -317,11 +367,19 @@ function applyMetafieldMappingRules(draft = {}, settings = {}) {
 }
 
 function applySettingsToDraft(draft = {}, settings = {}) {
-  let next = applyConditionalRules({ ...draft }, mergeDefaults(settings));
-  next = applyMetafieldMappingRules(next, mergeDefaults(settings));
-  next.handle = applyHandleRules(next, settings);
-  next.sku = applySkuRules(next, settings);
+  const mergedSettings = mergeDefaults(settings);
+  let next = applyConditionalRules({ ...draft }, mergedSettings);
+  next = applyMetafieldMappingRules(next, mergedSettings);
+  next.handle = applyHandleRules(next, mergedSettings);
+  next.sku = applyImportedSkuPrefix(next, mergedSettings);
+  next.sku = applySkuRules(next, mergedSettings);
   return next;
 }
 
-module.exports = { DEFAULT_SETTINGS, getProductImportSettings, saveProductImportSettings, applySettingsToDraft };
+module.exports = {
+  DEFAULT_SETTINGS,
+  getProductImportSettings,
+  saveProductImportSettings,
+  applySettingsToDraft,
+  applyImportedSkuPrefix,
+};

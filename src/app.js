@@ -44,6 +44,23 @@ function startTrashAutoCleanup() {
 }
 startTrashAutoCleanup();
 
+function injectProductImportCleanupAssets(html = '') {
+  let next = String(html || '');
+  const cssTag = '<link rel="stylesheet" href="/product-creation-import-cleanup.css?v=pci-cleanup-2">';
+  const jsTag = '<script src="/product-creation-import-cleanup.js?v=pci-cleanup-2" defer></script>';
+
+  if (!next.includes('/product-creation-import-cleanup.css')) {
+    if (next.includes('</head>')) next = next.replace('</head>', `  ${cssTag}\n</head>`);
+    else next = `${cssTag}\n${next}`;
+  }
+
+  if (!next.includes('/product-creation-import-cleanup.js')) {
+    if (next.includes('</body>')) next = next.replace('</body>', `  ${jsTag}\n</body>`);
+    else next = `${next}\n${jsTag}`;
+  }
+
+  return next;
+}
 
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
@@ -119,7 +136,7 @@ app.get('/admin', async (req, res, next) => {
     }
 
     const filePath = path.join(publicDir, 'admin.html');
-    const html = fs.readFileSync(filePath, 'utf8')
+    const html = injectProductImportCleanupAssets(fs.readFileSync(filePath, 'utf8'))
       .replace(/__SHOPIFY_API_KEY__/g, env.shopifyApiKey || '')
       .replace(/__APP_URL__/g, env.appUrl || '');
     return res.type('html').send(html);
