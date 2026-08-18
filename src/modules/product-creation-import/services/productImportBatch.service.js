@@ -1,5 +1,6 @@
 const ProductImportBatch = require('../productImportBatch.model');
 const { extractProductFromUrl } = require('../extractors/urlProductExtractor');
+const { extractProductsFromPhotos } = require('../extractors/photoProductExtractor');
 const { normaliseDraftProduct } = require('./normaliseProduct.service');
 const { enrichProductDraft } = require('./productEnrichment.service');
 const { createShopifyProductFromDraft } = require('./shopifyProduct.service');
@@ -43,11 +44,14 @@ function cleanDefaults(defaults = {}) {
 
 function buildBatchItem({ url = {}, manual = {}, index = 0, defaults = {} }) {
   const sourceUrl = cleanUrl(url.sourceUrl || manual.sourceUrl || manual.url || '');
+  const sourceType = cleanText(manual.sourceType || (sourceUrl ? 'url' : 'manual'), 40);
   const title = cleanText(manual.title || manual.name || '', 220);
   return {
     itemId: manual.itemId || makeLineId(index),
-    sourceType: sourceUrl ? 'url' : 'manual',
+    sourceType: ['url', 'manual', 'invoice_line', 'photo'].includes(sourceType) ? sourceType : (sourceUrl ? 'url' : 'manual'),
     sourceUrl,
+    sourceWebsite: cleanUrl(manual.sourceWebsite || manual.website || defaults.supplierUrl || ''),
+    sourceImageDataUrl: String(manual.sourceImageDataUrl || '').slice(0, 1_500_000),
     originalInput: cleanText(url.originalInput || manual.originalInput || sourceUrl || title, 1000),
     title,
     vendor: cleanText(manual.vendor || defaults.vendor || defaults.brand || '', 120),
@@ -57,7 +61,7 @@ function buildBatchItem({ url = {}, manual = {}, index = 0, defaults = {} }) {
     status: 'queued',
     approvalStatus: 'pending',
     confidence: 0,
-    draft: title ? normaliseDraftProduct({ ...defaults, ...manual, source: sourceUrl ? 'url' : 'manual', sourceUrl, title }) : {},
+    draft: title ? normaliseDraftProduct({ ...defaults, ...manual, source: sourceUrl ? 'url' : (sourceType === 'photo' ? 'photo' : 'manual'), sourceUrl, title }) : {},
     extractedData: {},
     aiEnrichment: {},
     nutrition: {},
@@ -65,6 +69,8 @@ function buildBatchItem({ url = {}, manual = {}, index = 0, defaults = {} }) {
     selectedImages: [],
     rejectedImages: [],
     supplementLabelImages: [],
+    visualEvidence: manual.visualEvidence || {},
+    requiredChecks: Array.isArray(manual.requiredChecks) ? manual.requiredChecks : [],
     validation: { status: 'unchecked', issues: [] },
     error: '',
     updatedAt: new Date(),
@@ -246,11 +252,15 @@ function looksTruncated(value = '') {
 function validateDraft(draft = {}, item = {}) {
   const blockers = [];
   const warnings = [];
+  const requiredChecks = Array.isArray(item.requiredChecks) ? item.requiredChecks : [];
+  const hasOpenRequiredCheck = requiredChecks.some((check) => check?.required !== false && !String(item.nutrition?.[check.key] || draft.enrichment?.photoImportChecks?.[check.key] || '').trim());
   const nutrition = item.nutrition || {};
   if (!draft.title || /^imported product$/i.test(draft.title)) blockers.push('Product title needs review.');
   if (!draft.images?.length) blockers.push('No selected product images.');
   if (!draft.productType) blockers.push('Product type missing.');
   if (!draft.vendor) blockers.push('Vendor/brand missing.');
+  if (hasOpenRequiredCheck) blockers.push('Required product-line/formula check still needs confirming.');
+  if (item.sourceType === 'photo' && !draft.sourceUrl && !item.sourceUrl) warnings.push('Photo import needs a verified source/product URL before final trust.');
 
   if (!plainTextFromHtml(draft.descriptionHtml)) warnings.push('Product description is missing or empty.');
   if (!draft.productCategory) warnings.push('Shopify product category missing.');
@@ -266,12 +276,13 @@ function validateDraft(draft = {}, item = {}) {
   return { status, issues, blockers, warnings, itemId: item.itemId };
 }
 
-async function createBatch({ shopDomain, name = '', defaults = {}, links = [], manualItems = [] }) {
+async function createBatch({ shopDomain, name = '', defaults = {}, links = [], manualItems = [], photoItems = [] }) {
   const clean = cleanDefaults(defaults);
   const urlItems = parseLinks(links);
   const manual = Array.isArray(manualItems) ? manualItems : [];
+  const photos = Array.isArray(photoItems) ? photoItems.map((item) => ({ ...item, sourceType: 'photo' })) : [];
   const seen = new Set();
-  const items = [...urlItems.map((url, index) => buildBatchItem({ url, index, defaults: clean })), ...manual.map((item, index) => buildBatchItem({ manual: item, index: index + urlItems.length, defaults: clean }))]
+  const items = [...urlItems.map((url, index) => buildBatchItem({ url, index, defaults: clean })), ...manual.map((item, index) => buildBatchItem({ manual: item, index: index + urlItems.length, defaults: clean })), ...photos.map((item, index) => buildBatchItem({ manual: item, index: index + urlItems.length + manual.length, defaults: clean }))]
     .filter((item) => {
       const key = item.sourceUrl || item.title || item.originalInput;
       if (!key || seen.has(key)) return false;
@@ -317,13 +328,14 @@ async function updateBatchDefaults({ shopDomain, batchId, defaults = {} }) {
   return { batch };
 }
 
-async function addBatchItems({ shopDomain, batchId, links = [], manualItems = [] }) {
+async function addBatchItems({ shopDomain, batchId, links = [], manualItems = [], photoItems = [] }) {
   const { batch } = await getBatch({ shopDomain, batchId });
   const defaults = cleanDefaults(batch.defaults || {});
   const existing = new Set((batch.items || []).map((item) => item.sourceUrl || item.title || item.originalInput).filter(Boolean));
   const urlItems = parseLinks(links);
   const manual = Array.isArray(manualItems) ? manualItems : [];
-  const newItems = [...urlItems.map((url, index) => buildBatchItem({ url, index: batch.items.length + index, defaults })), ...manual.map((item, index) => buildBatchItem({ manual: item, index: batch.items.length + urlItems.length + index, defaults }))]
+  const photos = Array.isArray(photoItems) ? photoItems.map((item) => ({ ...item, sourceType: 'photo' })) : [];
+  const newItems = [...urlItems.map((url, index) => buildBatchItem({ url, index: batch.items.length + index, defaults })), ...manual.map((item, index) => buildBatchItem({ manual: item, index: batch.items.length + urlItems.length + index, defaults })), ...photos.map((item, index) => buildBatchItem({ manual: item, index: batch.items.length + urlItems.length + manual.length + index, defaults }))]
     .filter((item) => {
       const key = item.sourceUrl || item.title || item.originalInput;
       if (!key || existing.has(key)) return false;
@@ -352,7 +364,10 @@ async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
     item.extractedData = extracted.rawExtract || {};
     item.confidence = Number(extracted.confidence || 0);
   } else {
-    draft = mergeDefaultsIntoDraft(item.draft || { title: item.title, source: 'manual' }, defaults);
+    draft = mergeDefaultsIntoDraft(item.draft || { title: item.title, source: item.sourceType === 'photo' ? 'photo' : 'manual' }, defaults);
+    if (item.sourceType === 'photo') {
+      draft.enrichment = { ...(draft.enrichment || {}), visualEvidence: item.visualEvidence || {}, requiredChecks: item.requiredChecks || [] };
+    }
   }
 
   draft = applyMerchantSeoPattern(applyLockedBatchDefaults(draft, defaults), defaults);
@@ -395,6 +410,13 @@ async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
   item.scannedAt = new Date();
   item.updatedAt = new Date();
   return item;
+}
+
+async function analyseProductPhotos({ shopDomain, photos = [], brand = '', sourceWebsite = '', notes = '', defaults = {} }) {
+  const clean = cleanDefaults(defaults || {});
+  const result = await extractProductsFromPhotos({ photos, brand: brand || clean.vendor || clean.brand || clean.supplierName, sourceWebsite: sourceWebsite || clean.supplierUrl, notes, defaults: clean });
+  const items = (result.items || []).map((item, index) => buildBatchItem({ manual: item, index, defaults: clean }));
+  return { ...result, items };
 }
 
 async function scanBatch({ shopDomain, batchId, itemIds = [], limit = 20, processAll = false, useAi = true }) {
@@ -454,6 +476,7 @@ async function updateBatchItem({ shopDomain, batchId, itemId, patch = {} }) {
     };
     const draft = normaliseDraftProduct(mergedDraft);
     item.draft = draft;
+    if (draft.sourceUrl) item.sourceUrl = draft.sourceUrl;
     if (Array.isArray(patch.draft.metafields)) item.metafieldPlan = normaliseMetafields(patch.draft.metafields);
     item.title = draft.title;
     item.vendor = draft.vendor;
@@ -465,6 +488,9 @@ async function updateBatchItem({ shopDomain, batchId, itemId, patch = {} }) {
   }
   if (patch.nutrition) {
     item.nutrition = { ...(item.nutrition || {}), ...patch.nutrition };
+    if (Array.isArray(item.requiredChecks) && item.requiredChecks.length) {
+      item.requiredChecks = item.requiredChecks.map((check) => ({ ...check, confirmedValue: item.nutrition?.[check.key] || '' }));
+    }
     const profileMetafields = profileToMetafields(item.nutrition);
     item.draft = applyProfileToDraft(item.draft || {}, item.nutrition);
     item.metafieldPlan = normaliseMetafields([...(item.metafieldPlan || []), ...profileMetafields, ...(item.draft?.metafields || [])]);
@@ -488,6 +514,8 @@ async function updateBatchItem({ shopDomain, batchId, itemId, patch = {} }) {
     item.draft = normaliseDraftProduct({ ...(item.draft || {}), metafields: item.metafieldPlan });
     item.validation = validateDraft(item.draft, item);
   }
+  if (patch.visualEvidence) item.visualEvidence = { ...(item.visualEvidence || {}), ...patch.visualEvidence };
+  if (Array.isArray(patch.requiredChecks)) item.requiredChecks = patch.requiredChecks;
   if (patch.status) item.status = cleanText(patch.status, 40);
   item.updatedAt = new Date();
   refreshBatchSummary(batch);
@@ -551,6 +579,7 @@ async function createShopifyDraftsForBatch({ shopDomain, batchId, itemIds = [], 
 
 module.exports = {
   createBatch,
+  analyseProductPhotos,
   listBatches,
   getBatch,
   updateBatchDefaults,

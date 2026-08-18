@@ -22,6 +22,7 @@ const {
 const {
   createBatch,
   listBatches,
+  analyseProductPhotos,
   getBatch,
   updateBatchDefaults,
   addBatchItems,
@@ -84,6 +85,26 @@ router.post('/batches', asyncRoute(async (req, res) => {
     defaults: body.defaults || {},
     links: body.links || body.urls || body.linkText || '',
     manualItems: Array.isArray(body.manualItems) ? body.manualItems : [],
+    photoItems: Array.isArray(body.photoItems) ? body.photoItems : [],
+  });
+  res.json(result);
+}));
+
+
+router.post('/photos/analyse', asyncRoute(async (req, res) => {
+  const body = req.body || {};
+  const photos = Array.isArray(body.photos) ? body.photos : [];
+  const totalBytes = photos.reduce((sum, photo) => sum + String(photo.imageDataUrl || '').length, 0);
+  if (!photos.length && !String(body.notes || '').trim()) return res.status(400).json({ error: 'Upload at least one product photo or paste product titles in notes.' });
+  if (photos.length > 30) return res.status(413).json({ error: 'Please analyse 30 photos or fewer at once.' });
+  if (totalBytes > 4_500_000) return res.status(413).json({ error: 'Photo upload is too large. Use fewer photos or smaller screenshots.' });
+  const result = await analyseProductPhotos({
+    shopDomain: shopDomainFromReq(req),
+    photos,
+    brand: body.brand || body.vendor || '',
+    sourceWebsite: body.sourceWebsite || body.website || '',
+    notes: body.notes || '',
+    defaults: body.defaults || {},
   });
   res.json(result);
 }));
@@ -105,6 +126,7 @@ router.post('/batches/:batchId/items', asyncRoute(async (req, res) => {
     batchId: req.params.batchId,
     links: body.links || body.urls || body.linkText || '',
     manualItems: Array.isArray(body.manualItems) ? body.manualItems : [],
+    photoItems: Array.isArray(body.photoItems) ? body.photoItems : [],
   });
   res.json(result);
 }));

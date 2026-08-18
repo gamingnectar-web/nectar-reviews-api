@@ -41,12 +41,45 @@
       <article class="panel">
         <h2>Product links</h2>
         <p class="muted">One URL per line is best. The backend will accept however many links you paste; large batches can be scanned in chunks.</p>
-        <textarea id="batch-links" rows="15" placeholder="https://example.com/products/product-one\nhttps://example.com/products/product-two"></textarea>
+        <textarea id="batch-links" rows="9" placeholder="https://example.com/products/product-one\nhttps://example.com/products/product-two"></textarea>
         <div class="action-row">
           <button class="secondary-btn" id="add-links" disabled>Add links to current batch</button>
           <button class="primary-btn" id="scan-batch" disabled>Scan all queued</button>
         </div>
         <p id="batch-status" class="status-text">No batch loaded.</p>
+      </article>
+    </section>
+
+    <section class="batch-grid photo-batch-grid">
+      <article class="panel photo-import-panel">
+        <div class="section-head compact-head">
+          <div>
+            <h2>Mass import from photo</h2>
+            <p class="muted">Upload product photos/screenshots that show the product image and title. Tell the importer the brand and source website so AI can read the photo, queue the product, and keep source checks clear.</p>
+          </div>
+          <span class="badge warning">AI-assisted</span>
+        </div>
+        <div class="form-grid">
+          <label>Brand / vendor<input id="photo-brand" list="vendor-options" placeholder="G FUEL, AdvancedGG, Z-Zero"></label>
+          <label>Source website<input id="photo-source-website" placeholder="https://gfuel.com"></label>
+          <label class="full-span">Product photos / screenshots<input id="photo-files" type="file" accept="image/*" multiple></label>
+          <label class="full-span">Notes / pasted product titles<textarea id="photo-notes" rows="4" placeholder="Optional: one known product title per line, offer context, or anything visible but hard to read."></textarea></label>
+        </div>
+        <div class="action-row">
+          <button class="secondary-btn" id="analyse-photos">Analyse photos</button>
+          <button class="primary-btn" id="add-photo-items" disabled>Add analysed photos to batch</button>
+        </div>
+        <p id="photo-status" class="status-text">No product photos analysed yet.</p>
+        <div id="photo-results" class="photo-results"></div>
+      </article>
+      <article class="panel photo-rules-panel">
+        <h2>Brand checks</h2>
+        <p class="muted">These checks are forced into the review queue whenever AI cannot safely pick the right product line.</p>
+        <div class="brand-rule-list">
+          <div><strong>G FUEL</strong><span>Confirm V1 / V2 / Hydration because formula drives ingredient-library matching.</span></div>
+          <div><strong>AdvancedGG</strong><span>Confirm ENERGY, FOCUS, HYDRATION or SLEEP if the source/photo is unclear.</span></div>
+          <div><strong>Z-Zero</strong><span>Confirm ENERGY or HYDRATION if the source/photo is unclear.</span></div>
+        </div>
       </article>
     </section>
 

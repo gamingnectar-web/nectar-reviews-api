@@ -1,5 +1,5 @@
 (() => {
-  const state = { batch: null, batches: [], activeItemId: '', metadata: {}, activeScanningItemId: '', completedScanIds: new Set(), rejectedSuggestions: {} };
+  const state = { batch: null, batches: [], activeItemId: '', metadata: {}, activeScanningItemId: '', completedScanIds: new Set(), rejectedSuggestions: {}, photoItems: [] };
   const $ = (id) => document.getElementById(id);
   const params = new URLSearchParams(window.location.search);
   const parentShopDomain = (() => {
@@ -91,6 +91,7 @@
       handleLocation: $('default-location')?.value || '',
       collections: csv('default-collections'),
       recommendedTags: csv('default-tags'),
+      supplierUrl: $('photo-source-website')?.value || '',
       currency: 'GBP',
     };
   }
@@ -128,11 +129,12 @@
     setBusy('Creating batch…');
     const data = await api('/batches', {
       method: 'POST',
-      body: JSON.stringify({ name: $('batch-name').value, defaults: defaults(), links: $('batch-links').value }),
+      body: JSON.stringify({ name: $('batch-name').value, defaults: defaults(), links: $('batch-links').value, photoItems: state.photoItems || [] }),
     });
     state.batch = data.batch;
     setBusy(`Batch created with ${state.batch.summary?.total || state.batch.items?.length || 0} item(s).`);
     $('batch-links').value = '';
+    clearPhotoResults();
     renderBatch();
     setLoadedControls();
     await loadRecentBatches();
@@ -146,6 +148,141 @@
     $('batch-links').value = '';
     setBusy(`Added ${data.added || 0} new item(s).`);
     renderBatch();
+  }
+
+
+  function setPhotoStatus(message, isError = false) {
+    const el = $('photo-status');
+    if (!el) return;
+    el.textContent = message;
+    el.className = `status-text ${isError ? 'error-text' : ''}`;
+  }
+
+  function clearPhotoResults() {
+    state.photoItems = [];
+    if ($('photo-results')) $('photo-results').innerHTML = '';
+    if ($('add-photo-items')) $('add-photo-items').disabled = true;
+  }
+
+  function syncPhotoDefaults() {
+    if ($('photo-brand') && !$('photo-brand').value) $('photo-brand').value = $('default-vendor')?.value || $('default-supplier')?.value || '';
+    if ($('default-supplier') && !$('default-supplier').value && $('photo-brand')?.value) $('default-supplier').value = $('photo-brand').value;
+    if ($('default-vendor') && !$('default-vendor').value && $('photo-brand')?.value) $('default-vendor').value = $('photo-brand').value;
+  }
+
+  async function imageFileToDataUrl(file) {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 1400;
+        const ratio = Math.min(1, max / Math.max(img.width || max, img.height || max));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round((img.width || max) * ratio));
+        canvas.height = Math.max(1, Math.round((img.height || max) * ratio));
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
+  }
+
+  async function analysePhotos() {
+    syncPhotoDefaults();
+    const files = Array.from($('photo-files')?.files || []).slice(0, 30);
+    const notes = $('photo-notes')?.value || '';
+    if (!files.length && !notes.trim()) return setPhotoStatus('Upload at least one product photo, or paste one product title per line as notes.', true);
+    setPhotoStatus(`Preparing ${files.length || 'note-only'} photo item(s)…`);
+    const photos = [];
+    for (const file of files) {
+      photos.push({ filename: file.name, mimeType: file.type || 'image/jpeg', imageDataUrl: await imageFileToDataUrl(file) });
+    }
+    setPhotoStatus('Reading product titles from photo(s)…');
+    const data = await api('/photos/analyse', {
+      method: 'POST',
+      body: JSON.stringify({
+        brand: $('photo-brand')?.value || $('default-vendor')?.value || $('default-supplier')?.value || '',
+        sourceWebsite: $('photo-source-website')?.value || '',
+        notes,
+        defaults: defaults(),
+        photos,
+      }),
+    });
+    state.photoItems = data.items || [];
+    renderPhotoResults(data.extractionError || '');
+    $('add-photo-items').disabled = !state.photoItems.length;
+    setPhotoStatus(state.photoItems.length ? `Found ${state.photoItems.length} product candidate(s). Review the checks, then add them to the batch.` : 'No products found in the uploaded photos.', !state.photoItems.length);
+  }
+
+  function renderPhotoResults(error = '') {
+    const el = $('photo-results');
+    if (!el) return;
+    if (!state.photoItems.length) {
+      el.innerHTML = error ? `<p class="error-text">${escapeHtml(error)}</p>` : '';
+      return;
+    }
+    el.innerHTML = `${error ? `<p class="error-text">${escapeHtml(error)}</p>` : ''}<div class="photo-candidate-grid">${state.photoItems.map((item, index) => renderPhotoCandidate(item, index)).join('')}</div>`;
+    el.querySelectorAll('[data-photo-field]').forEach((input) => input.addEventListener('input', () => {
+      const idx = Number(input.dataset.photoIndex);
+      const fieldName = input.dataset.photoField;
+      if (!state.photoItems[idx]) return;
+      if (fieldName === 'title') state.photoItems[idx].draft = { ...(state.photoItems[idx].draft || {}), title: input.value };
+      state.photoItems[idx][fieldName] = input.value;
+    }));
+    el.querySelectorAll('[data-photo-check]').forEach((select) => select.addEventListener('change', () => {
+      const idx = Number(select.dataset.photoIndex);
+      const key = select.dataset.photoCheck;
+      const item = state.photoItems[idx];
+      if (!item) return;
+      item.nutrition = { ...(item.nutrition || {}), [key]: select.value };
+      item.requiredChecks = (item.requiredChecks || []).map((check) => check.key === key ? { ...check, confirmedValue: select.value } : check);
+      item.draft = { ...(item.draft || {}), enrichment: { ...(item.draft?.enrichment || {}), photoImportChecks: { ...(item.draft?.enrichment?.photoImportChecks || {}), [key]: select.value } } };
+    }));
+  }
+
+  function renderPhotoCandidate(item = {}, index = 0) {
+    const checks = item.requiredChecks || [];
+    const confidence = Math.round(Number(item.confidence || 0) * 100);
+    const img = item.sourceImageDataUrl || '';
+    const sourceSearch = item.visualEvidence?.sourceSearchUrl || '';
+    return `<div class="photo-candidate-card">
+      <div class="photo-candidate-media">${img ? `<img src="${escapeAttr(img)}" alt="">` : '<span class="badge blocked">No image</span>'}</div>
+      <div class="photo-candidate-body">
+        <label>Product title<input data-photo-index="${index}" data-photo-field="title" value="${escapeAttr(item.title || item.draft?.title || '')}"></label>
+        <label>Vendor<input data-photo-index="${index}" data-photo-field="vendor" list="vendor-options" value="${escapeAttr(item.vendor || item.draft?.vendor || '')}"></label>
+        <label>Source URL, if visible/known<input data-photo-index="${index}" data-photo-field="sourceUrl" value="${escapeAttr(item.sourceUrl || '')}" placeholder="Paste exact supplier product URL if known"></label>
+        <div class="photo-candidate-meta"><span class="badge warning">${confidence || 0}%</span>${sourceSearch ? `<a target="_blank" rel="noopener" href="${escapeAttr(sourceSearch)}">Open source search</a>` : ''}</div>
+        ${checks.length ? `<div class="photo-check-list">${checks.map((check) => `<label>${escapeHtml(check.label || check.key)}<select data-photo-index="${index}" data-photo-check="${escapeAttr(check.key)}"><option value="">Choose…</option>${(check.options || []).map((option) => `<option value="${escapeAttr(option)}" ${(item.nutrition?.[check.key] || check.confirmedValue) === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}</select><small>${escapeHtml(check.help || '')}</small></label>`).join('')}</div>` : '<small class="muted">No forced brand check needed from this photo.</small>'}
+      </div>
+    </div>`;
+  }
+
+  async function addPhotoItemsToBatch() {
+    if (!state.photoItems.length) return setPhotoStatus('Analyse photos first.', true);
+    syncPhotoDefaults();
+    if (!state.batch?._id) {
+      setPhotoStatus('Creating a new photo import batch…');
+      const data = await api('/batches', { method: 'POST', body: JSON.stringify({ name: $('batch-name').value || `${$('photo-brand')?.value || 'Photo'} import batch`, defaults: defaults(), links: $('batch-links').value, photoItems: state.photoItems }) });
+      state.batch = data.batch;
+      setLoadedControls();
+      clearPhotoResults();
+      renderBatch();
+      await loadRecentBatches();
+      return setPhotoStatus(`Created batch with ${state.batch.summary?.total || state.batch.items?.length || 0} item(s).`);
+    }
+    setPhotoStatus('Adding photo products to current batch…');
+    const data = await api(`/batches/${state.batch._id}/items`, { method: 'POST', body: JSON.stringify({ photoItems: state.photoItems }) });
+    state.batch = data.batch;
+    clearPhotoResults();
+    renderBatch();
+    setPhotoStatus(`Added ${data.added || 0} photo-derived product(s) to the batch.`);
   }
 
   async function scanBatch() {
@@ -202,13 +339,13 @@
   }
 
   function renderItemRow(item) {
-    const image = item.selectedImages?.[0]?.src || item.draft?.images?.[0]?.src || '';
+    const image = item.selectedImages?.[0]?.src || item.draft?.images?.[0]?.src || item.sourceImageDataUrl || '';
     const issues = item.validation?.issues || [];
     const validationStatus = item.validation?.status || 'unchecked';
     const scanClass = state.activeScanningItemId === item.itemId ? 'actively-scanning' : (state.completedScanIds?.has?.(item.itemId) ? 'scan-complete' : '');
-    return `<div class="item-row ${escapeAttr(item.status || '')} ${escapeAttr(scanClass)}">
+    return `<div class="item-row ${escapeAttr(item.sourceType || '')} ${escapeAttr(item.status || '')} ${escapeAttr(scanClass)}">
       <div>${image ? `<img src="${escapeAttr(image)}" alt="">` : '<span class="badge blocked">No image</span>'}</div>
-      <div class="item-title"><strong>${escapeHtml(item.draft?.title || item.title || item.originalInput || 'Queued product')}</strong><small>${escapeHtml(item.sourceUrl || item.originalInput || '')}</small>${issues.length ? `<small class="issue-preview">${escapeHtml(issues.slice(0, 2).join(' · '))}${issues.length > 2 ? ` +${issues.length - 2} more` : ''}</small>` : ''}</div>
+      <div class="item-title"><strong>${escapeHtml(item.draft?.title || item.title || item.originalInput || 'Queued product')}</strong><small>${escapeHtml(item.sourceType === 'photo' ? (item.sourceWebsite || item.sourceUrl || item.originalInput || 'Photo import') : (item.sourceUrl || item.originalInput || ''))}</small>${issues.length ? `<small class="issue-preview">${escapeHtml(issues.slice(0, 2).join(' · '))}${issues.length > 2 ? ` +${issues.length - 2} more` : ''}</small>` : ''}</div>
       <span class="badge ${escapeAttr(item.status || '')}">${escapeHtml(item.status || 'queued')}</span>
       <span class="badge ${escapeAttr(validationStatus)}">${escapeHtml(validationStatus)}</span>
       <span class="badge ${escapeAttr(item.approvalStatus || '')}">${escapeHtml(item.approvalStatus || 'pending')}</span>
@@ -290,10 +427,13 @@
           ${clientIssues.length ? `<ul>${clientIssues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join('')}</ul>` : '<p>Still check the product carefully before creating the Shopify draft.</p>'}
         </div>
 
+        ${renderRequiredChecks(item)}
+
         ${section('product-basics', 'Product basics', 'Core Shopify fields. These are editable overrides; saving writes them back to the batch item.', `
           <div class="field-grid two">
             ${field('Product title', 'title', draft.title || item.title || '', 'text', 'Shown as the Shopify product title.')}
             ${field('URL handle', 'handle', draft.handle || '', 'text', 'This becomes the Shopify product URL handle.')}
+            ${field('Verified source URL', 'sourceUrl', draft.sourceUrl || item.sourceUrl || '', 'text', 'Exact supplier/product URL. Photo imports should be source-checked before final creation.')}
             ${field('Vendor', 'vendor', draft.vendor || item.vendor || '', 'text', 'Brand/vendor used in Shopify.')}
             ${field('Product type', 'productType', draft.productType || item.productType || '', 'text', 'Your Shopify product type.')}
             ${field('Shopify category', 'productCategory', draft.productCategory || item.productCategory || '', 'text', 'Taxonomy/category for the product.')}
@@ -364,6 +504,7 @@
             ${field('Servings', 'nutrition.servings', nutrition.servings ?? '', 'number', 'Servings per tub/pack.')}
             ${field('Caffeine mg per serving', 'nutrition.caffeineMgPerServing', nutrition.caffeineMgPerServing ?? '', 'number', 'Leave blank only if genuinely unknown.')}
             ${field('Formula version', 'nutrition.formulaVersion', nutrition.formulaVersion || '', 'text', 'Formula / version when visible.')}
+            ${field('Product line / grouped profile', 'nutrition.productLine', nutrition.productLine || nutrition.groupedProfiles || '', 'text', 'Energy, Focus, Hydration, Sleep, etc.')}
             ${field('Ingredients label image', 'nutrition.ingredientsLabelImage', nutrition.ingredientsLabelImage || nutrition.supplementLabelImage || (supplementLabels[0]?.src || ''), 'text', 'Image URL saved to the Ingredients Label metafield.')}
             ${field('Allergen', 'nutrition.allergen', nutrition.allergen || '', 'text', 'Known allergen text.')}
             ${field('Flavour profile', 'nutrition.flavourProfile', nutrition.flavourProfile || '', 'textarea', 'Short flavour profile.')}
@@ -400,6 +541,14 @@
         </div>
       </aside>
     </div>`;
+  }
+
+
+  function renderRequiredChecks(item = {}) {
+    const checks = item.requiredChecks || item.draft?.enrichment?.requiredChecks || [];
+    if (!checks.length) return '';
+    const nutrition = item.nutrition || {};
+    return `<article class="editor-section required-check-section" id="product-required-checks"><div class="section-title"><h3>Required brand checks</h3><p>These product-line choices affect ingredient-library and metafield mapping. The importer blocks approval until the required choice is saved.</p></div><div class="field-grid two">${checks.map((check) => `<label class="editor-field"><span>${escapeHtml(check.label || check.key)}</span><select data-field="nutrition.${escapeAttr(check.key)}"><option value="">Choose…</option>${(check.options || []).map((option) => `<option value="${escapeAttr(option)}" ${(nutrition[check.key] || check.confirmedValue) === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}</select><small>${escapeHtml(check.help || '')}</small></label>`).join('')}</div></article>`;
   }
 
   function renderCommercialSuggestions(item = {}) {
@@ -736,6 +885,7 @@
     const supplementLabelImages = currentLabelImages();
     const draft = {
       title: readField('title'),
+      sourceUrl: readField('sourceUrl'),
       handle: readField('handle'),
       descriptionHtml: readField('descriptionHtml'),
       vendor: readField('vendor'),
@@ -766,6 +916,8 @@
       servings: readNumberField('nutrition.servings'),
       caffeineMgPerServing: readNumberField('nutrition.caffeineMgPerServing'),
       formulaVersion: readField('nutrition.formulaVersion'),
+      productLine: readField('nutrition.productLine'),
+      groupedProfiles: readField('nutrition.productLine') || readField('nutrition.groupedProfiles'),
       ingredientsLabelImage: readField('nutrition.ingredientsLabelImage') || supplementLabelImages[0]?.src || '',
       allergen: readField('nutrition.allergen'),
       flavourProfile: readField('nutrition.flavourProfile'),
@@ -804,6 +956,8 @@
     const draft = item.draft || {};
     const nutrition = item.nutrition || {};
     const issues = [];
+    if ((item.requiredChecks || []).some((check) => check.required !== false && !String(nutrition?.[check.key] || '').trim())) issues.push('Required brand/product-line check needs confirming.');
+    if (item.sourceType === 'photo' && !draft.sourceUrl && !item.sourceUrl) issues.push('Photo import needs a verified source URL before final trust.');
     if (!stripHtml(draft.descriptionHtml)) issues.push('Description is blank or not visible.');
     if (!draft.productCategory) issues.push('Shopify category is missing.');
     if (!draft.price) issues.push('Price is missing.');
@@ -831,6 +985,9 @@
   $('approve-ready').addEventListener('click', () => approveReady().catch((e) => setBusy(e.message)));
   $('create-drafts').addEventListener('click', () => createDrafts().catch((e) => setBusy(e.message)));
   $('refresh-batches').addEventListener('click', () => loadRecentBatches().catch((e) => setBusy(e.message)));
+  $('analyse-photos')?.addEventListener('click', () => analysePhotos().catch((e) => setPhotoStatus(e.message, true)));
+  $('add-photo-items')?.addEventListener('click', () => addPhotoItemsToBatch().catch((e) => setPhotoStatus(e.message, true)));
+  $('photo-brand')?.addEventListener('input', () => { if (!$('default-supplier')?.value) $('default-supplier').value = $('photo-brand').value; if (!$('default-vendor')?.value) $('default-vendor').value = $('photo-brand').value; });
   $('close-dialog').addEventListener('click', () => $('item-dialog').close());
   Promise.all([loadMetadata(), loadRecentBatches()]).catch((e) => { $('recent-batches').innerHTML = `<p class="muted">${escapeHtml(e.message)}</p>`; });
 })();

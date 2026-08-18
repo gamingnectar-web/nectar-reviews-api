@@ -18,8 +18,10 @@ const imageCandidateSchema = new mongoose.Schema({
 
 const batchItemSchema = new mongoose.Schema({
   itemId: { type: String, required: true },
-  sourceType: { type: String, enum: ['url', 'manual', 'invoice_line'], default: 'url' },
+  sourceType: { type: String, enum: ['url', 'manual', 'invoice_line', 'photo'], default: 'url' },
   sourceUrl: { type: String, default: '' },
+  sourceWebsite: { type: String, default: '' },
+  sourceImageDataUrl: { type: String, default: '' },
   originalInput: { type: String, default: '' },
   title: { type: String, default: '' },
   vendor: { type: String, default: '' },
@@ -39,6 +41,8 @@ const batchItemSchema = new mongoose.Schema({
   rejectedImages: { type: [imageCandidateSchema], default: [] },
   supplementLabelImages: { type: [imageCandidateSchema], default: [] },
   suggestions: { type: mongoose.Schema.Types.Mixed, default: {} },
+  visualEvidence: { type: mongoose.Schema.Types.Mixed, default: {} },
+  requiredChecks: { type: [mongoose.Schema.Types.Mixed], default: [] },
   validation: {
     status: { type: String, enum: ['unchecked', 'ready', 'warning', 'blocked'], default: 'unchecked' },
     issues: { type: [String], default: [] },
