@@ -430,3 +430,15 @@ textarea { resize: vertical; }
   .photo-check-list { grid-template-columns: 1fr; }
   .photo-candidate-card { grid-template-columns: 88px minmax(0, 1fr); }
 }
+
+
+/* Strict product completeness gate */
+.completeness-section{border:1px solid #e5e7eb;background:#fff}
+.completeness-head{display:flex;justify-content:space-between;align-items:center;margin:0 0 14px;padding:12px 14px;border-radius:12px;background:#f8fafc}
+.completeness-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}
+.completeness-chip{appearance:none;text-align:left;border:2px solid #f59e0b;background:#fffbeb;border-radius:12px;padding:10px 12px;display:grid;grid-template-columns:1fr auto;gap:3px 8px;cursor:pointer;color:inherit}
+.completeness-chip.green{border-color:#22c55e;background:#f0fdf4}
+.completeness-chip.orange{border-color:#f59e0b;background:#fffbeb}
+.completeness-chip small{grid-column:1/-1;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.editor-field.confidence-green{border:2px solid #22c55e!important;background:#f0fdf4!important;border-radius:12px;padding:10px}
+.editor-field.confidence-orange{border:2px solid #f59e0b!important;background:#fffbeb!important;border-radius:12px;padding:10px}

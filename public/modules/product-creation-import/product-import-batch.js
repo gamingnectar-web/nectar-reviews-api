@@ -342,12 +342,13 @@
     const image = item.selectedImages?.[0]?.src || item.draft?.images?.[0]?.src || item.sourceImageDataUrl || '';
     const issues = item.validation?.issues || [];
     const validationStatus = item.validation?.status || 'unchecked';
+    const complete = item.completeness || {};
     const scanClass = state.activeScanningItemId === item.itemId ? 'actively-scanning' : (state.completedScanIds?.has?.(item.itemId) ? 'scan-complete' : '');
     return `<div class="item-row ${escapeAttr(item.sourceType || '')} ${escapeAttr(item.status || '')} ${escapeAttr(scanClass)}">
       <div>${image ? `<img src="${escapeAttr(image)}" alt="">` : '<span class="badge blocked">No image</span>'}</div>
       <div class="item-title"><strong>${escapeHtml(item.draft?.title || item.title || item.originalInput || 'Queued product')}</strong><small>${escapeHtml(item.sourceType === 'photo' ? (item.sourceWebsite || item.sourceUrl || item.originalInput || 'Photo import') : (item.sourceUrl || item.originalInput || ''))}</small>${issues.length ? `<small class="issue-preview">${escapeHtml(issues.slice(0, 2).join(' · '))}${issues.length > 2 ? ` +${issues.length - 2} more` : ''}</small>` : ''}</div>
       <span class="badge ${escapeAttr(item.status || '')}">${escapeHtml(item.status || 'queued')}</span>
-      <span class="badge ${escapeAttr(validationStatus)}">${escapeHtml(validationStatus)}</span>
+      <span class="badge ${escapeAttr(validationStatus)}">${escapeHtml(complete.total ? `${complete.green}/${complete.total}` : validationStatus)}</span>
       <span class="badge ${escapeAttr(item.approvalStatus || '')}">${escapeHtml(item.approvalStatus || 'pending')}</span>
       <span>${escapeHtml(item.draft?.productType || item.productType || '—')}</span>
       <span>${escapeHtml(item.nutrition?.productFlavour || '—')}</span>
@@ -392,6 +393,7 @@
     $('dialog-subtitle').textContent = item.sourceUrl || item.originalInput || '';
     $('dialog-body').innerHTML = renderEditor(item);
     bindEditorEvents(itemId);
+    applyConfidenceStyling(item);
     if (!$('item-dialog').open || !options.keepOpen) $('item-dialog').showModal();
   }
 
@@ -409,8 +411,8 @@
       <aside class="editor-nav">
         <div class="readiness-card ${escapeAttr(item.validation?.status || 'unchecked')}">
           <span class="eyebrow">READINESS</span>
-          <strong>${escapeHtml(item.validation?.status || 'unchecked')}</strong>
-          <small>${confidence ? `${confidence}% source confidence` : 'AI/source confidence unavailable'}</small>
+          <strong>${escapeHtml(item.completeness?.total ? `${item.completeness.green}/${item.completeness.total} complete` : (item.validation?.status || 'unchecked'))}</strong>
+          <small>${item.completeness?.orange ? `${item.completeness.orange} orange field(s) need review` : (confidence ? `${confidence}% source confidence` : 'AI/source confidence unavailable')}</small>
         </div>
         <a href="#product-basics">Basics</a>
         <a href="#product-description">Description</a>
@@ -427,6 +429,8 @@
           ${clientIssues.length ? `<ul>${clientIssues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join('')}</ul>` : '<p>Still check the product carefully before creating the Shopify draft.</p>'}
         </div>
 
+        ${renderCompletenessPanel(item)}
+
         ${renderRequiredChecks(item)}
 
         ${section('product-basics', 'Product basics', 'Core Shopify fields. These are editable overrides; saving writes them back to the batch item.', `
@@ -438,6 +442,9 @@
             ${field('Product type', 'productType', draft.productType || item.productType || '', 'text', 'Your Shopify product type.')}
             ${field('Shopify category', 'productCategory', draft.productCategory || item.productCategory || '', 'text', 'Taxonomy/category for the product.')}
             ${field('Theme template', 'themeTemplate', draft.themeTemplate || item.templateSuffix || '', 'text', 'Template suffix only, e.g. gfuel.')}
+            ${field('Dietary supplement', 'dietarySupplement', draft.dietarySupplement || '', 'select', 'Confirm whether this is a dietary supplement.', ['','Yes','No'])}
+            ${field('Package type', 'packageType', draft.packageType || '', 'select', 'Physical package format.', ['','Tub','Can','Sachet','Bottle','Box','Bag','Other'])}
+            ${field('Beverage product form', 'beverageProductForm', draft.beverageProductForm || '', 'select', 'Powder, ready-to-drink or other form.', ['','Powder','Ready-to-drink','Tablet/Capsule','Other','N/A'])}
             ${field('Collections', 'collections', joinCsv(draft.collections), 'text', 'Comma-separated collection handles/names. Use existing Shopify collection names/handles.')}<div class="option-pills">${siteOptionPills('collections')}</div>
             ${field('Suggested tags', 'recommendedTags', joinCsv(draft.recommendedTags), 'text', 'Suggestions only, drawn from existing site tags where possible. Tags below are the ones actually saved.')}<div class="option-pills">${siteOptionPills('recommended-tags')}</div>
             ${field('Approved Shopify tags', 'tags', joinCsv(draft.tags), 'text', 'Comma-separated tags to apply. Nothing is added unless it is here.')}<div class="option-pills">${siteOptionPills('tags')}</div>
@@ -480,7 +487,11 @@
             ${field('Compare-at price', 'compareAtPrice', draft.compareAtPrice || '', 'number', 'Optional crossed-out price.')}
             ${field('Cost per item', 'cost', draft.cost || '', 'number', 'Your landed/product cost.')}
             ${field('SKU', 'sku', draft.sku || '', 'text', 'Stock keeping unit.')}
-            ${field('Barcode / GTIN', 'barcode', draft.barcode || '', 'text', 'Optional barcode.')}
+            ${field('Barcode / GTIN', 'barcode', draft.barcode || '', 'text', 'Barcode / GTIN.')}
+            ${field('Barcode status', 'barcodeStatus', draft.barcodeStatus || (draft.barcode ? 'provided' : 'needs_check'), 'select', 'If no barcode is supplied, explicitly confirm unavailable.', ['needs_check','provided','unavailable'])}
+            ${field('HS / Harmonized system code', 'harmonizedSystemCode', draft.harmonizedSystemCode || '', 'text', 'Suggested from similar existing inventory where available; confirm before approval.')}
+            ${field('Sales channels / POS', 'salesChannelPolicy', draft.salesChannelPolicy || 'all', 'select', 'All uses Shopify global publication scope when the draft is later activated.', ['all','web'])}
+            ${field('Compare-at price state', 'compareAtPriceMode', draft.compareAtPriceMode || (draft.compareAtPrice ? 'value' : 'needs_check'), 'select', 'Confirm None when there is genuinely no compare-at price.', ['needs_check','value','none'])}
             ${field('Quantity', 'quantity', draft.quantity || 1, 'number', 'Initial stock quantity for draft context.')}
             ${field('Weight', 'weight', draft.weight || '', 'number', 'Shipping weight.')}
             ${field('Weight unit', 'weightUnit', draft.weightUnit || 'g', 'select', 'Weight unit.', ['g','kg','oz','lb'])}
@@ -544,6 +555,36 @@
   }
 
 
+  function renderCompletenessPanel(item = {}) {
+    const c = item.completeness || {};
+    if (!Array.isArray(c.fields) || !c.fields.length) return '';
+    return `<article class="editor-section completeness-section"><div class="section-title"><h3>Product completeness</h3><p>Green = deterministic, exact site match or merchant-confirmed. Orange = inferred, missing or still needs your confirmation.</p></div><div class="completeness-head"><strong>${c.green || 0}/${c.total || c.fields.length} confirmed</strong><span>${c.orange || 0} to review</span></div><div class="completeness-grid">${c.fields.map((f)=>`<button type="button" class="completeness-chip ${escapeAttr(f.status || 'orange')}" data-confirm-completeness="${escapeAttr(f.name)}"><span>${escapeHtml(f.label)}</span><strong>${f.status === 'green' ? '✓' : 'Check'}</strong><small>${escapeHtml(String(f.value || 'Missing').replace(/<[^>]+>/g,' ').slice(0,70))}</small></button>`).join('')}</div></article>`;
+  }
+
+  function applyConfidenceStyling(item = {}) {
+    const body = $('dialog-body');
+    if (!body) return;
+    const fields = item.completeness?.fields || [];
+    const aliases = { seoTitle:'seoTitle', seoDescription:'seoDescription', formulaVersion:'nutrition.formulaVersion', productFlavour:'nutrition.productFlavour', flavourFamily:'nutrition.flavourFamily', sweetness:'nutrition.sweetness', sourness:'nutrition.sourness', flavourProfile:'nutrition.flavourProfile' };
+    fields.forEach((f)=>{
+      const name = aliases[f.name] || f.name;
+      const control = body.querySelector(`[data-field="${cssEscape(name)}"]`);
+      control?.closest('.editor-field')?.classList.add(f.status === 'green' ? 'confidence-green' : 'confidence-orange');
+    });
+    body.querySelectorAll('[data-confirm-completeness]').forEach((button)=>button.addEventListener('click',()=>{
+      if (button.classList.contains('green')) return;
+      const name=button.dataset.confirmCompleteness;
+      const item=findItem(state.activeItemId); if (!item) return;
+      item.draft = item.draft || {}; item.draft.fieldConfirmations = { ...(item.draft.fieldConfirmations || {}), [name]: true };
+      button.classList.remove('orange'); button.classList.add('green'); button.querySelector('strong').textContent='✓';
+      setEditorStatus(`${name} confirmed locally. Save overrides to persist it.`);
+    }));
+  }
+
+  function collectFieldConfirmations(itemId) {
+    const item=findItem(itemId); return { ...(item?.draft?.fieldConfirmations || {}) };
+  }
+
   function renderRequiredChecks(item = {}) {
     const checks = item.requiredChecks || item.draft?.enrichment?.requiredChecks || [];
     if (!checks.length) return '';
@@ -560,6 +601,7 @@
       ['weight', 'Weight', 'weight'],
       ['sku', 'SKU', 'sku'],
       ['barcode', 'Barcode', 'barcode'],
+      ['harmonizedSystemCode', 'HS code', 'harmonizedSystemCode'],
     ].map(([key, label, fieldName]) => {
       const suggestion = suggestions[key];
       const value = suggestion?.value || '';
@@ -901,6 +943,15 @@
       cost: readField('cost'),
       sku: readField('sku'),
       barcode: readField('barcode'),
+      barcodeStatus: readField('barcodeStatus'),
+      harmonizedSystemCode: readField('harmonizedSystemCode'),
+      dietarySupplement: readField('dietarySupplement'),
+      packageType: readField('packageType'),
+      beverageProductForm: readField('beverageProductForm'),
+      salesChannelPolicy: readField('salesChannelPolicy') || 'all',
+      compareAtPriceMode: readField('compareAtPriceMode'),
+      fieldConfirmations: collectFieldConfirmations(itemId),
+      fieldInference: { ...(findItem(itemId)?.draft?.fieldInference || {}) },
       quantity: readNumberField('quantity') || 1,
       weight: readField('weight'),
       weightUnit: readField('weightUnit') || 'g',
@@ -922,6 +973,15 @@
       allergen: readField('nutrition.allergen'),
       flavourProfile: readField('nutrition.flavourProfile'),
     };
+    const previous = findItem(itemId)?.draft || {};
+    const confirmations = { ...(draft.fieldConfirmations || {}) };
+    const inference = { ...(draft.fieldInference || {}) };
+    ['title','descriptionHtml','vendor','themeTemplate','price','compareAtPrice','dietarySupplement','packageType','beverageProductForm','productType','handle','weight','harmonizedSystemCode','barcode','salesChannelPolicy','sku'].forEach((key)=>{
+      const before = key === 'descriptionHtml' ? previous.descriptionHtml : previous[key];
+      if (String(draft[key] ?? '') !== String(before ?? '')) { confirmations[key]=true; delete inference[key]; }
+    });
+    draft.fieldConfirmations=confirmations; draft.fieldInference=inference;
+    if (draft.barcode) draft.barcodeStatus='provided';
     setEditorStatus('Saving overrides…');
     const data = await api(`/batches/${state.batch._id}/items/${itemId}`, {
       method: 'PATCH',

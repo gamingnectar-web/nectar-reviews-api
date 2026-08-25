@@ -2,7 +2,8 @@ const ProductImportBatch = require('../productImportBatch.model');
 const { extractProductFromUrl } = require('../extractors/urlProductExtractor');
 const { extractProductsFromPhotos } = require('../extractors/photoProductExtractor');
 const { normaliseDraftProduct } = require('./normaliseProduct.service');
-const { enrichProductDraft } = require('./productEnrichment.service');
+const { enrichProductDraft, getProductImportMetadata } = require('./productEnrichment.service');
+const { applyCatalogueRules, completeness } = require('./productCompleteness.service');
 const { createShopifyProductFromDraft } = require('./shopifyProduct.service');
 const { scoreAndSelectProductImages } = require('./imageCandidateScoring.service');
 const { refineImagePlanWithAi } = require('./productMediaClassifier.service');
@@ -385,6 +386,14 @@ async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
   draft = applyProfileToDraft(draft, profile);
   draft.metafields = mergeMetafields(draft.metafields || [], supplementLabelMetafields(supplementImages));
   draft = await enrichProductDraft({ shopDomain, draft });
+  const metadata = await getProductImportMetadata({ shopDomain }).catch(() => ({}));
+  const commercial = draft.suggestions || draft.enrichment?.suggestions || {};
+  draft.fieldInference={...(draft.fieldInference||{})};
+  if (!draft.price && commercial.price?.value) { draft.price = commercial.price.value; draft.fieldInference.price=true; }
+  if (!draft.compareAtPrice && commercial.compareAtPrice?.value) { draft.compareAtPrice = commercial.compareAtPrice.value; draft.compareAtPriceMode = 'value'; draft.fieldInference.compareAtPrice=true; }
+  if (!draft.weight && commercial.weight?.value) { draft.weight = commercial.weight.value; draft.weightUnit = commercial.weight.weightUnit || 'g'; draft.fieldInference.weight=true; }
+  if (!draft.harmonizedSystemCode && commercial.harmonizedSystemCode?.value) { draft.harmonizedSystemCode = commercial.harmonizedSystemCode.value; draft.fieldInference.harmonizedSystemCode=true; }
+  draft = normaliseDraftProduct(applyCatalogueRules({ draft, metadata }));
   draft = applyMerchantSeoPattern(applyLockedBatchDefaults(draft, defaults), defaults);
   draft = applyProfileToDraft(draft, profile);
   draft.metafields = mergeMetafields(draft.metafields || [], supplementLabelMetafields(supplementImages));
@@ -405,7 +414,9 @@ async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
   item.selectedImages = byPageImageOrder(imagePlan.selected);
   item.rejectedImages = byPageImageOrder(imagePlan.rejected);
   item.supplementLabelImages = byPageImageOrder(supplementImages);
+  item.completeness = completeness({ draft, item, metadata });
   item.validation = validateDraft(draft, item);
+  if (!item.completeness.ready) { item.validation.status = 'blocked'; item.validation.blockers = item.completeness.blockers; item.validation.issues = Array.from(new Set([...(item.validation.issues || []), ...item.completeness.blockers])); }
   item.status = item.validation.status === 'ready' ? 'analysed' : 'needs_review';
   item.scannedAt = new Date();
   item.updatedAt = new Date();
@@ -467,6 +478,7 @@ async function updateBatchItem({ shopDomain, batchId, itemId, patch = {} }) {
     error.status = 404;
     throw error;
   }
+  const metadata = await getProductImportMetadata({ shopDomain }).catch(() => ({}));
   if (patch.draft) {
     const existingDraft = item.draft || {};
     const mergedDraft = {
@@ -474,7 +486,7 @@ async function updateBatchItem({ shopDomain, batchId, itemId, patch = {} }) {
       ...patch.draft,
       seo: { ...(existingDraft.seo || {}), ...(patch.draft.seo || {}) },
     };
-    const draft = normaliseDraftProduct(mergedDraft);
+    const draft = normaliseDraftProduct(applyCatalogueRules({ draft: mergedDraft, metadata }));
     item.draft = draft;
     if (draft.sourceUrl) item.sourceUrl = draft.sourceUrl;
     if (Array.isArray(patch.draft.metafields)) item.metafieldPlan = normaliseMetafields(patch.draft.metafields);
@@ -517,6 +529,9 @@ async function updateBatchItem({ shopDomain, batchId, itemId, patch = {} }) {
   if (patch.visualEvidence) item.visualEvidence = { ...(item.visualEvidence || {}), ...patch.visualEvidence };
   if (Array.isArray(patch.requiredChecks)) item.requiredChecks = patch.requiredChecks;
   if (patch.status) item.status = cleanText(patch.status, 40);
+  item.completeness = completeness({ draft: item.draft || {}, item, metadata });
+  item.validation = validateDraft(item.draft || {}, item);
+  if (!item.completeness.ready) { item.validation.status = 'blocked'; item.validation.blockers = item.completeness.blockers; item.validation.issues = Array.from(new Set([...(item.validation.issues || []), ...item.completeness.blockers])); }
   item.updatedAt = new Date();
   refreshBatchSummary(batch);
   await batch.save();
@@ -531,6 +546,8 @@ async function setBatchItemApproval({ shopDomain, batchId, itemId, approvalStatu
     error.status = 404;
     throw error;
   }
+  if (approvalStatus === 'approved' && !item.completeness?.total) { const metadata = await getProductImportMetadata({ shopDomain }).catch(() => ({})); item.completeness = completeness({ draft: item.draft || {}, item, metadata }); }
+  if (approvalStatus === 'approved' && item.completeness && item.completeness.ready === false) { const error = new Error(`Product is not complete: ${(item.completeness.blockers || []).slice(0, 4).join(' · ')}`); error.status = 400; throw error; }
   const allowed = ['pending', 'approved', 'rejected'];
   item.approvalStatus = allowed.includes(approvalStatus) ? approvalStatus : 'pending';
   if (item.approvalStatus === 'approved') {

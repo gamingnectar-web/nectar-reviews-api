@@ -446,6 +446,18 @@ function createProductErrorMessage(error) {
   return raw;
 }
 
+
+async function updateInventoryItemCustoms({ shopDomain, inventoryItemId, harmonizedSystemCode = '' }) {
+  const id = numericId(inventoryItemId);
+  const hs = cleanText(harmonizedSystemCode || '', 32);
+  if (!id || !hs) return null;
+  return shopifyFetch(`/admin/api/${env.shopifyApiVersion}/inventory_items/${id}.json`, {
+    shopDomain,
+    method: 'PUT',
+    body: JSON.stringify({ inventory_item: { id: Number(id), harmonized_system_code: hs } }),
+  });
+}
+
 async function createShopifyProductFromDraft({ shopDomain, draft }) {
   const normalised = normaliseDraftProduct(draft || {});
   const tags = Array.isArray(normalised.tags) ? normalised.tags.join(', ') : String(normalised.tags || '');
@@ -478,6 +490,7 @@ async function createShopifyProductFromDraft({ shopDomain, draft }) {
     vendor: normalised.vendor || undefined,
     product_type: normalised.productType || undefined,
     status: 'draft',
+    published_scope: normalised.salesChannelPolicy === 'all' ? 'global' : 'web',
     tags: tags || undefined,
     template_suffix: normalised.themeTemplate && normalised.themeTemplate !== 'default' ? normalised.themeTemplate.replace(/^product\./i, '') : undefined,
     variants: [variant],
@@ -540,6 +553,11 @@ async function createShopifyProductFromDraft({ shopDomain, draft }) {
     } catch (error) {
       collectionAttachWarning = `Product was created, but collections could not be attached. ${error.message || ''}`.trim();
     }
+  }
+
+  if (normalised.harmonizedSystemCode && createdProduct?.variants?.[0]?.inventory_item_id) {
+    try { await updateInventoryItemCustoms({ shopDomain, inventoryItemId: createdProduct.variants[0].inventory_item_id, harmonizedSystemCode: normalised.harmonizedSystemCode }); }
+    catch (error) { inventoryCostWarning = [inventoryCostWarning, `HS code could not be saved: ${error.message || ''}`].filter(Boolean).join(' '); }
   }
 
   if (normalised.cost && createdProduct?.variants?.[0]?.inventory_item_id) {
@@ -709,12 +727,21 @@ async function getCommercialSuggestionsFromExistingProducts({ shopDomain, draft 
   const sku = skuPatternSuggestion(variants.map((variant) => variant.sku), draft.title || '', draft.vendor || '');
   const weightGrams = modalValue(variants.map((variant) => variant.grams).filter((grams) => Number(grams) > 0));
   const sourceProducts = candidates.slice(0, 5).map((product) => ({ title: product.title || '', handle: product.handle || '', vendor: product.vendor || '', productType: product.product_type || '' }));
+  const hsCodes = [];
+  for (const variant of variants.slice(0, 6)) {
+    if (!variant.inventory_item_id) continue;
+    const inv = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/inventory_items/${variant.inventory_item_id}.json`, { shopDomain });
+    const hs = cleanText(inv?.inventory_item?.harmonized_system_code || '', 32);
+    if (hs) hsCodes.push(hs);
+  }
+  const harmonizedSystemCode = modalValue(hsCodes);
   return {
     price: price ? { value: price, confidence: 0.78, source: 'similar Shopify products', sourceProducts } : null,
     compareAtPrice: compareAtPrice ? { value: compareAtPrice, confidence: 0.72, source: 'similar Shopify products', sourceProducts } : null,
     barcode: barcode ? { value: barcode, confidence: 0.7, source: 'similar Shopify products', sourceProducts } : null,
     sku: sku ? { value: sku, confidence: 0.45, source: 'pattern from similar Shopify SKUs', sourceProducts } : null,
     weight: weightGrams ? { value: String(weightGrams), weightUnit: 'g', confidence: 0.72, source: 'similar Shopify products', sourceProducts } : null,
+    harmonizedSystemCode: harmonizedSystemCode ? { value: harmonizedSystemCode, confidence: 0.72, source: 'HS code used by similar Shopify inventory items', sourceProducts } : null,
   };
 }
 

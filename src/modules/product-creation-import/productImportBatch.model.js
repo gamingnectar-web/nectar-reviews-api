@@ -43,6 +43,7 @@ const batchItemSchema = new mongoose.Schema({
   suggestions: { type: mongoose.Schema.Types.Mixed, default: {} },
   visualEvidence: { type: mongoose.Schema.Types.Mixed, default: {} },
   requiredChecks: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  completeness: { type: mongoose.Schema.Types.Mixed, default: {} },
   validation: {
     status: { type: String, enum: ['unchecked', 'ready', 'warning', 'blocked'], default: 'unchecked' },
     issues: { type: [String], default: [] },
