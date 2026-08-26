@@ -6,7 +6,7 @@
 {% assign support_text = block.settings.support_text | default: 'If something didn’t go to plan, tell customer service first — we’d love the chance to sort it out.' %}
 {% assign support_button = block.settings.support_button | default: 'Get help with this order' %}
 
-{{ 'nectar-review-page.css' | asset_url | stylesheet_tag }}
+<link rel="stylesheet" href="{{ nectar_app_url }}/storefront/nectar-review-page.css?v=reviews-ui-20260826-3">
 
 <section
   class="nectar-review-page"
@@ -18,6 +18,7 @@
   data-support-email="{{ block.settings.support_email | escape }}"
   data-support-url="{{ block.settings.support_url | escape }}"
   data-customer-logged-in="{% if customer %}true{% else %}false{% endif %}"
+  data-review-ui-build="reviews-ui-20260826-3"
   style="--primary:{{ block.settings.primary_color }};--accent:{{ block.settings.star_color }};--nectar-review-width:{{ block.settings.max_width }}px;"
 >
   {% if block.settings.header_image != blank %}
@@ -85,7 +86,7 @@
   </div>
 </section>
 
-<script src="{{ 'nectar-review-page.js' | asset_url }}" defer></script>
+<script src="{{ nectar_app_url }}/storefront/nectar-review-page.js?v=reviews-ui-20260826-3" defer></script>
 
 {% schema %}
 {

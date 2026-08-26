@@ -719,7 +719,8 @@
     @media(max-width:1200px){.widget-library-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.migration-hero{grid-template-columns:1fr}}
     @media(max-width:760px){.widget-library-grid,.migration-form-grid{grid-template-columns:1fr}.migration-form-grid .wide{grid-column:auto}.widget-card-actions .secondary-btn,.widget-card-actions .primary-btn{width:100%;}}
 
-  </style>
+  .review-live-alert{position:sticky;top:0;z-index:950;display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 16px;padding:13px 16px;border:1px solid #b2ddff;border-radius:14px;background:#eff8ff;box-shadow:0 8px 24px rgba(15,23,42,.08)}.review-live-alert[hidden]{display:none!important}.review-live-alert>div:first-child{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.review-live-alert strong{color:#1849a9}.review-live-alert span{color:#475467;font-size:13px}.review-live-alert-actions{display:flex;align-items:center;gap:8px}.review-alert-close{width:32px;height:32px;border:0;background:transparent;font-size:22px;cursor:pointer;color:#475467}.review-action-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;margin-left:5px;padding:0 6px;border-radius:999px;background:#d92d20;color:#fff;font-size:10px;font-weight:950}.admin-build-version{margin:14px 12px 18px;padding:8px 10px;border-radius:9px;background:#f8fafc;border:1px solid #e5e7eb;color:#667085;font:700 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:760px){.review-live-alert{align-items:flex-start;flex-direction:column}.review-live-alert-actions{width:100%;justify-content:space-between}}
+</style>
   <link rel="stylesheet" href="/admin-responsive-polish.css?v=nav-polish-1">
 </head>
 <body>
@@ -734,7 +735,7 @@
         <div class="nav-group">
           <p class="nav-title">Manage</p>
           <button class="tab-btn active" onclick="window.tab('v-dash')">Dashboard</button>
-          <button class="tab-btn" onclick="window.tab('v-mgr')">Reviews</button>
+          <button class="tab-btn" onclick="window.tab('v-mgr')"><span>Reviews <span id="nav-review-action-badge" class="review-action-badge" hidden>0</span></span></button>
           <button class="tab-btn" onclick="window.tab('v-widget-library')">Reviews Widget Library</button>
           <button class="tab-btn" onclick="window.tab('v-migration')">Migration Centre</button>
           <button class="tab-btn" onclick="window.tab('v-import')">Review Importer</button>
@@ -762,9 +763,14 @@
           <button class="tab-btn" onclick="window.tab('v-manual')">Manual Setup</button>
         </div>
       </nav>
+      <div class="admin-build-version" id="admin-build-version">Build loading…</div>
     </aside>
 
     <main class="main">
+      <div id="review-live-alert" class="review-live-alert" hidden>
+        <div><strong id="review-live-alert-title">New reviews need attention</strong><span id="review-live-alert-copy"></span></div>
+        <div class="review-live-alert-actions"><button type="button" class="secondary-btn compact" onclick="window.openPendingReviews?.()">Review now</button><button type="button" class="review-alert-close" aria-label="Dismiss review notification" onclick="window.dismissReviewAlert?.()">×</button></div>
+      </div>
       <section id="v-dash" class="view active">
         <div class="dash-header">
           <div>

@@ -317,6 +317,8 @@ window.load = async function() {
     const session = await adminFetch('/admin/session');
     const security = document.getElementById('security-status');
     if (security) security.textContent = `Protected admin session active via ${session.authMode}. Shop: ${session.shopDomain}`;
+    const buildEl = document.getElementById('admin-build-version');
+    if (buildEl) buildEl.textContent = `Build ${String(session.buildCommit || 'local').slice(0, 8)}`;
 
     data = await adminFetch(`/admin/reviews?t=${Date.now()}`);
     const config = await adminFetch(`/admin/settings?t=${Date.now()}`);
@@ -328,6 +330,7 @@ window.load = async function() {
     window.loadReviewsLaunchChecklist?.();
     window.loadLoyaltyConfig?.();
     window.generateFlowCode();
+    window.pollReviewAlerts?.();
   } catch (error) {
     console.error('Init error:', error);
     window.showToast(error.message || 'Could not load admin data');
@@ -336,6 +339,41 @@ window.load = async function() {
       list.innerHTML = `<div class="panel"><h3>Admin authentication required</h3><p class="muted">${escapeHtml(error.message || 'Could not authenticate admin session.')}</p><p class="muted">For dev access, set ADMIN_SHARED_SECRET in Render and open /admin?shop=${escapeHtml(SHOP_DOMAIN)}&admin_secret=YOUR_SECRET once.</p></div>`;
     }
   }
+};
+
+
+let reviewAlertDismissedFor = 0;
+let reviewAlertLastCheckedAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+window.openPendingReviews = function(){
+  window.tab('v-mgr');
+  window.renderLists?.();
+};
+
+window.dismissReviewAlert = function(){
+  const badge = document.getElementById('nav-review-action-badge');
+  reviewAlertDismissedFor = Number(badge?.textContent || 0);
+  document.getElementById('review-live-alert')?.setAttribute('hidden','hidden');
+};
+
+window.pollReviewAlerts = async function(){
+  try {
+    const result = await adminFetch(`/admin/reviews/changes?since=${encodeURIComponent(reviewAlertLastCheckedAt)}&t=${Date.now()}`);
+    reviewAlertLastCheckedAt = result.checkedAt || new Date().toISOString();
+    const actionable = Number(result.actionableCount || 0);
+    const badge = document.getElementById('nav-review-action-badge');
+    if (badge) { badge.textContent = String(actionable); badge.hidden = actionable <= 0; }
+    const alert = document.getElementById('review-live-alert');
+    const title = document.getElementById('review-live-alert-title');
+    const copy = document.getElementById('review-live-alert-copy');
+    if (!alert || !title || !copy) return;
+    if (actionable <= 0) { alert.hidden = true; reviewAlertDismissedFor = 0; return; }
+    if (actionable === reviewAlertDismissedFor && Number(result.count || 0) <= 0) return;
+    title.textContent = `${actionable} review${actionable === 1 ? '' : 's'} awaiting attention`;
+    const newCount = Number(result.count || 0);
+    copy.textContent = newCount > 0 ? `${newCount} new since the last check. Review moderation updates automatically.` : `${Number(result.pendingCount || 0)} pending · ${Number(result.holdCount || 0)} on hold.`;
+    alert.hidden = false;
+  } catch (error) { console.warn('Review notification poll skipped:', error.message || error); }
 };
 
 function hydrateSettings(config) {
@@ -2167,3 +2205,5 @@ document.addEventListener('DOMContentLoaded', initResponsiveNavGroups);
   window.addEventListener('resize', apply);
   window.addEventListener('load', apply);
 })();
+
+if (!window.__reviewAlertPollStarted) { window.__reviewAlertPollStarted = true; setInterval(() => window.pollReviewAlerts?.(), 12000); }

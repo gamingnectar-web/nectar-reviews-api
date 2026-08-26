@@ -197,6 +197,29 @@
     return res.json();
   }
 
+  function mergeSignedTokenProductContext(data, signedToken) {
+    if (!signedToken || !data || !Array.isArray(data.products)) return data;
+    const payload = decodeSignedReviewTokenPayload(signedToken);
+    if (!payload || !Array.isArray(payload.products) || !payload.products.length) return data;
+    const tokenProducts = new Map(payload.products.map((product) => [String(product.productId || product.id || ''), product]));
+    const merged = data.products.map((product) => {
+      const id = String(product.productId || product.id || '');
+      const signed = tokenProducts.get(id);
+      if (!signed) return product;
+      return {
+        ...product,
+        image: product.image || signed.image || '',
+        handle: product.handle || signed.handle || '',
+        vendor: product.vendor || signed.vendor || '',
+        productType: product.productType || product.type || signed.productType || '',
+        tags: getProductTags(product).length ? getProductTags(product) : getProductTags(signed),
+        metafields: Array.isArray(product.metafields) && product.metafields.length ? product.metafields : (Array.isArray(signed.metafields) ? signed.metafields : []),
+        matchingSliders: Array.isArray(product.matchingSliders) && product.matchingSliders.length ? product.matchingSliders : (Array.isArray(signed.matchingSliders) ? signed.matchingSliders : []),
+      };
+    });
+    return { ...data, products: merged };
+  }
+
   function normaliseProduct(raw, index) {
     const id = String(raw.productId || raw.itemId || raw.id || `product-${index + 1}`);
     return {
@@ -212,7 +235,7 @@
       tags: getProductTags(raw),
       handle: raw.handle || '',
       metafields: Array.isArray(raw.metafields) ? raw.metafields : [],
-      matchingSliders: getMatchingSliders(raw),
+      matchingSliders: (Array.isArray(raw.matchingSliders) && raw.matchingSliders.length) ? raw.matchingSliders : getMatchingSliders(raw),
       raw,
     };
   }
@@ -551,9 +574,12 @@
     try {
       await fetchConfig();
       orderData = await fetchOrderData();
+      const signedToken = params.get('token') || params.get('reviewToken') || '';
+      orderData = mergeSignedTokenProductContext(orderData, signedToken);
       if (orderData?.preview) ui.previewPill.style.display = 'inline-flex';
       supportConfig = { ...supportConfig, ...(orderData.support || {}) };
       products = uniqueProducts((orderData.products || []).map(normaliseProduct));
+      root.dataset.sliderCount = String(products.reduce((sum, product) => sum + (Array.isArray(product.matchingSliders) ? product.matchingSliders.length : 0), 0));
       if (!products.length) throw new Error('No products found');
       await markAlreadyReviewedProducts();
       const alreadyReviewedIds = new Set([...(orderData.alreadyReviewedProductIds || [])].map(String));

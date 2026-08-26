@@ -433,4 +433,28 @@ check('delivery reconciliation stores canonical order dates and parcel statuses'
   requireText(source, 'job.orderCreatedAt = created', 'Persist canonical order date');
 });
 
+check('storefront signed-token context is merged before slider rendering', () => {
+  const js = read('Shopify-Liquid/assets/nectar-review-page.js');
+  return js.includes('mergeSignedTokenProductContext') && js.includes('root.dataset.sliderCount');
+});
+check('Test Centre preserves and enriches product context for signed links', () => {
+  const admin = read('src/routes/admin.js');
+  return admin.includes('matchingSliders: Array.isArray(product.matchingSliders)') && admin.includes('products = await enrichReviewProducts(shopDomain, products');
+});
+check('admin polls actionable review notifications', () => {
+  const adminJs = read('public/admin.js');
+  const adminRoute = read('src/routes/admin.js');
+  return adminJs.includes('pollReviewAlerts') && adminRoute.includes('actionableCount: pendingCount + holdCount');
+});
+check('review page assets can be served from Render for frontend updates', () => {
+  const liquid = read('Shopify-Liquid/blocks/bulk_review_page.liquid');
+  const app = read('src/app.js');
+  return liquid.includes('/storefront/nectar-review-page.js?v=reviews-ui-20260826-3') && app.includes("app.get('/storefront/:asset'");
+});
+check('admin exposes deployed build commit', () => {
+  const env = read('src/config/env.js');
+  const admin = read('src/routes/admin.js');
+  return env.includes('RENDER_GIT_COMMIT') && admin.includes('buildCommit: cleanText(env.buildCommit');
+});
+
 console.log('\nReviews smoke test passed: security and automation wiring look production-ready at build time.');

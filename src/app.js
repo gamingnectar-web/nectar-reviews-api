@@ -145,6 +145,15 @@ app.get('/admin', async (req, res, next) => {
   }
 });
 
+app.get('/storefront/:asset', (req, res, next) => {
+  const allowed = new Set(['nectar-review-page.js', 'nectar-review-page.css']);
+  if (!allowed.has(req.params.asset)) return next();
+  const filePath = path.join(publicDir, 'storefront', req.params.asset);
+  if (!fs.existsSync(filePath)) return res.status(404).end();
+  res.setHeader('Cache-Control', 'public, max-age=60, must-revalidate');
+  return res.sendFile(filePath);
+});
+
 app.get('/review-widget.js', (req, res) => {
   const filePath = path.join(publicDir, 'review-widget.js');
   const js = fs.readFileSync(filePath, 'utf8')

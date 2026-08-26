@@ -724,6 +724,7 @@ router.get('/session', async (req, res) => {
     shopDomain: shop.shopDomain,
     authMode: req.adminAuthMode,
     modules: shop.modules,
+    buildCommit: cleanText(env.buildCommit || '', 80),
   });
 });
 
@@ -745,9 +746,24 @@ router.get('/reviews', async (req, res, next) => {
 router.get('/reviews/changes', async (req, res, next) => {
   try {
     const shopDomain = shopDomainFromReq(req);
-    const since = req.query.since ? new Date(req.query.since) : new Date(Date.now() - 5 * 60 * 1000);
-    const count = await Review.countDocuments({ shopDomain, createdAt: { $gt: since }, isDeleted: false });
-    return res.json({ count, since });
+    const parsedSince = req.query.since ? new Date(req.query.since) : new Date(Date.now() - 5 * 60 * 1000);
+    const since = Number.isNaN(parsedSince.getTime()) ? new Date(Date.now() - 5 * 60 * 1000) : parsedSince;
+    const liveBase = { shopDomain, isDeleted: false, isTestReview: { $ne: true }, testMode: { $ne: true } };
+    const [count, pendingCount, holdCount, latest] = await Promise.all([
+      Review.countDocuments({ ...liveBase, createdAt: { $gt: since } }),
+      Review.countDocuments({ ...liveBase, status: 'pending' }),
+      Review.countDocuments({ ...liveBase, status: 'hold' }),
+      Review.findOne(liveBase).sort({ createdAt: -1 }).select('_id createdAt status rating itemId userId').lean(),
+    ]);
+    return res.json({
+      count,
+      since: since.toISOString(),
+      pendingCount,
+      holdCount,
+      actionableCount: pendingCount + holdCount,
+      latest: latest ? { id: String(latest._id), createdAt: latest.createdAt, status: latest.status, rating: latest.rating, itemId: latest.itemId, userId: latest.userId } : null,
+      checkedAt: new Date().toISOString(),
+    });
   } catch (error) {
     next(error);
   }
@@ -1990,8 +2006,16 @@ function e2eFakeProducts(body = {}) {
     id: cleanText(product.id || product.productId || product.itemId || `gid://shopify/Product/99999999900${index + 1}`, 180),
     productId: cleanText(product.productId || product.id || product.itemId || `gid://shopify/Product/99999999900${index + 1}`, 180),
     itemId: cleanText(product.itemId || product.productId || product.id || `gid://shopify/Product/99999999900${index + 1}`, 180),
-    title: cleanText(product.title || `Nectar Test Product ${index + 1}`, 180),
+    variantId: cleanText(product.variantId || product.variant_id || '', 180),
+    title: cleanText(product.title || product.name || `Nectar Test Product ${index + 1}`, 180),
+    name: cleanText(product.name || product.title || `Nectar Test Product ${index + 1}`, 180),
     handle: cleanText(product.handle || `nectar-test-product-${index + 1}`, 180),
+    image: cleanText(product.image || product.imageUrl || product.productImage || '', 1000),
+    vendor: cleanText(product.vendor || '', 160),
+    productType: cleanText(product.productType || product.product_type || product.type || '', 160),
+    tags: Array.isArray(product.tags) ? product.tags.map((tag) => cleanText(tag, 80)).filter(Boolean) : [],
+    metafields: Array.isArray(product.metafields) ? product.metafields : [],
+    matchingSliders: Array.isArray(product.matchingSliders) ? product.matchingSliders : [],
     quantity: clampNumber(product.quantity, 1, 99, 1),
   }));
 }
@@ -2684,7 +2708,10 @@ router.post('/e2e-tests/run', async (req, res, next) => {
     const recipientEmail = cleanEmail(req.body?.email || req.body?.recipientEmail || readiness.emailSettings?.fromEmail || '');
     const fakeOrderId = cleanText(req.body?.orderId || `NECTAR-TEST-${Date.now().toString().slice(-6)}`, 120);
     const fakeCustomerName = cleanText(req.body?.customerName || 'Nectar Test Customer', 120);
-    const products = e2eFakeProducts(req.body || {});
+    let products = e2eFakeProducts(req.body || {});
+    if (e2eScenarioConfig(scenario).needsReviews) {
+      products = await enrichReviewProducts(shopDomain, products, readiness.settings?.attributeProfiles || []);
+    }
     const blocked = e2eHasBlocking(readiness.prerequisites);
     const steps = [
       { key: 'fake_order', label: 'Create fake order context', status: 'ready', detail: `Prepared fake order ${fakeOrderId} with ${products.length} product(s).` },
