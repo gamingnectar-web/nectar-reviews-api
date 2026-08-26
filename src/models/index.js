@@ -344,6 +344,12 @@ const reviewRequestProductSchema = new mongoose.Schema({
   variantId: { type: String, default: '' },
   title: { type: String, default: 'Purchased product' },
   handle: { type: String, default: '' },
+  image: { type: String, default: '' },
+  vendor: { type: String, default: '' },
+  productType: { type: String, default: '' },
+  tags: { type: [String], default: [] },
+  metafields: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  matchingSliders: { type: [mongoose.Schema.Types.Mixed], default: [] },
   quantity: { type: Number, default: 1 },
 }, { _id: false });
 

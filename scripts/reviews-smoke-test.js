@@ -252,4 +252,63 @@ check('launch portal exposes old-order safety controls', () => {
   requireText(source, 'saveReviewOrderSafety', 'Safety save action');
 });
 
+
+check('review product context schema retains image tags metafields and resolved sliders', () => {
+  const source = read('src/models/index.js');
+  for (const field of ['image:', 'vendor:', 'productType:', 'tags:', 'metafields:', 'matchingSliders:']) requireText(source, field, `Review request product ${field}`);
+});
+
+check('Drink tag resolves the configured review sliders', () => {
+  const { matchingReviewSliders } = require('../src/modules/reviews/reviewProductContext');
+  const rules = [
+    { type: 'tag', condition: 'Drink', label: 'Sourness' },
+    { type: 'tag', condition: 'Drink', label: 'Sweetness' },
+    { type: 'tag', condition: 'Drink', label: 'Flavour' },
+  ];
+  const matched = matchingReviewSliders({ productId: '1234567890', tags: ['Drink', 'Energy'] }, rules);
+  assert.deepStrictEqual(matched.map((item) => item.label), ['Sourness', 'Sweetness', 'Flavour']);
+});
+
+check('unmatched tag does not leak conditional sliders', () => {
+  const { matchingReviewSliders } = require('../src/modules/reviews/reviewProductContext');
+  const matched = matchingReviewSliders({ productId: '1234567890', tags: ['Powder'] }, [{ type: 'tag', condition: 'Drink', label: 'Sourness' }]);
+  assert.strictEqual(matched.length, 0);
+});
+
+check('metafield rules match actual namespaced product metafields', () => {
+  const { matchingReviewSliders } = require('../src/modules/reviews/reviewProductContext');
+  const product = { metafields: [{ namespace: 'core', key: 'review_profile', value: 'drink' }] };
+  assert.strictEqual(matchingReviewSliders(product, [{ type: 'metafield', condition: 'core.review_profile', label: 'Mixability' }]).length, 1);
+});
+
+check('signed review tokens retain customer-facing product context', () => {
+  const { createReviewToken, verifyReviewToken } = require('../src/utils/reviewTokens');
+  const token = createReviewToken({ shopDomain: 'gamingnectar.myshopify.com', email: 'customer@example.com', orderId: 'ORDER-CONTEXT', products: [{ productId: '1234567890', title: 'Drink', image: 'https://cdn.example.com/p.png', tags: ['Drink'], metafields: [{ namespace: 'core', key: 'review_profile', value: 'drink' }], matchingSliders: [{ type: 'tag', condition: 'Drink', label: 'Sourness' }] }] });
+  const verified = verifyReviewToken(token, { shopDomain: 'gamingnectar.myshopify.com', email: 'customer@example.com', orderId: 'ORDER-CONTEXT' });
+  assert.strictEqual(verified.ok, true);
+  assert.strictEqual(verified.payload.products[0].image, 'https://cdn.example.com/p.png');
+  assert.deepStrictEqual(verified.payload.products[0].tags, ['Drink']);
+  assert.strictEqual(verified.payload.products[0].matchingSliders[0].label, 'Sourness');
+});
+
+check('storefront magic-link request canonicalises shopDomain instead of duplicating it', () => {
+  const source = read('Shopify-Liquid/assets/nectar-review-page.js');
+  requireText(source, "magicParams.set('shopDomain', SHOP_DOMAIN)", 'Canonical magic-link shop');
+  requireText(source, "magicParams.delete('shop')", 'Remove alternate shop parameter');
+  assert(!source.includes('magic-link/order?shopDomain=${encodeURIComponent(SHOP_DOMAIN)}&${params.toString()}'), 'Old duplicate shopDomain builder must be removed.');
+});
+
+check('proof order preserves product identity and image context', () => {
+  const source = read('src/routes/admin.js');
+  requireText(source, 'product_id: numericShopifyProductId', 'Proof product ID');
+  requireText(source, "image: cleanText(product.image || '', 1000)", 'Proof product image');
+  requireText(source, 'tags: Array.isArray(product.tags)', 'Proof product tags');
+});
+
+check('saving old-order safety immediately reconciles existing unsent jobs', () => {
+  const source = read('src/routes/admin.js');
+  requireText(source, 'reconciledSkipped', 'Safety reconciliation result');
+  requireText(source, "status: { $in: ['awaiting_delivery', 'scheduled', 'failed', 'blocked'] }", 'Queued-job safety reconciliation');
+});
+
 console.log('\nReviews smoke test passed: security and automation wiring look production-ready at build time.');

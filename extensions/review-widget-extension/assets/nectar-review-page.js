@@ -67,14 +67,10 @@
   }
 
   function getMatchingSliders(product) {
+    if (Array.isArray(product?.matchingSliders) && product.matchingSliders.length) return product.matchingSliders;
     const profiles = appConfig.attributeProfiles || appConfig.profiles || [];
     const tags = getProductTags(product).map((v) => String(v).toLowerCase().trim());
-    const haystack = [
-      ...tags,
-      String(product?.title || product?.name || '').toLowerCase(),
-      String(product?.handle || '').toLowerCase(),
-      String(product?.productId || product?.id || '').toLowerCase(),
-    ].filter(Boolean);
+    const metafields = Array.isArray(product?.metafields) ? product.metafields : [];
     return profiles.filter((profile) => {
       const type = String(profile.type || profile.ruleType || '').toLowerCase().replace(/[^a-z]/g, '');
       const condition = String(profile.condition || profile.value || '').trim().toLowerCase();
@@ -83,10 +79,14 @@
       if (type === 'all' || type === 'global') return true;
       if (!condition) return false;
       if (type === 'tag' || type === 'producttag') return tags.includes(condition);
-      if (type === 'product' || type === 'productid') return String(product?.productId || product?.id || '').toLowerCase() === condition;
+      if (type === 'product' || type === 'productid') return String(product?.productId || product?.id || '').toLowerCase().includes(condition);
       if (type === 'vendor') return String(product?.vendor || '').toLowerCase() === condition;
       if (type === 'type' || type === 'producttype') return String(product?.type || product?.productType || '').toLowerCase() === condition;
-      if (type === 'metafield' || type === 'metafieldkey') return haystack.some((part) => part.includes(condition));
+      if (type === 'metafield' || type === 'metafieldkey') return metafields.some((field) => {
+        const key = String(field?.key || '').toLowerCase();
+        const namespaced = `${String(field?.namespace || '').toLowerCase()}.${key}`;
+        return condition === key || condition === namespaced;
+      });
       return false;
     });
   }
@@ -154,7 +154,11 @@
       };
     }
 
-    const res = await fetch(`${API}/magic-link/order?shopDomain=${encodeURIComponent(SHOP_DOMAIN)}&${params.toString()}&t=${Date.now()}`);
+    const magicParams = new URLSearchParams(params);
+    magicParams.set('shopDomain', SHOP_DOMAIN);
+    magicParams.delete('shop');
+    magicParams.set('t', String(Date.now()));
+    const res = await fetch(`${API}/magic-link/order?${magicParams.toString()}`);
     if (res.status === 403) {
       const err = new Error('Order not delivered yet');
       err.code = 'NOT_DELIVERED';
@@ -173,6 +177,10 @@
       name: raw.name || raw.title || `Product ${index + 1}`,
       title: raw.name || raw.title || `Product ${index + 1}`,
       image: raw.image || raw.productImage || raw.imageUrl || '',
+      vendor: raw.vendor || '',
+      productType: raw.productType || raw.type || '',
+      metafields: Array.isArray(raw.metafields) ? raw.metafields : [],
+      matchingSliders: Array.isArray(raw.matchingSliders) ? raw.matchingSliders : [],
       quantity: raw.quantity || 1,
       tags: getProductTags(raw),
       handle: raw.handle || '',
@@ -516,6 +524,7 @@
     try {
       await fetchConfig();
       orderData = await fetchOrderData();
+      if (orderData?.preview) ui.previewPill.style.display = 'inline-flex';
       supportConfig = { ...supportConfig, ...(orderData.support || {}) };
       products = uniqueProducts((orderData.products || []).map(normaliseProduct));
       if (!products.length) throw new Error('No products found');

@@ -269,14 +269,26 @@ function lockedReviewProofRecipient(emailSettings, settings) {
   );
 }
 
+function numericShopifyProductId(value = '') {
+  const matches = String(value || '').match(/\d{5,}/g) || [];
+  return matches.length ? matches[matches.length - 1] : '';
+}
+
 function sourceJobToProofOrder(sourceJob, proofEmail) {
   const sourceOrder = sourceJob?.orderName || sourceJob?.orderId || 'ORDER';
   const proofStamp = Date.now().toString().slice(-8);
   const products = Array.isArray(sourceJob?.products) && sourceJob.products.length
     ? sourceJob.products.slice(0, 20).map((product, index) => ({
       id: cleanText(product.id || product.productId || product.handle || product.title || `proof-product-${index + 1}`, 180),
+      product_id: numericShopifyProductId(product.productId || product.id),
+      variant_id: numericShopifyProductId(product.variantId),
       title: cleanText(product.title || 'Purchased product', 200),
       handle: cleanText(product.handle || '', 200),
+      image: cleanText(product.image || '', 1000),
+      vendor: cleanText(product.vendor || '', 160),
+      product_type: cleanText(product.productType || '', 160),
+      tags: Array.isArray(product.tags) ? product.tags : [],
+      metafields: Array.isArray(product.metafields) ? product.metafields : [],
       quantity: clampNumber(product.quantity || 1, 1, 999, 1),
     }))
     : [{ id: 'proof-product', title: 'Review proof product', quantity: 1 }];
@@ -336,6 +348,7 @@ function publicReviewRequestJob(job = {}) {
     orderId: job.orderName || job.orderId || '',
     email: job.customerEmail || '',
     customerName: job.customerName || '',
+    orderCreatedAt: job.orderCreatedAt || null,
     productCount: Array.isArray(job.products) ? job.products.length : 0,
     scheduledAt: job.scheduledAt || null,
     sentAt: job.sentAt || null,
@@ -2104,8 +2117,26 @@ router.patch('/review-automation', async (req, res, next) => {
       'reviewAutomation.subject': cleanText(body.subject || 'How was your recent order?', 160),
     };
     await Settings.findOneAndUpdate({ shopDomain }, { $set: update, $setOnInsert: { shopDomain } }, { upsert: true, new: true, setDefaultsOnInsert: true });
+    const safetyCfg = {
+      orderCutoffDate: update['reviewAutomation.orderCutoffDate'],
+      maxOrderAgeDays: update['reviewAutomation.maxOrderAgeDays'],
+    };
+    const candidates = await ReviewRequestJob.find({ shopDomain, testMode: { $ne: true }, status: { $in: ['awaiting_delivery', 'scheduled', 'failed', 'blocked'] } });
+    let reconciledSkipped = 0;
+    for (const job of candidates) {
+      const created = job.orderCreatedAt || job.fulfilledAt || job.createdAt || null;
+      const eligibility = require('../modules/reviews/reviewRequestAutomation').reviewRequestEligibility(created, safetyCfg);
+      if (!eligibility.eligible) {
+        job.status = 'skipped';
+        job.scheduledAt = null;
+        job.blockedReason = eligibility.reason;
+        job.errorMessage = '';
+        await job.save();
+        reconciledSkipped += 1;
+      }
+    }
     const readiness = await automationReadiness(shopDomain);
-    return res.json({ ok: true, ...readiness });
+    return res.json({ ok: true, reconciledSkipped, ...readiness });
   } catch (error) {
     next(error);
   }

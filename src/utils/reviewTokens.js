@@ -27,7 +27,12 @@ function normaliseProduct(product = {}) {
     title: cleanText(product.title || product.name || 'Product', 240) || 'Product',
     name: cleanText(product.name || product.title || 'Product', 240) || 'Product',
     image: cleanText(product.image || product.imageUrl || product.productImage || '', 1000),
+    handle: cleanText(product.handle || '', 200),
+    vendor: cleanText(product.vendor || '', 160),
+    productType: cleanText(product.productType || product.type || '', 160),
     tags: Array.isArray(product.tags) ? product.tags.map((tag) => cleanText(tag, 80)).filter(Boolean) : [],
+    metafields: Array.isArray(product.metafields) ? product.metafields.slice(0, 30).map((field) => ({ namespace: cleanText(field.namespace || '', 80), key: cleanText(field.key || '', 120), value: cleanText(field.value || '', 500), type: cleanText(field.type || field.value_type || '', 80) })).filter((field) => field.key) : [],
+    matchingSliders: Array.isArray(product.matchingSliders) ? product.matchingSliders.slice(0, 20).map((slider) => ({ type: cleanText(slider.type || '', 40), condition: cleanText(slider.condition || '', 160), label: cleanText(slider.label || '', 80) })).filter((slider) => slider.label) : [],
   };
 }
 
@@ -57,7 +62,7 @@ function createReviewToken(input = {}) {
     orderId: cleanText(input.orderId || input.order || '', 120),
     orderDate: cleanText(input.orderDate || input.createdAt || input.orderCreatedAt || '', 80),
     orderName: cleanText(input.orderName || input.orderDisplayName || '', 120),
-    products: Array.isArray(input.products) ? input.products.map(normaliseProduct).filter((p) => p.id).map((p) => ({ id: p.id, productId: p.id, variantId: p.variantId, title: p.title, name: p.name, image: p.image })) : [],
+    products: Array.isArray(input.products) ? input.products.map(normaliseProduct).filter((p) => p.id).map((p) => ({ id: p.id, productId: p.id, variantId: p.variantId, title: p.title, name: p.name, image: p.image, handle: p.handle, vendor: p.vendor, productType: p.productType, tags: p.tags, metafields: p.metafields, matchingSliders: p.matchingSliders })) : [],
     testMode: Boolean(input.testMode || input.isPreview),
     iat: Date.now(),
     exp: Date.now() + expiresMs,

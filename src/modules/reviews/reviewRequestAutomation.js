@@ -6,6 +6,7 @@ const { cleanText, cleanEmail, clampNumber } = require('../../utils/validation')
 const { decryptSecret, hashValue } = require('../../utils/crypto');
 const { createReviewToken } = require('../../utils/reviewTokens');
 const { shopifyFetchOptional } = require('../../utils/shopify');
+const { numericShopifyId, splitShopifyTags, metafieldRuleKeys, matchingReviewSliders } = require('./reviewProductContext');
 
 const DEFAULT_DELAY_DAYS = 14;
 const DEFAULT_CAMPAIGN = 'native_review_request';
@@ -62,6 +63,11 @@ function productFromLineItem(line = {}) {
     variantId: variantId ? `gid://shopify/ProductVariant/${variantId}` : cleanText(line.variantId || '', 160),
     title: cleanText(line.title || line.name || 'Purchased product', 200),
     handle: cleanText(line.handle || '', 200),
+    image: cleanText(line.image || line.image_url || line.product?.image?.src || '', 1000),
+    vendor: cleanText(line.vendor || line.product?.vendor || '', 160),
+    productType: cleanText(line.product_type || line.productType || line.product?.product_type || '', 160),
+    tags: splitShopifyTags(line.tags || line.product?.tags || []),
+    metafields: Array.isArray(line.metafields) ? line.metafields : [],
     quantity: clampNumber(line.quantity || 1, 1, 999, 1),
   };
 }
@@ -69,6 +75,55 @@ function productFromLineItem(line = {}) {
 function productsFromOrder(order = {}) {
   const lines = Array.isArray(order.line_items) ? order.line_items : Array.isArray(order.products) ? order.products : [];
   return lines.map(productFromLineItem).filter((product) => product.title || product.productId || product.id).slice(0, 50);
+}
+
+async function enrichReviewProducts(shopDomain, products = [], attributeProfiles = []) {
+  const base = (Array.isArray(products) ? products : []).map((product) => ({ ...product }));
+  const ids = Array.from(new Set(base.map((product) => numericShopifyId(product.productId || product.id)).filter(Boolean)));
+  let productMap = new Map();
+  if (ids.length) {
+    const fields = 'id,title,handle,vendor,product_type,tags,image,images';
+    const payload = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products.json?ids=${encodeURIComponent(ids.join(','))}&fields=${encodeURIComponent(fields)}`, { shopDomain }).catch((error) => {
+      console.warn('Review product enrichment skipped:', error.message);
+      return null;
+    });
+    productMap = new Map((payload?.products || []).map((product) => [String(product.id), product]));
+  }
+
+  const wantedMetafields = metafieldRuleKeys(attributeProfiles);
+  const enriched = [];
+  for (const original of base) {
+    const productId = numericShopifyId(original.productId || original.id);
+    const live = productMap.get(productId) || {};
+    const image = cleanText(original.image || live.image?.src || live.images?.[0]?.src || '', 1000);
+    let metafields = Array.isArray(original.metafields) ? original.metafields : [];
+    if (wantedMetafields.size && productId && !metafields.length) {
+      const metaPayload = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products/${productId}/metafields.json?limit=250`, { shopDomain }).catch((error) => {
+        console.warn(`Review metafield enrichment skipped for ${productId}:`, error.message);
+        return null;
+      });
+      metafields = (metaPayload?.metafields || []).filter((field) => {
+        const key = String(field.key || '').toLowerCase();
+        const namespaced = `${String(field.namespace || '').toLowerCase()}.${key}`;
+        return wantedMetafields.has(key) || wantedMetafields.has(namespaced);
+      }).map((field) => ({ namespace: cleanText(field.namespace || '', 80), key: cleanText(field.key || '', 120), value: cleanText(field.value || '', 500), type: cleanText(field.type || field.value_type || '', 80) }));
+    }
+    const product = {
+      ...original,
+      id: original.id || (productId ? `gid://shopify/Product/${productId}` : ''),
+      productId: original.productId || (productId ? `gid://shopify/Product/${productId}` : ''),
+      title: cleanText(original.title || live.title || 'Purchased product', 200),
+      handle: cleanText(original.handle || live.handle || '', 200),
+      image,
+      vendor: cleanText(original.vendor || live.vendor || '', 160),
+      productType: cleanText(original.productType || live.product_type || '', 160),
+      tags: splitShopifyTags((Array.isArray(original.tags) && original.tags.length) ? original.tags : live.tags),
+      metafields,
+    };
+    product.matchingSliders = matchingReviewSliders(product, attributeProfiles);
+    enriched.push(product);
+  }
+  return enriched;
 }
 
 function resolveOrderEmail(order = {}) {
@@ -176,7 +231,8 @@ async function scheduleReviewRequestFromOrder({ shopDomain, order = {}, source =
   const cleanShop = cleanText(shopDomain, 200).toLowerCase();
   if (!cleanShop) throw new Error('Missing shop domain for review request scheduling.');
 
-  const cfg = await getAutomationConfig(cleanShop);
+  const settingsDoc = await Settings.findOne({ shopDomain: cleanShop }).lean();
+  const cfg = reviewAutomationConfig(settingsDoc || {});
   const effectiveDelay = delayDays === undefined || delayDays === null ? cfg.delayDays : clampNumber(delayDays, 0, 365, cfg.delayDays);
   const orderId = makeOrderId(order);
   const orderName = makeOrderDisplayName(order);
@@ -189,7 +245,7 @@ async function scheduleReviewRequestFromOrder({ shopDomain, order = {}, source =
   const delivered = !cfg.deliveryTagRequired || hasRequiredDeliveryTag(order, cfg.deliveryTag) || Boolean(testMode && order.delivered !== false);
   const deliveredAt = delivered ? new Date(order.delivered_at || order.updated_at || order.fulfilled_at || new Date()) : null;
   const anchorDate = cfg.deliveryAnchor === 'delivered_tag' && deliveredAt ? deliveredAt : fulfilledAt;
-  const products = productsFromOrder(order);
+  const products = await enrichReviewProducts(cleanShop, productsFromOrder(order), settingsDoc?.attributeProfiles || []);
   const scheduledAt = delivered ? addDays(anchorDate, effectiveDelay) : null;
   let status = email && products.length && cfg.enabled && cfg.nativeEnabled ? 'scheduled' : 'blocked';
   let blockedReason = '';
@@ -446,7 +502,10 @@ function renderTemplateReviewEmail({ template, shopDomain, shopName, customerNam
 
 async function sendReviewRequestJob(job) {
   const shopDomain = job.shopDomain;
-  const cfg = await getAutomationConfig(shopDomain);
+  const settingsDoc = await Settings.findOne({ shopDomain }).lean();
+  const cfg = reviewAutomationConfig(settingsDoc || {});
+  const enrichedProducts = await enrichReviewProducts(shopDomain, job.products || [], settingsDoc?.attributeProfiles || []);
+  if (enrichedProducts.length) { job.products = enrichedProducts; await job.save(); }
   const orderCreatedAt = resolveOrderCreatedAt({}, job.orderCreatedAt || job.fulfilledAt || job.createdAt || null);
   const eligibility = reviewRequestEligibility(orderCreatedAt, cfg);
   if (!job.testMode && !eligibility.eligible) {
@@ -744,6 +803,8 @@ module.exports = {
   DEFAULT_DELAY_DAYS,
   reviewAutomationConfig,
   reviewRequestEligibility,
+  matchingReviewSliders,
+  enrichReviewProducts,
   resolveOrderCreatedAt,
   getAutomationConfig,
   scheduleReviewRequestFromOrder,

@@ -9,6 +9,11 @@ const { awardForReview } = require('../modules/loyalty/loyalty.service');
 
 const router = express.Router();
 
+function firstQueryValue(value) {
+  if (Array.isArray(value)) return value.find((item) => String(item || '').trim()) || '';
+  return value || '';
+}
+
 function onePixelGif() {
   return Buffer.from('R0lGODlhAQABAPAAAP///wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==', 'base64');
 }
@@ -704,9 +709,9 @@ router.post('/reviews/bulk', async (req, res, next) => {
 
 router.get('/magic-link/order', async (req, res, next) => {
   try {
-    const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop);
+    const shopDomain = cleanShopDomain(firstQueryValue(req.query.shopDomain) || firstQueryValue(req.query.shop));
     if (!shopDomain || !isValidShopDomain(shopDomain)) return res.status(400).json({ error: 'Valid shopDomain is required.' });
-    const reviewToken = cleanText(req.query.token || req.query.reviewToken, 3000);
+    const reviewToken = cleanText(firstQueryValue(req.query.token) || firstQueryValue(req.query.reviewToken), 3000);
     let tokenPayload = null;
     let tokenVerified = false;
     if (reviewToken) {
