@@ -9,7 +9,7 @@ const { encryptSecret, decryptSecret } = require('../utils/crypto');
 const { publicEmailSettings } = require('../utils/emailSettings');
 const { shopifyFetch, shopifyFetchOptional, getAccessTokenForShop, buildInstallUrl } = require('../utils/shopify');
 const { createReviewToken } = require('../utils/reviewTokens');
-const { scheduleReviewRequestFromOrder, sendDueReviewRequests, enrichReviewProducts, automationReadiness, registerReviewWebhookSubscriptions, inspectReviewWebhookSubscriptions, expectedReviewWebhookSubscriptions } = require('../modules/reviews/reviewRequestAutomation');
+const { scheduleReviewRequestFromOrder, sendDueReviewRequests, enrichReviewProducts, refreshReviewJobProductsFromShopify, automationReadiness, registerReviewWebhookSubscriptions, inspectReviewWebhookSubscriptions, expectedReviewWebhookSubscriptions } = require('../modules/reviews/reviewRequestAutomation');
 const { awardForReview, getOrCreateLoyaltyProgram, normaliseCustomerRef, customerHintFromHash, createLedgerEntry } = require('../modules/loyalty/loyalty.service');
 const { getOrCreateDiscountProgram, issueDiscountCode } = require('../modules/discounts/discounts.service');
 
@@ -290,21 +290,16 @@ function reviewProofDiagnostics(products = []) {
 }
 
 async function buildProofProducts({ shopDomain, sourceJob, settings }) {
-  const sourceProducts = Array.isArray(sourceJob?.products) ? sourceJob.products.filter(Boolean) : [];
-  if (!sourceProducts.length) {
-    const error = new Error('This review request has no source products. Choose a real Shopify order job before sending a proof.');
-    error.statusCode = 409;
+  // Never trust the stored ReviewRequestJob product array for a proof. Re-read
+  // the canonical Shopify order so this test exercises exactly what a customer
+  // send will use: current line items, images, tags and configured metafields.
+  try {
+    const refreshed = await refreshReviewJobProductsFromShopify(shopDomain, sourceJob, settings);
+    return refreshed.products;
+  } catch (error) {
+    error.statusCode = error.statusCode || 409;
     throw error;
   }
-
-  const enriched = await enrichReviewProducts(shopDomain, sourceProducts, settings?.attributeProfiles || []);
-  const usable = enriched.filter((product) => numericShopifyProductId(product.productId || product.id));
-  if (!usable.length) {
-    const error = new Error('The source order products could not be matched back to Shopify. The proof was not sent.');
-    error.statusCode = 409;
-    throw error;
-  }
-  return usable;
 }
 
 async function sendReviewProofForSourceJob({ shopDomain, sourceJob }) {
@@ -2560,7 +2555,6 @@ router.post('/review-automation/send-proof-latest', async (req, res, next) => {
       shopDomain,
       testMode: { $ne: true },
       source: { $ne: 'admin_shop_email_order_proof' },
-      'products.0': { $exists: true },
     }).sort({ createdAt: -1 }).lean();
     if (!sourceJob) return res.status(409).json({ error: 'No real Shopify review-request job is available for a proof yet. Fulfil a test order first, then send its proof.' });
     const result = await sendReviewProofForSourceJob({ shopDomain, sourceJob });

@@ -5,7 +5,7 @@ const { ReviewRequestJob, CampaignEvent, EmailProviderSettings, Settings, Shop, 
 const { cleanText, cleanEmail, clampNumber } = require('../../utils/validation');
 const { decryptSecret, hashValue } = require('../../utils/crypto');
 const { createReviewToken } = require('../../utils/reviewTokens');
-const { shopifyFetchOptional } = require('../../utils/shopify');
+const { shopifyFetch, shopifyFetchOptional } = require('../../utils/shopify');
 const { numericShopifyId, splitShopifyTags, metafieldRuleKeys, matchingReviewSliders } = require('./reviewProductContext');
 
 const DEFAULT_DELAY_DAYS = 14;
@@ -77,8 +77,66 @@ function productsFromOrder(order = {}) {
   return lines.map(productFromLineItem).filter((product) => product.title || product.productId || product.id).slice(0, 50);
 }
 
+function plainReviewProduct(product = {}) {
+  if (product && typeof product.toObject === 'function') {
+    return product.toObject({ depopulate: true, getters: false, virtuals: false });
+  }
+  return product && typeof product === 'object' ? { ...product } : {};
+}
+
+function numericShopifyOrderId(value = '') {
+  const matches = String(value || '').match(/\d{5,}/g) || [];
+  return matches.length ? matches[matches.length - 1] : '';
+}
+
+async function fetchShopifyOrderForReviewJob(shopDomain, job = {}) {
+  const orderId = numericShopifyOrderId(job.orderId || job.orderName);
+  if (!orderId) {
+    const error = new Error('Review job does not contain a usable Shopify order ID.');
+    error.code = 'REVIEW_ORDER_ID_MISSING';
+    throw error;
+  }
+  const fields = ['id','admin_graphql_api_id','name','email','contact_email','created_at','processed_at','updated_at','customer','billing_address','shipping_address','line_items','tags'].join(',');
+  const payload = await shopifyFetch(`/admin/api/${env.shopifyApiVersion}/orders/${orderId}.json?fields=${encodeURIComponent(fields)}`, { shopDomain });
+  const order = payload?.order;
+  if (!order) {
+    const error = new Error(`Shopify order ${orderId} could not be loaded for Reviews.`);
+    error.code = 'REVIEW_ORDER_NOT_FOUND';
+    throw error;
+  }
+  return order;
+}
+
+async function refreshReviewJobProductsFromShopify(shopDomain, job, settingsDoc = null) {
+  const settings = settingsDoc || await Settings.findOne({ shopDomain }).lean();
+  const order = await fetchShopifyOrderForReviewJob(shopDomain, job);
+  const rawProducts = productsFromOrder(order);
+  if (!rawProducts.length) {
+    const error = new Error('Shopify returned this order without any reviewable line items. Review email was not sent.');
+    error.code = 'REVIEW_ORDER_PRODUCTS_MISSING';
+    throw error;
+  }
+  const products = await enrichReviewProducts(shopDomain, rawProducts, settings?.attributeProfiles || []);
+  const usable = products.filter((product) => numericShopifyId(product.productId || product.id));
+  if (!usable.length) {
+    const error = new Error('Shopify order products could not be resolved to valid product IDs. Review email was not sent.');
+    error.code = 'REVIEW_PRODUCT_CONTEXT_MISSING';
+    throw error;
+  }
+  if (job && typeof job.set === 'function') {
+    job.set('products', usable);
+    if (order.name) job.set('orderName', cleanText(order.name, 120));
+    const createdAt = resolveOrderCreatedAt(order, job.orderCreatedAt || job.fulfilledAt || null);
+    if (createdAt) job.set('orderCreatedAt', createdAt);
+    await job.save();
+  } else if (job && job._id) {
+    await ReviewRequestJob.updateOne({ _id: job._id, shopDomain }, { $set: { products: usable, orderName: cleanText(order.name || job.orderName || '', 120), orderCreatedAt: resolveOrderCreatedAt(order, job.orderCreatedAt || job.fulfilledAt || null) } });
+  }
+  return { order, products: usable };
+}
+
 async function enrichReviewProducts(shopDomain, products = [], attributeProfiles = []) {
-  const base = (Array.isArray(products) ? products : []).map((product) => ({ ...product }));
+  const base = (Array.isArray(products) ? products : []).map(plainReviewProduct);
   const ids = Array.from(new Set(base.map((product) => numericShopifyId(product.productId || product.id)).filter(Boolean)));
   let productMap = new Map();
   if (ids.length) {
@@ -504,8 +562,15 @@ async function sendReviewRequestJob(job) {
   const shopDomain = job.shopDomain;
   const settingsDoc = await Settings.findOne({ shopDomain }).lean();
   const cfg = reviewAutomationConfig(settingsDoc || {});
-  const enrichedProducts = await enrichReviewProducts(shopDomain, job.products || [], settingsDoc?.attributeProfiles || []);
-  if (enrichedProducts.length) { job.products = enrichedProducts; await job.save(); }
+  if (!job.testMode) {
+    // A live customer send is always rebuilt from the canonical Shopify order.
+    // This prevents stale/partial webhook payloads or persisted subdocuments from
+    // producing a review link with missing products, images, tags or sliders.
+    await refreshReviewJobProductsFromShopify(shopDomain, job, settingsDoc);
+  } else {
+    const enrichedProducts = await enrichReviewProducts(shopDomain, job.products || [], settingsDoc?.attributeProfiles || []);
+    if (enrichedProducts.length) { job.set('products', enrichedProducts); await job.save(); }
+  }
   const orderCreatedAt = resolveOrderCreatedAt({}, job.orderCreatedAt || job.fulfilledAt || job.createdAt || null);
   const eligibility = reviewRequestEligibility(orderCreatedAt, cfg);
   if (!job.testMode && !eligibility.eligible) {
@@ -805,6 +870,9 @@ module.exports = {
   reviewRequestEligibility,
   matchingReviewSliders,
   enrichReviewProducts,
+  plainReviewProduct,
+  fetchShopifyOrderForReviewJob,
+  refreshReviewJobProductsFromShopify,
   resolveOrderCreatedAt,
   getAutomationConfig,
   scheduleReviewRequestFromOrder,
