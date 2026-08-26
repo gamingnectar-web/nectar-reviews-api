@@ -2536,6 +2536,60 @@ router.post('/review-automation/delivery-monitor/run', async (req, res, next) =>
   }
 });
 
+router.get('/review-operations', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const limit = clampNumber(req.query?.limit, 10, 500, 200);
+    const jobs = await ReviewRequestJob.find({ shopDomain }).sort({ createdAt: -1 }).limit(limit).lean();
+    const safeEmail = (value = '') => {
+      const email = String(value || '');
+      const [local, domain] = email.split('@');
+      if (!domain) return email ? `${email.slice(0, 1)}***` : '';
+      return `${(local || '').slice(0, 1)}***@${domain}`;
+    };
+    const rows = jobs.map((job) => ({
+      id: String(job._id || ''),
+      orderId: job.orderName || job.orderId || '',
+      customer: job.customerName ? `${String(job.customerName).slice(0, 1)}***` : '',
+      email: safeEmail(job.customerEmail),
+      status: job.status || '',
+      testMode: Boolean(job.testMode),
+      source: job.source || '',
+      productCount: Array.isArray(job.products) ? job.products.length : 0,
+      orderCreatedAt: job.orderCreatedAt || null,
+      fulfilledAt: job.fulfilledAt || null,
+      deliveredAt: job.deliveredAt || null,
+      lastDeliveryCheckAt: job.lastDeliveryCheckAt || null,
+      deliveryStatus: job.deliveryStatus || '',
+      deliverySource: job.deliverySource || '',
+      deliveryTracking: Array.isArray(job.deliveryTracking) ? job.deliveryTracking : [],
+      scheduledAt: job.scheduledAt || null,
+      sentAt: job.sentAt || null,
+      lastAttemptAt: job.lastAttemptAt || null,
+      attempts: Number(job.attempts || 0),
+      errorMessage: job.errorMessage || '',
+      blockedReason: job.blockedReason || '',
+      campaign: job.campaign || '',
+      createdAt: job.createdAt || null,
+      updatedAt: job.updatedAt || null,
+    }));
+    const live = rows.filter((row) => !row.testMode);
+    const summary = {
+      total: live.length,
+      awaitingDelivery: live.filter((row) => row.status === 'awaiting_delivery').length,
+      deliveredCooling: live.filter((row) => row.deliveredAt && row.status === 'scheduled' && row.scheduledAt && new Date(row.scheduledAt) > new Date()).length,
+      dueToSend: live.filter((row) => row.status === 'scheduled' && row.scheduledAt && new Date(row.scheduledAt) <= new Date()).length,
+      sent: live.filter((row) => row.status === 'sent').length,
+      failed: live.filter((row) => row.status === 'failed').length,
+      skipped: live.filter((row) => row.status === 'skipped').length,
+      tests: rows.filter((row) => row.testMode).length,
+    };
+    return res.json({ ok: true, summary, rows });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post('/review-automation/jobs/:jobId/manual-send', async (req, res, next) => {
   try {
     if (req.body?.confirm !== true) return res.status(400).json({ error: 'Confirmation is required before emailing a customer manually.' });

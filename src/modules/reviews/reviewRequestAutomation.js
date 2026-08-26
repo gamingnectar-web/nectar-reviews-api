@@ -319,6 +319,8 @@ async function fetchShopifyDeliveryStatus(shopDomain, job = {}) {
       id
       name
       tags
+      createdAt
+      processedAt
       displayFulfillmentStatus
       fulfillments(first: 50) {
         nodes {
@@ -375,7 +377,21 @@ async function fetchShopifyDeliveryStatus(shopDomain, job = {}) {
     orderName: order.name || job.orderName || '',
     fulfillmentCount: active.length,
     deliveredFulfillmentCount: deliveredFulfillments.length,
-    tracking: active.flatMap((fulfillment) => Array.isArray(fulfillment.trackingInfo) ? fulfillment.trackingInfo : []).slice(0, 10),
+    orderCreatedAt: order.createdAt || order.processedAt || null,
+    tracking: active.flatMap((fulfillment) => {
+      const infos = Array.isArray(fulfillment.trackingInfo) && fulfillment.trackingInfo.length ? fulfillment.trackingInfo : [{}];
+      return infos.map((info) => ({
+        fulfillmentId: fulfillment.id || '',
+        company: info.company || '',
+        number: info.number || '',
+        url: info.url || '',
+        status: fulfillment.status || '',
+        displayStatus: fulfillment.displayStatus || '',
+        deliveredAt: fulfillment.deliveredAt || null,
+        inTransitAt: fulfillment.inTransitAt || null,
+        updatedAt: fulfillment.updatedAt || null,
+      }));
+    }).slice(0, 20),
   };
 }
 
@@ -393,6 +409,12 @@ async function reconcileAwaitingDeliveryJobs({ limit = 25, jobId = '' } = {}) {
       job.deliveryStatus = cleanText(delivery.currentStatus || '', 80);
       job.deliverySource = cleanText(delivery.source || 'shopify_fulfillment_monitor', 80);
       job.deliveryTracking = Array.isArray(delivery.tracking) ? delivery.tracking : [];
+      if (delivery.orderName) job.orderName = cleanText(delivery.orderName, 120);
+      if (delivery.orderCreatedAt) {
+        const created = new Date(delivery.orderCreatedAt);
+        if (!Number.isNaN(created.getTime())) job.orderCreatedAt = created;
+      }
+      job.errorMessage = '';
 
       if (delivery.delivered) {
         const deliveredAt = delivery.deliveredAt || new Date();
@@ -448,7 +470,7 @@ async function scheduleReviewRequestFromOrder({ shopDomain, order = {}, source =
   else if (!products.length) blockedReason = 'Order has no reviewable products.';
   else if (!delivered) {
     status = 'awaiting_delivery';
-    blockedReason = `Waiting for Shopify order tag "${cfg.deliveryTag}" before starting the ${effectiveDelay}-day review timer.`;
+    blockedReason = `Waiting for Shopify delivery confirmation before starting the ${effectiveDelay}-day review timer. The "${cfg.deliveryTag}" order tag is used only as a fallback.`;
   }
 
   const update = {

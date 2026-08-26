@@ -408,4 +408,29 @@ check('test-centre review page has a signed test-token fallback', () => {
   requireText(source, 'testPayload?.testMode === true', 'Test-only fallback guard');
 });
 
+
+check('Reviews portal has a dedicated Delivery & Sending operations tab', () => {
+  const html = read('public/admin.html');
+  requireText(html, "window.tab('v-review-operations')", 'Operations navigation tab');
+  requireText(html, 'id="v-review-operations"', 'Operations view');
+  requireText(html, 'Delivery Monitor', 'Delivery inner tab');
+  requireText(html, 'Email Sends', 'Email inner tab');
+});
+
+check('review operations API exposes delivery and send ledger fields', () => {
+  const source = read('src/routes/admin.js');
+  requireText(source, "router.get('/review-operations'", 'Review operations endpoint');
+  for (const key of ['orderCreatedAt', 'deliveredAt', 'deliveryTracking', 'scheduledAt', 'sentAt', 'lastAttemptAt', 'errorMessage']) {
+    requireText(source, key, `Review operations field ${key}`);
+  }
+});
+
+check('delivery reconciliation stores canonical order dates and parcel statuses', () => {
+  const source = read('src/modules/reviews/reviewRequestAutomation.js');
+  requireText(source, 'createdAt', 'Shopify order created date');
+  requireText(source, 'displayStatus: fulfillment.displayStatus', 'Parcel display status');
+  requireText(source, 'deliveredAt: fulfillment.deliveredAt', 'Parcel delivery timestamp');
+  requireText(source, 'job.orderCreatedAt = created', 'Persist canonical order date');
+});
+
 console.log('\nReviews smoke test passed: security and automation wiring look production-ready at build time.');

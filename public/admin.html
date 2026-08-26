@@ -745,6 +745,7 @@
           <p class="nav-title">Configuration</p>
           <button class="tab-btn" onclick="window.tab('v-settings')">App Settings &amp; Render Names</button>
           <button class="tab-btn" onclick="window.tab('v-review-launch')">Reviews Launch Checklist</button>
+          <button class="tab-btn" onclick="window.tab('v-review-operations')">Delivery &amp; Sending</button>
           <button class="tab-btn" onclick="window.tab('v-test-centre')">Real-world Test Centre</button>
         </div>
         <div class="nav-group">
@@ -1072,6 +1073,27 @@
           <p><strong>Flow is optional.</strong> For launch, use Nectar’s native scheduler. Shopify Flow can be kept as a fallback later.</p>
         </div>
       </section>
+
+
+<section id="v-review-operations" class="view">
+  <div class="dash-header">
+    <div>
+      <h2 class="page-title">Delivery &amp; Sending</h2>
+      <p class="dash-subtitle">Operational view of every review request: when the order was placed, parcel status, timer state, and whether the email was successfully handed to the email provider.</p>
+    </div>
+    <div class="dash-actions">
+      <button class="secondary-btn" type="button" onclick="window.loadReviewOperations?.()">Refresh</button>
+      <button class="primary-btn" type="button" onclick="window.runReviewOperationsDeliveryCheck?.()">Run delivery check now</button>
+    </div>
+  </div>
+  <div id="review-ops-summary" class="review-ops-summary"><p class="muted">Loading review operations…</p></div>
+  <div class="review-ops-tabs" role="tablist">
+    <button type="button" class="review-ops-tab active" data-review-ops-tab="delivery" onclick="window.setReviewOperationsTab?.('delivery')">Delivery Monitor</button>
+    <button type="button" class="review-ops-tab" data-review-ops-tab="emails" onclick="window.setReviewOperationsTab?.('emails')">Email Sends</button>
+  </div>
+  <div id="review-ops-delivery" class="review-ops-panel active"><p class="muted">Loading delivery data…</p></div>
+  <div id="review-ops-emails" class="review-ops-panel"><p class="muted">Loading email data…</p></div>
+</section>
 
 <section id="v-test-centre" class="view">
         <div class="dash-header">
@@ -1690,5 +1712,6 @@
   <script src="/admin-loyalty-foundation.js?v=secure-24"></script>
   <script src="/module-registry.js?v=cart-rewards-module-v28" defer></script>
   <script src="/module-shell.js?v=cart-rewards-module-v28" defer></script>
+  <script src="/review-operations.js?v=ops-1"></script>
 </body>
 </html>
