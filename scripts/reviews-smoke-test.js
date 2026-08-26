@@ -389,4 +389,23 @@ check('review sends fail closed when canonical Shopify order has no usable produ
   requireText(automation, 'Shopify order products could not be resolved to valid product IDs. Review email was not sent.', 'Missing product-context send guard');
 });
 
+
+check('delivery monitor has an admin run-now endpoint', () => {
+  const source = read('src/routes/admin.js');
+  requireText(source, '/review-automation/delivery-monitor/run', 'Delivery monitor run endpoint');
+  requireText(source, 'reconcileAwaitingDeliveryJobs', 'Delivery reconciliation invocation');
+});
+
+check('launch portal renders a visual delivery monitor', () => {
+  const source = read('public/reviews-launch-checklist.js');
+  requireText(source, 'renderDeliveryMonitor', 'Delivery monitor renderer');
+  requireText(source, 'runReviewDeliveryMonitor', 'Delivery monitor run-now action');
+});
+
+check('test-centre review page has a signed test-token fallback', () => {
+  const source = read('Shopify-Liquid/assets/nectar-review-page.js');
+  requireText(source, 'decodeSignedReviewTokenPayload', 'Signed test-token decoder');
+  requireText(source, 'testPayload?.testMode === true', 'Test-only fallback guard');
+});
+
 console.log('\nReviews smoke test passed: security and automation wiring look production-ready at build time.');

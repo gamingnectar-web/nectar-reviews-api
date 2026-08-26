@@ -9,7 +9,7 @@ const { encryptSecret, decryptSecret } = require('../utils/crypto');
 const { publicEmailSettings } = require('../utils/emailSettings');
 const { shopifyFetch, shopifyFetchOptional, getAccessTokenForShop, buildInstallUrl } = require('../utils/shopify');
 const { createReviewToken } = require('../utils/reviewTokens');
-const { scheduleReviewRequestFromOrder, sendDueReviewRequests, enrichReviewProducts, refreshReviewJobProductsFromShopify, automationReadiness, registerReviewWebhookSubscriptions, inspectReviewWebhookSubscriptions, expectedReviewWebhookSubscriptions } = require('../modules/reviews/reviewRequestAutomation');
+const { scheduleReviewRequestFromOrder, sendDueReviewRequests, enrichReviewProducts, refreshReviewJobProductsFromShopify, reconcileAwaitingDeliveryJobs, automationReadiness, registerReviewWebhookSubscriptions, inspectReviewWebhookSubscriptions, expectedReviewWebhookSubscriptions } = require('../modules/reviews/reviewRequestAutomation');
 const { awardForReview, getOrCreateLoyaltyProgram, normaliseCustomerRef, customerHintFromHash, createLedgerEntry } = require('../modules/loyalty/loyalty.service');
 const { getOrCreateDiscountProgram, issueDiscountCode } = require('../modules/discounts/discounts.service');
 
@@ -385,6 +385,10 @@ function publicReviewRequestJob(job = {}) {
     blockedReason: job.blockedReason || job.errorMessage || '',
     deliveryRequired: Boolean(job.deliveryRequired),
     requiredDeliveryTag: job.requiredDeliveryTag || 'delivered',
+    lastDeliveryCheckAt: job.lastDeliveryCheckAt || null,
+    deliveryStatus: job.deliveryStatus || '',
+    deliverySource: job.deliverySource || '',
+    deliveryTracking: Array.isArray(job.deliveryTracking) ? job.deliveryTracking : [],
     testMode: Boolean(job.testMode),
   };
 }
@@ -2516,6 +2520,17 @@ router.post('/review-automation/process-outstanding', async (req, res, next) => 
     const result = await sendDueReviewRequests({ limit: clampNumber(req.body?.limit, 1, 100, 50) });
     const snapshot = await outstandingReviewAutomationSnapshot(shopDomain);
     return res.json({ ok: true, retriedFailed, processed: result.count || 0, result, outstanding: snapshot });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/review-automation/delivery-monitor/run', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const result = await reconcileAwaitingDeliveryJobs({ limit: clampNumber(req.body?.limit, 1, 100, 50) });
+    const snapshot = await outstandingReviewAutomationSnapshot(shopDomain);
+    return res.json({ ok: true, reconciliation: result, outstanding: snapshot });
   } catch (error) {
     next(error);
   }

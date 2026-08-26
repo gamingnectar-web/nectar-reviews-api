@@ -1058,6 +1058,11 @@
           <div id="all-reviews-page-setup" class="webhook-registry-wrap"><p class="muted">Loading all reviews page setup…</p></div>
         </div>
         <div class="panel launch-card">
+          <div class="settings-card-header"><div><h3>Delivery monitor</h3><p>Live view of Shopify fulfilment checks used to decide when the review timer can start. Split shipments remain waiting until every active parcel is delivered.</p></div><button class="primary-btn compact" type="button" onclick="window.runReviewDeliveryMonitor?.()">Run check now</button></div>
+          <div id="review-delivery-monitor" class="webhook-registry-wrap"><p class="muted">Loading delivery monitor…</p></div>
+        </div>
+
+        <div class="panel launch-card">
           <div class="settings-card-header"><div><h3>Recent orders and review automation</h3><p>Each row shows where the order is in the review journey. Use “Send proof to shop email” to test the exact customer email safely without emailing the customer.</p></div><button class="secondary-btn compact" type="button" onclick="window.loadReviewsLaunchChecklist?.()">Refresh</button></div>
           <div id="review-launch-jobs" class="launch-job-list"><p class="muted">No jobs loaded yet.</p></div>
         </div>

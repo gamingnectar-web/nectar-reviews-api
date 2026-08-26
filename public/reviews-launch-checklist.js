@@ -185,6 +185,43 @@
     return { label: `Order ${days} day${days === 1 ? '' : 's'} old · eligible under current safety rules`, status: 'ready' };
   }
 
+  function deliveryStatusHuman(job = {}) {
+    const raw = String(job.deliveryStatus || '').trim();
+    if (job.deliveredAt || job.status === 'scheduled' || job.status === 'sent') return raw || 'Delivered';
+    if (raw) return raw.replace(/_/g, ' ');
+    return job.status === 'awaiting_delivery' ? 'Waiting for Shopify delivery update' : 'Not currently waiting';
+  }
+
+  function renderDeliveryMonitor(jobs = []) {
+    const box = document.getElementById('review-delivery-monitor');
+    if (!box) return;
+    const realJobs = jobs.filter((job) => !job.testMode);
+    const waiting = realJobs.filter((job) => job.status === 'awaiting_delivery');
+    const delivered = realJobs.filter((job) => job.deliveredAt || ['scheduled','sent'].includes(job.status));
+    const checked = realJobs.filter((job) => job.lastDeliveryCheckAt);
+    const latestCheck = checked.sort((a,b)=>new Date(b.lastDeliveryCheckAt)-new Date(a.lastDeliveryCheckAt))[0]?.lastDeliveryCheckAt || null;
+    const rows = realJobs.slice(0, 20).map((job) => {
+      const tracking = Array.isArray(job.deliveryTracking) ? job.deliveryTracking : [];
+      const deliveredParcels = tracking.filter((item) => String(item.status || item.displayStatus || '').toLowerCase().includes('deliver')).length;
+      const parcelLabel = tracking.length ? `${deliveredParcels}/${tracking.length} parcel${tracking.length === 1 ? '' : 's'} delivered` : 'No parcel detail returned yet';
+      const checkedAt = job.lastDeliveryCheckAt ? new Date(job.lastDeliveryCheckAt).toLocaleString() : 'Not checked yet';
+      const source = job.deliverySource ? job.deliverySource.replace(/_/g, ' ') : 'Awaiting first monitor check';
+      return `<div class="webhook-registry-item" data-status="${job.status === 'awaiting_delivery' ? 'warning' : 'ready'}">
+        <span class="webhook-registry-dot">${job.status === 'awaiting_delivery' ? '○' : '✓'}</span>
+        <div class="webhook-registry-copy">
+          <strong>${esc(job.orderId || 'Order')} <em>${esc(deliveryStatusHuman(job))}</em></strong>
+          <p>${esc(parcelLabel)} · Last checked ${esc(checkedAt)}</p>
+          <code>${esc(source)}</code>
+        </div>
+      </div>`;
+    }).join('');
+    box.innerHTML = `<div class="webhook-registry-summary" data-status="${waiting.length ? 'warning' : 'ready'}">
+      <div><strong>${waiting.length ? `${waiting.length} order${waiting.length === 1 ? '' : 's'} waiting for delivery` : 'No tracked orders are currently waiting for delivery'}</strong>
+      <p>${delivered.length} delivered/scheduled · ${checked.length} checked${latestCheck ? ` · Latest ${new Date(latestCheck).toLocaleString()}` : ''}</p></div>
+      <div class="webhook-registry-actions"><button class="primary-btn compact" type="button" onclick="window.runReviewDeliveryMonitor?.()">Run check now</button></div>
+    </div><div class="webhook-registry-list">${rows || '<div class="launch-empty-state"><strong>No real review jobs yet.</strong><p>Once Shopify fulfilment creates a review job, its delivery status will appear here.</p></div>'}</div>`;
+  }
+
   function renderJobs(jobs=[]){
     const box = document.getElementById('review-launch-jobs');
     if (!box) return;
@@ -341,6 +378,7 @@
       renderChecks(data.checks || []);
       renderPath(data.livePath || []);
       renderJobs(data.recentJobs || []);
+      renderDeliveryMonitor(data.recentJobs || []);
       renderWebhookRegistry(data.webhookRegistry || null);
       window.loadAllReviewsPageSetup?.();
       const banner = document.querySelector('.launch-mode-banner');

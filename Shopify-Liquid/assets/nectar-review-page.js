@@ -51,6 +51,12 @@
     } catch (_) { return null; }
   }
 
+  function decodeSignedReviewTokenPayload(token) {
+    const parts = String(token || '').split('.');
+    if (parts.length !== 3 || parts[0] !== 'rv1') return null;
+    return decodePreviewPayload(parts[1]);
+  }
+
   function slug(value) {
     return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   }
@@ -164,7 +170,30 @@
       err.code = 'NOT_DELIVERED';
       throw err;
     }
-    if (!res.ok) throw new Error('Order not found');
+    if (!res.ok) {
+      // The Real-world Test Centre deliberately uses a fake order ID. If the
+      // signed TEST token already contains the complete product context, a
+      // transient/stale magic-link API response must not make the safe preview
+      // unusable. This fallback is test-only; live links still fail closed.
+      const testPayload = params.get('test') === '1' ? decodeSignedReviewTokenPayload(signedToken) : null;
+      const tokenShop = String(testPayload?.shop || '').toLowerCase();
+      const currentShop = String(SHOP_DOMAIN || '').toLowerCase();
+      if (testPayload?.testMode === true && tokenShop === currentShop && Array.isArray(testPayload.products) && testPayload.products.length) {
+        ui.previewPill.style.display = 'inline-flex';
+        return {
+          orderId: testPayload.orderId || params.get('order_id') || params.get('order') || 'TEST',
+          customerName: testPayload.customerName || 'Test Customer',
+          customerEmail: testPayload.email || params.get('email') || '',
+          orderDate: testPayload.orderDate || '',
+          products: testPayload.products,
+          delivered: true,
+          preview: true,
+          verifiedLink: false,
+          support: {},
+        };
+      }
+      throw new Error('Order not found');
+    }
     return res.json();
   }
 
