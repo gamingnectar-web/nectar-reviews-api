@@ -710,11 +710,11 @@ router.get('/magic-link/order', async (req, res, next) => {
     let tokenPayload = null;
     let tokenVerified = false;
     if (reviewToken) {
-      const verified = verifyReviewToken(reviewToken, { shopDomain, email: cleanEmail(req.query.email), orderId: cleanText(req.query.orderId || req.query.order, 120) });
+      const verified = verifyReviewToken(reviewToken, { shopDomain, email: cleanEmail(req.query.email), orderId: cleanText(req.query.orderId || req.query.order_id || req.query.order, 120) });
       if (verified.ok) {
         tokenVerified = true;
         tokenPayload = verified.payload;
-      } else if (req.query.preview !== '1' && req.query.test !== '1') {
+      } else {
         return res.status(400).json({ error: verified.error || 'Invalid review verification link.' });
       }
     }
@@ -724,12 +724,12 @@ router.get('/magic-link/order', async (req, res, next) => {
     const products = queryProducts.length ? queryProducts : tokenProducts;
     if (!products.length) return res.status(404).json({ error: 'No review products were included in this link.' });
     return res.json({
-      orderId: cleanText(tokenPayload?.orderId || req.query.orderId || req.query.order || '1001', 120),
+      orderId: cleanText(tokenPayload?.orderId || req.query.orderId || req.query.order_id || req.query.order || '1001', 120),
       orderDate: cleanText(tokenPayload?.orderDate || req.query.orderDate || req.query.createdAt || '', 80),
       customerName: cleanText(tokenPayload?.customerName || req.query.customer || req.query.name || 'Customer', 120),
       customerEmail: cleanEmail(tokenPayload?.email || req.query.email),
       products,
-      alreadyReviewedProductIds: await alreadyReviewedProductIds({ shopDomain, email: cleanEmail(tokenPayload?.email || req.query.email), orderId: cleanText(tokenPayload?.orderId || req.query.orderId || req.query.order, 120), products }),
+      alreadyReviewedProductIds: await alreadyReviewedProductIds({ shopDomain, email: cleanEmail(tokenPayload?.email || req.query.email), orderId: cleanText(tokenPayload?.orderId || req.query.orderId || req.query.order_id || req.query.order, 120), products }),
       delivered: true,
       verifiedLink: tokenVerified && !tokenPayload?.testMode,
       preview: tokenPayload?.testMode || req.query.preview === '1' || req.query.preview === 'true' || req.query.test === '1',

@@ -233,8 +233,14 @@ function clampTemplateNumber(value, fallback, min, max) {
 }
 
 function templateText(value = '', context = {}) {
+  const customerName = context.customerName || 'there';
+  const firstName = String(customerName).trim().split(/\s+/)[0] || 'there';
   return String(value || '')
-    .replace(/\{\{\s*customerName\s*\}\}/gi, context.customerName || 'there')
+    .replace(/\{\{\s*customerName\s*\}\}/gi, customerName)
+    .replace(/\{\{\s*customerFirstName\s*\}\}/gi, firstName)
+    // Backwards compatibility for templates previously authored with Shopify-Liquid-style variables.
+    .replace(/\{\{\s*order\.customer\.firstName(?:\s*\|\s*default:\s*["'][^"']*["'])?\s*\}\}/gi, firstName)
+    .replace(/\{\{\s*order\.customer\.first_name(?:\s*\|\s*default:\s*["'][^"']*["'])?\s*\}\}/gi, firstName)
     .replace(/\{\{\s*orderId\s*\}\}/gi, context.orderId || 'recent order')
     .replace(/\{\{\s*shopDomain\s*\}\}/gi, context.shopDomain || '')
     .replace(/\{\{\s*reviewUrl\s*\}\}/gi, context.reviewUrl || '');

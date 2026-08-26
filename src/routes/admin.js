@@ -2815,7 +2815,7 @@ router.get('/review-launch-checklist', async (req, res, next) => {
         label: 'Reviews email sender',
         status: emailReady ? 'ready' : 'blocked',
         detail: emailReady ? `Emails can send from ${emailSettings.fromEmail || emailSettings.smtpUser}.` : 'Save an email provider with SMTP/app-password details before going live.',
-        action: 'Open Messaging & Campaigns → Email Delivery.',
+        action: emailReady ? '' : 'Open Messaging & Campaigns → Email Delivery.',
         target: 'v-msg:delivery',
       },
       {
@@ -2823,7 +2823,7 @@ router.get('/review-launch-checklist', async (req, res, next) => {
         label: 'Primary provider for Reviews',
         status: primaryReviewsProvider ? 'ready' : (emailReady ? 'warning' : 'blocked'),
         detail: primaryReviewsProvider ? `${primaryReviewsProvider.name || 'Provider'} is primary for Reviews.` : 'A provider is saved, but none is marked primary for Reviews yet.',
-        action: 'Mark the saved provider as Primary: Reviews.',
+        action: primaryReviewsProvider ? '' : 'Mark the saved provider as Primary: Reviews.',
         target: 'v-msg:delivery',
       },
       {
@@ -2831,7 +2831,7 @@ router.get('/review-launch-checklist', async (req, res, next) => {
         label: 'Signed one-use review links',
         status: tokenReady ? 'ready' : 'blocked',
         detail: tokenReady ? 'Unique order-review links can be signed and verified.' : 'Set EMAIL_CREDENTIAL_SECRET or SHOPIFY_API_SECRET in Render so links cannot be forged.',
-        action: 'Add EMAIL_CREDENTIAL_SECRET in Render environment variables.',
+        action: tokenReady ? '' : 'Add EMAIL_CREDENTIAL_SECRET in Render environment variables.',
         target: 'v-settings',
       },
       {
@@ -2839,7 +2839,7 @@ router.get('/review-launch-checklist', async (req, res, next) => {
         label: 'Shopify connection',
         status: oauthReady ? 'ready' : 'blocked',
         detail: oauthReady ? 'OAuth is connected, so Nectar can register order webhooks and search products.' : 'OAuth is not connected for this shop. Real fulfilled orders will not create review jobs yet.',
-        action: 'Open the app from Shopify Admin and complete OAuth.',
+        action: oauthReady ? '' : 'Open the app from Shopify Admin and complete OAuth.',
         target: 'v-settings',
       },
       {
@@ -2859,7 +2859,7 @@ router.get('/review-launch-checklist', async (req, res, next) => {
         label: 'Native 14-day scheduler',
         status: nativeReady ? 'ready' : 'blocked',
         detail: nativeReady ? `Nectar waits ${Number(auto.delayDays ?? 14)} days after fulfilment, then sends automatically.` : 'Native scheduler is not ready. Check sender, signed links and scheduler settings.',
-        action: 'Keep mode set to Native and delay set to 14 days.',
+        action: nativeReady ? '' : 'Keep mode set to Native and delay set to 14 days.',
         target: 'v-review-launch',
       },
       {

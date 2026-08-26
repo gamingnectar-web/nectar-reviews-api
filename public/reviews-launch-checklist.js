@@ -77,7 +77,6 @@
   function renderSimplePortal(data = {}) {
     const root = document.getElementById('v-review-launch');
     if (!root) return;
-    markTechnicalPanels();
     const header = root.querySelector('.dash-header');
     const title = header?.querySelector('.page-title');
     const subtitle = header?.querySelector('.dash-subtitle');
@@ -100,6 +99,23 @@
     const proofRecipient = summary.proofRecipient || '';
     const blockers = Number(summary.blockers || 0);
     const warnings = Number(summary.warnings || 0);
+    const outstanding = data.outstanding || {
+      dueNow: Number(summary.outstandingDueNow || 0),
+      failed: Number(summary.outstandingFailed || 0),
+      blocked: Number(summary.outstandingBlocked || 0),
+      awaitingDelivery: Number(summary.outstandingAwaitingDelivery || 0),
+      actionable: Number(summary.outstandingActionable || 0),
+    };
+    const outstandingActionable = Number(outstanding.actionable || 0) > 0
+      || Number(outstanding.failed || 0) > 0
+      || Number(outstanding.blocked || 0) > 0
+      || Number(outstanding.dueNow || 0) > 0;
+    const outstandingAttention = Number(outstanding.failed || 0) + Number(outstanding.blocked || 0) + Number(outstanding.dueNow || 0);
+    const outstandingLabel = outstandingAttention > 0
+      ? `${outstandingAttention} need attention`
+      : Number(outstanding.awaitingDelivery || 0) > 0
+        ? `${Number(outstanding.awaitingDelivery || 0)} waiting delivery`
+        : 'Nothing outstanding';
     const readyCopy = blockers ? `${blockers} blocker${blockers === 1 ? '' : 's'} to fix` : warnings ? `${warnings} warning${warnings === 1 ? '' : 's'} to prove` : 'Ready to test live flow';
     shell.innerHTML = `
       <div class="review-simple-hero" data-ready="${esc(summary.ready ? 'ready' : 'not-ready')}">
@@ -123,6 +139,14 @@
         </div>
       </div>
     `;
+    markTechnicalPanels();
+  }
+
+  function restoreTechnicalPanels() {
+    const root = document.getElementById('v-review-launch');
+    if (!root) return;
+    root.classList.remove('reviews-simple-mode');
+    root.querySelectorAll('.reviews-technical-panel').forEach((node) => node.classList.remove('reviews-technical-panel'));
   }
 
   function jobStage(job) {
@@ -260,7 +284,9 @@
       if (dot) { dot.className = `tab-status-dot ${data.summary?.ready ? 'live' : 'warning'}`; dot.title = data.summary?.ready ? 'Reviews live-ready: launch checks passed' : 'Reviews enabled but launch checks still need attention'; }
       window.updateProductNavStatuses?.(data);
     } catch (error) {
-      renderChecks([{ status:'blocked', label:'Could not load launch checklist', detail:error.message || 'Refresh the page and try again.', action:'Check the API logs in Render.' }]);
+      console.error('Reviews launch checklist failed:', error);
+      restoreTechnicalPanels();
+      renderChecks([{ status:'blocked', label:'Could not load launch checklist', detail:error.message || 'Refresh the page and try again.', action:'Check the browser console/API logs in Render.' }]);
     }
   };
 

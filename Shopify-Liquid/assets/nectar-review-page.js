@@ -136,10 +136,14 @@
     }
 
     const queryProducts = productsFromParams();
-    if (params.get('test') === '1' || queryProducts.length) {
+    const signedToken = params.get('token') || params.get('reviewToken') || '';
+
+    // Signed links always take precedence, including proof/test links. The API
+    // verifies the token and returns the products embedded in it.
+    if (!signedToken && (params.get('test') === '1' || queryProducts.length)) {
       ui.previewPill.style.display = params.get('test') === '1' ? 'inline-flex' : 'none';
       return {
-        orderId: params.get('orderId') || params.get('order') || '1001',
+        orderId: params.get('orderId') || params.get('order_id') || params.get('order') || '1001',
         customerName: params.get('customer') || params.get('name') || 'Customer',
         customerEmail: params.get('email') || '',
         orderDate: params.get('orderDate') || params.get('createdAt') || '',
@@ -195,7 +199,7 @@
     const query = new URLSearchParams({
       shopDomain: SHOP_DOMAIN,
       email,
-      orderId: orderData?.orderId || params.get('orderId') || params.get('order') || '',
+      orderId: orderData?.orderId || params.get('orderId') || params.get('orderId') || params.get('order_id') || params.get('order') || '',
       products: JSON.stringify(products.map((product) => ({ productId: product.productId, id: product.id }))),
     });
     try {
@@ -470,7 +474,7 @@
     if (!box) return;
     const orderDate = orderData?.orderDate ? `<br><strong>Order date:</strong> ${escapeHtml(orderData.orderDate)}` : '';
     const itemList = products.length ? `<br><strong>Items:</strong> ${products.map((p)=>escapeHtml(p.title || p.name || p.id)).join(', ')}` : '';
-    box.innerHTML = `<strong>Order ID:</strong> ${escapeHtml(orderData?.orderId || params.get('order') || 'Not supplied')}${orderDate}<br><strong>Customer:</strong> ${escapeHtml(orderData?.customerName || 'Customer')}<br><strong>Email:</strong> ${escapeHtml(orderData?.customerEmail || params.get('email') || 'Not supplied')}${itemList}`;
+    box.innerHTML = `<strong>Order ID:</strong> ${escapeHtml(orderData?.orderId || params.get('orderId') || params.get('order_id') || params.get('order') || 'Not supplied')}${orderDate}<br><strong>Customer:</strong> ${escapeHtml(orderData?.customerName || 'Customer')}<br><strong>Email:</strong> ${escapeHtml(orderData?.customerEmail || params.get('email') || 'Not supplied')}${itemList}`;
   }
   function renderAffectedProducts() {
     const box = document.getElementById('nectar-support-affected-products');
@@ -494,7 +498,7 @@
     btn.textContent = 'Sending…';
     try {
       const affectedProducts = Array.from(document.querySelectorAll('[data-support-product-index]:checked')).map((input)=>products[Number(input.dataset.supportProductIndex)]).filter(Boolean).map((product)=>({ id: product.id, productId: product.productId, title: product.title, quantity: product.quantity })).slice(0,20);
-      const res = await fetch(`${API}/support-requests`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shopDomain: SHOP_DOMAIN, orderId: orderData?.orderId || params.get('order') || '', orderDate: orderData?.orderDate || params.get('orderDate') || '', email: orderData?.customerEmail || params.get('email') || '', customerName: orderData?.customerName || 'Customer', subject, message, issueType: affectedProducts.length ? 'missing_or_item_issue' : 'general', affectedProducts, reviewToken: params.get('token') || params.get('reviewToken') || '', products: products.map((product) => ({ id: product.id, productId: product.productId, variantId: product.variantId, title: product.title, quantity: product.quantity })).slice(0, 20) }) });
+      const res = await fetch(`${API}/support-requests`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shopDomain: SHOP_DOMAIN, orderId: orderData?.orderId || params.get('orderId') || params.get('order_id') || params.get('order') || '', orderDate: orderData?.orderDate || params.get('orderDate') || '', email: orderData?.customerEmail || params.get('email') || '', customerName: orderData?.customerName || 'Customer', subject, message, issueType: affectedProducts.length ? 'missing_or_item_issue' : 'general', affectedProducts, reviewToken: params.get('token') || params.get('reviewToken') || '', products: products.map((product) => ({ id: product.id, productId: product.productId, variantId: product.variantId, title: product.title, quantity: product.quantity })).slice(0, 20) }) });
       if (!res.ok) throw new Error('Support request failed');
       closeSupportModal();
       alert('Your message has been sent to customer service.');
@@ -532,7 +536,7 @@
       show('main');
       if (params.get('support') === '1' || params.get('openSupport') === '1') {
         const subjectInput = document.getElementById('nectar-support-subject');
-        if (subjectInput && !subjectInput.value) subjectInput.value = `Help with order ${orderData.orderId || params.get('order') || ''}`.trim();
+        if (subjectInput && !subjectInput.value) subjectInput.value = `Help with order ${orderData.orderId || params.get('orderId') || params.get('order_id') || params.get('order') || ''}`.trim();
         setTimeout(openSupportModal, 120);
       }
     } catch (error) {

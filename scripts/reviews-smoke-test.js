@@ -193,4 +193,41 @@ check('review database schema retains token-use and automation fields', () => {
   requireText(source, 'delayDays:', 'Delay settings schema');
 });
 
+
+check('launch checklist simple portal defines outstanding-send state before rendering', () => {
+  const source = read('public/reviews-launch-checklist.js');
+  requireText(source, "const outstanding = data.outstanding ||", 'Outstanding snapshot declaration');
+  requireText(source, "const outstandingActionable =", 'Outstanding actionable declaration');
+  requireText(source, "const outstandingLabel =", 'Outstanding label declaration');
+  requireText(source, 'restoreTechnicalPanels();', 'Checklist render fallback');
+  const renderStart = source.indexOf('function renderSimplePortal');
+  const labelDecl = source.indexOf('const outstandingLabel =', renderStart);
+  const labelUse = source.indexOf('${esc(outstandingLabel)}', renderStart);
+  assert(labelDecl >= 0 && labelUse >= 0 && labelDecl < labelUse, 'Outstanding label must be declared before it is rendered.');
+});
+
+check('signed proof links take precedence over local test-mode query fallback', () => {
+  const source = read('Shopify-Liquid/assets/nectar-review-page.js');
+  requireText(source, "const signedToken = params.get('token') || params.get('reviewToken') || '';", 'Signed proof token lookup');
+  requireText(source, "if (!signedToken && (params.get('test') === '1' || queryProducts.length))", 'Signed-token precedence');
+  requireText(source, "params.get('order_id')", 'order_id compatibility');
+  const extension = read('extensions/review-widget-extension/assets/nectar-review-page.js');
+  requireText(extension, "if (!signedToken && (params.get('test') === '1' || queryProducts.length))", 'Extension signed-token precedence');
+});
+
+check('magic-link API validates supplied signed proof tokens and accepts order_id aliases', () => {
+  const source = read('src/routes/public.js');
+  requireText(source, "req.query.orderId || req.query.order_id || req.query.order", 'Magic-link order_id alias');
+  requireRegex(source, /if \(reviewToken\)[\s\S]*?if \(verified\.ok\)[\s\S]*?else \{\s*return res\.status\(400\)/, 'Invalid supplied token fails closed');
+});
+
+check('review email renderer supports Nectar and legacy customer first-name variables', () => {
+  const source = read('src/modules/reviews/reviewRequestAutomation.js');
+  requireText(source, "const firstName = String(customerName).trim().split(/\\s+/)[0] || 'there';", 'Customer first-name derivation');
+  requireText(source, 'order\\.customer\\.firstName', 'Legacy firstName template compatibility');
+  requireText(source, 'customerFirstName', 'Nectar first-name template variable');
+  const builder = read('public/admin-messaging-campaigns.js');
+  requireText(builder, 'Hi {{ customerName }}', 'Email-builder Nectar variable default');
+});
+
 console.log('\nReviews smoke test passed: security and automation wiring look production-ready at build time.');
