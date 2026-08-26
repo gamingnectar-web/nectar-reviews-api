@@ -298,17 +298,44 @@ check('storefront magic-link request canonicalises shopDomain instead of duplica
   assert(!source.includes('magic-link/order?shopDomain=${encodeURIComponent(SHOP_DOMAIN)}&${params.toString()}'), 'Old duplicate shopDomain builder must be removed.');
 });
 
-check('proof order preserves product identity and image context', () => {
+check('proof flow preserves real order identity and refreshed product context', () => {
   const source = read('src/routes/admin.js');
-  requireText(source, 'product_id: numericShopifyProductId', 'Proof product ID');
-  requireText(source, "image: cleanText(product.image || '', 1000)", 'Proof product image');
-  requireText(source, 'tags: Array.isArray(product.tags)', 'Proof product tags');
+  requireText(source, 'const products = await buildProofProducts', 'Proof refreshes source products');
+  requireText(source, 'const enriched = await enrichReviewProducts', 'Proof uses Shopify enrichment');
+  requireText(source, 'orderId: sourceJob.orderId', 'Proof keeps real order ID');
+  requireText(source, 'products,', 'Proof job receives enriched products');
 });
 
 check('saving old-order safety immediately reconciles existing unsent jobs', () => {
   const source = read('src/routes/admin.js');
   requireText(source, 'reconciledSkipped', 'Safety reconciliation result');
   requireText(source, "status: { $in: ['awaiting_delivery', 'scheduled', 'failed', 'blocked'] }", 'Queued-job safety reconciliation');
+});
+
+
+check('proofs use a real non-test order source and never fall back to fabricated products', () => {
+  const source = read('src/routes/admin.js');
+  requireText(source, "source: { $ne: 'admin_shop_email_order_proof' }", 'Proof source excludes prior proofs');
+  requireText(source, "'products.0': { $exists: true }", 'Proof source requires products');
+  requireText(source, 'No real Shopify review-request job is available for a proof yet.', 'No fake fallback');
+  requireText(source, 'const products = await buildProofProducts', 'Proof products are refreshed');
+  requireText(source, "orderId: sourceJob.orderId", 'Proof retains real order identity');
+  requireText(source, 'customerName: maskProofName', 'Proof masks customer display');
+  requireText(source, 'testMode: true', 'Proof remains test-only');
+});
+
+check('proof send refuses empty/unmatched product context and reports enrichment diagnostics', () => {
+  const source = read('src/routes/admin.js');
+  requireText(source, 'This review request has no source products.', 'Empty source proof refusal');
+  requireText(source, 'could not be matched back to Shopify', 'Unmatched Shopify proof refusal');
+  for (const key of ['productCount', 'withImages', 'withTags', 'sliderRuleCount']) requireText(source, key, `Proof diagnostic ${key}`);
+});
+
+check('storefront product normaliser has one authoritative metafield/slider assignment', () => {
+  const source = read('Shopify-Liquid/assets/nectar-review-page.js');
+  const body = source.slice(source.indexOf('function normaliseProduct'), source.indexOf('function uniqueProducts'));
+  assert.strictEqual((body.match(/metafields:/g) || []).length, 1, 'normaliseProduct should assign metafields once.');
+  assert.strictEqual((body.match(/matchingSliders:/g) || []).length, 1, 'normaliseProduct should assign matchingSliders once.');
 });
 
 console.log('\nReviews smoke test passed: security and automation wiring look production-ready at build time.');

@@ -432,7 +432,7 @@
     if (!ok) return;
     try {
       const result = await api(`/admin/review-automation/jobs/${encodeURIComponent(jobId)}/send-proof`, { method:'POST', body: JSON.stringify({}) });
-      toast(`Proof email sent to ${result.proofRecipient || proofRecipient}.`);
+      const d = result.diagnostics || {}; toast(`Proof sent to ${result.proofRecipient || proofRecipient}. ${d.productCount || 0} products · ${d.withImages || 0} images · ${d.withTags || 0} tagged · ${d.sliderRuleCount || 0} slider rules.`);
       await window.loadReviewsLaunchChecklist?.();
     } catch (error) {
       toast(error.message || 'Could not send the shop proof email.');
@@ -442,11 +442,11 @@
 
   window.sendLatestReviewProof = async function(){
     const proofRecipient = lastChecklist?.summary?.proofRecipient || 'the saved shop email';
-    const ok = confirm(`Send a safe review-request proof to ${proofRecipient}? Nectar will use the latest order job when available, otherwise a sample proof order. Customers will not be emailed.`);
+    const ok = confirm(`Send a safe review-request proof to ${proofRecipient}? Nectar will use the latest real Shopify order job, refresh its product context, mask the customer display, and never email the customer.`);
     if (!ok) return;
     try {
       const result = await api('/admin/review-automation/send-proof-latest', { method:'POST', body: JSON.stringify({}) });
-      toast(`Proof email sent to ${result.proofRecipient || proofRecipient}.`);
+      const d = result.diagnostics || {}; toast(`Proof sent to ${result.proofRecipient || proofRecipient}. ${d.productCount || 0} products · ${d.withImages || 0} images · ${d.withTags || 0} tagged · ${d.sliderRuleCount || 0} slider rules.`);
       await window.loadReviewsLaunchChecklist?.();
     } catch (error) {
       toast(error.message || 'Could not send the shop proof email.');

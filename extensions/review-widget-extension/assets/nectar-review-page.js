@@ -179,12 +179,10 @@
       image: raw.image || raw.productImage || raw.imageUrl || '',
       vendor: raw.vendor || '',
       productType: raw.productType || raw.type || '',
-      metafields: Array.isArray(raw.metafields) ? raw.metafields : [],
-      matchingSliders: Array.isArray(raw.matchingSliders) ? raw.matchingSliders : [],
       quantity: raw.quantity || 1,
       tags: getProductTags(raw),
       handle: raw.handle || '',
-      metafields: raw.metafields || {},
+      metafields: Array.isArray(raw.metafields) ? raw.metafields : [],
       matchingSliders: getMatchingSliders(raw),
       raw,
     };

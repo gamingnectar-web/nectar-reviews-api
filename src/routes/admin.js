@@ -9,7 +9,7 @@ const { encryptSecret, decryptSecret } = require('../utils/crypto');
 const { publicEmailSettings } = require('../utils/emailSettings');
 const { shopifyFetch, shopifyFetchOptional, getAccessTokenForShop, buildInstallUrl } = require('../utils/shopify');
 const { createReviewToken } = require('../utils/reviewTokens');
-const { scheduleReviewRequestFromOrder, sendDueReviewRequests, automationReadiness, registerReviewWebhookSubscriptions, inspectReviewWebhookSubscriptions, expectedReviewWebhookSubscriptions } = require('../modules/reviews/reviewRequestAutomation');
+const { scheduleReviewRequestFromOrder, sendDueReviewRequests, enrichReviewProducts, automationReadiness, registerReviewWebhookSubscriptions, inspectReviewWebhookSubscriptions, expectedReviewWebhookSubscriptions } = require('../modules/reviews/reviewRequestAutomation');
 const { awardForReview, getOrCreateLoyaltyProgram, normaliseCustomerRef, customerHintFromHash, createLedgerEntry } = require('../modules/loyalty/loyalty.service');
 const { getOrCreateDiscountProgram, issueDiscountCode } = require('../modules/discounts/discounts.service');
 
@@ -274,38 +274,46 @@ function numericShopifyProductId(value = '') {
   return matches.length ? matches[matches.length - 1] : '';
 }
 
-function sourceJobToProofOrder(sourceJob, proofEmail) {
-  const sourceOrder = sourceJob?.orderName || sourceJob?.orderId || 'ORDER';
-  const proofStamp = Date.now().toString().slice(-8);
-  const products = Array.isArray(sourceJob?.products) && sourceJob.products.length
-    ? sourceJob.products.slice(0, 20).map((product, index) => ({
-      id: cleanText(product.id || product.productId || product.handle || product.title || `proof-product-${index + 1}`, 180),
-      product_id: numericShopifyProductId(product.productId || product.id),
-      variant_id: numericShopifyProductId(product.variantId),
-      title: cleanText(product.title || 'Purchased product', 200),
-      handle: cleanText(product.handle || '', 200),
-      image: cleanText(product.image || '', 1000),
-      vendor: cleanText(product.vendor || '', 160),
-      product_type: cleanText(product.productType || '', 160),
-      tags: Array.isArray(product.tags) ? product.tags : [],
-      metafields: Array.isArray(product.metafields) ? product.metafields : [],
-      quantity: clampNumber(product.quantity || 1, 1, 999, 1),
-    }))
-    : [{ id: 'proof-product', title: 'Review proof product', quantity: 1 }];
+function maskProofName(value = '') {
+  const parts = cleanText(value || 'Customer', 140).split(/\s+/).filter(Boolean);
+  return parts.map((part) => part.length <= 1 ? `${part}*` : `${part.charAt(0)}${'*'.repeat(Math.min(7, Math.max(3, part.length - 1)))}`).join(' ');
+}
+
+function reviewProofDiagnostics(products = []) {
+  const list = Array.isArray(products) ? products : [];
   return {
-    id: `NECTAR-PROOF-${proofStamp}-${String(sourceJob?._id || sourceOrder).slice(-6)}`,
-    name: `PROOF-${sourceOrder}`,
-    email: proofEmail,
-    contact_email: proofEmail,
-    customer: { first_name: 'Shop', last_name: 'Proof', email: proofEmail },
-    fulfilled_at: new Date().toISOString(),
-    tags: 'delivered, nectar-proof',
-    line_items: products,
-    delivered: true,
+    productCount: list.length,
+    withImages: list.filter((product) => Boolean(product.image)).length,
+    withTags: list.filter((product) => Array.isArray(product.tags) && product.tags.length).length,
+    sliderRuleCount: list.reduce((sum, product) => sum + (Array.isArray(product.matchingSliders) ? product.matchingSliders.length : 0), 0),
   };
 }
 
+async function buildProofProducts({ shopDomain, sourceJob, settings }) {
+  const sourceProducts = Array.isArray(sourceJob?.products) ? sourceJob.products.filter(Boolean) : [];
+  if (!sourceProducts.length) {
+    const error = new Error('This review request has no source products. Choose a real Shopify order job before sending a proof.');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const enriched = await enrichReviewProducts(shopDomain, sourceProducts, settings?.attributeProfiles || []);
+  const usable = enriched.filter((product) => numericShopifyProductId(product.productId || product.id));
+  if (!usable.length) {
+    const error = new Error('The source order products could not be matched back to Shopify. The proof was not sent.');
+    error.statusCode = 409;
+    throw error;
+  }
+  return usable;
+}
+
 async function sendReviewProofForSourceJob({ shopDomain, sourceJob }) {
+  if (!sourceJob || sourceJob.testMode || sourceJob.source === 'admin_shop_email_order_proof') {
+    const error = new Error('Choose a real Shopify review-request job as the proof source. Test/proof jobs cannot seed another proof.');
+    error.statusCode = 409;
+    throw error;
+  }
+
   const [emailSettings, settings] = await Promise.all([
     activeEmailSettings(shopDomain),
     Settings.findOne({ shopDomain }).lean(),
@@ -316,25 +324,49 @@ async function sendReviewProofForSourceJob({ shopDomain, sourceJob }) {
     error.statusCode = 400;
     throw error;
   }
-  const proofOrder = sourceJobToProofOrder(sourceJob, proofRecipient);
-  const proofJob = await scheduleReviewRequestFromOrder({
+
+  const products = await buildProofProducts({ shopDomain, sourceJob, settings });
+  const diagnostics = reviewProofDiagnostics(products);
+  if (!diagnostics.productCount) {
+    const error = new Error('No reviewable Shopify products were available for this proof. The email was not sent.');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  // Keep the real order identity and real Shopify product context. Only the
+  // recipient is replaced with the locked shop proof address, and the customer
+  // display name is masked. testMode prevents this proof becoming verified/live.
+  const proofJob = await ReviewRequestJob.create({
     shopDomain,
-    order: proofOrder,
     source: 'admin_shop_email_order_proof',
+    orderId: sourceJob.orderId,
+    orderName: sourceJob.orderName || sourceJob.orderId,
+    customerEmail: proofRecipient,
+    customerName: maskProofName(sourceJob.customerName || 'Customer'),
+    products,
     delayDays: 0,
+    orderCreatedAt: sourceJob.orderCreatedAt || sourceJob.fulfilledAt || sourceJob.createdAt || new Date(),
+    fulfilledAt: sourceJob.fulfilledAt || new Date(),
+    deliveredAt: new Date(),
+    scheduledAt: new Date(Date.now() - 5000),
+    status: 'scheduled',
+    blockedReason: '',
+    orderTags: Array.isArray(sourceJob.orderTags) ? sourceJob.orderTags : [],
+    deliveryRequired: false,
+    requiredDeliveryTag: sourceJob.requiredDeliveryTag || 'delivered',
     testMode: true,
-    webhookId: `proof-${String(sourceJob?._id || proofOrder.id)}-${Date.now()}`,
+    webhookId: `proof-${String(sourceJob._id || sourceJob.orderId)}-${Date.now()}`,
+    campaign: sourceJob.campaign || 'native_review_request',
   });
-  await ReviewRequestJob.updateOne(
-    { _id: proofJob._id },
-    { $set: { status: 'scheduled', scheduledAt: new Date(Date.now() - 5000), blockedReason: '', deliveryRequired: false, deliveredAt: new Date() } }
-  );
+
   const sendResult = await sendDueReviewRequests({ limit: 1, jobId: proofJob._id });
   const refreshed = await ReviewRequestJob.findById(proofJob._id).lean();
   return {
     ok: true,
     proofRecipient,
-    sourceOrderId: sourceJob?.orderName || sourceJob?.orderId || '',
+    sourceOrderId: sourceJob.orderName || sourceJob.orderId || '',
+    maskedCustomerName: maskProofName(sourceJob.customerName || 'Customer'),
+    diagnostics,
     job: refreshed || proofJob,
     sendResult,
   };
@@ -2524,17 +2556,13 @@ router.post('/review-automation/jobs/:jobId/send-proof', async (req, res, next) 
 router.post('/review-automation/send-proof-latest', async (req, res, next) => {
   try {
     const shopDomain = shopDomainFromReq(req);
-    let sourceJob = await ReviewRequestJob.findOne({ shopDomain, testMode: { $ne: true } }).sort({ createdAt: -1 }).lean();
-    if (!sourceJob) {
-      sourceJob = {
-        _id: `manual-${Date.now()}`,
-        orderId: `NECTAR-PROOF-SAMPLE-${Date.now().toString().slice(-6)}`,
-        orderName: 'Sample proof order',
-        customerEmail: '',
-        customerName: 'Shop Proof',
-        products: [{ id: 'sample-proof-product', title: 'Sample review proof product', quantity: 1 }],
-      };
-    }
+    const sourceJob = await ReviewRequestJob.findOne({
+      shopDomain,
+      testMode: { $ne: true },
+      source: { $ne: 'admin_shop_email_order_proof' },
+      'products.0': { $exists: true },
+    }).sort({ createdAt: -1 }).lean();
+    if (!sourceJob) return res.status(409).json({ error: 'No real Shopify review-request job is available for a proof yet. Fulfil a test order first, then send its proof.' });
     const result = await sendReviewProofForSourceJob({ shopDomain, sourceJob });
     return res.status(201).json(result);
   } catch (error) {
