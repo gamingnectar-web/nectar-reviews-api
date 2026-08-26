@@ -161,6 +161,32 @@ check('review automation requires delivery gating and supports delayed sends', (
   requireText(source, 'sendDueReviewRequests', 'Due send processor');
 });
 
+check('delivery monitor uses Shopify fulfilment delivery events and requires every active parcel to be delivered', () => {
+  const source = read('src/modules/reviews/reviewRequestAutomation.js');
+  requireText(source, 'fetchShopifyDeliveryStatus', 'Delivery monitor query');
+  requireText(source, 'deliveredAt', 'Shopify deliveredAt signal');
+  requireText(source, "displayStatus", 'Shopify fulfilment display status');
+  requireText(source, "event?.status", 'Shopify delivery event status');
+  requireText(source, 'deliveredFulfillments.length === active.length', 'All-parcels delivered gate');
+  requireText(source, "source: allCarrierDelivered ? 'shopify_fulfillment_delivery'", 'Carrier delivery source');
+});
+
+check('delivery monitor reconciles awaiting jobs before the email sender runs', () => {
+  const source = read('src/modules/reviews/reviewRequestAutomation.js');
+  requireText(source, 'async function reconcileAwaitingDeliveryJobs', 'Awaiting-delivery reconciliation');
+  const scheduler = source.indexOf('function startReviewRequestJobs()');
+  const reconcile = source.indexOf('await reconcileAwaitingDeliveryJobs({ limit: 25 });', scheduler);
+  const send = source.indexOf('await sendDueReviewRequests({ limit: 25 });', scheduler);
+  assert(reconcile >= 0 && send >= 0 && reconcile < send, 'Delivery reconciliation must run before due review emails are sent.');
+});
+
+check('review jobs persist delivery diagnostics for launch visibility', () => {
+  const source = read('src/models/index.js');
+  for (const field of ['lastDeliveryCheckAt:', 'deliveryStatus:', 'deliverySource:', 'deliveryTracking:']) {
+    requireText(source, field, `Delivery diagnostic field ${field}`);
+  }
+});
+
 check('review scheduler starts automatically and repeatedly processes due jobs', () => {
   const reviews = read('src/modules/reviews/reviewRequestAutomation.js');
   const modules = read('src/modules/index.js');

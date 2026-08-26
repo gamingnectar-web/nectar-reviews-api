@@ -285,6 +285,138 @@ function hasRequiredDeliveryTag(order = {}, tag = 'delivered') {
   return orderTags(order).includes(wanted);
 }
 
+function deliveryStatusLabel(status = '') {
+  return String(status || '').trim().toLowerCase().replace(/_/g, ' ');
+}
+
+function fulfillmentDelivered(fulfillment = {}) {
+  if (fulfillment.deliveredAt) return true;
+  if (String(fulfillment.displayStatus || '').toUpperCase() === 'DELIVERED') return true;
+  const events = Array.isArray(fulfillment.events?.nodes) ? fulfillment.events.nodes : [];
+  return events.some((event) => String(event?.status || '').toUpperCase() === 'DELIVERED');
+}
+
+function fulfillmentDeliveredAt(fulfillment = {}) {
+  const candidates = [
+    fulfillment.deliveredAt,
+    ...(Array.isArray(fulfillment.events?.nodes) ? fulfillment.events.nodes
+      .filter((event) => String(event?.status || '').toUpperCase() === 'DELIVERED')
+      .map((event) => event.happenedAt || event.createdAt) : []),
+  ].filter(Boolean).map((value) => new Date(value)).filter((date) => !Number.isNaN(date.getTime()));
+  return candidates.sort((a, b) => b.getTime() - a.getTime())[0] || null;
+}
+
+async function fetchShopifyDeliveryStatus(shopDomain, job = {}) {
+  const numericOrderId = numericShopifyOrderId(job.orderId || job.orderName);
+  if (!numericOrderId) {
+    const error = new Error('Review job does not contain a usable Shopify order ID for delivery monitoring.');
+    error.code = 'REVIEW_DELIVERY_ORDER_ID_MISSING';
+    throw error;
+  }
+
+  const query = `query ReviewDeliveryStatus($id: ID!) {
+    order(id: $id) {
+      id
+      name
+      tags
+      displayFulfillmentStatus
+      fulfillments(first: 50) {
+        nodes {
+          id
+          status
+          displayStatus
+          deliveredAt
+          inTransitAt
+          updatedAt
+          trackingInfo(first: 5) { company number url }
+          events(first: 20, reverse: true) { nodes { status happenedAt createdAt } }
+        }
+      }
+    }
+  }`;
+  const payload = await shopifyFetch(`/admin/api/${env.shopifyApiVersion}/graphql.json`, {
+    shopDomain,
+    method: 'POST',
+    body: JSON.stringify({ query, variables: { id: `gid://shopify/Order/${numericOrderId}` } }),
+  });
+  if (Array.isArray(payload?.errors) && payload.errors.length) {
+    const error = new Error(`Shopify delivery query failed: ${payload.errors.map((item) => item.message).filter(Boolean).join('; ')}`);
+    error.code = 'REVIEW_DELIVERY_QUERY_FAILED';
+    throw error;
+  }
+  const order = payload?.data?.order;
+  if (!order) {
+    const error = new Error(`Shopify order ${numericOrderId} could not be loaded for delivery monitoring.`);
+    error.code = 'REVIEW_DELIVERY_ORDER_NOT_FOUND';
+    throw error;
+  }
+
+  const fulfillments = Array.isArray(order.fulfillments?.nodes) ? order.fulfillments.nodes : [];
+  const active = fulfillments.filter((fulfillment) => !['CANCELLED', 'CANCELED', 'FAILURE', 'ERROR'].includes(String(fulfillment.status || '').toUpperCase()));
+  const deliveredFulfillments = active.filter(fulfillmentDelivered);
+  const tagDelivered = hasRequiredDeliveryTag({ tags: order.tags }, job.requiredDeliveryTag || 'delivered');
+  const allCarrierDelivered = active.length > 0 && deliveredFulfillments.length === active.length;
+  const delivered = allCarrierDelivered || tagDelivered;
+  const deliveredDates = deliveredFulfillments.map(fulfillmentDeliveredAt).filter(Boolean);
+  const finalDeliveredAt = deliveredDates.sort((a, b) => b.getTime() - a.getTime())[0] || null;
+  const displayStatuses = active.map((fulfillment) => String(fulfillment.displayStatus || fulfillment.status || '')).filter(Boolean);
+  const currentStatus = allCarrierDelivered
+    ? 'DELIVERED'
+    : (displayStatuses.find((status) => String(status).toUpperCase() === 'OUT_FOR_DELIVERY')
+      || displayStatuses.find((status) => String(status).toUpperCase() === 'IN_TRANSIT')
+      || displayStatuses[0]
+      || String(order.displayFulfillmentStatus || 'UNKNOWN'));
+
+  return {
+    delivered,
+    deliveredAt: finalDeliveredAt || (tagDelivered ? new Date() : null),
+    source: allCarrierDelivered ? 'shopify_fulfillment_delivery' : (tagDelivered ? 'shopify_order_tag' : 'shopify_fulfillment_monitor'),
+    currentStatus,
+    orderName: order.name || job.orderName || '',
+    fulfillmentCount: active.length,
+    deliveredFulfillmentCount: deliveredFulfillments.length,
+    tracking: active.flatMap((fulfillment) => Array.isArray(fulfillment.trackingInfo) ? fulfillment.trackingInfo : []).slice(0, 10),
+  };
+}
+
+async function reconcileAwaitingDeliveryJobs({ limit = 25, jobId = '' } = {}) {
+  const filter = jobId
+    ? { _id: jobId, status: 'awaiting_delivery', testMode: { $ne: true } }
+    : { status: 'awaiting_delivery', testMode: { $ne: true } };
+  const jobs = await ReviewRequestJob.find(filter).sort({ updatedAt: 1 }).limit(Math.max(1, Number(limit) || 25));
+  const results = [];
+
+  for (const job of jobs) {
+    try {
+      const delivery = await fetchShopifyDeliveryStatus(job.shopDomain, job);
+      job.lastDeliveryCheckAt = new Date();
+      job.deliveryStatus = cleanText(delivery.currentStatus || '', 80);
+      job.deliverySource = cleanText(delivery.source || 'shopify_fulfillment_monitor', 80);
+      job.deliveryTracking = Array.isArray(delivery.tracking) ? delivery.tracking : [];
+
+      if (delivery.delivered) {
+        const deliveredAt = delivery.deliveredAt || new Date();
+        job.status = 'scheduled';
+        job.deliveredAt = deliveredAt;
+        job.scheduledAt = addDays(deliveredAt, Number(job.delayDays || DEFAULT_DELAY_DAYS));
+        job.blockedReason = '';
+      } else {
+        const statusLabel = deliveryStatusLabel(delivery.currentStatus || 'awaiting carrier update');
+        job.blockedReason = `Waiting for Shopify delivery confirmation${statusLabel ? ` · current status: ${statusLabel}` : ''}.`;
+      }
+      await job.save();
+      results.push({ id: String(job._id), delivered: Boolean(delivery.delivered), status: job.status, deliveryStatus: job.deliveryStatus, source: job.deliverySource, scheduledAt: job.scheduledAt || null });
+    } catch (error) {
+      job.lastDeliveryCheckAt = new Date();
+      job.deliverySource = 'shopify_fulfillment_monitor_error';
+      job.errorMessage = cleanText(error.message || 'Delivery monitor failed.', 500);
+      await job.save().catch(() => {});
+      results.push({ id: String(job._id), delivered: false, status: job.status, error: error.message || 'Delivery monitor failed.' });
+    }
+  }
+  return { count: results.length, results };
+}
+
 async function scheduleReviewRequestFromOrder({ shopDomain, order = {}, source = 'shopify_webhook', delayDays, testMode = false, webhookId = '' }) {
   const cleanShop = cleanText(shopDomain, 200).toLowerCase();
   if (!cleanShop) throw new Error('Missing shop domain for review request scheduling.');
@@ -835,7 +967,8 @@ async function automationReadiness(shopDomain) {
     flowOptional: true,
     checks: [
       { key: 'native_scheduler', label: 'Nectar native scheduler', status: cfg.enabled && cfg.nativeEnabled ? 'ready' : 'blocked', detail: cfg.enabled && cfg.nativeEnabled ? `Native automation waits ${cfg.delayDays} days after ${cfg.deliveryTagRequired ? `Shopify order tag ${cfg.deliveryTag}` : 'fulfilment'}, then sends using Nectar email.` : 'Native automation is disabled.' },
-      { key: 'delivery_tag_gate', label: 'Delivery tag gate', status: cfg.deliveryTagRequired ? 'ready' : 'warning', detail: cfg.deliveryTagRequired ? `Review emails wait until the Shopify order has tag ${cfg.deliveryTag}. Your tracking app can add this tag when delivered.` : 'Review emails use fulfilment date only. Enable the delivery tag gate to avoid reviews before delivery.' },
+      { key: 'delivery_tag_gate', label: 'Delivery tag fallback', status: cfg.deliveryTagRequired ? 'ready' : 'warning', detail: cfg.deliveryTagRequired ? `The ${cfg.deliveryTag} order tag remains available as a delivery fallback.` : 'The order-tag fallback is disabled.' },
+      { key: 'delivery_monitor', label: 'Shopify delivery monitor', status: oauthReady ? 'ready' : 'warning', detail: oauthReady ? 'Nectar independently re-checks Shopify fulfilment delivery events every 10 minutes and only starts the review delay after all active parcels are delivered. The order tag remains a fallback.' : 'Delivery monitoring needs the existing Shopify OAuth order access.' },
       { key: 'email_provider', label: 'Email provider', status: emailReady ? 'ready' : 'blocked', detail: emailReady ? `Emails send from ${emailSettings.fromEmail || emailSettings.smtpUser}.` : 'No active email provider is saved.' },
       { key: 'order_age_gate', label: 'Order age safety gate', status: (cfg.orderCutoffDate || cfg.maxOrderAgeDays > 0) ? 'ready' : 'warning', detail: cfg.orderCutoffDate || cfg.maxOrderAgeDays > 0 ? `Old-order protection is active${cfg.orderCutoffDate ? ` from ${cfg.orderCutoffDate.toISOString().slice(0, 10)}` : ''}${cfg.maxOrderAgeDays > 0 ? ` with a ${cfg.maxOrderAgeDays}-day maximum order age` : ''}.` : 'No old-order cutoff is configured. New webhooks still work, but historic orders are not automatically excluded by age.' },
       { key: 'signed_links', label: 'Signed review links', status: tokenReady ? 'ready' : 'blocked', detail: tokenReady ? 'Review links can be signed and verified.' : 'Set EMAIL_CREDENTIAL_SECRET or SHOPIFY_API_SECRET.' },
@@ -853,6 +986,7 @@ function startReviewRequestJobs() {
     if (schedulerRunning) return;
     schedulerRunning = true;
     try {
+      await reconcileAwaitingDeliveryJobs({ limit: 25 });
       await sendDueReviewRequests({ limit: 25 });
     } catch (error) {
       console.warn('Review request scheduler skipped:', error.message);
@@ -877,6 +1011,8 @@ module.exports = {
   getAutomationConfig,
   scheduleReviewRequestFromOrder,
   updateReviewRequestDeliveryFromOrder,
+  fetchShopifyDeliveryStatus,
+  reconcileAwaitingDeliveryJobs,
   sendDueReviewRequests,
   expectedReviewWebhookSubscriptions,
   inspectReviewWebhookSubscriptions,
