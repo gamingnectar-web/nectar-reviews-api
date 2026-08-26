@@ -12,7 +12,7 @@
     const style = document.createElement('style');
     style.id = 'nectar-webhook-registry-styles';
     style.textContent = `
-      .webhook-registry-summary{border:1px solid #d9e0ea;background:#fbfdff;border-radius:14px;padding:12px 14px;margin:8px 0 14px;display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}.webhook-registry-summary strong{display:block;margin-bottom:3px}.webhook-registry-summary p{margin:0;color:#667085}.webhook-registry-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.webhook-registry-item{border:1px solid #e5e7eb;background:#fff;border-radius:16px;padding:14px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:start;box-shadow:0 8px 18px rgba(15,23,42,.035)}.webhook-registry-item[data-status=verified],.webhook-registry-item[data-status=received]{border-color:#abefc6;background:#f6fef9}.webhook-registry-item[data-status=manual_ready]{border-color:#fedf89;background:#fffcf5}.webhook-registry-item[data-status=missing]{border-color:#fecdd6;background:#fff7f7}.webhook-registry-item[data-status=manual_unverified]{border-color:#fedf89;background:#fffcf5}.webhook-registry-dot{width:30px;height:30px;border-radius:999px;display:grid;place-items:center;font-weight:900;background:#f2f4f7;color:#344054}.webhook-registry-item[data-status=verified] .webhook-registry-dot,.webhook-registry-item[data-status=received] .webhook-registry-dot{background:#039855;color:white}.webhook-registry-item[data-status=manual_ready] .webhook-registry-dot{background:#f79009;color:#111827}.webhook-registry-item[data-status=missing] .webhook-registry-dot{background:#d92d20;color:white}.webhook-registry-item[data-status=manual_unverified] .webhook-registry-dot{background:#f79009;color:#111827}.webhook-registry-copy strong{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.webhook-registry-copy em{font-size:11px;text-transform:uppercase;letter-spacing:.04em;font-style:normal;color:#667085}.webhook-registry-copy p{margin:5px 0;color:#475467;line-height:1.45}.webhook-registry-copy code{display:block;background:#fff;border:1px solid #edf0f3;border-radius:9px;padding:7px 8px;font-size:12px;word-break:break-all;margin-top:8px}.webhook-registry-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.webhook-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.52);z-index:9999;display:grid;place-items:center;padding:20px}.webhook-modal{max-width:760px;width:min(760px,100%);max-height:86vh;overflow:auto;background:#fff;border-radius:20px;box-shadow:0 24px 70px rgba(15,23,42,.28);border:1px solid #e5e7eb}.webhook-modal header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 20px;border-bottom:1px solid #edf0f3}.webhook-modal header h3{margin:0}.webhook-modal header p{margin:6px 0 0;color:#667085}.webhook-modal-body{padding:18px 20px;display:grid;gap:12px}.webhook-modal-grid{display:grid;grid-template-columns:180px minmax(0,1fr);gap:8px 12px}.webhook-modal-grid span{color:#667085;font-weight:800}.webhook-modal-grid code{word-break:break-all;background:#f8fafc;border:1px solid #edf0f3;border-radius:8px;padding:6px}.webhook-modal-close{border:0;background:#f2f4f7;border-radius:999px;width:34px;height:34px;font-size:20px;cursor:pointer}.webhook-manual-steps{border:1px solid #dbeafe;background:#eff6ff;border-radius:14px;padding:14px}.webhook-manual-steps ol{margin:8px 0 12px 20px;color:#344054}.webhook-manual-steps li{margin:4px 0;line-height:1.45}@media(max-width:900px){.webhook-registry-list,.webhook-modal-grid{grid-template-columns:1fr}.webhook-registry-summary{align-items:flex-start}}`;
+      .webhook-registry-summary{border:1px solid #d9e0ea;background:#fbfdff;border-radius:14px;padding:12px 14px;margin:8px 0 14px;display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}.webhook-registry-summary strong{display:block;margin-bottom:3px}.webhook-registry-summary p{margin:0;color:#667085}.webhook-registry-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.webhook-registry-item{border:1px solid #e5e7eb;background:#fff;border-radius:16px;padding:14px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:start;box-shadow:0 8px 18px rgba(15,23,42,.035)}.webhook-registry-item[data-status=verified],.webhook-registry-item[data-status=received]{border-color:#abefc6;background:#f6fef9}.webhook-registry-item[data-status=manual_ready]{border-color:#fedf89;background:#fffcf5}.webhook-registry-item[data-status=missing]{border-color:#fecdd6;background:#fff7f7}.webhook-registry-item[data-status=manual_unverified]{border-color:#fedf89;background:#fffcf5}.webhook-registry-dot{width:30px;height:30px;border-radius:999px;display:grid;place-items:center;font-weight:900;background:#f2f4f7;color:#344054}.webhook-registry-item[data-status=verified] .webhook-registry-dot,.webhook-registry-item[data-status=received] .webhook-registry-dot{background:#039855;color:white}.webhook-registry-item[data-status=manual_ready] .webhook-registry-dot{background:#f79009;color:#111827}.webhook-registry-item[data-status=missing] .webhook-registry-dot{background:#d92d20;color:white}.webhook-registry-item[data-status=manual_unverified] .webhook-registry-dot{background:#f79009;color:#111827}.webhook-registry-copy strong{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.webhook-registry-copy em{font-size:11px;text-transform:uppercase;letter-spacing:.04em;font-style:normal;color:#667085}.webhook-registry-copy p{margin:5px 0;color:#475467;line-height:1.45}.webhook-registry-copy code{display:block;background:#fff;border:1px solid #edf0f3;border-radius:9px;padding:7px 8px;font-size:12px;word-break:break-all;margin-top:8px}.webhook-registry-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.webhook-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.52);z-index:9999;display:grid;place-items:center;padding:20px}.webhook-modal{max-width:760px;width:min(760px,100%);max-height:86vh;overflow:auto;background:#fff;border-radius:20px;box-shadow:0 24px 70px rgba(15,23,42,.28);border:1px solid #e5e7eb}.webhook-modal header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 20px;border-bottom:1px solid #edf0f3}.webhook-modal header h3{margin:0}.webhook-modal header p{margin:6px 0 0;color:#667085}.webhook-modal-body{padding:18px 20px;display:grid;gap:12px}.webhook-modal-grid{display:grid;grid-template-columns:180px minmax(0,1fr);gap:8px 12px}.webhook-modal-grid span{color:#667085;font-weight:800}.webhook-modal-grid code{word-break:break-all;background:#f8fafc;border:1px solid #edf0f3;border-radius:8px;padding:6px}.webhook-modal-close{border:0;background:#f2f4f7;border-radius:999px;width:34px;height:34px;font-size:20px;cursor:pointer}.webhook-manual-steps{border:1px solid #dbeafe;background:#eff6ff;border-radius:14px;padding:14px}.webhook-manual-steps ol{margin:8px 0 12px 20px;color:#344054}.webhook-manual-steps li{margin:4px 0;line-height:1.45}.review-safety-gate{margin-top:14px;border:1px solid #dbe4ee;background:#fbfdff;border-radius:16px;padding:16px}.review-safety-gate h4{margin:0 0 5px}.review-safety-gate p{margin:0 0 12px;color:#667085}.review-safety-grid{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr)) auto;gap:12px;align-items:end}.review-safety-grid label{display:grid;gap:6px;font-size:12px;font-weight:800;color:#344054}.review-safety-grid input{min-height:42px;border:1px solid #d0d5dd;border-radius:10px;padding:9px 11px;background:#fff}.review-safety-status{margin-top:9px;font-size:12px;color:#667085}@media(max-width:900px){.webhook-registry-list,.webhook-modal-grid,.review-safety-grid{grid-template-columns:1fr}.webhook-registry-summary{align-items:flex-start}}`;
     document.head.appendChild(style);
   }
 
@@ -136,6 +136,20 @@
           <div class="review-simple-tile" data-status="${esc(scheduler.status || 'blocked')}"><span>Delay timer</span><strong>${esc(Number(summary.delayDays ?? 14))} days</strong><p>${esc(scheduler.detail || 'Nectar waits after delivery before sending.')}</p></div>
           <div class="review-simple-tile" data-status="${esc(links.status || 'blocked')}"><span>Review links</span><strong>${esc(compactCheckLabel(links))}</strong><p>One-use signed links protect verified review requests.</p></div>
           <div class="review-simple-tile review-simple-tile-wide" data-status="${outstandingActionable ? 'warning' : 'ready'}"><span>Outstanding sends</span><strong>${esc(outstandingLabel)}</strong><p>${esc(Number(outstanding.failed || 0))} failed · ${esc(Number(outstanding.dueNow || 0))} due now · ${esc(Number(outstanding.awaitingDelivery || 0))} waiting delivery</p><button class="secondary-btn compact" type="button" onclick="window.processOutstandingReviewSends?.()">Run outstanding sends</button></div>
+        </div>
+        <div class="review-safety-gate">
+          <h4>Old-order safety cutoff</h4>
+          <p>Prevent historic orders from ever receiving a review request. Either rule can block a send; using both gives the strongest protection.</p>
+          <div class="review-safety-grid">
+            <label>Do not send for orders placed before
+              <input id="review-order-cutoff-date" type="date" value="${esc(summary.orderCutoffDate || '')}">
+            </label>
+            <label>Maximum order age (days)
+              <input id="review-max-order-age-days" type="number" min="0" max="3650" step="1" value="${esc(Number(summary.maxOrderAgeDays || 0))}" placeholder="e.g. 30">
+            </label>
+            <button class="secondary-btn" type="button" onclick="window.saveReviewOrderSafety?.()">Save safety rule</button>
+          </div>
+          <div class="review-safety-status">${summary.orderCutoffDate || Number(summary.maxOrderAgeDays || 0) > 0 ? `Active${summary.orderCutoffDate ? ` · before ${esc(summary.orderCutoffDate)} blocked` : ''}${Number(summary.maxOrderAgeDays || 0) > 0 ? ` · older than ${esc(Number(summary.maxOrderAgeDays))} days blocked` : ''}` : 'Not configured yet.'}</div>
         </div>
       </div>
     `;
@@ -265,6 +279,40 @@
     const close = () => overlay.remove();
     overlay.querySelector('.webhook-modal-close')?.addEventListener('click', close);
     overlay.addEventListener('click', (event)=>{ if (event.target === overlay) close(); });
+  };
+
+  window.saveReviewOrderSafety = async function(){
+    const cutoff = document.getElementById('review-order-cutoff-date')?.value || '';
+    const maxAgeRaw = Number(document.getElementById('review-max-order-age-days')?.value || 0);
+    const maxOrderAgeDays = Number.isFinite(maxAgeRaw) ? Math.max(0, Math.min(3650, Math.round(maxAgeRaw))) : 0;
+    try {
+      const current = await api('/admin/review-automation');
+      const cfg = current.config || {};
+      await api('/admin/review-automation', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          enabled: cfg.enabled !== false,
+          mode: cfg.mode || 'native',
+          nativeEnabled: cfg.nativeEnabled !== false,
+          flowEnabled: Boolean(cfg.flowEnabled),
+          trigger: cfg.trigger || 'orders/fulfilled',
+          deliveryTagRequired: cfg.deliveryTagRequired !== false,
+          deliveryTag: cfg.deliveryTag || 'delivered',
+          deliveryAnchor: cfg.deliveryAnchor || 'delivered_tag',
+          delayDays: Number(cfg.delayDays ?? 14),
+          sendWindowHour: Number(cfg.sendWindowHour ?? 10),
+          sendWindowTimezone: cfg.sendWindowTimezone || 'store',
+          campaign: cfg.campaign || 'native_review_request',
+          subject: cfg.subject || 'How was your recent order?',
+          orderCutoffDate: cutoff,
+          maxOrderAgeDays,
+        }),
+      });
+      toast(`Review safety rule saved${cutoff ? ` · cutoff ${cutoff}` : ''}${maxOrderAgeDays ? ` · max age ${maxOrderAgeDays} days` : ''}.`);
+      await window.loadReviewsLaunchChecklist?.();
+    } catch (error) {
+      toast(`Could not save review safety rule: ${error.message}`);
+    }
   };
 
   window.loadReviewsLaunchChecklist = async function(){

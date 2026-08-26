@@ -230,4 +230,26 @@ check('review email renderer supports Nectar and legacy customer first-name vari
   requireText(builder, 'Hi {{ customerName }}', 'Email-builder Nectar variable default');
 });
 
+check('old-order cutoff config is modelled', () => {
+  const source = read('src/models/index.js');
+  requireText(source, 'orderCutoffDate:', 'Order cutoff date setting');
+  requireText(source, 'maxOrderAgeDays:', 'Maximum order age setting');
+  requireText(source, 'orderCreatedAt:', 'Order creation timestamp on review jobs');
+});
+
+check('old-order eligibility is enforced before customer send', () => {
+  const source = read('src/modules/reviews/reviewRequestAutomation.js');
+  requireText(source, 'function reviewRequestEligibility', 'Order eligibility helper');
+  requireText(source, "job.status = 'skipped';", 'Pre-send skipped state');
+  requireText(source, 'Review request skipped: order is older than', 'Maximum age block reason');
+  requireText(source, 'Review request skipped: order was placed before the configured cutoff date', 'Cutoff date block reason');
+});
+
+check('launch portal exposes old-order safety controls', () => {
+  const source = read('public/reviews-launch-checklist.js');
+  requireText(source, 'review-order-cutoff-date', 'Cutoff date control');
+  requireText(source, 'review-max-order-age-days', 'Maximum age control');
+  requireText(source, 'saveReviewOrderSafety', 'Safety save action');
+});
+
 console.log('\nReviews smoke test passed: security and automation wiring look production-ready at build time.');

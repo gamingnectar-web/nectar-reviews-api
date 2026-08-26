@@ -34,6 +34,8 @@ function reviewAutomationConfig(settings = {}) {
     nativeEnabled: cfg.nativeEnabled !== false,
     flowEnabled: Boolean(cfg.flowEnabled),
     delayDays: clampNumber(cfg.delayDays, 0, 365, DEFAULT_DELAY_DAYS),
+    orderCutoffDate: cfg.orderCutoffDate ? new Date(cfg.orderCutoffDate) : null,
+    maxOrderAgeDays: clampNumber(cfg.maxOrderAgeDays, 0, 3650, 0),
     trigger: ['orders/fulfilled', 'fulfillments/create', 'manual'].includes(cfg.trigger) ? cfg.trigger : 'orders/fulfilled',
     sendWindowHour: clampNumber(cfg.sendWindowHour, 0, 23, 10),
     sendWindowTimezone: cleanText(cfg.sendWindowTimezone || 'store', 80),
@@ -90,6 +92,58 @@ function resolveFulfilledAt(order = {}) {
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
+function resolveOrderCreatedAt(order = {}, fallback = null) {
+  const candidates = [
+    order.created_at,
+    order.processed_at,
+    order.order_date,
+    fallback,
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    const date = candidate instanceof Date ? candidate : new Date(candidate);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  return null;
+}
+
+function reviewRequestEligibility(orderCreatedAt, cfg = {}, now = new Date()) {
+  const created = orderCreatedAt instanceof Date ? orderCreatedAt : (orderCreatedAt ? new Date(orderCreatedAt) : null);
+  if (!created || Number.isNaN(created.getTime())) {
+    return { eligible: true, reason: '', orderCreatedAt: null };
+  }
+
+  const cutoff = cfg.orderCutoffDate instanceof Date
+    ? cfg.orderCutoffDate
+    : (cfg.orderCutoffDate ? new Date(cfg.orderCutoffDate) : null);
+
+  if (cutoff && !Number.isNaN(cutoff.getTime())) {
+    const cutoffStart = new Date(cutoff);
+    cutoffStart.setUTCHours(0, 0, 0, 0);
+    if (created.getTime() < cutoffStart.getTime()) {
+      return {
+        eligible: false,
+        reason: `Review request skipped: order was placed before the configured cutoff date (${cutoffStart.toISOString().slice(0, 10)}).`,
+        orderCreatedAt: created,
+      };
+    }
+  }
+
+  const maxAgeDays = Number(cfg.maxOrderAgeDays || 0);
+  if (maxAgeDays > 0) {
+    const ageMs = now.getTime() - created.getTime();
+    const maxMs = maxAgeDays * 24 * 60 * 60 * 1000;
+    if (ageMs > maxMs) {
+      return {
+        eligible: false,
+        reason: `Review request skipped: order is older than the configured ${maxAgeDays}-day maximum age.`,
+        orderCreatedAt: created,
+      };
+    }
+  }
+
+  return { eligible: true, reason: '', orderCreatedAt: created };
+}
+
 function addDays(date, days) {
   const base = date instanceof Date && !Number.isNaN(date.getTime()) ? date : new Date();
   return new Date(base.getTime() + Number(days || 0) * 24 * 60 * 60 * 1000);
@@ -129,6 +183,8 @@ async function scheduleReviewRequestFromOrder({ shopDomain, order = {}, source =
   const email = resolveOrderEmail(order);
   const customerName = resolveOrderName(order);
   const fulfilledAt = resolveFulfilledAt(order);
+  const orderCreatedAt = resolveOrderCreatedAt(order, fulfilledAt);
+  const eligibility = reviewRequestEligibility(orderCreatedAt, cfg);
   const tags = orderTags(order);
   const delivered = !cfg.deliveryTagRequired || hasRequiredDeliveryTag(order, cfg.deliveryTag) || Boolean(testMode && order.delivered !== false);
   const deliveredAt = delivered ? new Date(order.delivered_at || order.updated_at || order.fulfilled_at || new Date()) : null;
@@ -137,7 +193,11 @@ async function scheduleReviewRequestFromOrder({ shopDomain, order = {}, source =
   const scheduledAt = delivered ? addDays(anchorDate, effectiveDelay) : null;
   let status = email && products.length && cfg.enabled && cfg.nativeEnabled ? 'scheduled' : 'blocked';
   let blockedReason = '';
-  if (!cfg.enabled || !cfg.nativeEnabled) blockedReason = 'Native review request automation is disabled.';
+  if (!testMode && !eligibility.eligible) {
+    status = 'skipped';
+    blockedReason = eligibility.reason;
+  }
+  else if (!cfg.enabled || !cfg.nativeEnabled) blockedReason = 'Native review request automation is disabled.';
   else if (!email) blockedReason = 'Order has no customer email.';
   else if (!products.length) blockedReason = 'Order has no reviewable products.';
   else if (!delivered) {
@@ -153,9 +213,10 @@ async function scheduleReviewRequestFromOrder({ shopDomain, order = {}, source =
     customerEmail: email,
     customerName,
     products,
+    orderCreatedAt,
     fulfilledAt,
     deliveredAt,
-    scheduledAt,
+    scheduledAt: status === 'skipped' ? null : scheduledAt,
     delayDays: effectiveDelay,
     status,
     blockedReason,
@@ -182,8 +243,18 @@ async function updateReviewRequestDeliveryFromOrder({ shopDomain, order = {}, we
   const tags = orderTags(order);
   const delivered = hasRequiredDeliveryTag(order, cfg.deliveryTag);
   const filter = email ? { shopDomain: cleanShop, orderId, customerEmail: email } : { shopDomain: cleanShop, orderId };
+  const existingJob = await ReviewRequestJob.findOne(filter).select('orderCreatedAt fulfilledAt testMode').lean().catch(() => null);
+  const orderCreatedAt = resolveOrderCreatedAt(order, existingJob?.orderCreatedAt || existingJob?.fulfilledAt || null);
+  const eligibility = reviewRequestEligibility(orderCreatedAt, cfg);
+  if (!existingJob?.testMode && !eligibility.eligible) {
+    const result = await ReviewRequestJob.updateMany(
+      { ...filter, status: { $in: ['awaiting_delivery', 'scheduled', 'sending'] } },
+      { $set: { status: 'skipped', scheduledAt: null, orderCreatedAt, orderTags: tags, blockedReason: eligibility.reason, webhookId: cleanText(webhookId, 160) } }
+    );
+    return { ok: true, delivered: Boolean(delivered), skipped: true, updated: result.modifiedCount || 0, reason: eligibility.reason };
+  }
   if (!delivered) {
-    await ReviewRequestJob.updateMany(filter, { $set: { orderTags: tags, webhookId: cleanText(webhookId, 160) } });
+    await ReviewRequestJob.updateMany(filter, { $set: { orderCreatedAt, orderTags: tags, webhookId: cleanText(webhookId, 160) } });
     return { ok: true, delivered: false, updated: 0, reason: `Order does not have tag "${cfg.deliveryTag}" yet.` };
   }
   const deliveredAt = new Date(order.delivered_at || order.updated_at || new Date());
@@ -192,6 +263,7 @@ async function updateReviewRequestDeliveryFromOrder({ shopDomain, order = {}, we
     $set: {
       status: 'scheduled',
       blockedReason: '',
+      orderCreatedAt,
       deliveredAt,
       scheduledAt,
       orderTags: tags,
@@ -374,6 +446,19 @@ function renderTemplateReviewEmail({ template, shopDomain, shopName, customerNam
 
 async function sendReviewRequestJob(job) {
   const shopDomain = job.shopDomain;
+  const cfg = await getAutomationConfig(shopDomain);
+  const orderCreatedAt = resolveOrderCreatedAt({}, job.orderCreatedAt || job.fulfilledAt || job.createdAt || null);
+  const eligibility = reviewRequestEligibility(orderCreatedAt, cfg);
+  if (!job.testMode && !eligibility.eligible) {
+    job.status = 'skipped';
+    job.scheduledAt = null;
+    job.blockedReason = eligibility.reason;
+    job.errorMessage = '';
+    job.lastAttemptAt = new Date();
+    if (orderCreatedAt) job.orderCreatedAt = orderCreatedAt;
+    await job.save();
+    return job;
+  }
   const settings = await EmailProviderSettings.findOne({ shopDomain });
   if (!settings || !settings.enabled || !settings.smtpPassEncrypted) {
     throw new Error('No active email provider with saved SMTP/app-password credentials is configured.');
@@ -395,7 +480,6 @@ async function sendReviewRequestJob(job) {
   const reviewUrl = `https://${shopDomain}/pages/leave-review?shopDomain=${encodeURIComponent(shopDomain)}&mode=order&order_id=${encodeURIComponent(job.orderId)}&email=${encodeURIComponent(job.customerEmail)}&token=${encodeURIComponent(token)}${job.testMode ? '&test=1' : ''}`;
   const fromEmail = settings.fromEmail || settings.smtpUser;
   const fromName = settings.fromName || 'Store Reviews';
-  const cfg = await getAutomationConfig(shopDomain);
   const primaryTemplate = await findPrimaryReviewTemplate(shopDomain);
   const subject = primaryTemplate?.subject || cfg.subject || 'How was your recent order?';
   const html = primaryTemplate
@@ -450,7 +534,7 @@ async function sendDueReviewRequests({ limit = 25, jobId = '' } = {}) {
       job.lastAttemptAt = new Date();
       await job.save();
       const sent = await sendReviewRequestJob(job);
-      results.push({ id: String(sent._id), status: 'sent' });
+      results.push({ id: String(sent._id), status: sent.status || 'sent', reason: sent.blockedReason || '' });
     } catch (error) {
       job.status = Number(job.attempts || 0) >= 4 ? 'failed' : 'scheduled';
       job.attempts = Number(job.attempts || 0) + 1;
@@ -629,6 +713,7 @@ async function automationReadiness(shopDomain) {
       { key: 'native_scheduler', label: 'Nectar native scheduler', status: cfg.enabled && cfg.nativeEnabled ? 'ready' : 'blocked', detail: cfg.enabled && cfg.nativeEnabled ? `Native automation waits ${cfg.delayDays} days after ${cfg.deliveryTagRequired ? `Shopify order tag ${cfg.deliveryTag}` : 'fulfilment'}, then sends using Nectar email.` : 'Native automation is disabled.' },
       { key: 'delivery_tag_gate', label: 'Delivery tag gate', status: cfg.deliveryTagRequired ? 'ready' : 'warning', detail: cfg.deliveryTagRequired ? `Review emails wait until the Shopify order has tag ${cfg.deliveryTag}. Your tracking app can add this tag when delivered.` : 'Review emails use fulfilment date only. Enable the delivery tag gate to avoid reviews before delivery.' },
       { key: 'email_provider', label: 'Email provider', status: emailReady ? 'ready' : 'blocked', detail: emailReady ? `Emails send from ${emailSettings.fromEmail || emailSettings.smtpUser}.` : 'No active email provider is saved.' },
+      { key: 'order_age_gate', label: 'Order age safety gate', status: (cfg.orderCutoffDate || cfg.maxOrderAgeDays > 0) ? 'ready' : 'warning', detail: cfg.orderCutoffDate || cfg.maxOrderAgeDays > 0 ? `Old-order protection is active${cfg.orderCutoffDate ? ` from ${cfg.orderCutoffDate.toISOString().slice(0, 10)}` : ''}${cfg.maxOrderAgeDays > 0 ? ` with a ${cfg.maxOrderAgeDays}-day maximum order age` : ''}.` : 'No old-order cutoff is configured. New webhooks still work, but historic orders are not automatically excluded by age.' },
       { key: 'signed_links', label: 'Signed review links', status: tokenReady ? 'ready' : 'blocked', detail: tokenReady ? 'Review links can be signed and verified.' : 'Set EMAIL_CREDENTIAL_SECRET or SHOPIFY_API_SECRET.' },
       { key: 'shopify_oauth', label: 'Shopify OAuth / order webhook', status: oauthReady ? 'ready' : 'warning', detail: oauthReady ? 'The app can register Shopify webhooks for real fulfilled orders.' : 'OAuth is not connected. Fake-order tests still work, but live order webhooks will not.' },
     ],
@@ -658,6 +743,8 @@ function startReviewRequestJobs() {
 module.exports = {
   DEFAULT_DELAY_DAYS,
   reviewAutomationConfig,
+  reviewRequestEligibility,
+  resolveOrderCreatedAt,
   getAutomationConfig,
   scheduleReviewRequestFromOrder,
   updateReviewRequestDeliveryFromOrder,

@@ -2096,6 +2096,8 @@ router.patch('/review-automation', async (req, res, next) => {
       'reviewAutomation.deliveryTag': cleanText(body.deliveryTag || 'delivered', 80).toLowerCase(),
       'reviewAutomation.deliveryAnchor': ['fulfilled_at', 'delivered_tag'].includes(body.deliveryAnchor) ? body.deliveryAnchor : 'delivered_tag',
       'reviewAutomation.delayDays': clampNumber(body.delayDays, 0, 365, 14),
+      'reviewAutomation.orderCutoffDate': body.orderCutoffDate ? new Date(`${cleanText(body.orderCutoffDate, 10)}T00:00:00.000Z`) : null,
+      'reviewAutomation.maxOrderAgeDays': clampNumber(body.maxOrderAgeDays, 0, 3650, 0),
       'reviewAutomation.sendWindowHour': clampNumber(body.sendWindowHour, 0, 23, 10),
       'reviewAutomation.sendWindowTimezone': cleanText(body.sendWindowTimezone || 'store', 80),
       'reviewAutomation.campaign': cleanText(body.campaign || 'native_review_request', 120),
@@ -2863,6 +2865,16 @@ router.get('/review-launch-checklist', async (req, res, next) => {
         target: 'v-review-launch',
       },
       {
+        key: 'order_age_gate',
+        label: 'Old-order review-request safety',
+        status: (auto.orderCutoffDate || Number(auto.maxOrderAgeDays || 0) > 0) ? 'ready' : 'warning',
+        detail: (auto.orderCutoffDate || Number(auto.maxOrderAgeDays || 0) > 0)
+          ? `Old orders are protected${auto.orderCutoffDate ? ` before ${new Date(auto.orderCutoffDate).toISOString().slice(0, 10)}` : ''}${Number(auto.maxOrderAgeDays || 0) > 0 ? ` and after ${Number(auto.maxOrderAgeDays)} days of age` : ''}.`
+          : 'No old-order cutoff is configured. Add a date and/or maximum order age before launching customer sends.',
+        action: (auto.orderCutoffDate || Number(auto.maxOrderAgeDays || 0) > 0) ? '' : 'Set an order cutoff date or maximum order age in the Reviews Portal safety controls.',
+        target: 'v-review-launch',
+      },
+      {
         key: 'theme_widget',
         label: 'Storefront review blocks',
         status: 'manual',
@@ -2889,6 +2901,8 @@ router.get('/review-launch-checklist', async (req, res, next) => {
         blockers: checks.filter((check) => check.status === 'blocked').length,
         warnings: checks.filter((check) => check.status === 'warning').length,
         delayDays: Number(auto.delayDays ?? 14),
+        orderCutoffDate: auto.orderCutoffDate ? new Date(auto.orderCutoffDate).toISOString().slice(0, 10) : '',
+        maxOrderAgeDays: Number(auto.maxOrderAgeDays || 0),
         totalReviews,
         pendingReviews,
         acceptedReviews,
@@ -2918,7 +2932,7 @@ router.get('/review-launch-checklist', async (req, res, next) => {
       livePath: [
         'Customer order is fulfilled in Shopify.',
         'Shopify sends an orders/fulfilled webhook to Nectar.',
-        'Nectar creates a private review-request job.',
+        'Nectar creates a private review-request job only if the order passes the configured age/cutoff safety rules.',
         'Nectar waits the configured delay, normally 14 days.',
         'Nectar sends the review request from the saved Reviews email provider.',
         'The customer submits through a signed one-use order link.',
