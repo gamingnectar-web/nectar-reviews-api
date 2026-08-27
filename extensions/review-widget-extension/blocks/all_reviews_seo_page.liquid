@@ -5,7 +5,7 @@
   data-title="{{ block.settings.title | escape }}"
   data-intro="{{ block.settings.intro | escape }}"
   data-limit="{{ block.settings.limit }}"
-  data-build="reviews-seo-20260827-2"
+  data-build="reviews-seo-20260827-3"
 >
   <div class="nectar-seo-hero">
     <div class="nectar-seo-ambient" data-nectar-seo-ambient aria-hidden="true">
@@ -101,6 +101,7 @@
 </section>
 
 {{ 'nectar-all-reviews-page.css' | asset_url | stylesheet_tag }}
+{{ 'nectar-all-reviews-page-refinement.css' | asset_url | stylesheet_tag }}
 <script src="{{ 'nectar-all-reviews-page.js' | asset_url }}" defer></script>
 
 {% schema %}

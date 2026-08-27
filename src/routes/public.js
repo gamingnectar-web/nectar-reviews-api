@@ -1,4 +1,5 @@
 const express = require('express');
+const { env } = require('../config/env');
 const nodemailer = require('nodemailer');
 const { Review, Settings, CampaignEvent, EmailProviderSettings, SupportRequest } = require('../models');
 const { cleanShopDomain, isValidShopDomain, cleanText, cleanEmail, clampNumber, getClientIp } = require('../utils/validation');
@@ -208,6 +209,80 @@ function maskPublicName(name) {
   return first ? `${first}***` : 'Customer';
 }
 
+
+function seoProductNumericId(value) {
+  const raw = cleanText(value, 180);
+  if (!raw) return '';
+  const gid = raw.match(/^gid:\/\/shopify\/Product\/(\d+)$/i);
+  if (gid) return gid[1];
+  if (/^\d{6,}$/.test(raw)) return raw;
+  const candidates = raw.match(/\d{6,}/g) || [];
+  return candidates[0] || '';
+}
+
+function reviewHasUsefulProductTitle(review = {}) {
+  const title = cleanText(review.productTitle, 240);
+  return Boolean(title && !/^\d{6,}$/.test(title) && !/^gid:\/\/shopify\//i.test(title));
+}
+
+async function enrichSeoReviewProducts(shopDomain, reviews = []) {
+  const rows = Array.isArray(reviews) ? reviews.map((row) => ({ ...row })) : [];
+  const missingIds = Array.from(new Set(rows
+    .filter((row) => !reviewHasUsefulProductTitle(row) || !row.productHandle || !row.productImage)
+    .map((row) => seoProductNumericId(row.itemId))
+    .filter(Boolean)
+  )).slice(0, 200);
+
+  if (!missingIds.length) return rows;
+
+  const productMap = new Map();
+  for (let index = 0; index < missingIds.length; index += 50) {
+    const ids = missingIds.slice(index, index + 50);
+    const endpoint = `/admin/api/${env.shopifyApiVersion}/products.json?ids=${encodeURIComponent(ids.join(','))}&limit=50&fields=id,title,handle,image,images`;
+    const data = await shopifyFetchOptional(endpoint, { shopDomain }).catch(() => null);
+    (Array.isArray(data?.products) ? data.products : []).forEach((product) => {
+      const image = product?.image?.src || product?.images?.[0]?.src || '';
+      productMap.set(String(product.id), {
+        productTitle: cleanText(product.title, 240),
+        productHandle: cleanText(product.handle, 180),
+        productImage: cleanText(image, 1000),
+        productUrl: product.handle ? `https://${shopDomain}/products/${encodeURIComponent(product.handle)}` : '',
+      });
+    });
+  }
+
+  const writes = [];
+  const enriched = rows.map((row) => {
+    const id = seoProductNumericId(row.itemId);
+    const product = productMap.get(id);
+    if (!product) return row;
+    const next = {
+      ...row,
+      productTitle: reviewHasUsefulProductTitle(row) ? row.productTitle : product.productTitle,
+      productHandle: row.productHandle || product.productHandle,
+      productUrl: row.productUrl || product.productUrl,
+      productImage: row.productImage || product.productImage,
+    };
+    if (row._id && (next.productTitle !== row.productTitle || next.productHandle !== row.productHandle || next.productUrl !== row.productUrl || next.productImage !== row.productImage)) {
+      writes.push({
+        updateOne: {
+          filter: { _id: row._id, shopDomain },
+          update: { $set: {
+            productTitle: next.productTitle || '',
+            productHandle: next.productHandle || '',
+            productUrl: next.productUrl || '',
+            productImage: next.productImage || '',
+          } }
+        }
+      });
+    }
+    return next;
+  });
+
+  if (writes.length) Review.bulkWrite(writes, { ordered: false }).catch((error) => console.warn('SEO product metadata backfill skipped:', error.message));
+  return enriched;
+}
+
 function normaliseReviewForPublic(review) {
   const plain = review && typeof review.toObject === 'function' ? review.toObject() : review;
   if (!plain) return plain;
@@ -218,6 +293,7 @@ function normaliseReviewForPublic(review) {
     productTitle: plain.productTitle || '',
     productHandle: plain.productHandle || '',
     productUrl: plain.productUrl || '',
+    productImage: plain.productImage || '',
     media: Array.isArray(plain.media) ? plain.media : [],
     sourcePlatform: plain.sourcePlatform || '',
     sourceLabel: plain.sourceLabel || '',
@@ -500,7 +576,8 @@ router.get('/reviews/seo-page', async (req, res, next) => {
     if (itemId) match.itemId = { $in: itemIdCandidates(itemId) };
     if (exactRating) match.rating = exactRating;
     else if (minRating) match.rating = { $gte: minRating };
-    const baseRows = await Review.find(match).sort({ createdAt: -1 }).limit(500).lean();
+    const rawBaseRows = await Review.find(match).sort({ createdAt: -1 }).limit(500).lean();
+    const baseRows = await enrichSeoReviewProducts(shopDomain, rawBaseRows);
     const attrsFromReview = (review = {}) => {
       const attrs = review.attributes && typeof review.attributes === 'object' ? (review.attributes instanceof Map ? Object.fromEntries(review.attributes) : review.attributes) : {};
       return Object.entries(attrs).map(([key, value]) => `${cleanText(key, 80)} ${cleanText(value, 40)}`).join(' ');
@@ -543,7 +620,7 @@ router.get('/reviews/seo-page', async (req, res, next) => {
       const searchable = searchBlob(review);
       const item = recommendationMap.get(productKey) || {
         itemId: review.itemId,
-        productTitle: review.productTitle || productKey,
+        productTitle: reviewHasUsefulProductTitle(review) ? review.productTitle : 'Product review',
         productHandle: review.productHandle || '',
         productUrl: review.productUrl || '',
         count: 0,

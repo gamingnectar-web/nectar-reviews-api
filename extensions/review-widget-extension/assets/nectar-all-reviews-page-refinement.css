@@ -1,0 +1,118 @@
+/* All Reviews SEO Page refinement — full bleed + storefront typography */
+.nectar-seo-reviews-page{
+  width:100vw!important;
+  max-width:none!important;
+  margin-left:calc(50% - 50vw)!important;
+  margin-right:calc(50% - 50vw)!important;
+  font-family:var(--font-body-family,var(--font-body--family,"Poppins",Arial,sans-serif))!important;
+  font-style:normal;
+  letter-spacing:normal;
+}
+.nectar-seo-reviews-page button,
+.nectar-seo-reviews-page input,
+.nectar-seo-reviews-page select,
+.nectar-seo-reviews-page textarea{
+  font-family:inherit!important;
+}
+.nectar-seo-reviews-page h1,
+.nectar-seo-reviews-page h2,
+.nectar-seo-reviews-page h3,
+.nectar-seo-reviews-page strong,
+.nectar-seo-reviews-page b{
+  font-family:var(--font-heading-family,var(--font-heading--family,var(--font-body-family,"Poppins",Arial,sans-serif)))!important;
+}
+.nectar-seo-hero__inner{
+  width:min(100%,1440px)!important;
+  max-width:1440px!important;
+  padding-left:clamp(24px,5vw,84px)!important;
+  padding-right:clamp(24px,5vw,84px)!important;
+}
+.nectar-seo-results-shell{
+  width:min(100%,1540px)!important;
+  max-width:1540px!important;
+  padding-left:clamp(24px,4vw,72px)!important;
+  padding-right:clamp(24px,4vw,72px)!important;
+}
+.nectar-seo-reviews__header h1{
+  font-weight:700!important;
+  letter-spacing:-.045em!important;
+}
+.nectar-seo-reviews__header>p:last-child{
+  font-weight:400!important;
+  letter-spacing:0!important;
+}
+.nectar-seo-search__box input[type=search]{
+  font-weight:400!important;
+  letter-spacing:0!important;
+}
+.nectar-seo-quick-filters button,
+.nectar-seo-filter-panel,
+.nectar-seo-review,
+.nectar-seo-rec-card{
+  letter-spacing:0!important;
+}
+.nectar-seo-review__media{
+  background:#f3f4f8!important;
+}
+.nectar-seo-review__media img{
+  object-fit:contain!important;
+  padding:6px;
+  background:#fff;
+}
+.nectar-seo-review__product{
+  font-weight:700!important;
+  letter-spacing:-.01em!important;
+}
+.nectar-seo-review h3{
+  font-weight:700!important;
+}
+.nectar-seo-review__body{
+  font-weight:400!important;
+}
+.nectar-seo-rec-card__top strong{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.nectar-seo-popular button[data-popular-search]{
+  max-width:190px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+@media(min-width:1300px){
+  .nectar-seo-results-layout{grid-template-columns:280px minmax(0,1fr)!important;gap:30px!important}
+  .nectar-seo-review{grid-template-columns:96px minmax(0,1fr) 180px!important;padding:18px!important}
+  .nectar-seo-review__media{width:96px!important;height:108px!important}
+  .nectar-seo-rec-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+}
+@media(max-width:760px){
+  .nectar-seo-reviews-page{
+    width:100%!important;
+    margin-left:0!important;
+    margin-right:0!important;
+  }
+  .nectar-seo-hero__inner,
+  .nectar-seo-results-shell{
+    width:100%!important;
+    padding-left:16px!important;
+    padding-right:16px!important;
+  }
+  .nectar-seo-hero{min-height:500px!important}
+  .nectar-seo-reviews__header h1{font-size:40px!important;letter-spacing:-.035em!important}
+  .nectar-seo-search__box{width:100%!important}
+  .nectar-seo-quick-filters{
+    overflow-x:auto;
+    flex-wrap:nowrap!important;
+    justify-content:flex-start!important;
+    padding:0 2px 5px;
+    scrollbar-width:none;
+  }
+  .nectar-seo-quick-filters::-webkit-scrollbar{display:none}
+  .nectar-seo-quick-filters button{flex:0 0 auto}
+  .nectar-seo-popular{display:none!important}
+  .nectar-seo-results-layout{display:block!important}
+  .nectar-seo-filter-panel{margin-bottom:16px}
+  .nectar-seo-review{grid-template-columns:68px minmax(0,1fr)!important}
+  .nectar-seo-review__media{width:68px!important;height:78px!important}
+}

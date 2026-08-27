@@ -17,6 +17,7 @@ const reviewSchema = new mongoose.Schema({
   productTitle: { type: String, default: '' },
   productHandle: { type: String, default: '' },
   productUrl: { type: String, default: '' },
+  productImage: { type: String, default: '' },
   externalProductId: { type: String, default: '' },
   source: { type: String, enum: ['website', 'email', 'import'], default: 'website' },
   sourcePlatform: { type: String, default: '' },

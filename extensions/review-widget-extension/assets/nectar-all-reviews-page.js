@@ -52,7 +52,7 @@
 
   function reviewCard(shopDomain, review){
     const url = productUrl(shopDomain, review);
-    const image = mediaUrl(review);
+    const image = review.productImage || mediaUrl(review);
     const tagHtml = [
       ...attributeTags(review),
       ...(review.productTags || []).slice(0,3).map((tag) => `<em>${esc(tag)}</em>`)
@@ -84,10 +84,10 @@
     cards.forEach((card, index) => {
       const review = usable[index % Math.max(usable.length, 1)];
       if (!review) return;
-      const image = mediaUrl(review);
+      const image = review.productImage || mediaUrl(review);
       const media = card.querySelector('.nectar-seo-float__media');
       if (media && image) media.style.backgroundImage = `url("${String(image).replace(/"/g, '%22')}")`;
-      const safeTitle = esc(review.productTitle || 'Customer review');
+      const safeTitle = esc((review.productTitle && !/^\\d{6,}$/.test(String(review.productTitle))) ? review.productTitle : 'Customer review');
       const safeComment = esc(cleanText(review.comment).slice(0, 78));
       const safeStars = '★'.repeat(Math.max(1, Math.min(5, Math.round(Number(review.rating || 5)))));
       card.innerHTML = `${media ? media.outerHTML : '<span class="nectar-seo-float__media"></span>'}<span><strong>${safeTitle}</strong><small>${safeStars}</small><p>${safeComment}</p></span>`;
@@ -138,7 +138,7 @@
     }
 
     function renderPopular(data){
-      const labels = [...(data.topTags || []).map((t) => t.label), ...(data.recommendations || []).map((r) => r.productTitle)]
+      const labels = [...(data.topTags || []).map((t) => t.label), ...(data.recommendations || []).map((r) => r.productTitle)].filter((label) => label && !/^\\d{6,}$/.test(String(label)))
         .filter(Boolean).filter((value, index, arr) => arr.indexOf(value) === index).slice(0,5);
       if (!labels.length || !popular || !popularLinks) return;
       popular.hidden = false;
