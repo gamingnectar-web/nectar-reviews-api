@@ -1,0 +1,58 @@
+/* All Reviews SEO Page v4 hotfix
+   - true full-bleed on desktop
+   - safe contained layout on mobile
+*/
+@media (min-width: 761px) {
+  .nectar-seo-reviews-page {
+    position: relative !important;
+    left: 50% !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    margin-left: -50vw !important;
+    margin-right: 0 !important;
+    transform: none !important;
+  }
+
+  .nectar-seo-hero {
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  .nectar-seo-hero__inner {
+    width: min(100%, 1440px) !important;
+    max-width: 1440px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    padding-left: clamp(28px, 5vw, 88px) !important;
+    padding-right: clamp(28px, 5vw, 88px) !important;
+  }
+
+  .nectar-seo-results-shell {
+    width: min(100%, 1600px) !important;
+    max-width: 1600px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    padding-left: clamp(28px, 4vw, 76px) !important;
+    padding-right: clamp(28px, 4vw, 76px) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .nectar-seo-reviews-page {
+    position: relative !important;
+    left: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    transform: none !important;
+  }
+
+  .nectar-seo-hero__inner,
+  .nectar-seo-results-shell {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+}

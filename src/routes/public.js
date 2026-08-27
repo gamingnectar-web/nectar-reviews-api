@@ -225,6 +225,69 @@ function reviewHasUsefulProductTitle(review = {}) {
   return Boolean(title && !/^\d{6,}$/.test(title) && !/^gid:\/\/shopify\//i.test(title));
 }
 
+
+async function fetchSeoProductsGraphql(shopDomain, numericIds = []) {
+  const ids = numericIds
+    .map((id) => cleanText(id, 80))
+    .filter(Boolean)
+    .map((id) => `gid://shopify/Product/${id}`);
+
+  if (!ids.length) return new Map();
+
+  const query = `query NectarReviewProducts($ids: [ID!]!) {
+    nodes(ids: $ids) {
+      ... on Product {
+        id
+        title
+        handle
+        featuredMedia {
+          preview {
+            image {
+              url
+            }
+          }
+        }
+      }
+    }
+  }`;
+
+  const response = await shopifyFetchOptional(
+    `/admin/api/${env.shopifyApiVersion}/graphql.json`,
+    {
+      shopDomain,
+      method: 'POST',
+      body: JSON.stringify({
+        query,
+        variables: { ids },
+      }),
+    }
+  ).catch(() => null);
+
+  const map = new Map();
+
+  (Array.isArray(response?.data?.nodes) ? response.data.nodes : []).forEach((product) => {
+    if (!product?.id) return;
+
+    const numericId = String(product.id).split('/').pop();
+    if (!numericId) return;
+
+    const image =
+      product?.featuredMedia?.preview?.image?.url ||
+      '';
+
+    map.set(numericId, {
+      productTitle: cleanText(product.title, 240),
+      productHandle: cleanText(product.handle, 180),
+      productImage: cleanText(image, 1000),
+      productUrl: product.handle
+        ? `https://${shopDomain}/products/${encodeURIComponent(product.handle)}`
+        : '',
+    });
+  });
+
+  return map;
+}
+
 async function enrichSeoReviewProducts(shopDomain, reviews = []) {
   const rows = Array.isArray(reviews) ? reviews.map((row) => ({ ...row })) : [];
   const missingIds = Array.from(new Set(rows
@@ -249,6 +312,21 @@ async function enrichSeoReviewProducts(shopDomain, reviews = []) {
         productUrl: product.handle ? `https://${shopDomain}/products/${encodeURIComponent(product.handle)}` : '',
       });
     });
+  }
+
+  const unresolvedIds = missingIds.filter((id) => !productMap.has(id));
+
+  if (unresolvedIds.length) {
+    for (let index = 0; index < unresolvedIds.length; index += 50) {
+      const fallback = await fetchSeoProductsGraphql(
+        shopDomain,
+        unresolvedIds.slice(index, index + 50)
+      );
+
+      fallback.forEach((product, id) => {
+        productMap.set(id, product);
+      });
+    }
   }
 
   const writes = [];

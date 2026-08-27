@@ -7,6 +7,14 @@
   }[m]));
 
   const cleanText = (value) => String(value ?? '').trim();
+  const isRawProductId = (value) => {
+    const text = cleanText(value);
+    return /^\d{6,}$/.test(text) || /^gid:\/\/shopify\/(?:Product|Variant)\/\d+$/i.test(text);
+  };
+  const safeProductTitle = (value, fallback = 'Product review') => {
+    const title = cleanText(value);
+    return title && !isRawProductId(title) ? title : fallback;
+  };
   const productUrl = (shopDomain, item = {}) => {
     if (item.productUrl) return item.productUrl;
     if (item.productHandle) return `https://${String(shopDomain).replace(/^https?:\/\//,'')}/products/${encodeURIComponent(item.productHandle)}`;
@@ -43,7 +51,7 @@
       ...(item.flavourProfile || []).slice(0,2).map((tag) => `<span>${esc(tag.label)} ${esc(tag.average)}/10</span>`)
     ].join('');
     return `<article class="nectar-seo-rec-card">
-      <div class="nectar-seo-rec-card__top"><strong>${esc(item.productTitle || 'Recommended product')}</strong><b>★ ${esc(item.average || 0)}</b></div>
+      <div class="nectar-seo-rec-card__top"><strong>${esc(safeProductTitle(item.productTitle, 'Recommended product'))}</strong><b>★ ${esc(item.average || 0)}</b></div>
       ${item.bestQuote ? `<p>“${esc(item.bestQuote)}”</p>` : '<p>Popular with customers based on approved review data.</p>'}
       <div class="nectar-seo-rec-card__chips">${chips}</div>
       ${url ? `<a href="${esc(url)}">View product →</a>` : ''}
@@ -61,7 +69,7 @@
     return `<article class="nectar-seo-review">
       <div class="nectar-seo-review__media">${image ? `<img src="${esc(image)}" alt="" loading="lazy">` : esc(initials(review))}</div>
       <div class="nectar-seo-review__content">
-        <div class="nectar-seo-review__product">${url ? `<a href="${esc(url)}">${esc(review.productTitle || 'Customer review')}</a>` : esc(review.productTitle || 'Customer review')}</div>
+        <div class="nectar-seo-review__product">${url ? `<a href="${esc(url)}">${esc(safeProductTitle(review.productTitle, 'Product review'))}</a>` : esc(safeProductTitle(review.productTitle, 'Product review'))}</div>
         <div class="nectar-seo-review__rating">
           <span class="nectar-seo-stars">${stars(review.rating)}</span><b>${esc(review.rating || '')}</b>
           ${review.verifiedPurchase ? '<span class="nectar-seo-verified">✓ Verified Purchase</span>' : ''}
@@ -87,7 +95,7 @@
       const image = review.productImage || mediaUrl(review);
       const media = card.querySelector('.nectar-seo-float__media');
       if (media && image) media.style.backgroundImage = `url("${String(image).replace(/"/g, '%22')}")`;
-      const safeTitle = esc((review.productTitle && !/^\\d{6,}$/.test(String(review.productTitle))) ? review.productTitle : 'Customer review');
+      const safeTitle = esc(safeProductTitle(review.productTitle, 'Customer review'));
       const safeComment = esc(cleanText(review.comment).slice(0, 78));
       const safeStars = '★'.repeat(Math.max(1, Math.min(5, Math.round(Number(review.rating || 5)))));
       card.innerHTML = `${media ? media.outerHTML : '<span class="nectar-seo-float__media"></span>'}<span><strong>${safeTitle}</strong><small>${safeStars}</small><p>${safeComment}</p></span>`;
@@ -138,7 +146,7 @@
     }
 
     function renderPopular(data){
-      const labels = [...(data.topTags || []).map((t) => t.label), ...(data.recommendations || []).map((r) => r.productTitle)].filter((label) => label && !/^\\d{6,}$/.test(String(label)))
+      const labels = [...(data.topTags || []).map((t) => t.label), ...(data.recommendations || []).map((r) => r.productTitle)].filter((label) => label && !isRawProductId(label))
         .filter(Boolean).filter((value, index, arr) => arr.indexOf(value) === index).slice(0,5);
       if (!labels.length || !popular || !popularLinks) return;
       popular.hidden = false;
