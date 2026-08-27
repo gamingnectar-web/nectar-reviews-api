@@ -494,10 +494,12 @@ router.get('/reviews/seo-page', async (req, res, next) => {
     const limit = clampNumber(req.query.limit, 1, 250, 120);
     const q = cleanText(req.query.q || '', 120).toLowerCase();
     const minRating = clampNumber(req.query.minRating, 0, 5, 0);
+    const exactRating = clampNumber(req.query.rating || req.query.exactRating, 0, 5, 0);
     const itemId = cleanText(req.query.itemId || req.query.productId, 160);
     const match = liveReviewMatch({ shopDomain });
     if (itemId) match.itemId = { $in: itemIdCandidates(itemId) };
-    if (minRating) match.rating = { $gte: minRating };
+    if (exactRating) match.rating = exactRating;
+    else if (minRating) match.rating = { $gte: minRating };
     const baseRows = await Review.find(match).sort({ createdAt: -1 }).limit(500).lean();
     const attrsFromReview = (review = {}) => {
       const attrs = review.attributes && typeof review.attributes === 'object' ? (review.attributes instanceof Map ? Object.fromEntries(review.attributes) : review.attributes) : {};
@@ -586,7 +588,7 @@ router.get('/reviews/seo-page', async (req, res, next) => {
       count,
       average,
       generatedAt: new Date().toISOString(),
-      filters: { q, minRating, itemId },
+      filters: { q, minRating, rating: exactRating, itemId },
       topTags: Array.from(tags.entries()).sort((a,b)=>b[1]-a[1]).slice(0,20).map(([label,count])=>({ label, count })),
       attributeAverages: Array.from(attributes.values()).map((item)=>({ label: item.label, count: item.count, average: item.count ? Number((item.total / item.count).toFixed(1)) : 0 })).sort((a,b)=>b.count-a.count).slice(0,20),
       recommendations,

@@ -1,30 +1,102 @@
-<section class="nectar-seo-reviews-page nectar-seo-reviews-page--search" data-api-url="{{ block.settings.app_url | escape }}/api" data-shop-domain="{{ shop.permanent_domain }}" data-title="{{ block.settings.title | escape }}" data-intro="{{ block.settings.intro | escape }}" data-limit="{{ block.settings.limit }}">
-  <div class="nectar-seo-bg" aria-hidden="true">
-    <span class="nectar-seo-bg__box nectar-seo-bg__box--one"></span>
-    <span class="nectar-seo-bg__box nectar-seo-bg__box--two"></span>
-    <span class="nectar-seo-bg__box nectar-seo-bg__box--three"></span>
-    <span class="nectar-seo-bg__box nectar-seo-bg__box--four"></span>
-    <span class="nectar-seo-bg__box nectar-seo-bg__box--five"></span>
+<section
+  class="nectar-seo-reviews-page"
+  data-api-url="{{ block.settings.app_url | escape }}/api"
+  data-shop-domain="{{ shop.permanent_domain }}"
+  data-title="{{ block.settings.title | escape }}"
+  data-intro="{{ block.settings.intro | escape }}"
+  data-limit="{{ block.settings.limit }}"
+  data-build="reviews-seo-20260827-2"
+>
+  <div class="nectar-seo-hero">
+    <div class="nectar-seo-ambient" data-nectar-seo-ambient aria-hidden="true">
+      <div class="nectar-seo-float nectar-seo-float--1"><span class="nectar-seo-float__media"></span><span class="nectar-seo-float__lines"></span></div>
+      <div class="nectar-seo-float nectar-seo-float--2"><span class="nectar-seo-float__media"></span><span class="nectar-seo-float__lines"></span></div>
+      <div class="nectar-seo-float nectar-seo-float--3"><span class="nectar-seo-float__media"></span><span class="nectar-seo-float__lines"></span></div>
+      <div class="nectar-seo-float nectar-seo-float--4"><span class="nectar-seo-float__media"></span><span class="nectar-seo-float__lines"></span></div>
+      <div class="nectar-seo-float nectar-seo-float--5"><span class="nectar-seo-float__media"></span><span class="nectar-seo-float__lines"></span></div>
+      <div class="nectar-seo-float nectar-seo-float--6"><span class="nectar-seo-float__media"></span><span class="nectar-seo-float__lines"></span></div>
+    </div>
+
+    <div class="nectar-seo-hero__inner">
+      <header class="nectar-seo-reviews__header">
+        <p class="nectar-seo-reviews__eyebrow">Customer review search</p>
+        <h1>{{ block.settings.title }}</h1>
+        <p>{{ block.settings.intro }}</p>
+      </header>
+
+      <form class="nectar-seo-search" data-nectar-seo-filters role="search">
+        <label class="visually-hidden" for="nectar-seo-review-search-{{ block.id }}">Search customer reviews</label>
+        <div class="nectar-seo-search__box">
+          <span class="nectar-seo-search__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path d="m21 21-4.35-4.35m1.35-5.65a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </span>
+          <input
+            id="nectar-seo-review-search-{{ block.id }}"
+            type="search"
+            name="q"
+            placeholder="{{ block.settings.placeholder | escape }}"
+            autocomplete="off"
+            spellcheck="false"
+          >
+          <input type="hidden" name="rating" value="">
+          <button class="nectar-seo-search__submit" type="submit" aria-label="Search reviews">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path d="m21 21-4.35-4.35m1.35-5.65a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+
+        <div class="nectar-seo-quick-filters" aria-label="Quick review searches">
+          <button type="button" data-review-preset="product"><span>⌑</span> Product name</button>
+          <button type="button" data-review-preset="rating" data-rating="5"><span class="gold">★</span> 5 star reviews</button>
+          <button type="button" data-review-preset="rating" data-rating="1"><span>☆</span> 1 star reviews</button>
+          <button type="button" data-review-preset="attribute"><span>◌</span> Flavour profile</button>
+          <button type="button" data-review-preset="recent"><span>◷</span> Recent reviews</button>
+        </div>
+
+        <div class="nectar-seo-popular" data-nectar-popular hidden>
+          <span>Popular searches:</span>
+          <div data-nectar-popular-links></div>
+        </div>
+      </form>
+    </div>
   </div>
-  <div class="nectar-seo-reviews__inner">
-    <header class="nectar-seo-reviews__header">
-      <p class="nectar-seo-reviews__eyebrow">Customer review search</p>
-      <h1>{{ block.settings.title }}</h1>
-      <p>{{ block.settings.intro }}</p>
-    </header>
 
-    <form class="nectar-seo-search" data-nectar-seo-filters role="search">
-      <label class="visually-hidden" for="nectar-seo-review-search-{{ block.id }}">Search product reviews</label>
-      <input id="nectar-seo-review-search-{{ block.id }}" type="search" name="q" placeholder="{{ block.settings.placeholder | escape }}" autocomplete="off">
-      <select name="minRating" aria-label="Minimum rating"><option value="0">All ratings</option><option value="5">5 stars</option><option value="4">4 stars & up</option><option value="3">3 stars & up</option></select>
-      <button type="submit">Search</button>
-    </form>
+  <div class="nectar-seo-results-shell">
+    <div class="nectar-seo-results-head">
+      <div>
+        <span class="nectar-seo-results-head__label" data-nectar-result-label>Customer review results</span>
+        <h2 data-nectar-result-title>Explore what customers are saying</h2>
+      </div>
+      <div data-nectar-seo-summary class="nectar-seo-reviews__summary" aria-live="polite">
+        <span class="nectar-seo-loading-dot"></span> Loading approved reviews…
+      </div>
+    </div>
 
-    <div data-nectar-seo-summary class="nectar-seo-reviews__summary">Loading reviews…</div>
-    <div data-nectar-seo-tags class="nectar-seo-reviews__chips"></div>
+    <div class="nectar-seo-results-layout">
+      <aside class="nectar-seo-filter-panel" aria-label="Filter reviews">
+        <div class="nectar-seo-filter-panel__head">
+          <h3>Filter Reviews</h3>
+          <button type="button" data-clear-filters aria-label="Clear review filters">↺</button>
+        </div>
+        <div class="nectar-seo-filter-group">
+          <strong>Rating</strong>
+          <button class="active" type="button" data-rating-filter="">All</button>
+          <button type="button" data-rating-filter="5"><span>★★★★★</span></button>
+          <button type="button" data-rating-filter="4"><span>★★★★☆</span></button>
+          <button type="button" data-rating-filter="3"><span>★★★☆☆</span></button>
+          <button type="button" data-rating-filter="2"><span>★★☆☆☆</span></button>
+          <button type="button" data-rating-filter="1"><span>★☆☆☆☆</span></button>
+        </div>
+        <div class="nectar-seo-filter-group">
+          <strong>Discover</strong>
+          <div data-nectar-seo-tags class="nectar-seo-filter-tags"></div>
+        </div>
+      </aside>
 
-    <section class="nectar-seo-recommendations" data-nectar-seo-recommendations aria-live="polite"></section>
-    <div data-nectar-seo-list class="nectar-seo-reviews__list"></div>
+      <main class="nectar-seo-results">
+        <section class="nectar-seo-recommendations" data-nectar-seo-recommendations aria-live="polite"></section>
+        <div data-nectar-seo-list class="nectar-seo-reviews__list"></div>
+      </main>
+    </div>
   </div>
 </section>
 
@@ -36,10 +108,10 @@
   "name": "All Reviews SEO Page",
   "target": "section",
   "settings": [
-    { "type": "text", "id": "app_url", "label": "Nectar app URL" },
-    { "type": "text", "id": "title", "label": "Page title", "default": "Find your next favourite product" },
-    { "type": "textarea", "id": "intro", "label": "Intro", "default": "Search real customer reviews by product, flavour profile, rating, ingredients, feeling or feedback. Recommendations are powered by approved review data." },
-    { "type": "text", "id": "placeholder", "label": "Search placeholder", "default": "Search G FUEL flavours, sour, sweet, tropical, mango, caffeine..." },
+    { "type": "text", "id": "app_url", "label": "Nectar app URL", "default": "https://nectar-reviews-api.onrender.com" },
+    { "type": "text", "id": "title", "label": "Page title", "default": "Customer Reviews" },
+    { "type": "textarea", "id": "intro", "label": "Intro", "default": "Search real customer reviews by product, rating, flavour profile and feedback." },
+    { "type": "text", "id": "placeholder", "label": "Search placeholder", "default": "Search reviews by product, flavour or keyword…" },
     { "type": "range", "id": "limit", "min": 20, "max": 200, "step": 10, "label": "Maximum reviews", "default": 120 }
   ]
 }

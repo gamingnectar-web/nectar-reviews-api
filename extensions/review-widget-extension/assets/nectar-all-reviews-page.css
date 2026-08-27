@@ -1,1 +1,102 @@
-.nectar-seo-reviews-page{position:relative;overflow:hidden;background:radial-gradient(circle at 50% 24%,#ffffff 0,#f8fafc 48%,#eef2ff 100%);color:#111827}.nectar-seo-reviews__inner{position:relative;z-index:2;max-width:1180px;margin:0 auto;padding:78px 20px}.nectar-seo-bg{position:absolute;inset:0;z-index:1;pointer-events:none}.nectar-seo-bg__box{position:absolute;border:1px solid rgba(15,23,42,.08);background:rgba(255,255,255,.42);box-shadow:0 22px 80px rgba(15,23,42,.08);border-radius:32px;backdrop-filter:blur(2px);opacity:.72}.nectar-seo-bg__box--one{width:230px;height:150px;left:7%;top:10%;transform:rotate(-12deg)}.nectar-seo-bg__box--two{width:170px;height:210px;right:8%;top:12%;transform:rotate(10deg)}.nectar-seo-bg__box--three{width:280px;height:120px;left:14%;bottom:13%;transform:rotate(8deg)}.nectar-seo-bg__box--four{width:220px;height:155px;right:16%;bottom:9%;transform:rotate(-7deg)}.nectar-seo-bg__box--five{width:140px;height:140px;left:45%;top:4%;border-radius:40px;transform:rotate(18deg);opacity:.45}.nectar-seo-reviews__header{text-align:center;margin:0 auto 28px;max-width:900px}.nectar-seo-reviews__eyebrow{display:inline-flex;text-transform:uppercase;letter-spacing:.08em;font-weight:900;color:#fff;background:#111827;border-radius:999px;padding:7px 12px;font-size:12px;margin:0 0 14px}.nectar-seo-reviews__header h1{font-size:clamp(36px,6vw,82px);line-height:.92;letter-spacing:-.07em;margin:0 0 16px}.nectar-seo-reviews__header p{font-size:clamp(16px,2vw,20px);line-height:1.55;color:#475467;margin:0 auto;max-width:760px}.nectar-seo-search{display:grid;grid-template-columns:minmax(0,1fr)170px auto;gap:10px;margin:0 auto 18px;max-width:900px;background:rgba(255,255,255,.88);border:1px solid rgba(217,224,234,.9);border-radius:999px;padding:8px;box-shadow:0 22px 70px rgba(15,23,42,.12);backdrop-filter:blur(7px)}.nectar-seo-search input,.nectar-seo-search select{min-height:54px;border:0;border-radius:999px;padding:0 18px;font:inherit;background:#f8fafc;color:#111827}.nectar-seo-search input{font-size:17px}.nectar-seo-search input:focus,.nectar-seo-search select:focus{outline:2px solid rgba(17,24,39,.18);outline-offset:2px}.nectar-seo-search button{min-height:54px;border:0;border-radius:999px;background:#111827;color:#fff;font-weight:900;padding:0 24px;cursor:pointer}.nectar-seo-reviews__summary{display:flex;justify-content:center;align-items:center;gap:12px;padding:16px;border:1px solid rgba(229,231,235,.92);border-radius:18px;background:rgba(255,255,255,.78);margin:0 auto 14px;max-width:720px;backdrop-filter:blur(5px)}.nectar-seo-reviews__summary strong{font-size:28px}.nectar-seo-reviews__chips{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:0 auto 32px;max-width:960px}.nectar-seo-reviews__chips button{border:1px solid #e5e7eb;border-radius:999px;background:#fff;padding:8px 12px;font-weight:800;cursor:pointer;box-shadow:0 4px 12px rgba(15,23,42,.04)}.nectar-seo-reviews__chips span{color:#667085}.nectar-seo-recommendations{margin:0 0 34px}.nectar-seo-rec-head{text-align:center;margin-bottom:16px}.nectar-seo-rec-head span{display:inline-flex;border-radius:999px;background:#ecfdf3;color:#027a48;font-weight:950;font-size:12px;text-transform:uppercase;letter-spacing:.06em;padding:6px 10px}.nectar-seo-rec-head h2{font-size:clamp(24px,3vw,38px);letter-spacing:-.04em;margin:8px 0 6px}.nectar-seo-rec-head p{margin:0;color:#667085}.nectar-seo-rec-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.nectar-seo-rec-card{border:1px solid rgba(217,224,234,.95);border-radius:22px;background:rgba(255,255,255,.9);padding:16px;box-shadow:0 14px 34px rgba(15,23,42,.07);display:flex;flex-direction:column;gap:10px}.nectar-seo-rec-card__top{display:flex;justify-content:space-between;gap:10px;align-items:start}.nectar-seo-rec-card__top strong{font-size:16px;line-height:1.2}.nectar-seo-rec-card__top b{white-space:nowrap;background:#fff7ed;color:#c2410c;border-radius:999px;padding:4px 8px;font-size:12px}.nectar-seo-rec-card p{margin:0;color:#475467;font-size:13px;line-height:1.45}.nectar-seo-rec-card__chips{display:flex;gap:6px;flex-wrap:wrap}.nectar-seo-rec-card__chips span{border:1px solid #e5e7eb;border-radius:999px;background:#f8fafc;color:#475467;font-size:11px;font-weight:800;padding:4px 7px}.nectar-seo-rec-card a{margin-top:auto;color:#111827;font-weight:900;text-decoration:underline}.nectar-seo-reviews__list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.nectar-seo-review{border:1px solid #e5e7eb;border-radius:20px;padding:20px;background:#fff;box-shadow:0 12px 28px rgba(15,23,42,.05)}.nectar-seo-review h2{font-size:18px;margin:10px 0 4px}.nectar-seo-review>span{display:block;color:#667085;font-weight:800;font-size:13px}.nectar-seo-review p{line-height:1.55;color:#344054}.nectar-seo-review footer{color:#667085;font-weight:800;font-size:13px}.nectar-seo-stars span{color:#d0d5dd}.nectar-seo-stars span.on{color:#f5b301}.nectar-seo-review__tags{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}.nectar-seo-review__tags em{font-style:normal;border-radius:999px;background:#f3f6fa;color:#475467;font-size:11px;font-weight:800;padding:4px 7px}.nectar-seo-empty{grid-column:1/-1;text-align:center;background:#fff;border:1px dashed #cbd5e1;border-radius:20px;padding:26px;color:#667085}.visually-hidden{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}@media(max-width:1000px){.nectar-seo-rec-grid,.nectar-seo-reviews__list{grid-template-columns:repeat(2,minmax(0,1fr))}.nectar-seo-search{grid-template-columns:1fr;border-radius:28px}.nectar-seo-search input,.nectar-seo-search select,.nectar-seo-search button{border-radius:18px}}@media(max-width:700px){.nectar-seo-reviews__inner{padding:52px 16px}.nectar-seo-rec-grid,.nectar-seo-reviews__list{grid-template-columns:1fr}.nectar-seo-reviews__summary{align-items:flex-start;flex-direction:column}.nectar-seo-bg__box{opacity:.4}}
+.nectar-seo-reviews-page{
+  --seo-ink:#111827;--seo-muted:#667085;--seo-line:#e4e7ec;--seo-violet:#5b34da;--seo-violet-2:#7448ff;
+  --seo-star:#f5b301;--seo-green:#16a34a;--seo-panel:#fff;--seo-soft:#f8f9fc;
+  position:relative;color:var(--seo-ink);background:#fff;font-family:inherit;overflow:hidden
+}
+.nectar-seo-reviews-page *{box-sizing:border-box}
+.nectar-seo-hero{position:relative;min-height:500px;overflow:hidden;background:
+  radial-gradient(circle at 50% 20%,rgba(255,255,255,.98) 0 18%,rgba(248,247,255,.92) 46%,rgba(237,235,255,.96) 100%)}
+.nectar-seo-hero:before{content:"";position:absolute;inset:0;background:
+  radial-gradient(circle at 22% 65%,rgba(91,52,218,.12),transparent 30%),
+  radial-gradient(circle at 82% 30%,rgba(116,72,255,.10),transparent 28%);pointer-events:none}
+.nectar-seo-hero__inner{position:relative;z-index:3;max-width:1120px;margin:0 auto;padding:82px 24px 52px}
+.nectar-seo-reviews__header{text-align:center;max-width:860px;margin:0 auto 30px}
+.nectar-seo-reviews__eyebrow{margin:0 0 11px;text-transform:uppercase;letter-spacing:.18em;font-size:12px;font-weight:900;color:var(--seo-violet)}
+.nectar-seo-reviews__header h1{margin:0;font-size:clamp(42px,5vw,72px);line-height:1.02;letter-spacing:-.055em;font-weight:780;color:#10131d}
+.nectar-seo-reviews__header>p:last-child{max-width:720px;margin:15px auto 0;color:#353b49;font-size:17px;line-height:1.6}
+.nectar-seo-search{max-width:920px;margin:0 auto}
+.nectar-seo-search__box{height:70px;display:grid;grid-template-columns:48px minmax(0,1fr)58px;align-items:center;background:#fff;border:1px solid rgba(91,52,218,.13);border-radius:999px;padding:6px 7px 6px 14px;box-shadow:0 18px 60px rgba(67,45,156,.16),0 2px 8px rgba(17,24,39,.05)}
+.nectar-seo-search__icon{display:grid;place-items:center;color:#1f2937}
+.nectar-seo-search__box input[type=search]{width:100%;height:54px;border:0;outline:0;background:transparent;font:inherit;font-size:16px;color:#111827;padding:0 5px}
+.nectar-seo-search__box input::placeholder{color:#8a91a0}
+.nectar-seo-search__submit{width:56px;height:56px;border:0;border-radius:50%;display:grid;place-items:center;color:#fff;background:linear-gradient(145deg,var(--seo-violet-2),#3e20c4);box-shadow:0 8px 18px rgba(91,52,218,.30);cursor:pointer;transition:.2s transform,.2s box-shadow}
+.nectar-seo-search__submit:hover{transform:translateY(-1px);box-shadow:0 12px 24px rgba(91,52,218,.34)}
+.nectar-seo-quick-filters{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin:20px 0 0}
+.nectar-seo-quick-filters button{border:1px solid #e3e4ea;background:rgba(255,255,255,.88);border-radius:999px;padding:10px 15px;color:#2d3340;font:inherit;font-size:13px;font-weight:760;cursor:pointer;box-shadow:0 5px 16px rgba(17,24,39,.035);backdrop-filter:blur(5px)}
+.nectar-seo-quick-filters button:hover,.nectar-seo-quick-filters button.active{border-color:#c9bdf9;background:#fff;color:var(--seo-violet)}
+.nectar-seo-quick-filters .gold{color:var(--seo-star)}
+.nectar-seo-popular{margin:18px auto 0;display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;font-size:13px}
+.nectar-seo-popular>span{color:#475467;font-weight:700}.nectar-seo-popular>div{display:flex;gap:14px;flex-wrap:wrap}
+.nectar-seo-popular button{border:0;background:none;color:var(--seo-violet);font:inherit;font-weight:800;cursor:pointer;padding:2px}
+
+.nectar-seo-ambient{position:absolute;inset:0;z-index:1;pointer-events:none;overflow:hidden}
+.nectar-seo-float{position:absolute;width:260px;min-height:124px;display:grid;grid-template-columns:64px 1fr;gap:12px;align-items:center;padding:15px;border:1px solid rgba(91,52,218,.07);border-radius:19px;background:rgba(255,255,255,.62);box-shadow:0 18px 55px rgba(75,55,150,.09);filter:blur(1.5px);opacity:.43;backdrop-filter:blur(7px);animation:nectarSeoFloat 15s ease-in-out infinite alternate}
+.nectar-seo-float__media{width:60px;height:78px;border-radius:12px;background:linear-gradient(145deg,#d9d6ee,#b7b1dc);display:block;background-size:cover;background-position:center}
+.nectar-seo-float__lines{height:72px;display:block;border-radius:8px;background:
+  linear-gradient(#7262c8,#7262c8) 0 2px/55% 8px no-repeat,
+  linear-gradient(#f3b71b,#f3b71b) 0 22px/70% 7px no-repeat,
+  linear-gradient(#b9bdc9,#b9bdc9) 0 42px/93% 6px no-repeat,
+  linear-gradient(#d1d5df,#d1d5df) 0 58px/70% 6px no-repeat}
+.nectar-seo-float--1{left:2%;top:12%;transform:rotate(-7deg);animation-delay:-3s}
+.nectar-seo-float--2{left:5%;bottom:7%;transform:rotate(5deg);animation-delay:-7s}
+.nectar-seo-float--3{right:1%;top:13%;transform:rotate(8deg);animation-delay:-5s}
+.nectar-seo-float--4{right:6%;bottom:4%;transform:rotate(-5deg);animation-delay:-11s}
+.nectar-seo-float--5{left:29%;top:-5%;width:210px;transform:rotate(10deg);opacity:.25;animation-delay:-9s}
+.nectar-seo-float--6{right:30%;bottom:-12%;width:220px;transform:rotate(-9deg);opacity:.25;animation-delay:-1s}
+.nectar-seo-float strong,.nectar-seo-float small,.nectar-seo-float p{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nectar-seo-float strong{font-size:13px}.nectar-seo-float small{color:#6757bc;margin:5px 0}.nectar-seo-float p{font-size:11px;color:#667085;margin:0}
+@keyframes nectarSeoFloat{0%{translate:0 16px}100%{translate:0 -20px}}
+@media(prefers-reduced-motion:reduce){.nectar-seo-float{animation:none}}
+
+.nectar-seo-results-shell{position:relative;z-index:4;max-width:1360px;margin:0 auto;padding:30px 28px 70px;background:#fff}
+.nectar-seo-results-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;padding:0 0 18px 300px}
+.nectar-seo-results-head__label{display:block;font-size:12px;color:#667085;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.nectar-seo-results-head h2{margin:4px 0 0;font-size:22px;letter-spacing:-.02em}
+.nectar-seo-reviews__summary{font-size:13px;color:#475467;font-weight:700;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.nectar-seo-reviews__summary strong{font-size:18px;color:#111827}.nectar-seo-loading-dot{width:9px;height:9px;border-radius:50%;background:var(--seo-violet);box-shadow:0 0 0 5px rgba(91,52,218,.10)}
+.nectar-seo-results-layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:24px;align-items:start}
+.nectar-seo-filter-panel{position:sticky;top:24px;border:1px solid var(--seo-line);border-radius:18px;background:#fff;overflow:hidden;box-shadow:0 8px 25px rgba(17,24,39,.035)}
+.nectar-seo-filter-panel__head{display:flex;align-items:center;justify-content:space-between;padding:18px;border-bottom:1px solid #eef0f3}
+.nectar-seo-filter-panel__head h3{margin:0;font-size:17px}.nectar-seo-filter-panel__head button{border:0;background:#f2efff;color:var(--seo-violet);width:31px;height:31px;border-radius:50%;cursor:pointer}
+.nectar-seo-filter-group{padding:17px;border-bottom:1px solid #eef0f3}.nectar-seo-filter-group:last-child{border-bottom:0}
+.nectar-seo-filter-group>strong{display:block;margin:0 0 12px;font-size:13px}
+.nectar-seo-filter-group>[data-rating-filter]{display:flex;width:100%;align-items:center;min-height:32px;border:0;background:transparent;color:#9aa0ad;text-align:left;padding:4px 7px;border-radius:8px;cursor:pointer;font-size:14px;letter-spacing:1px}
+.nectar-seo-filter-group>[data-rating-filter].active{background:#f2efff;color:var(--seo-violet);font-weight:900}
+.nectar-seo-filter-tags{display:flex;gap:7px;flex-wrap:wrap}
+.nectar-seo-filter-tags button{border:1px solid #e4e7ec;background:#f8fafc;color:#475467;border-radius:999px;padding:6px 8px;font:inherit;font-size:11px;font-weight:750;cursor:pointer}
+.nectar-seo-filter-tags button:hover{border-color:#cfc5f5;color:var(--seo-violet)}
+.nectar-seo-results{min-width:0}
+
+.nectar-seo-recommendations{margin:0 0 20px}
+.nectar-seo-rec-head{display:flex;justify-content:space-between;align-items:end;gap:14px;margin:0 0 11px}
+.nectar-seo-rec-head span{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--seo-violet);font-weight:900}.nectar-seo-rec-head h3{margin:3px 0 0;font-size:17px}.nectar-seo-rec-head p{margin:0;color:#667085;font-size:12px}
+.nectar-seo-rec-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.nectar-seo-rec-card{border:1px solid #e4e7ec;border-radius:14px;background:#fff;padding:13px;box-shadow:0 4px 14px rgba(17,24,39,.025)}
+.nectar-seo-rec-card__top{display:flex;justify-content:space-between;gap:10px}.nectar-seo-rec-card__top strong{font-size:13px}.nectar-seo-rec-card__top b{font-size:12px;color:#c77700}
+.nectar-seo-rec-card p{font-size:12px;line-height:1.45;color:#667085;margin:8px 0}.nectar-seo-rec-card__chips{display:flex;gap:5px;flex-wrap:wrap}.nectar-seo-rec-card__chips span{font-size:10px;padding:4px 6px;border-radius:999px;background:#f5f6f8;color:#59606c}
+.nectar-seo-rec-card a{display:inline-block;margin-top:9px;color:var(--seo-violet);font-size:12px;font-weight:800;text-decoration:none}
+
+.nectar-seo-reviews__list{display:grid;gap:12px}
+.nectar-seo-review{display:grid;grid-template-columns:82px minmax(0,1fr) 155px;gap:16px;align-items:start;padding:15px;border:1px solid #e4e7ec;border-radius:16px;background:#fff;box-shadow:0 6px 18px rgba(17,24,39,.035);transition:.18s transform,.18s box-shadow}
+.nectar-seo-review:hover{transform:translateY(-1px);box-shadow:0 10px 28px rgba(17,24,39,.06)}
+.nectar-seo-review__media{width:82px;height:96px;border-radius:12px;background:linear-gradient(145deg,#f0eff7,#e0dded);display:grid;place-items:center;overflow:hidden;color:#776ca0;font-weight:900;font-size:22px}
+.nectar-seo-review__media img{width:100%;height:100%;object-fit:cover}
+.nectar-seo-review__product{margin:0 0 4px;font-size:16px;font-weight:850;color:#101828}.nectar-seo-review__product a{color:inherit;text-decoration:none}.nectar-seo-review__product a:hover{color:var(--seo-violet)}
+.nectar-seo-review__rating{display:flex;align-items:center;gap:8px;margin-bottom:8px}.nectar-seo-stars{color:#d0d5dd;letter-spacing:1px;font-size:15px}.nectar-seo-stars span.on{color:var(--seo-star)}.nectar-seo-review__rating b{font-size:12px}
+.nectar-seo-verified{display:inline-flex;padding:3px 7px;border-radius:999px;background:#f2efff;color:var(--seo-violet);font-size:10px;font-weight:900}
+.nectar-seo-review h3{margin:0 0 5px;font-size:14px}.nectar-seo-review__body{margin:0;color:#3e4552;font-size:13px;line-height:1.55}
+.nectar-seo-review__tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.nectar-seo-review__tags em{font-style:normal;border-radius:999px;background:#f5f6f8;color:#59606c;font-size:10px;font-weight:750;padding:5px 7px}
+.nectar-seo-review__meta{text-align:right;color:#667085;font-size:11px;line-height:1.5}.nectar-seo-review__meta strong{display:block;color:#344054;font-size:12px}.nectar-seo-review__meta time{display:block;margin-top:2px}
+.nectar-seo-empty{padding:46px 24px;text-align:center;border:1px dashed #d0d5dd;border-radius:18px;background:#fbfcfd;color:#667085}.nectar-seo-empty strong{display:block;color:#344054;font-size:18px;margin-bottom:5px}
+.nectar-seo-error{padding:18px;border-radius:14px;background:#fff4f3;border:1px solid #fecdca;color:#b42318}.nectar-seo-error button{margin-left:8px;border:1px solid #fda29b;background:#fff;border-radius:8px;padding:5px 8px;cursor:pointer}
+.nectar-seo-skeleton{height:120px;border-radius:16px;background:linear-gradient(90deg,#f4f5f7 25%,#fbfbfc 40%,#f4f5f7 60%);background-size:300% 100%;animation:nectarSeoSkeleton 1.4s ease infinite}
+@keyframes nectarSeoSkeleton{0%{background-position:100% 0}100%{background-position:0 0}}
+.visually-hidden{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+@media(max-width:1100px){
+  .nectar-seo-float{opacity:.25}.nectar-seo-results-head{padding-left:0}.nectar-seo-results-layout{grid-template-columns:1fr}.nectar-seo-filter-panel{position:relative;top:auto}.nectar-seo-filter-group{display:inline-block;vertical-align:top;min-width:220px;border-bottom:0}.nectar-seo-rec-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:760px){
+  .nectar-seo-hero{min-height:520px}.nectar-seo-hero__inner{padding:64px 15px 42px}.nectar-seo-search__box{height:62px;grid-template-columns:40px minmax(0,1fr)48px}.nectar-seo-search__submit{width:46px;height:46px}.nectar-seo-reviews__header h1{font-size:42px}.nectar-seo-reviews__header>p:last-child{font-size:15px}.nectar-seo-float{width:190px;grid-template-columns:48px 1fr;opacity:.2}.nectar-seo-float__media{width:46px;height:58px}.nectar-seo-float--5,.nectar-seo-float--6{display:none}
+  .nectar-seo-results-shell{padding:24px 14px 50px}.nectar-seo-results-head{display:block}.nectar-seo-reviews__summary{margin-top:10px}.nectar-seo-rec-grid{grid-template-columns:1fr}.nectar-seo-review{grid-template-columns:58px minmax(0,1fr);gap:11px}.nectar-seo-review__media{width:58px;height:68px}.nectar-seo-review__meta{grid-column:2;text-align:left}.nectar-seo-filter-group{display:block;min-width:0}
+}
