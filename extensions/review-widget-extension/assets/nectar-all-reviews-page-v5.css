@@ -1,0 +1,19 @@
+/* All Reviews v5: collapse image column when an old review cannot be safely mapped */
+.nectar-seo-review.no-product-image{
+  grid-template-columns:minmax(0,1fr) 180px!important;
+}
+.nectar-seo-review.no-product-image .nectar-seo-review__content{
+  grid-column:1;
+}
+.nectar-seo-review.no-product-image .nectar-seo-review__meta{
+  grid-column:2;
+}
+@media(max-width:760px){
+  .nectar-seo-review.no-product-image{
+    grid-template-columns:minmax(0,1fr)!important;
+  }
+  .nectar-seo-review.no-product-image .nectar-seo-review__content,
+  .nectar-seo-review.no-product-image .nectar-seo-review__meta{
+    grid-column:1!important;
+  }
+}
