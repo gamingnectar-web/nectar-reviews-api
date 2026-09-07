@@ -1,0 +1,17 @@
+Add this to the Shopify app's shopify.app.toml used for `shopify app deploy`:
+
+[app_proxy]
+url = "/api/elev8/proxy"
+prefix = "apps"
+subpath = "elev8"
+
+Add the access scope:
+write_app_proxy
+
+The customer block calls these same-store URLs:
+/apps/elev8/feed
+/apps/elev8/subscriptions
+/apps/elev8/events/read
+/apps/elev8/track
+
+Shopify signs each proxy request; ELEV8 verifies the signature and uses logged_in_customer_id.

@@ -3,6 +3,7 @@ const { startReviewRequestJobs } = require('./reviews');
 const { mountCartRewardsModule, startCartRewardsJobs } = require('./cart-rewards');
 const { mountDiscountsModule, startDiscountJobs } = require('./discounts');
 const { mountProductCreationImportModule, startProductCreationImportJobs } = require('./product-creation-import');
+const { mountNotificationsModule, startNotificationsJobs } = require('./notifications');
 
 let moduleJobsStarted = false;
 
@@ -20,6 +21,7 @@ function mountPlatformModules(app, deps = {}) {
   mountDiscountsModule(app, deps);
   mountCartRewardsModule(app, deps);
   mountProductCreationImportModule(app, deps);
+  mountNotificationsModule(app, deps);
 }
 
 function startPlatformModuleJobs() {
@@ -29,6 +31,7 @@ function startPlatformModuleJobs() {
   startDiscountJobs();
   startCartRewardsJobs();
   startProductCreationImportJobs();
+  startNotificationsJobs();
 }
 
 module.exports = {

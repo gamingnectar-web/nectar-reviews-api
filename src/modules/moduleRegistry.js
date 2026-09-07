@@ -1,5 +1,15 @@
 const modules = [
   {
+    id: 'notifications',
+    productSlug: 'notifications',
+    label: 'Notifications & Tracking',
+    description: 'Customer order tracking, restock alerts, price drops and account notifications.',
+    status: 'beta',
+    adminFolder: 'public/modules/notifications',
+    apiNamespace: '/api/admin/notifications'
+  },
+
+  {
     id: 'reviews',
     productSlug: 'review-widget',
     label: 'review-widget',

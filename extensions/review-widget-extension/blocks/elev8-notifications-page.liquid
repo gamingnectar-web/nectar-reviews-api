@@ -1,0 +1,9 @@
+<section class="elev8-notifications-page" data-proxy-root="/apps/elev8" data-customer-signed-in="{% if customer %}true{% else %}false{% endif %}">
+  <div class="elev8-notifications-page__hero"><p class="elev8-notifications-page__eyebrow">ELEV8</p><h1>{{ block.settings.title }}</h1><p>{{ block.settings.intro }}</p></div>
+  {% if customer %}<div class="elev8-notifications-page__app" data-elev8-notifications-app><div class="e8notify-loading">Loading your notifications…</div></div>{% else %}<div class="e8notify-login"><h2>Sign in to see your notifications</h2><p>Your tracked orders and product alerts are private to your account.</p><a href="{{ routes.account_login_url }}">Sign in</a></div>{% endif %}
+</section>
+{{ 'elev8-notifications.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'elev8-notifications.js' | asset_url }}" defer></script>
+{% schema %}
+{"name":"ELEV8 Notifications Page","target":"section","settings":[{"type":"text","id":"title","label":"Title","default":"Your notifications"},{"type":"textarea","id":"intro","label":"Intro","default":"Track orders, products and the things you want to hear about."}]}
+{% endschema %}

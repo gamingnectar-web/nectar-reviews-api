@@ -1,0 +1,12 @@
+const express=require('express');
+const NotificationSubscription=require('../models/NotificationSubscription');
+const NotificationEvent=require('../models/NotificationEvent');
+const NotificationConfig=require('../models/NotificationConfig');
+const { runNotificationScheduler }=require('../jobs/notificationScheduler');
+const router=express.Router();
+router.get('/summary',async(req,res,next)=>{try{const shopDomain=req.shopDomain,since=new Date(Date.now()-30*86400000);const [config,subscriptions,unread,eventsByType]=await Promise.all([NotificationConfig.findOne({shopDomain}).lean(),NotificationSubscription.countDocuments({shopDomain,active:true}),NotificationEvent.countDocuments({shopDomain,readAt:null}),NotificationEvent.aggregate([{$match:{shopDomain,createdAt:{$gte:since}}},{$group:{_id:'$type',count:{$sum:1}}}])]);res.json({config:config||{},activeSubscriptions:subscriptions,unreadEvents:unread,events30d:Object.fromEntries(eventsByType.map(r=>[r._id,r.count]))})}catch(e){next(e)}});
+router.get('/subscriptions',async(req,res,next)=>{try{res.json({subscriptions:await NotificationSubscription.find({shopDomain:req.shopDomain}).sort({updatedAt:-1}).limit(500).lean()})}catch(e){next(e)}});
+router.get('/events',async(req,res,next)=>{try{res.json({events:await NotificationEvent.find({shopDomain:req.shopDomain}).sort({createdAt:-1}).limit(500).lean()})}catch(e){next(e)}});
+router.patch('/config',async(req,res,next)=>{try{const allowed=['enabled','pageEnabled','restockEnabled','priceDropEnabled','trackingEnabled','productNewsEnabled','emailEnabled','pageTitle','pageIntro','pollMinutes'],update={};for(const k of allowed)if(req.body[k]!==undefined)update[k]=req.body[k];const config=await NotificationConfig.findOneAndUpdate({shopDomain:req.shopDomain},{$set:update},{upsert:true,new:true,setDefaultsOnInsert:true});res.json({ok:true,config})}catch(e){next(e)}});
+router.post('/run-now',async(_req,res,next)=>{try{await runNotificationScheduler();res.json({ok:true})}catch(e){next(e)}});
+module.exports=router;
