@@ -17,6 +17,7 @@ const taskRoutes = require('./routes/tasks');
 const aiEmailModuleRoutes = require('./routes/aiEmailModules');
 const emailModuleLibraryRoutes = require('./routes/emailModuleLibrary');
 const reviewMigrationRoutes = require('./routes/reviewMigrations');
+const elev8DashboardRoutes = require('./routes/elev8Dashboard');
 const { securityHeaders, corsOptions, makeRateLimiter, errorHandler, requireAdminSession } = require('./utils/security');
 const reviewSubmissionSecurity = require('./utils/reviewSubmissionSecurity');
 const { mountPlatformModules } = require('./modules');
@@ -93,7 +94,10 @@ app.get('/admin', async (req, res, next) => {
       if (!shop?.accessTokenEncrypted) return res.redirect(302, `/auth/shopify?shop=${encodeURIComponent(shopDomain)}`);
     }
     const filePath = path.join(publicDir, 'admin.html');
-    const html = injectProductImportCleanupAssets(fs.readFileSync(filePath, 'utf8'))
+    let html = injectProductImportCleanupAssets(fs.readFileSync(filePath, 'utf8'));
+    if (!html.includes('/elev8-dashboard.css')) html = html.replace('</head>', '<link rel="stylesheet" href="/elev8-dashboard.css?v=elev8-1"></head>');
+    if (!html.includes('/elev8-dashboard.js')) html = html.replace('</body>', '<script src="/elev8-dashboard.js?v=elev8-1" defer></script></body>');
+    html = html
       .replace(/__SHOPIFY_API_KEY__/g, env.shopifyApiKey || '').replace(/__APP_URL__/g, env.appUrl || '');
     res.setHeader('Cache-Control', 'no-store');
     return res.type('html').send(html);
@@ -122,6 +126,7 @@ app.use('/auth', authRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/loyalty/checkout', makeRateLimiter({ windowMs: 60 * 1000, max: 60, keyPrefix: 'loyalty-checkout' }), loyaltyCheckoutRoutes);
 mountPlatformModules(app, { makeRateLimiter, requireAdminSession });
+app.use('/api/admin/elev8', requireAdminSession, elev8DashboardRoutes);
 app.use('/api/admin/ai', makeRateLimiter({ windowMs: 60 * 1000, max: 30, keyPrefix: 'admin-ai' }), requireAdminSession, aiEmailModuleRoutes);
 app.use('/api/admin/email-module-library', requireAdminSession, emailModuleLibraryRoutes);
 app.use('/api/admin/review-migrations', reviewMigrationRoutes);

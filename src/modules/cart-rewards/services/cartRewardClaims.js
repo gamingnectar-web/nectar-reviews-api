@@ -7,6 +7,7 @@ const {
   variantNumericId
 } = require("./cartRewardEngine");
 const { createClaimToken, verifyToken, hashToken } = require("./cartRewardTokens");
+const { createRewardDiscount } = require("./cartRewardDiscounts");
 
 function campaignAlreadyHasClaim(cart, campaignId) {
   return getClaimedRewardLines(cart).some((line) => line.campaignId === String(campaignId));
@@ -102,9 +103,22 @@ async function issueClaim({
     currencyCode: match.campaign.currencyCode
   });
 
+  let shopifyDiscount = null;
+  try {
+    shopifyDiscount = await createRewardDiscount({ adminGraphql, reward: match.reward, claimId: claim._id });
+    claim.metadata = { ...(claim.metadata || {}), shopifyDiscountCode: shopifyDiscount.code, shopifyDiscountNodeId: shopifyDiscount.discountNodeId, shopifyDiscountEndsAt: shopifyDiscount.endsAt };
+    await claim.save();
+  } catch (error) {
+    claim.metadata = { ...(claim.metadata || {}), discountProvisionError: error.message };
+    await claim.save();
+    throw new Error(`Reward qualified, but Shopify could not create the reward discount: ${error.message}`);
+  }
+
   return {
     claim,
     token,
+    discountCode: shopifyDiscount.code,
+    discountEndsAt: shopifyDiscount.endsAt,
     cartLine: {
       id: Number(variantNumericId(match.reward.variantId)) || match.reward.variantId,
       merchandiseId: match.reward.variantId,

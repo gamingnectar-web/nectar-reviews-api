@@ -40,6 +40,13 @@
     return response.json();
   }
 
+  async function applyDiscountCode(code) {
+    if (!code) return;
+    const url = rootRoute(`/discount/${encodeURIComponent(code)}?redirect=/cart`);
+    const response = await fetch(url, { method: "GET", credentials: "same-origin", redirect: "follow", cache: "no-store" });
+    if (!response.ok) throw new Error(`Discount application failed: ${response.status}`);
+  }
+
   async function changeCartLine(lineKeyOrNumber, quantity) {
     const response = await fetch(rootRoute("/cart/change.js"), {
       method: "POST",
@@ -57,7 +64,7 @@
     return (
       container.dataset.appUrl ||
       window.NECTAR_CART_REWARDS_APP_URL ||
-      ""
+      "https://nectar-reviews-api.onrender.com"
     ).replace(/\/$/, "");
   }
 
@@ -327,6 +334,8 @@
           }
         ]
       });
+
+      await applyDiscountCode(claim.discountCode);
 
       const refreshedCart = await getCart();
       const addedLine = (refreshedCart.items || []).find((item) => {

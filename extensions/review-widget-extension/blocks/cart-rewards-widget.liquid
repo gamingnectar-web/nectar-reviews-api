@@ -10,7 +10,7 @@
   id="NectarCartRewards-{{ block.id }}"
   class="nectar-cart-rewards"
   data-shop="{{ shop.permanent_domain }}"
-  data-app-url="{{ block.settings.app_url }}"
+  data-app-url="{{ block.settings.app_url | default: 'https://nectar-reviews-api.onrender.com' }}"
   data-placement="{{ block.settings.placement }}"
   data-layout="{{ block.settings.layout }}"
   data-density="{{ block.settings.density }}"
@@ -26,7 +26,7 @@
 
 {% schema %}
 {
-  "name": "Nectar Cart Rewards",
+  "name": "ELEV8 Cart Rewards",
   "target": "section",
   "settings": [
     {

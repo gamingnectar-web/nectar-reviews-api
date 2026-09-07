@@ -313,6 +313,8 @@ async function claimReward(req, res) {
   res.json({
     claimId: String(result.claim._id),
     token: result.token,
+    discountCode: result.discountCode,
+    discountEndsAt: result.discountEndsAt,
     cartLine: result.cartLine
   });
 }
