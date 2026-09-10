@@ -471,13 +471,17 @@ async function enrichBatch({ shopDomain, batchId, itemIds = [], useAi = true }) 
   return scanBatch({ shopDomain, batchId, itemIds, processAll: Boolean(itemIds?.length), useAi });
 }
 
-async function updateBatchItem({
+async function updateBatchItem({ shopDomain, batchId, itemId, patch = {} }) {
   if (patch?.draft && typeof patch.draft === 'object') {
     const batchPreview = await ProductImportBatch.findOne({ _id: batchId, shopDomain }).lean();
-    const itemPreview = batchPreview?.items?.find(row => row.itemId === itemId);
-    if (itemPreview) patch = { ...patch, draft: markMerchantEdits(itemPreview.draft || {}, patch.draft) };
+    const itemPreview = batchPreview?.items?.find((row) => row.itemId === itemId);
+    if (itemPreview) {
+      patch = {
+        ...patch,
+        draft: markMerchantEdits(itemPreview.draft || {}, patch.draft),
+      };
+    }
   }
- shopDomain, batchId, itemId, patch = {} }) {
   const { batch } = await getBatch({ shopDomain, batchId });
   const item = batch.items.find((candidate) => candidate.itemId === itemId);
   if (!item) {
