@@ -2,6 +2,8 @@ const { cleanText, slugify, normaliseMetafields, parseTags } = require('../utils
 const { normaliseDraftProduct } = require('./normaliseProduct.service');
 const { listRecentlyUsedProductTags, listRecentlyUsedProductVendors, listRecentlyUsedProductTypes, listRecentlyUsedThemeTemplates, listProductCategoryHints, getProductMetafieldDefinitions, getProfileValuesFromExistingProducts, getCommercialSuggestionsFromExistingProducts, listShopifyCollections, listProductSeoExamples, listThemeTemplateHints } = require('./shopifyProduct.service');
 const { getProductImportSettings, applySettingsToDraft } = require('./productImportSettings.service');
+const { buildCatalogueReferenceContext } = require('./catalogueReference.service');
+const { preserveLockedFields } = require('./fieldAuthority.service');
 
 const CORE_PROFILE_METAFIELDS = [
   { namespace: 'core', key: 'product_flavour', name: 'Product Flavour', type: 'single_line_text_field', help: 'The actual flavour shown on the supplier/product page, e.g. Pomegranate Green Tea.' },
@@ -226,7 +228,8 @@ function filterToExistingCollections(values = [], collections = [], allowUserDef
   }).filter(Boolean))).slice(0, 40);
 }
 
-async function aiSuggestProductProfile({ draft, metadata }) {
+async function aiSuggestProductProfile({ draft, metadata, shopDomain = '' }) {
+  const catalogueContext = shopDomain ? await buildCatalogueReferenceContext({ shopDomain, draft }).catch(() => null) : null;
   const apiKey = process.env.OPENAI_API_KEY || '';
   if (!apiKey) return null;
   const model = process.env.OPENAI_PRODUCT_IMPORT_MODEL || process.env.OPENAI_MODULE_MODEL || 'gpt-4.1-mini';

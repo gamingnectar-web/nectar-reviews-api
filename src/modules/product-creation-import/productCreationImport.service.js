@@ -11,6 +11,7 @@ const { extractNutritionAndProductProfile } = require('./services/nutritionProfi
 const { applyProfileToDraft, profileToMetafields, mergeMetafields } = require('./services/metafieldSchemaRegistry.service');
 const { suggestedRetailFromCost, toMoney, cleanText } = require('./utils/safe');
 const { getProductImportSettings, saveProductImportSettings } = require('./services/productImportSettings.service');
+const { preserveLockedFields } = require('./services/fieldAuthority.service');
 
 
 function moneyNumber(value) {
@@ -298,7 +299,11 @@ async function createDraftProduct({ shopDomain, draft, importId, lineId }) {
 
   const importSettings = await getProductImportSettings({ shopDomain });
   sourceDraft = { ...sourceDraft, saveImagesToFiles: sourceDraft?.saveImagesToFiles !== undefined ? sourceDraft.saveImagesToFiles : Boolean(importSettings?.imageRules?.saveSelectedImagesToFiles) };
-  sourceDraft = await enrichProductDraft({ shopDomain, draft: sourceDraft });
+  {
+    const merchantDraft = JSON.parse(JSON.stringify(sourceDraft || {}));
+    const enriched = await enrichProductDraft({ shopDomain, draft: sourceDraft });
+    sourceDraft = preserveLockedFields(merchantDraft, enriched);
+  }
   const created = await createShopifyProductFromDraft({ shopDomain, draft: sourceDraft });
 
   if (doc) {

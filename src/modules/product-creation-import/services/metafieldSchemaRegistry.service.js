@@ -1,9 +1,11 @@
 const { cleanText, normaliseMetafields, parseTags } = require('../utils/safe');
+const { mergeMetafieldsWithAuthority } = require('./fieldAuthority.service');
 
 const PRODUCT_IMPORT_PROFILE_SCHEMA = {
   product_flavour: { namespace: 'core', key: 'product_flavour', type: 'single_line_text_field', label: 'Product Flavour' },
   flavour_family: { namespace: 'core', key: 'flavour_family', type: 'single_line_text_field', label: 'Flavour Family' },
   flavour_profile: { namespace: 'core', key: 'flavour_profile', type: 'single_line_text_field', label: 'Flavour Profile' },
+  about_brand: { namespace: 'core', key: 'about_brand', type: 'rich_text_field', label: 'About Brand' },
   formula_version: { namespace: 'core', key: 'formula_version', type: 'single_line_text_field', label: 'Formula Version' },
   grouped_profiles: { namespace: 'core', key: 'grouped_profiles', type: 'single_line_text_field', label: 'Grouped Profiles' },
   sweetness: { namespace: 'core', key: 'sweetness', type: 'single_line_text_field', label: 'Sweetness', allowed: ['1', '2', '3', '4', '5'] },
@@ -77,6 +79,7 @@ function profileToMetafields(profile = {}) {
     buildMetafield('product_flavour', profile.productFlavour || profile.product_flavour || profile.flavour, source, confidence),
     buildMetafield('flavour_family', profile.flavourFamily || profile.flavour_family, source, confidence),
     buildMetafield('flavour_profile', profile.flavourProfile || profile.flavour_profile, source, confidence),
+    buildMetafield('about_brand', profile.aboutBrand || profile.about_brand || profile.brandDescription, source, confidence),
     buildMetafield('formula_version', profile.formulaVersion || profile.formula_version, source, confidence),
     buildMetafield('grouped_profiles', profile.groupedProfiles || profile.grouped_profiles || profile.productLine || profile.product_line, source, confidence),
     buildMetafield('sweetness', profile.sweetness, source, confidence),
@@ -114,7 +117,7 @@ function applyProfileToDraft(draft = {}, profile = {}) {
     // Keep profile labels/flavour families in metafields only. Tags should come
     // from merchant-approved site tags, not from free-text AI/profile extraction.
     recommendedTags: Array.from(new Set(parseTags(draft.recommendedTags || []))).slice(0, 40),
-    metafields: mergeMetafields(draft.metafields || [], profileMetafields),
+    metafields: mergeMetafieldsWithAuthority(draft.metafields || [], profileMetafields, draft),
   };
 }
 

@@ -1,4 +1,5 @@
 const { cleanText, cleanUrl, toMoney, suggestedRetailFromCost, slugify, parseTags, normaliseMetafields } = require('../utils/safe');
+const { preserveLockedFields, locked } = require('./fieldAuthority.service');
 
 function escapeHtml(value) {
   return String(value || '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m]));
@@ -134,7 +135,7 @@ function normaliseDraftProduct(raw = {}) {
     ...(Array.isArray(raw.metafields) ? raw.metafields : normaliseMetafields(raw.metafields || {})),
   ]);
 
-  return {
+  const result = {
     source: cleanText(raw.source || 'manual', 40),
     sourceUrl: cleanUrl(raw.sourceUrl || raw.url || ''),
     title,
@@ -175,8 +176,13 @@ function normaliseDraftProduct(raw = {}) {
       description: makeSafeSeoDescription(raw.seo?.description || raw.description || '', title, raw.vendor || raw.brand || raw.supplierName || '', raw.productType || raw.category || ''),
     },
     enrichment: raw.enrichment || {},
+    fieldLocks: raw.fieldLocks && typeof raw.fieldLocks === 'object' ? raw.fieldLocks : {},
+    lastMerchantEditAt: raw.lastMerchantEditAt || null,
     raw,
   };
+  if (locked(raw, 'seo.title')) result.seo.title = cleanText(raw.seo?.title || '', 180);
+  if (locked(raw, 'seo.description')) result.seo.description = cleanText(raw.seo?.description || '', 500);
+  return preserveLockedFields(raw, result);
 }
 
 module.exports = { normaliseDraftProduct, htmlFromPlainText, coreMetafieldDefaults, toWeight, normaliseWeightUnit };

@@ -10,6 +10,7 @@ const { refineImagePlanWithAi } = require('./productMediaClassifier.service');
 const { extractNutritionAndProductProfile } = require('./nutritionProfileExtractor.service');
 const { applyProfileToDraft, profileToMetafields, mergeMetafields } = require('./metafieldSchemaRegistry.service');
 const { cleanText, cleanUrl, makeLineId, parseTags, normaliseMetafields, slugify } = require('../utils/safe');
+const { markMerchantEdits, preserveLockedFields } = require('./fieldAuthority.service');
 
 function asArray(value) {
   if (Array.isArray(value)) return value;
@@ -470,7 +471,13 @@ async function enrichBatch({ shopDomain, batchId, itemIds = [], useAi = true }) 
   return scanBatch({ shopDomain, batchId, itemIds, processAll: Boolean(itemIds?.length), useAi });
 }
 
-async function updateBatchItem({ shopDomain, batchId, itemId, patch = {} }) {
+async function updateBatchItem({
+  if (patch?.draft && typeof patch.draft === 'object') {
+    const batchPreview = await ProductImportBatch.findOne({ _id: batchId, shopDomain }).lean();
+    const itemPreview = batchPreview?.items?.find(row => row.itemId === itemId);
+    if (itemPreview) patch = { ...patch, draft: markMerchantEdits(itemPreview.draft || {}, patch.draft) };
+  }
+ shopDomain, batchId, itemId, patch = {} }) {
   const { batch } = await getBatch({ shopDomain, batchId });
   const item = batch.items.find((candidate) => candidate.itemId === itemId);
   if (!item) {
