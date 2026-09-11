@@ -21,6 +21,7 @@ const {
 } = require('./productCreationImport.service');
 const {
   createBatch,
+  createSiteImportBatch,
   listBatches,
   analyseProductPhotos,
   getBatch,
@@ -72,6 +73,12 @@ router.post('/profile/suggest', asyncRoute(async (req, res) => {
 
 // Batch product import workspace. This keeps the existing single URL / invoice / manual flows intact,
 // but adds a parent batch that can contain any number of supplier/product URLs and shared defaults.
+router.post('/batches/site-import', asyncRoute(async (req, res) => {
+  const body = req.body || {};
+  const result = await createSiteImportBatch({ shopDomain: shopDomainFromReq(req), rootUrl: body.rootUrl || body.url || body.supplierUrl || '', name: body.name || '', maxProducts: body.maxProducts || 500, useAi: body.useAi !== false, autoApproveReady: body.autoApproveReady !== false, autoCreateDrafts: Boolean(body.autoCreateDrafts), batchSize: body.batchSize || 12 });
+  res.json(result);
+}));
+
 router.get('/batches', asyncRoute(async (req, res) => {
   const result = await listBatches({ shopDomain: shopDomainFromReq(req), limit: req.query.limit || 30 });
   res.json(result);

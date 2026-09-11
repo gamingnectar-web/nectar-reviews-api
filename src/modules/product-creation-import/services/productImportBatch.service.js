@@ -11,6 +11,10 @@ const { extractNutritionAndProductProfile } = require('./nutritionProfileExtract
 const { applyProfileToDraft, profileToMetafields, mergeMetafields } = require('./metafieldSchemaRegistry.service');
 const { cleanText, cleanUrl, makeLineId, parseTags, normaliseMetafields, slugify } = require('../utils/safe');
 const { markMerchantEdits, preserveLockedFields } = require('./fieldAuthority.service');
+const { applySupplierProfile, supplierDefaultsForUrl, profileForUrl } = require('./supplierProfile.service');
+const { mapSupplierFactsToExistingMetafields } = require('./supplierFactMapper.service');
+const { discoverSiteProducts } = require('./siteCatalogDiscovery.service');
+const { searchShopifyProducts } = require('./shopifyProduct.service');
 
 function asArray(value) {
   if (Array.isArray(value)) return value;
@@ -305,6 +309,15 @@ async function createBatch({ shopDomain, name = '', defaults = {}, links = [], m
   return { batch };
 }
 
+async function createSiteImportBatch({ shopDomain, rootUrl, name = '', maxProducts = 500, useAi = true, autoApproveReady = true, autoCreateDrafts = false, batchSize = 12 }) {
+  const discovery = await discoverSiteProducts({ rootUrl, maxProducts });
+  const defaults = { ...discovery.supplierDefaults, ...supplierDefaultsForUrl(rootUrl) };
+  const result = await createBatch({ shopDomain, name: name || `${defaults.vendor || defaults.supplierName || 'Supplier'} full site import`, defaults, links: discovery.urls });
+  result.batch.automation = { siteImport: true, supplierProfile: profileForUrl(rootUrl), useAi: useAi !== false, autoApproveReady: autoApproveReady !== false, autoCreateDrafts: Boolean(autoCreateDrafts), batchSize: Math.max(1, Math.min(Number(batchSize || 12), 25)), discoveryMethod: discovery.method, discoveredCount: discovery.count };
+  await result.batch.save();
+  return { ...result, discovery: { method: discovery.method, count: discovery.count, rootUrl: discovery.rootUrl } };
+}
+
 async function listBatches({ shopDomain, limit = 30 }) {
   const batches = await ProductImportBatch.find({ shopDomain }).sort({ createdAt: -1 }).limit(Math.min(Number(limit) || 30, 100)).lean();
   return { batches };
@@ -354,6 +367,15 @@ function byPageImageOrder(images = []) {
   return [...(images || [])].sort((a, b) => (a.originalIndex ?? 9999) - (b.originalIndex ?? 9999));
 }
 
+async function detectExistingProduct({ shopDomain, draft }) {
+  const title = cleanText(draft.title || '', 180); if (!title) return null;
+  const candidates = await searchShopifyProducts({ shopDomain, q: title, first: 8 }).catch(() => []);
+  const norm = (v='') => cleanText(v,220).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  const titleKey=norm(title), handleKey=norm(draft.handle||''), vendorKey=norm(draft.vendor||'');
+  const exact=candidates.find(product => (norm(product.title)===titleKey || (handleKey && norm(product.handle)===handleKey)) && (!vendorKey || !product.vendor || norm(product.vendor)===vendorKey));
+  return exact ? { exact:true, confidence:1, id:exact.id, title:exact.title, handle:exact.handle, image:exact.image||'', reason:'Exact title/handle match already exists in Shopify.' } : null;
+}
+
 async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
   item.status = 'scanning';
   item.error = '';
@@ -372,6 +394,7 @@ async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
     }
   }
 
+  draft = applySupplierProfile(draft);
   draft = applyMerchantSeoPattern(applyLockedBatchDefaults(draft, defaults), defaults);
   const baseImagePlan = scoreAndSelectProductImages({ images: draft.images || [], title: draft.title, sourceUrl: draft.sourceUrl || item.sourceUrl, maxSelected: 8 });
   const imagePlan = await refineImagePlanWithAi({ imagePlan: baseImagePlan, title: draft.title, sourceUrl: draft.sourceUrl || item.sourceUrl, useAi });
@@ -388,6 +411,7 @@ async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
   draft.metafields = mergeMetafields(draft.metafields || [], supplementLabelMetafields(supplementImages));
   draft = await enrichProductDraft({ shopDomain, draft });
   const metadata = await getProductImportMetadata({ shopDomain }).catch(() => ({}));
+  draft = mapSupplierFactsToExistingMetafields(draft, metadata);
   const commercial = draft.suggestions || draft.enrichment?.suggestions || {};
   draft.fieldInference={...(draft.fieldInference||{})};
   if (!draft.price && commercial.price?.value) { draft.price = commercial.price.value; draft.fieldInference.price=true; }
@@ -400,6 +424,9 @@ async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
   draft.metafields = mergeMetafields(draft.metafields || [], supplementLabelMetafields(supplementImages));
   draft.images = byPageImageOrder(imagePlan.selected).map((image) => ({ src: image.src, alt: image.alt || draft.title, role: image.role || '', reason: image.roleReason || image.reason || '', originalIndex: image.originalIndex ?? 0 }));
   draft = applyMerchantSeoPattern(applyLockedBatchDefaults(draft, defaults), defaults);
+
+  const existingProduct = await detectExistingProduct({ shopDomain, draft });
+  if (existingProduct) draft.suggestions = { ...(draft.suggestions || {}), existingProduct };
 
   item.title = draft.title;
   item.vendor = draft.vendor;
@@ -418,7 +445,8 @@ async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
   item.completeness = completeness({ draft, item, metadata });
   item.validation = validateDraft(draft, item);
   if (!item.completeness.ready) { item.validation.status = 'blocked'; item.validation.blockers = item.completeness.blockers; item.validation.issues = Array.from(new Set([...(item.validation.issues || []), ...item.completeness.blockers])); }
-  item.status = item.validation.status === 'ready' ? 'analysed' : 'needs_review';
+  item.status = existingProduct ? 'skipped' : (item.validation.status === 'ready' ? 'analysed' : 'needs_review');
+  if (existingProduct) { item.approvalStatus = 'rejected'; item.error = 'Skipped: an exact Shopify product already exists.'; }
   item.scannedAt = new Date();
   item.updatedAt = new Date();
   return item;
@@ -607,6 +635,7 @@ async function createShopifyDraftsForBatch({ shopDomain, batchId, itemIds = [], 
 
 module.exports = {
   createBatch,
+  createSiteImportBatch,
   analyseProductPhotos,
   listBatches,
   getBatch,

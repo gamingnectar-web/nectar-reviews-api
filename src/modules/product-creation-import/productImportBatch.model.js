@@ -88,6 +88,16 @@ const productImportBatchSchema = new mongoose.Schema({
     created: { type: Number, default: 0 },
     failed: { type: Number, default: 0 },
   },
+  automation: {
+    siteImport: { type: Boolean, default: false },
+    supplierProfile: { type: String, default: '' },
+    useAi: { type: Boolean, default: true },
+    autoApproveReady: { type: Boolean, default: true },
+    autoCreateDrafts: { type: Boolean, default: false },
+    batchSize: { type: Number, default: 12, min: 1, max: 25 },
+    discoveryMethod: { type: String, default: '' },
+    discoveredCount: { type: Number, default: 0 }
+  },
   errors: { type: [String], default: [] },
 }, { timestamps: true, collection: 'product_import_batches', suppressReservedKeysWarning: true });
 

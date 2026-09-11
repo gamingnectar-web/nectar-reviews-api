@@ -1,4 +1,5 @@
 const productCreationImportRoutes = require('./productCreationImport.routes');
+const { startSiteImportAutomation } = require('./jobs/siteImportAutomation');
 
 function mountProductCreationImportModule(app, deps = {}) {
   const requireAdminSession = deps.requireAdminSession || ((_req, _res, next) => next());
@@ -8,6 +9,6 @@ function mountProductCreationImportModule(app, deps = {}) {
   app.use('/api/admin/product-creation-import', limiter, requireAdminSession, productCreationImportRoutes);
 }
 
-function startProductCreationImportJobs() {}
+function startProductCreationImportJobs() { return startSiteImportAutomation(); }
 
 module.exports = { mountProductCreationImportModule, startProductCreationImportJobs };

@@ -1,0 +1,10 @@
+const fs=require('fs'),assert=require('assert');
+const x=fs.readFileSync('src/modules/product-creation-import/services/supplierProfiles/xZero.profile.js','utf8');
+const d=fs.readFileSync('src/modules/product-creation-import/services/siteCatalogDiscovery.service.js','utf8');
+const m=fs.readFileSync('src/modules/product-creation-import/services/supplierFactMapper.service.js','utf8');
+const b=fs.readFileSync('src/modules/product-creation-import/services/productImportBatch.service.js','utf8');
+const r=fs.readFileSync('src/modules/product-creation-import/productCreationImport.routes.js','utf8');
+const i=fs.readFileSync('src/modules/product-creation-import/index.js','utf8');
+const w=fs.readFileSync('src/modules/product-creation-import/jobs/siteImportAutomation.js','utf8');
+const checks=[['family classification',x.includes('classifyXZeroProduct')],['energy hydration split',x.includes('hydration_powder')&&x.includes('energy_powder')],['accessories isolated',x.includes('mousepad')&&x.includes('air_freshener')&&x.includes('shaker')],['sitemap discovery',d.includes('discoverFromSitemap')],['Shopify JSON fallback',d.includes('discoverShopifyProductsJson')],['existing metafield mapping',m.includes('mapSupplierFactsToExistingMetafields')],['full site batch',b.includes('createSiteImportBatch')],['supplier profile applied',b.includes('draft = applySupplierProfile(draft)')],['duplicates detected',b.includes('detectExistingProduct')],['route exists',r.includes('/batches/site-import')],['worker starts',i.includes('startSiteImportAutomation')],['ready-only auto approval',w.includes('item.completeness?.ready===true')]];
+for(const [n,ok] of checks){assert.ok(ok,n);console.log('✓ '+n)}console.log(`ELEV8 X-Zero site import smoke passed: ${checks.length} checks`);
