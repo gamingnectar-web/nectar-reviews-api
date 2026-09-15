@@ -69,18 +69,52 @@ PRODUCT EVIDENCE:${JSON.stringify(cards.slice(0,40))}`;
   if(!response.ok)throw new Error(payload?.error?.message||`OpenAI failed (${response.status})`);
   return JSON.parse(payload?.choices?.[0]?.message?.content||'{}');
 }
-async function scrapeBrandUrl({sourceUrl,brandName=''}) {
+async function scrapeBrandUrl({sourceUrl,brandName='',onProgress=async()=>{}}) {
   const url=cleanUrl(sourceUrl); if(!url)throw new Error('A valid brand or collection URL is required.');
   const website=new URL(url).origin;
   const name=cleanText(brandName||inferBrandName(url),120);
   const discovery=await discoverSiteProducts({rootUrl:url,maxProducts:1000});
+  await onProgress({
+    stage:'discovered',progress:20,headline:'Supplier catalogue found',
+    detail:`Found ${discovery.count||0} product URLs via ${discovery.method||'site discovery'}.`,
+    discoveredCount:discovery.count||0,
+    log:'Catalogue discovered',logDetail:`${discovery.count||0} product URLs found`,logStatus:'success'
+  });
   const cards=[];
   for(let i=0;i<discovery.urls.length;i+=12){
-    const results=await Promise.all(discovery.urls.slice(i,i+12).map(fetchProductCard));
+    const chunk=discovery.urls.slice(i,i+12);
+    const results=await Promise.all(chunk.map(fetchProductCard));
     cards.push(...results.filter(Boolean));
+    const processed=Math.min(i+chunk.length,discovery.urls.length);
+    const pct=20+Math.round((processed/Math.max(discovery.urls.length,1))*35);
+    await onProgress({
+      stage:'reading_products',progress:pct,headline:'Reading product data',
+      detail:`Analysed ${processed} of ${discovery.urls.length} supplier products.`,
+      discoveredCount:discovery.urls.length,processedCount:processed,
+      log:processed===discovery.urls.length?'Finished reading product catalogue':'Read another group of products',
+      logDetail:`${processed}/${discovery.urls.length} analysed`,
+      logStatus:processed===discovery.urls.length?'success':'info'
+    });
   }
   const productLines=deterministicProductLines(cards);
+  await onProgress({
+    stage:'grouping_lines',progress:62,headline:'Grouping core product lines',
+    detail:`Identified ${productLines.length} reusable product families/ranges.`,
+    productLineCount:productLines.length,
+    log:'Core product lines identified',logDetail:productLines.map(x=>x.name).slice(0,8).join(' · '),logStatus:'success'
+  });
+  await onProgress({
+    stage:'ai_enrichment',progress:72,headline:'Generating brand intelligence',
+    detail:'Creating About Brand, SEO, claims and line-level defaults from supplier evidence.',
+    log:'Started AI enrichment',logDetail:'Building reusable brand information'
+  });
   const suggestion=await aiBrandAndLines({brandName:name,website,cards,productLines});
+  await onProgress({
+    stage:'ai_complete',progress:90,headline:'Brand intelligence generated',
+    detail:'Brand information is ready to save.',
+    productLineCount:(suggestion.coreProductLines||productLines||[]).length,
+    log:'AI enrichment complete',logDetail:`${Math.round(Number(suggestion.confidence||0)*100)}% profile confidence`,logStatus:'success'
+  });
   return {
     sourceUrl:url,website,brandName:name,discoveredCount:discovery.count,discoveryMethod:discovery.method,
     productCards:cards,deterministicProductLines:productLines,

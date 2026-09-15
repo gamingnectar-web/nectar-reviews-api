@@ -4,6 +4,8 @@ const {
   generateBrandsFromShopify,scrapeAndSaveBrand
 }=require('./catalogueAudit.service');
 
+const { createBrandScrapeJob, getBrandScrapeJob } = require('./brandScrapeJob.service');
+
 const router=express.Router();
 function shop(req){return req.shopDomain||req.query.shopDomain||req.body?.shopDomain||req.headers['x-shop-domain']||req.headers['x-shopify-shop-domain']||''}
 function wrap(fn){return(req,res,next)=>Promise.resolve(fn(req,res,next)).catch(next)}
@@ -18,6 +20,16 @@ router.get('/audits/:auditId',wrap(async(req,res)=>res.json({audit:await getAudi
 router.get('/brands',wrap(async(req,res)=>res.json({brands:await listBrands({shopDomain:shop(req)})})));
 router.post('/brands',wrap(async(req,res)=>res.json({brand:await saveBrand({shopDomain:shop(req),profile:req.body?.brand||req.body||{}})})));
 router.post('/audits/:auditId/create-brand',wrap(async(req,res)=>res.json({brand:await createBrandFromAudit({shopDomain:shop(req),auditId:req.params.auditId,approve:Boolean(req.body?.approve)})})));
+router.post('/brands/scrape-job',wrap(async(req,res)=>{
+  const body=req.body||{};
+  const job=await createBrandScrapeJob({shopDomain:shop(req),sourceUrl:body.sourceUrl||body.url||'',brandName:body.brandName||''});
+  res.status(202).json({job});
+}));
+router.get('/brands/scrape-job/:jobId',wrap(async(req,res)=>{
+  const job=await getBrandScrapeJob({shopDomain:shop(req),jobId:req.params.jobId});
+  res.json({job});
+}));
+
 router.post('/brands/scrape-url',wrap(async(req,res)=>{
   const body=req.body||{};
   const result=await scrapeAndSaveBrand({shopDomain:shop(req),sourceUrl:body.sourceUrl||body.url||'',brandName:body.brandName||'',approve:Boolean(body.approve)});

@@ -34,6 +34,7 @@ const {
   createShopifyDraftsForBatch,
 } = require('./services/productImportBatch.service');
 const { healthCheckShopify, searchShopifyProducts } = require('./services/shopifyProduct.service');
+const { createBrandScrapeJob, getBrandScrapeJob } = require('./catalogue-audit/brandScrapeJob.service');
 const {
   listBrands: listCatalogueBrands,
   saveBrand: saveCatalogueBrand,
@@ -64,6 +65,16 @@ router.post('/brands', asyncRoute(async (req, res) => {
   const brand=await saveCatalogueBrand({shopDomain:shopDomainFromReq(req),profile:req.body?.brand||req.body||{}});
   res.json({brand});
 }));
+router.post('/brands/scrape-job', asyncRoute(async (req,res)=>{
+  const body=req.body||{};
+  const job=await createBrandScrapeJob({shopDomain:shopDomainFromReq(req),sourceUrl:body.sourceUrl||body.url||'',brandName:body.brandName||''});
+  res.status(202).json({job});
+}));
+router.get('/brands/scrape-job/:jobId', asyncRoute(async (req,res)=>{
+  const job=await getBrandScrapeJob({shopDomain:shopDomainFromReq(req),jobId:req.params.jobId});
+  res.json({job});
+}));
+
 router.post('/brands/scrape-url', asyncRoute(async (req, res) => {
   const body=req.body||{};
   const result=await scrapeAndSaveCatalogueBrand({
