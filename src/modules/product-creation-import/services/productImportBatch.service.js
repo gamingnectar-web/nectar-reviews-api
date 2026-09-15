@@ -12,6 +12,7 @@ const { applyProfileToDraft, profileToMetafields, mergeMetafields } = require('.
 const { cleanText, cleanUrl, makeLineId, parseTags, normaliseMetafields, slugify } = require('../utils/safe');
 const { markMerchantEdits, preserveLockedFields } = require('./fieldAuthority.service');
 const { applySupplierProfile, supplierDefaultsForUrl, profileForUrl } = require('./supplierProfile.service');
+const { applyBrandDirectoryProfile } = require('./brandDirectoryProfile.service');
 const { mapSupplierFactsToExistingMetafields } = require('./supplierFactMapper.service');
 const { discoverSiteProducts } = require('./siteCatalogDiscovery.service');
 const { searchShopifyProducts } = require('./shopifyProduct.service');
@@ -395,6 +396,7 @@ async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
   }
 
   draft = applySupplierProfile(draft);
+  draft = await applyBrandDirectoryProfile({ shopDomain, draft });
   draft = applyMerchantSeoPattern(applyLockedBatchDefaults(draft, defaults), defaults);
   const baseImagePlan = scoreAndSelectProductImages({ images: draft.images || [], title: draft.title, sourceUrl: draft.sourceUrl || item.sourceUrl, maxSelected: 8 });
   const imagePlan = await refineImagePlanWithAi({ imagePlan: baseImagePlan, title: draft.title, sourceUrl: draft.sourceUrl || item.sourceUrl, useAi });
