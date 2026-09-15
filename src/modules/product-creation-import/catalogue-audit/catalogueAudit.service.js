@@ -3,6 +3,7 @@ const { shopifyFetchOptional } = require('../../../utils/shopify');
 const { cleanText, cleanUrl } = require('../utils/safe');
 const { discoverSiteProducts } = require('../services/siteCatalogDiscovery.service');
 const { ProductBrandProfile, ProductCatalogueAudit } = require('./catalogueAudit.model');
+const { scrapeBrandUrl } = require('./brandScrape.service');
 
 function keyText(value='') {
   return cleanText(value, 240).toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim();
@@ -322,6 +323,26 @@ async function createBrandFromAudit({ shopDomain, auditId, approve=false }) {
   return profile;
 }
 
+async function scrapeAndSaveBrand({shopDomain,sourceUrl,brandName='',approve=false}){
+  const scraped=await scrapeBrandUrl({sourceUrl,brandName});
+  const s=scraped.suggestion||{};
+  const profile=await saveBrand({shopDomain,profile:{
+    ...s,
+    name:s.name||scraped.brandName,
+    canonicalVendor:s.canonicalVendor||scraped.brandName,
+    website:s.website||scraped.website,
+    productFamilies:s.productFamilies||[],
+    coreProductLines:s.coreProductLines||scraped.deterministicProductLines||[],
+    aliases:Array.from(new Set([...(s.aliases||[]),scraped.brandName,s.name,s.canonicalVendor].filter(Boolean))),
+    sourceUrls:Array.from(new Set([sourceUrl,...(s.sourceUrls||[])])),
+    source:'supplier',confidence:Number(s.confidence||0),status:approve?'approved':'draft',
+    lastAuditedAt:new Date(),
+    evidence:{...(s.evidence||{}),discoveredCount:scraped.discoveredCount,discoveryMethod:scraped.discoveryMethod,
+      sampleProducts:scraped.productCards.slice(0,30).map(p=>({title:p.title,url:p.url,productType:p.productType}))}
+  }});
+  return {profile,scraped};
+}
+
 async function generateBrandsFromShopify({ shopDomain, onlyMissing=true }) {
   const products=await listAllShopifyProducts({shopDomain});
   const vendors=[...new Set(products.map(p=>cleanText(p.vendor||'',120)).filter(Boolean))].sort();
@@ -357,5 +378,5 @@ async function generateBrandsFromShopify({ shopDomain, onlyMissing=true }) {
 
 module.exports={
   runCatalogueAudit,listAudits,getAudit,listBrands,saveBrand,createBrandFromAudit,
-  generateBrandsFromShopify,listAllShopifyProducts,brandMissingFields
+  generateBrandsFromShopify,scrapeAndSaveBrand,listAllShopifyProducts,brandMissingFields
 };

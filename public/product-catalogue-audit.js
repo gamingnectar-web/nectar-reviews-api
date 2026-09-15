@@ -2,12 +2,24 @@
   const API='/api/admin/product-creation-import/catalogue';
   const $=(id)=>document.getElementById(id);
   const esc=(v='')=>String(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-  async function api(path,options={}){
+  async function rawApi(base,path,options={}){
     const fn=window.adminFetch||window.fetch.bind(window);
-    const res=await fn(`${API}${path}`,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});
+    const res=await fn(`${base}${path}`,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});
     const data=await res.json().catch(()=>({}));
-    if(!res.ok) throw new Error(data.error||data.message||`Request failed (${res.status})`);
+    if(!res.ok){const error=new Error(data.error||data.message||`Request failed (${res.status})`);error.status=res.status;throw error}
     return data;
+  }
+  async function catalogueApi(path,options={}){
+    try{return await rawApi(API,path,options)}
+    catch(error){
+      if(error.status!==404)throw error;
+      if(path==='/brands')return rawApi('/api/admin/product-creation-import','/brands',options);
+      if(path==='/brands/scrape-url')return rawApi('/api/admin/product-creation-import','/brands/scrape-url',options);
+      throw error;
+    }
+  }
+  async function api(path,options={}){
+    return catalogueApi(path,options);
   }
   function findTabRow(){
     return document.querySelector('#v-product-creation-import .pci-tabs, #v-product-creation-import [role="tablist"], #v-product-creation-import .pci-nav, #v-product-creation-import .pci-tab-row');
@@ -54,9 +66,19 @@
       <div class="ca-card"><h3>Recent site audits</h3><div id="ca-recent-audits" class="ca-muted">Loading…</div></div>`;
     const brands=document.createElement('section');brands.id='pci-pane-brand-directory';brands.className='ca-pane';
     brands.innerHTML=`
-      <div class="ca-hero"><div><h2 style="margin:0">Brand Directory</h2><p class="ca-muted">Reusable brand information generated from your existing Shopify catalogue and supplier audits.</p></div>
-      <div class="ca-actions"><button class="ca-btn primary" id="ca-generate-brands">Generate missing brands from Shopify</button></div></div>
-      <div class="ca-card"><div id="ca-brand-list" class="ca-muted">Loading…</div></div>`;
+      <div class="ca-hero"><div><h2 style="margin:0">Brand Directory</h2><p class="ca-muted">Reusable brand information and core product-line rules. MongoDB remains usable even when Shopify is unavailable.</p></div>
+      <div class="ca-actions"><button class="ca-btn" id="ca-generate-brands">Generate missing brands from Shopify</button></div></div>
+      <div class="ca-card">
+        <h3>Scrape a brand website</h3>
+        <p class="ca-muted">Paste a brand homepage or collection. ELEV8 discovers the catalogue, identifies core ranges/formulas and creates a reusable draft profile.</p>
+        <div style="display:grid;grid-template-columns:minmax(220px,2fr) minmax(160px,1fr) auto;gap:10px;align-items:end">
+          <label><span class="ca-label">Brand / collection URL</span><input class="ca-input" id="ca-brand-source-url" placeholder="https://x-zero.co.uk/collections/x-zero"></label>
+          <label><span class="ca-label">Brand name (optional)</span><input class="ca-input" id="ca-brand-name" placeholder="X-Zero"></label>
+          <button class="ca-btn primary" id="ca-scrape-brand">Scrape & create draft</button>
+        </div>
+        <div id="ca-brand-scrape-status" class="ca-muted" style="margin-top:10px"></div>
+      </div>
+      <div class="ca-card"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h3 style="margin:0">Brands in MongoDB</h3><button class="ca-btn" id="ca-refresh-brands">Refresh</button></div><div id="ca-brand-list" class="ca-muted" style="margin-top:12px">Loading…</div></div>`;
     host.append(audit,brands);
 
     function activate(which){
@@ -70,6 +92,8 @@
     brandTab.addEventListener('click',()=>activate('brands'));
     $('ca-run-audit')?.addEventListener('click',runAudit);
     $('ca-generate-brands')?.addEventListener('click',generateBrands);
+    $('ca-scrape-brand')?.addEventListener('click',scrapeBrand);
+    $('ca-refresh-brands')?.addEventListener('click',loadBrands);
   }
 
   function statusBadge(status){return `<span class="ca-badge ${esc(status)}">${esc(String(status||'').replace(/_/g,' '))}</span>`}
@@ -126,11 +150,15 @@
     }catch(e){box.textContent=e.message}
   }
   function brandCard(b){
-    const missing=[];if(!b.aboutBrand)missing.push('About Brand');if(!b.seoTitle||!b.seoDescription)missing.push('SEO');if(!(b.productFamilies||[]).length)missing.push('Product families');
-    return `<div class="ca-brand"><div><h3 style="margin:0">${esc(b.name)}</h3><div class="ca-muted">${esc(b.canonicalVendor||'')} · ${esc(b.source||'')}</div></div>
-      <div>${b.aboutBrand?esc(b.aboutBrand):'<span class="ca-muted">No About Brand yet.</span>'}${missing.length?`<div class="ca-muted" style="margin-top:6px">Missing: ${esc(missing.join(', '))}</div>`:''}</div>
+    const missing=[];if(!b.aboutBrand)missing.push('About Brand');if(!b.seoTitle||!b.seoDescription)missing.push('SEO');if(!(b.productFamilies||[]).length&&!((b.coreProductLines||[]).length))missing.push('Product families');
+    const lines=(b.coreProductLines||[]).length
+      ? (b.coreProductLines||[]).slice(0,12).map(line=>`<span class="ca-badge" style="margin:3px">${esc(line.name||line.productType||'Range')}</span>`).join('')
+      : (b.productFamilies||[]).slice(0,12).map(line=>`<span class="ca-badge" style="margin:3px">${esc(line)}</span>`).join('');
+    return `<div class="ca-brand"><div><h3 style="margin:0">${esc(b.name)}</h3><div class="ca-muted">${esc(b.canonicalVendor||'')} · ${esc(b.source||'')} · ${Math.round(Number(b.confidence||0)*100)}% confidence</div>${b.website?`<div class="ca-muted">${esc(b.website)}</div>`:''}</div>
+      <div>${b.aboutBrand?`<div>${esc(b.aboutBrand)}</div>`:'<span class="ca-muted">No About Brand yet.</span>'}${lines?`<div style="margin-top:10px"><strong>Core product lines</strong><div style="margin-top:5px">${lines}</div></div>`:''}${missing.length?`<div class="ca-muted" style="margin-top:8px">Missing: ${esc(missing.join(', '))}</div>`:''}</div>
       <div>${b.status==='approved'?statusBadge('matched'):statusBadge('possible_match')}</div></div>`;
   }
+
   async function loadBrands(){
     const box=$('ca-brand-list');if(!box)return;
     try{const {brands=[]}=await api('/brands');box.innerHTML=brands.length?brands.map(brandCard).join(''):'No brand profiles yet. Generate them from Shopify or create one from a supplier audit.'}

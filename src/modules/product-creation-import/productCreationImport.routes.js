@@ -34,6 +34,11 @@ const {
   createShopifyDraftsForBatch,
 } = require('./services/productImportBatch.service');
 const { healthCheckShopify, searchShopifyProducts } = require('./services/shopifyProduct.service');
+const {
+  listBrands: listCatalogueBrands,
+  saveBrand: saveCatalogueBrand,
+  scrapeAndSaveBrand: scrapeAndSaveCatalogueBrand,
+} = require('./catalogue-audit/catalogueAudit.service');
 
 const router = express.Router();
 
@@ -49,6 +54,22 @@ router.get('/health', asyncRoute(async (req, res) => {
   const shopDomain = shopDomainFromReq(req);
   const shopify = await healthCheckShopify(shopDomain);
   res.json({ ok: true, module: 'PRODUCT CREATION & PRODUCT IMPORT', shopify, invoiceVision: Boolean(process.env.OPENAI_API_KEY), batchImport: true });
+}));
+
+// Brand Directory compatibility endpoints.
+router.get('/brands', asyncRoute(async (req, res) => {
+  res.json({ brands: await listCatalogueBrands({ shopDomain: shopDomainFromReq(req) }) });
+}));
+router.post('/brands', asyncRoute(async (req, res) => {
+  const brand=await saveCatalogueBrand({shopDomain:shopDomainFromReq(req),profile:req.body?.brand||req.body||{}});
+  res.json({brand});
+}));
+router.post('/brands/scrape-url', asyncRoute(async (req, res) => {
+  const body=req.body||{};
+  const result=await scrapeAndSaveCatalogueBrand({
+    shopDomain:shopDomainFromReq(req),sourceUrl:body.sourceUrl||body.url||'',brandName:body.brandName||'',approve:Boolean(body.approve)
+  });
+  res.json(result);
 }));
 
 router.get('/metadata', asyncRoute(async (req, res) => {

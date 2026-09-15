@@ -1,7 +1,7 @@
 const express=require('express');
 const {
   runCatalogueAudit,listAudits,getAudit,listBrands,saveBrand,createBrandFromAudit,
-  generateBrandsFromShopify
+  generateBrandsFromShopify,scrapeAndSaveBrand
 }=require('./catalogueAudit.service');
 
 const router=express.Router();
@@ -18,6 +18,11 @@ router.get('/audits/:auditId',wrap(async(req,res)=>res.json({audit:await getAudi
 router.get('/brands',wrap(async(req,res)=>res.json({brands:await listBrands({shopDomain:shop(req)})})));
 router.post('/brands',wrap(async(req,res)=>res.json({brand:await saveBrand({shopDomain:shop(req),profile:req.body?.brand||req.body||{}})})));
 router.post('/audits/:auditId/create-brand',wrap(async(req,res)=>res.json({brand:await createBrandFromAudit({shopDomain:shop(req),auditId:req.params.auditId,approve:Boolean(req.body?.approve)})})));
+router.post('/brands/scrape-url',wrap(async(req,res)=>{
+  const body=req.body||{};
+  const result=await scrapeAndSaveBrand({shopDomain:shop(req),sourceUrl:body.sourceUrl||body.url||'',brandName:body.brandName||'',approve:Boolean(body.approve)});
+  res.json(result);
+}));
 router.post('/brands/generate-from-shopify',wrap(async(req,res)=>{
   const brands=await generateBrandsFromShopify({shopDomain:shop(req),onlyMissing:req.body?.onlyMissing!==false});
   res.json({brands,created:brands.length});
