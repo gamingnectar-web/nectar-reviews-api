@@ -13,6 +13,8 @@ const brandProfileSchema = new mongoose.Schema({
   seoDescription: { type: String, default: '' },
   productFamilies: { type: [String], default: [] },
   coreProductLines: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  alwaysApply: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  conditionalRules: { type: [mongoose.Schema.Types.Mixed], default: [] },
   aliases: { type: [String], default: [] },
   productTypes: { type: [String], default: [] },
   collections: { type: [String], default: [] },
