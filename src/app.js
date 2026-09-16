@@ -19,6 +19,8 @@ const emailModuleLibraryRoutes = require('./routes/emailModuleLibrary');
 const reviewMigrationRoutes = require('./routes/reviewMigrations');
 const elev8DashboardRoutes = require('./routes/elev8Dashboard');
 const brandDirectoryDirectRoutes = require('./routes/brandDirectoryDirect');
+const brandDirectoryV3Routes = require('./routes/brandDirectoryV3');
+const elev8CommercePulseRoutes = require('./routes/elev8CommercePulse');
 const { securityHeaders, corsOptions, makeRateLimiter, errorHandler, requireAdminSession } = require('./utils/security');
 const reviewSubmissionSecurity = require('./utils/reviewSubmissionSecurity');
 const { mountPlatformModules } = require('./modules');
@@ -126,6 +128,8 @@ app.use(express.static(publicDir, { etag: true, maxAge: env.nodeEnv === 'product
 app.use('/auth', authRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/loyalty/checkout', makeRateLimiter({ windowMs: 60 * 1000, max: 60, keyPrefix: 'loyalty-checkout' }), loyaltyCheckoutRoutes);
+app.use('/api/admin/brand-directory-v3', requireAdminSession, brandDirectoryV3Routes);
+app.use('/api/admin/elev8-commerce', requireAdminSession, elev8CommercePulseRoutes);
 mountPlatformModules(app, { makeRateLimiter, requireAdminSession });
 app.use('/api/admin/brand-directory-v2', requireAdminSession, brandDirectoryDirectRoutes);
 app.use('/api/admin/elev8', requireAdminSession, elev8DashboardRoutes);
