@@ -27,7 +27,7 @@
 
   async function request(path, options={}){
     const fn=window.adminFetch||window.fetch.bind(window);
-    const bases=['/api/admin/product-creation-import/catalogue','/api/admin/product-creation-import'];
+    const bases=['/api/admin/brand-directory-v2','/api/admin/product-creation-import/catalogue','/api/admin/product-creation-import'];
     let lastError;
     for(const base of bases){
       const res=await fn(`${base}${path}`,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});
