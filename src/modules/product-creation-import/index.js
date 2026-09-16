@@ -8,6 +8,7 @@ function mountProductCreationImportModule(app, deps = {}) {
     ? deps.makeRateLimiter({ windowMs: 60 * 1000, max: 80, keyPrefix: 'product-import' })
     : (_req, _res, next) => next();
   app.use('/api/admin/product-creation-import/catalogue', limiter, requireAdminSession, catalogueAuditRoutes);
+  app.use('/api/admin/brand-directory', limiter, requireAdminSession, catalogueAuditRoutes);
   app.use('/api/admin/product-creation-import', limiter, requireAdminSession, productCreationImportRoutes);
 }
 

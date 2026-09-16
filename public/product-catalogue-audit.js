@@ -159,6 +159,8 @@
       <div>${b.status==='approved'?statusBadge('matched'):statusBadge('possible_match')}</div></div>`;
   }
 
+  window.__elev8RenderBrandCard=brandCard;
+
   async function loadBrands(){
     const box=$('ca-brand-list');if(!box)return;
     try{const {brands=[]}=await api('/brands');box.innerHTML=brands.length?brands.map(brandCard).join(''):'No brand profiles yet. Generate them from Shopify or create one from a supplier audit.'}
