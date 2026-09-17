@@ -2,6 +2,8 @@
   const $=id=>document.getElementById(id);
   const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
+  let activeManualBatchId='';
+
   async function api(path,options={}){
     if(window.adminFetch) return window.adminFetch(`/admin/manual-reviews${path}`,options);
     throw new Error('Admin session unavailable');
@@ -64,6 +66,7 @@
   }
 
   function modal(){
+    activeManualBatchId='';
     $('mr-backdrop')?.remove();
     const el=document.createElement('div');el.id='mr-backdrop';el.className='mr-backdrop';
     el.innerHTML=`<div class="mr-modal">
@@ -90,7 +93,8 @@
     document.body.appendChild(el);
     $('mr-x').onclick=$('mr-cancel').onclick=()=>el.remove();
     $('mr-add-row').onclick=()=>addRow();
-    $('mr-save').onclick=()=>saveBatch({continueAdding:false});\n    $('mr-save-add').onclick=()=>saveBatch({continueAdding:true});
+    $('mr-save').onclick=()=>saveBatch({continueAdding:false});
+    $('mr-save-add').onclick=()=>saveBatch({continueAdding:true});
     el.querySelectorAll('.mr-tabs button').forEach(btn=>btn.onclick=()=>switchTab(btn.dataset.tab));
     addRow();
   }
@@ -213,6 +217,7 @@
     document.querySelectorAll('.mr-tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
     document.querySelectorAll('.mr-pane').forEach(p=>p.classList.toggle('active',p.id===`mr-pane-${name}`));
     $('mr-save').style.display=name==='add'?'inline-flex':'none';
+    $('mr-save-add').style.display=name==='add'?'inline-flex':'none';
     if(name==='drafts')loadDrafts();
   }
 
