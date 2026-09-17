@@ -222,15 +222,39 @@
     const headings=[...document.querySelectorAll('h1,h2,h3')];
     const heading=headings.find(h=>/review manager/i.test(h.textContent||''));
     if(!heading||$('mr-open'))return;
-    const btn=document.createElement('button');btn.id='mr-open';btn.type='button';btn.className='mr-open';btn.textContent='+ Manual Add';
+
+    const view=heading.closest('.view')||heading.parentElement?.parentElement||document;
+    const tabButtons=[...view.querySelectorAll('button')].filter(btn=>{
+      const text=String(btn.textContent||'').replace(/\\s+/g,' ').trim().toLowerCase();
+      return ['reviews','approval rules','trash'].includes(text);
+    });
+
+    const btn=document.createElement('button');
+    btn.id='mr-open';
+    btn.type='button';
+    btn.className='mr-open mr-open-inline';
+    btn.textContent='+ Manual Add';
     btn.onclick=modal;
+
+    if(tabButtons.length){
+      const tabsParent=tabButtons[0].parentElement;
+      if(tabsParent){
+        tabsParent.classList.add('mr-review-tabs-row');
+        tabsParent.appendChild(btn);
+        return;
+      }
+    }
+
     const parent=heading.parentElement;
-    if(parent){parent.classList.add('mr-titlebar');parent.appendChild(btn)}
+    if(parent){
+      parent.classList.add('mr-titlebar');
+      parent.appendChild(btn);
+    }
   }
 
   const style=document.createElement('style');
   style.textContent=`
-    .mr-titlebar{display:flex!important;align-items:center;justify-content:space-between;gap:12px}.mr-open,.mr-primary{background:#0f1d32;color:#fff;border:0;border-radius:10px;padding:10px 14px;font-weight:800;cursor:pointer}.mr-secondary{background:#fff;border:1px solid #d6dce5;border-radius:10px;padding:9px 12px;font-weight:700;cursor:pointer}
+    .mr-titlebar{display:flex!important;align-items:center;justify-content:space-between;gap:12px}.mr-review-tabs-row{display:flex!important;align-items:center!important;gap:18px!important;flex-wrap:wrap}.mr-review-tabs-row .mr-open-inline{margin-left:auto!important;white-space:nowrap}.mr-open,.mr-primary{background:#0f1d32;color:#fff;border:0;border-radius:10px;padding:10px 14px;font-weight:800;cursor:pointer}.mr-secondary{background:#fff;border:1px solid #d6dce5;border-radius:10px;padding:9px 12px;font-weight:700;cursor:pointer}
     .mr-backdrop{position:fixed;inset:0;background:rgba(15,29,50,.45);z-index:100002;display:flex;align-items:center;justify-content:center;padding:18px}.mr-modal{width:min(1050px,97vw);max-height:92vh;background:#f7f9fb;border-radius:22px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 30px 90px rgba(15,29,50,.25)}
     .mr-head{background:#fff;padding:20px 22px;border-bottom:1px solid #e5e9ef;display:flex;justify-content:space-between;gap:16px}.mr-head h2{margin:0}.mr-head p{margin:5px 0 0;color:#667085}.mr-head>button{border:0;background:none;font-size:30px;cursor:pointer}.mr-tabs{background:#fff;padding:0 22px;border-bottom:1px solid #e5e9ef;display:flex;gap:18px}.mr-tabs button{border:0;background:none;padding:13px 0;font-weight:800;color:#667085;border-bottom:3px solid transparent;cursor:pointer}.mr-tabs button.active{color:#0f1d32;border-bottom-color:#0f1d32}
     .mr-body{padding:18px;overflow:auto}.mr-pane{display:none}.mr-pane.active{display:block}.mr-row{background:#fff;border:1px solid #dde3eb;border-radius:16px;padding:17px;margin-bottom:14px}.mr-card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.mr-card-head>div{display:flex;gap:8px;align-items:center}.mr-draft-badge{font-size:11px;background:#fff5d9;color:#8a6500;border-radius:999px;padding:4px 7px}.mr-remove{border:0;background:#fff0ee;color:#a72b20;border-radius:50%;width:30px;height:30px;font-size:20px;cursor:pointer}
