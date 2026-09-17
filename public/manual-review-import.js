@@ -84,13 +84,13 @@
       </div>
       <div class="mr-foot">
         <span id="mr-status"></span>
-        <div><button id="mr-cancel" type="button" class="mr-secondary">Close</button><button id="mr-save" type="button" class="mr-primary">Save batch as draft</button></div>
+        <div><button id="mr-cancel" type="button" class="mr-secondary">Close</button><button id="mr-save" type="button" class="mr-secondary">Save draft</button><button id="mr-save-add" type="button" class="mr-primary">Save & add another</button></div>
       </div>
     </div>`;
     document.body.appendChild(el);
     $('mr-x').onclick=$('mr-cancel').onclick=()=>el.remove();
     $('mr-add-row').onclick=()=>addRow();
-    $('mr-save').onclick=saveBatch;
+    $('mr-save').onclick=()=>saveBatch({continueAdding:false});\n    $('mr-save-add').onclick=()=>saveBatch({continueAdding:true});
     el.querySelectorAll('.mr-tabs button').forEach(btn=>btn.onclick=()=>switchTab(btn.dataset.tab));
     addRow();
   }
@@ -175,18 +175,38 @@
     }));
   }
 
-  async function saveBatch(){
-    const reviews=collect();const status=$('mr-status'),btn=$('mr-save');
-    btn.disabled=true;btn.textContent='Saving…';status.textContent='';
+  async function saveBatch({continueAdding=false}={}){
+    const reviews=collect();
+    const status=$('mr-status'),saveBtn=$('mr-save'),addBtn=$('mr-save-add');
+    saveBtn.disabled=true;addBtn.disabled=true;
+    const oldSave=saveBtn.textContent,oldAdd=addBtn.textContent;
+    (continueAdding?addBtn:saveBtn).textContent='Saving…';
+    status.textContent='';
     try{
-      const data=await api('/batches',{method:'POST',body:JSON.stringify({reviews})});
-      status.textContent=`✓ ${data.saved} review${data.saved===1?'':'s'} saved as draft.`;
+      const data=await api('/batches',{method:'POST',body:JSON.stringify({
+        reviews,
+        ...(activeManualBatchId?{batchId:activeManualBatchId}:{})
+      })});
+      activeManualBatchId=data.batchId||activeManualBatchId;
+      status.textContent=`✓ ${data.saved} review${data.saved===1?'':'s'} added to this draft batch.`;
       status.className='ok';
-      switchTab('drafts');
-      loadDrafts();
+
+      if(continueAdding){
+        const rows=$('mr-rows');
+        rows.innerHTML='';
+        addRow();
+        rows.querySelector('.mr-product-search')?.focus();
+        window.scrollTo?.({top:0,behavior:'smooth'});
+      }else{
+        switchTab('drafts');
+        loadDrafts();
+      }
     }catch(error){
       status.textContent=error.message;status.className='error';
-    }finally{btn.disabled=false;btn.textContent='Save batch as draft'}
+    }finally{
+      saveBtn.disabled=false;addBtn.disabled=false;
+      saveBtn.textContent=oldSave;addBtn.textContent=oldAdd;
+    }
   }
 
   function switchTab(name){
@@ -269,8 +289,8 @@
     .mr-head{background:#fff;padding:20px 22px;border-bottom:1px solid #e5e9ef;display:flex;justify-content:space-between;gap:16px}.mr-head h2{margin:0}.mr-head p{margin:5px 0 0;color:#667085}.mr-head>button{border:0;background:none;font-size:30px;cursor:pointer}.mr-tabs{background:#fff;padding:0 22px;border-bottom:1px solid #e5e9ef;display:flex;gap:18px}.mr-tabs button{border:0;background:none;padding:13px 0;font-weight:800;color:#667085;border-bottom:3px solid transparent;cursor:pointer}.mr-tabs button.active{color:#0f1d32;border-bottom-color:#0f1d32}
     .mr-body{padding:18px;overflow:auto}.mr-pane{display:none}.mr-pane.active{display:block}.mr-row{background:#fff;border:1px solid #dde3eb;border-radius:16px;padding:17px;margin-bottom:14px}.mr-card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.mr-card-head>div{display:flex;gap:8px;align-items:center}.mr-draft-badge{font-size:11px;background:#fff5d9;color:#8a6500;border-radius:999px;padding:4px 7px}.mr-remove{border:0;background:#fff0ee;color:#a72b20;border-radius:50%;width:30px;height:30px;font-size:20px;cursor:pointer}
     .mr-grid{display:grid;gap:12px}.mr-grid.two{grid-template-columns:2fr 1fr}.mr-grid.three{grid-template-columns:1fr 1fr 1fr}.mr-grid.rating-row{grid-template-columns:1fr auto;align-items:end}label{display:block}.mr-row label>span{display:block;font-size:12px;font-weight:800;color:#4b5563;margin:0 0 6px}.mr-row input,.mr-row textarea{width:100%;box-sizing:border-box;border:1px solid #ccd4df;border-radius:10px;padding:10px 11px;font:inherit;background:#fff}.mr-row textarea{resize:vertical}.mr-check{display:flex!important;align-items:center;gap:7px;padding-bottom:9px}.mr-check input{width:auto}.mr-check span{margin:0!important}
-    .mr-stars{display:flex;gap:3px}.mr-stars button{border:0;background:none;padding:0;font-size:27px;color:#d8dde5;cursor:pointer}.mr-stars button.on{color:#ffb400}.mr-product-search-wrap{position:relative}.mr-product-results{display:none;position:absolute;left:0;right:0;top:100%;z-index:10;background:#fff;border:1px solid #d8dee7;border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.12);max-height:260px;overflow:auto}.mr-product-results.open{display:block}.mr-result{width:100%;border:0;background:#fff;padding:9px;text-align:left;display:flex;gap:9px;align-items:center;cursor:pointer;border-bottom:1px solid #eef1f4}.mr-result img{width:42px;height:42px;object-fit:cover;border-radius:7px}.mr-result span{display:flex;flex-direction:column}.mr-result small,.muted{color:#7b8493}
-    .mr-attributes{margin-top:14px;border-top:1px solid #edf0f4;padding-top:14px}.mr-attributes>strong{font-size:13px}.mr-attributes small{font-weight:500;color:#7b8493}.mr-attr-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:10px}.mr-attr-grid input{padding:0;border:0}.mr-foot{background:#fff;border-top:1px solid #e5e9ef;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px}.mr-foot>div{display:flex;gap:8px}.mr-foot .ok{color:#167642;font-weight:700}.mr-foot .error{color:#a72b20;font-weight:700}
+    .mr-stars{display:flex;gap:3px}.mr-stars{gap:6px!important;align-items:center}.mr-stars button{border:0;background:none;padding:2px 1px;font-size:40px;line-height:1;color:#d8dde5;cursor:pointer;transition:transform .12s ease,color .12s ease}.mr-stars button:hover{transform:scale(1.08)}.mr-stars button.on{color:#ffb400}.mr-product-search-wrap{position:relative}.mr-product-results{display:none;position:absolute;left:0;right:0;top:100%;z-index:10;background:#fff;border:1px solid #d8dee7;border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.12);max-height:260px;overflow:auto}.mr-product-results.open{display:block}.mr-result{width:100%;border:0;background:#fff;padding:9px;text-align:left;display:flex;gap:9px;align-items:center;cursor:pointer;border-bottom:1px solid #eef1f4}.mr-result img{width:42px;height:42px;object-fit:cover;border-radius:7px}.mr-result span{display:flex;flex-direction:column}.mr-result small,.muted{color:#7b8493}
+    .mr-attributes{margin-top:14px;border-top:1px solid #edf0f4;padding-top:14px}.mr-attributes>strong{font-size:13px}.mr-attributes small{font-weight:500;color:#7b8493}.mr-attr-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:10px}.mr-attr-grid input{padding:0;border:0}.mr-foot{background:#fff;border-top:1px solid #e5e9ef;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px}.mr-foot>div{display:flex;gap:8px;align-items:center}.mr-foot .mr-primary{min-width:165px}.mr-foot .mr-secondary{white-space:nowrap}.mr-foot .ok{color:#167642;font-weight:700}.mr-foot .error{color:#a72b20;font-weight:700}
     .mr-batch{background:#fff;border:1px solid #dfe5ec;border-radius:12px;padding:13px;display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:9px}.mr-batch>div:first-child{display:flex;flex-direction:column}.mr-batch small{color:#737d8c;margin-top:4px}.mr-batch-actions{display:flex;gap:7px}.mr-approve{border:0;background:#0b8a68;color:#fff;border-radius:9px;padding:8px 10px;font-weight:800;cursor:pointer}.mr-delete{border:1px solid #ffc9c3;background:#fff7f6;color:#b33225;border-radius:9px;padding:8px 10px;font-weight:800;cursor:pointer}.mr-approved{background:#e9f8ef;color:#167642;border-radius:999px;padding:5px 9px;font-weight:800}.mr-empty{padding:18px;text-align:center;color:#737d8c}
     @media(max-width:760px){.mr-grid.two,.mr-grid.three,.mr-grid.rating-row,.mr-attr-grid{grid-template-columns:1fr}.mr-batch{align-items:flex-start;flex-direction:column}}
   `;

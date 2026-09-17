@@ -71,7 +71,8 @@ router.post('/batches', async (req,res,next) => {
     if(!rows.length) return res.status(400).json({error:'Add at least one review.'});
     if(rows.length>100) return res.status(400).json({error:'Manual batches are limited to 100 reviews.'});
 
-    const id=newBatchId(), docs=[], errors=[];
+    const requestedBatchId=String(req.body?.batchId||'').trim();
+    const id=/^manual-\d{10,}-[a-f0-9]{6,}$/i.test(requestedBatchId)?requestedBatchId:newBatchId(), docs=[], errors=[];
     rows.forEach((raw,index)=>{
       try {
         const scope=raw.reviewScope==='site'?'site':'product';
