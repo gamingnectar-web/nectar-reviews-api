@@ -4,7 +4,7 @@ const { locked } = require('./fieldAuthority.service');
 const t=v=>cleanText(v,5000).toLowerCase();
 function getField(draft={},field=''){
   if(field==='title')return draft.title||'';
-  if(field==='description')return draft.descriptionHtml||'';
+  if(field==='description')return draft.descriptionHtml||draft.description||'';
   if(field==='vendor')return draft.vendor||'';
   if(field==='productType')return draft.productType||'';
   if(field==='tags')return (draft.tags||[]).join(' ');
@@ -18,8 +18,10 @@ function getField(draft={},field=''){
 function matches(draft,when={}){
   const a=t(getField(draft,when.field||'title')),e=t(when.value||'');
   switch(when.operator||'contains'){
-    case 'equals':return a===e; case 'starts_with':return a.startsWith(e);
-    case 'ends_with':return a.endsWith(e); case 'exists':return Boolean(a.trim());
+    case 'equals':return a===e;
+    case 'starts_with':return a.startsWith(e);
+    case 'ends_with':return a.endsWith(e);
+    case 'exists':return Boolean(a.trim());
     default:return a.includes(e);
   }
 }
@@ -57,18 +59,39 @@ function applyAction(draft={},a={}){
   }
   return draft;
 }
+function inferredMatcher(line={}){
+  if(line.matcher?.field)return line.matcher;
+  const name=String(line.name||'').trim();
+  return name?{field:'title',operator:'contains',value:name}:{field:'title',operator:'exists',value:''};
+}
+function applyRuleset(next,rules=[],applied=[],prefix=''){
+  for(const rule of rules){
+    if(rule?.enabled===false)continue;
+    for(const action of rule.actions||[])next=applyAction(next,action);
+    applied.push(`${prefix}${rule.name||'Rule'}`);
+  }
+  return next;
+}
 function applyBrandRules(draft={},profile={}){
   let next={...draft};const applied=[];
-  for(const rule of profile.alwaysApply||[]){
-    if(rule?.enabled===false)continue;
-    for(const a of rule.actions||[])next=applyAction(next,a);
-    applied.push(rule.name||'Always apply');
-  }
+  next=applyRuleset(next,profile.alwaysApply||[],applied,'Brand: ');
+
   for(const rule of profile.conditionalRules||[]){
     if(rule?.enabled===false||!matches(next,rule.when||{}))continue;
-    for(const a of rule.actions||[])next=applyAction(next,a);
-    applied.push(rule.name||'Conditional rule');
+    next=applyRuleset(next,[rule],applied,'Brand condition: ');
   }
+
+  for(const line of profile.coreProductLines||[]){
+    const matcher=inferredMatcher(line);
+    if(!matches(next,matcher))continue;
+    const lineRules=Array.isArray(line.rules)?line.rules:[];
+    next=applyRuleset(next,lineRules,applied,`${line.name||'Product line'}: `);
+    next={...next,enrichment:{...(next.enrichment||{}),brandProductLine:{
+      name:line.name||'',matcher,description:line.description||'',defaultClaims:line.defaultClaims||[]
+    }}};
+    break;
+  }
+
   return {...next,enrichment:{...(next.enrichment||{}),brandRules:{profileId:String(profile._id||''),applied}}};
 }
-module.exports={applyBrandRules,matches,applyAction};
+module.exports={applyBrandRules,matches,applyAction,inferredMatcher};
