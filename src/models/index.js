@@ -19,7 +19,7 @@ const reviewSchema = new mongoose.Schema({
   productUrl: { type: String, default: '' },
   productImage: { type: String, default: '' },
   externalProductId: { type: String, default: '' },
-  source: { type: String, enum: ['website', 'email', 'import'], default: 'website' },
+  source: { type: String, enum: ['website', 'email', 'import', 'manual'], default: 'website' },
   sourcePlatform: { type: String, default: '' },
   sourceLabel: { type: String, default: '' },
   externalReviewId: { type: String, default: '', index: true },
