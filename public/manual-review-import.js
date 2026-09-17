@@ -35,6 +35,11 @@
         <label><span>Order # <small>optional</small></span><input class="mr-order" placeholder="#1195135775"></label>
       </div>
 
+      <div class="mr-grid two mr-reason-grid">
+        <label><span>Reason for manual add <b>required</b></span><select class="mr-import-reason"><option value="">Choose a reason…</option><option value="historical_migration">Historical review migration</option><option value="platform_export">Imported from previous review platform</option><option value="customer_record">Existing customer review transcribed from records</option><option value="manual_recovery">Manual recovery / reconstruction</option><option value="other">Other – explain below</option></select></label>
+        <label><span>Reason note <small>optional unless Other</small></span><input class="mr-import-reason-detail" placeholder="e.g. migrated from Yotpo before plan expired"></label>
+      </div>
+
       <div class="mr-grid rating-row">
         <label><span>Star rating</span>
           <div class="mr-stars" data-rating="5">
@@ -44,15 +49,15 @@
         <label class="mr-check"><input class="mr-verified" type="checkbox"><span>Verified buyer</span></label>
       </div>
 
-      <label><span>Review headline</span><input class="mr-headline" placeholder="Great flavour and fast delivery"></label>
+      <label><span>Review headline</span><div class="mr-headline-row"><input class="mr-headline" placeholder="Great flavour and fast delivery"><button type="button" class="mr-ai-title">✨ AI generate title</button></div><small class="mr-ai-help">Summarises only the review text below; it will not invent flavour or product claims.</small></label>
       <label><span>Review</span><textarea class="mr-comment" rows="4" placeholder="Write the review exactly as you want it to appear…"></textarea></label>
 
       <div class="mr-attributes">
         <strong>Review attributes <small>optional</small></strong>
         <div class="mr-attr-grid">
-          <label><span>Sourness <b class="mr-val">5</b>/10</span><input class="mr-sour" type="range" min="1" max="10" value="5"></label>
-          <label><span>Sweetness <b class="mr-val">5</b>/10</span><input class="mr-sweet" type="range" min="1" max="10" value="5"></label>
-          <label><span>Flavour <b class="mr-val">5</b>/10</span><input class="mr-flavour" type="range" min="1" max="10" value="5"></label>
+          <label class="mr-score-card"><span><input class="mr-score-live mr-sour-live" type="checkbox"> Include Sourness score</span><div class="mr-score-control is-off"><span>Sourness <b class="mr-val">5</b>/10</span><input class="mr-sour" type="range" min="1" max="10" value="5" disabled></div></label>
+          <label class="mr-score-card"><span><input class="mr-score-live mr-sweet-live" type="checkbox"> Include Sweetness score</span><div class="mr-score-control is-off"><span>Sweetness <b class="mr-val">5</b>/10</span><input class="mr-sweet" type="range" min="1" max="10" value="5" disabled></div></label>
+          <label class="mr-score-card"><span><input class="mr-score-live mr-flavour-live" type="checkbox"> Include Flavour score</span><div class="mr-score-control is-off"><span>Flavour <b class="mr-val">5</b>/10</span><input class="mr-flavour" type="range" min="1" max="10" value="5" disabled></div></label>
         </div>
       </div>
     </div>`;
@@ -105,9 +110,9 @@
       const n=Number(btn.dataset.star);const stars=row.querySelector('.mr-stars');stars.dataset.rating=n;
       stars.querySelectorAll('button').forEach(x=>x.classList.toggle('on',Number(x.dataset.star)<=n));
     });
-    row.querySelectorAll('input[type=range]').forEach(input=>input.oninput=()=>{
-      input.closest('label').querySelector('.mr-val').textContent=input.value;
-    });
+    row.querySelectorAll('input[type=range]').forEach(input=>input.oninput=()=>{input.closest('.mr-score-control')?.querySelector('.mr-val').textContent=input.value});
+    row.querySelectorAll('.mr-score-live').forEach(toggle=>toggle.addEventListener('change',()=>{const card=toggle.closest('.mr-score-card'),slider=card?.querySelector('input[type=range]');if(slider)slider.disabled=!toggle.checked;card?.querySelector('.mr-score-control')?.classList.toggle('is-off',!toggle.checked)}));
+    row.querySelector('.mr-ai-title')?.addEventListener('click',async()=>{const btn=row.querySelector('.mr-ai-title'),comment=row.querySelector('.mr-comment').value.trim();if(comment.length<8)return window.showToast?.('Add the review description first');const old=btn.textContent;btn.disabled=true;btn.textContent='Generating…';try{const result=await api('/generate-title',{method:'POST',body:JSON.stringify({comment,productTitle:row.querySelector('.mr-product-title').value||row.querySelector('.mr-product-search').value,rating:Number(row.querySelector('.mr-stars').dataset.rating||5)})});row.querySelector('.mr-headline').value=result.title||''}catch(error){window.showToast?.(error.message||'Could not generate title')}finally{btn.disabled=false;btn.textContent=old}});
 
     let timer;
     const input=row.querySelector('.mr-product-search');
@@ -157,10 +162,12 @@
       headline:row.querySelector('.mr-headline').value.trim(),
       comment:row.querySelector('.mr-comment').value.trim(),
       verifiedPurchase:row.querySelector('.mr-verified').checked,
+      importReason:row.querySelector('.mr-import-reason').value,
+      importReasonDetail:row.querySelector('.mr-import-reason-detail').value.trim(),
       attributes:{
-        sourness:Number(row.querySelector('.mr-sour').value),
-        sweetness:Number(row.querySelector('.mr-sweet').value),
-        flavour:Number(row.querySelector('.mr-flavour').value)
+        ...(row.querySelector('.mr-sour-live').checked?{sourness:Number(row.querySelector('.mr-sour').value)}:{}),
+        ...(row.querySelector('.mr-sweet-live').checked?{sweetness:Number(row.querySelector('.mr-sweet').value)}:{}),
+        ...(row.querySelector('.mr-flavour-live').checked?{flavour:Number(row.querySelector('.mr-flavour').value)}:{})
       }
     }));
   }

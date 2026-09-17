@@ -612,6 +612,10 @@ window.buildCard = function(r, isTrash) {
   const sourceClass = sourcePlatform.includes('yotpo') ? 'yotpo' : (sourcePlatform.includes('shop') ? 'shop' : '');
   const sourceLabel = r.sourceLabel || (r.source === 'import' ? 'Imported review' : r.source === 'email' ? 'Email request' : 'Storefront');
   const sourceHtml = `<span class="source-pill ${escapeHtml(sourceClass)}">${escapeHtml(sourceLabel)}${r.externalReviewId ? ` · ${escapeHtml(r.externalReviewId)}` : ''}</span>`;
+  const editableImport = ['manual','import'].includes(String(r.source || ''));
+  const reasonLabels = { historical_migration:'Historical migration', platform_export:'Previous platform', customer_record:'Customer record', manual_recovery:'Manual recovery', other:'Other' };
+  const importReasonHtml = editableImport ? `<div style="margin-top:7px;font-size:11px;color:${r.importReason ? 'var(--muted)' : '#a72b20'};font-weight:700;">${r.importReason ? 'Reason: ' + escapeHtml(reasonLabels[r.importReason] || r.importReason) : '⚠ Import reason not recorded'}</div>` : '';
+  const editableImportHtml = editableImport && !isTrash ? `<button class="manual-import-edit-btn" onclick="window.openImportedReviewEditor?.('${r._id}')">✎ Edit import</button>` : '';
 
   return `
     <div class="review-card status-border-${escapeHtml(r.status || 'pending')}">
@@ -635,9 +639,11 @@ window.buildCard = function(r, isTrash) {
           <p class="admin-card-meta-label">Product ID:</p>
           ${productHtml}
           <div>${sourceHtml}</div>
+          ${importReasonHtml}
           <p class="admin-card-meta-label" style="margin-top:10px;">${escapeHtml(createdDate)}</p>
           <div style="font-size:13px; color:var(--primary); font-weight:800; margin:10px 0;">${escapeHtml(r.email || 'No Email')}</div>
           <div style="margin-bottom:18px;">${verifyHtml}</div>
+          ${editableImportHtml}
           ${isTrash ? `<button class="restore-btn" onclick="window.toggleBin('${r._id}', false)">↺ Restore</button>` : `<button class="delete-btn" onclick="window.toggleBin('${r._id}', true)">🗑️ Trash</button>`}
         </div>
       </div>

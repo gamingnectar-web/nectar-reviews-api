@@ -9,6 +9,8 @@ const router = express.Router();
 const shop = req => req.shopDomain || req.query.shopDomain || req.body?.shopDomain || '';
 const numericId = value => (String(value || '').match(/\d{5,}/g) || []).pop() || '';
 const newBatchId = () => `manual-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+const allowedImportReasons = new Set(['historical_migration','platform_export','customer_record','manual_recovery','other']);
+const isEditableImport = review => ['manual','import'].includes(String(review?.source||''));
 
 function cleanAttributes(raw={}) {
   const out={};
@@ -46,6 +48,22 @@ router.get('/products', async (req,res,next) => {
   } catch(e){next(e)}
 });
 
+router.post('/generate-title', async (req,res,next) => {
+  try {
+    const comment=cleanText(req.body?.comment||'',6000);
+    const productTitle=cleanText(req.body?.productTitle||'',300);
+    const rating=Number(req.body?.rating||0);
+    if(comment.length<8)return res.status(400).json({error:'Add more review text before generating a title.'});
+    const fallback=()=>{const first=comment.split(/[.!?]/).map(x=>x.trim()).find(Boolean)||comment;return first.length<=80?first:first.slice(0,77).trim()+'…'};
+    if(!process.env.OPENAI_API_KEY)return res.json({title:fallback(),source:'fallback'});
+    const model=process.env.OPENAI_ASSISTANT_MODEL||process.env.OPENAI_MODULE_MODEL||'gpt-4.1-mini';
+    const response=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{Authorization:'Bearer '+process.env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model,temperature:.2,messages:[{role:'system',content:'Write a concise ecommerce review headline from the customer review text. Maximum 80 characters. Preserve sentiment and tone. Do not add facts, product claims, scores, flavour notes or benefits not explicitly present. Return the headline only.'},{role:'user',content:'Product: '+(productTitle||'Unknown')+'\nStar rating: '+(rating||'Unknown')+'\nReview:\n'+comment}]})});
+    const payload=await response.json().catch(()=>({}));if(!response.ok)throw new Error(payload?.error?.message||('OpenAI title generation failed ('+response.status+')'));
+    const title=cleanText(payload?.choices?.[0]?.message?.content||'',120).replace(/^[\"“]|[\"”]$/g,'').trim();
+    res.json({title:(title||fallback()).slice(0,80),source:title?'openai':'fallback'});
+  } catch(e){next(e)}
+});
+
 router.post('/batches', async (req,res,next) => {
   try {
     const shopDomain=shop(req);
@@ -57,6 +75,8 @@ router.post('/batches', async (req,res,next) => {
     rows.forEach((raw,index)=>{
       try {
         const scope=raw.reviewScope==='site'?'site':'product';
+        if(!allowedImportReasons.has(String(raw.importReason||''))) throw new Error('Choose why this review is being added manually.');
+        if(raw.importReason==='other'&&!cleanText(raw.importReasonDetail||'',500)) throw new Error('Add a note explaining the Other import reason.');
         const productId=numericId(raw.itemId||raw.productId||'');
         if(scope==='product'&&!productId) throw new Error('Choose a product.');
         const comment=cleanText(raw.comment||'',6000);
@@ -78,6 +98,7 @@ router.post('/batches', async (req,res,next) => {
           externalProductId:productId,
           source:'manual',sourcePlatform:'manual',sourceLabel:'Manual Add',
           importBatchId:id,status:'pending',
+          importReason:String(raw.importReason||''),importReasonDetail:cleanText(raw.importReasonDetail||'',500),
           verifiedPurchase:Boolean(raw.verifiedPurchase),
           verificationNote:raw.verifiedPurchase?'Manually marked as verified purchase by admin.':'',
           orderId:cleanText(raw.orderId||'',120),createdAt
@@ -128,6 +149,42 @@ router.post('/batches/:batchId/delete', async (req,res,next) => {
   try {
     const result=await Review.updateMany({shopDomain:shop(req),source:'manual',importBatchId:req.params.batchId,status:'pending',isDeleted:{$ne:true}},{$set:{isDeleted:true,deletedAt:new Date()}});
     res.json({ok:true,deleted:result.modifiedCount||0});
+  } catch(e){next(e)}
+});
+
+router.get('/reviews/:reviewId', async (req,res,next) => {
+  try {
+    const review=await Review.findOne({_id:req.params.reviewId,shopDomain:shop(req),isDeleted:{$ne:true}}).lean();
+    if(!review)return res.status(404).json({error:'Review not found.'});
+    if(!isEditableImport(review))return res.status(403).json({error:'Only manual and imported historical reviews can be edited here.'});
+    res.json({review});
+  } catch(e){next(e)}
+});
+
+router.patch('/reviews/:reviewId', async (req,res,next) => {
+  try {
+    const review=await Review.findOne({_id:req.params.reviewId,shopDomain:shop(req),isDeleted:{$ne:true}});
+    if(!review)return res.status(404).json({error:'Review not found.'});
+    if(!isEditableImport(review))return res.status(403).json({error:'Only manual and imported historical reviews can be edited here.'});
+    const body=req.body||{};
+    const reason=String(body.importReason||'');
+    if(!allowedImportReasons.has(reason))return res.status(400).json({error:'Choose why this review was imported.'});
+    const reasonDetail=cleanText(body.importReasonDetail||'',500);
+    if(reason==='other'&&!reasonDetail)return res.status(400).json({error:'Add a note explaining the Other import reason.'});
+    const comment=cleanText(body.comment??review.comment,6000);if(!comment)return res.status(400).json({error:'Review text is required.'});
+    const createdAt=body.createdAt?new Date(body.createdAt):review.createdAt;if(Number.isNaN(createdAt.getTime()))return res.status(400).json({error:'Review date is invalid.'});
+    review.userId=cleanText(body.userId??review.userId,120)||'Guest';
+    review.email=cleanEmail(body.email??review.email);
+    review.rating=clampNumber(body.rating??review.rating,1,5,review.rating||5);
+    review.headline=cleanText(body.headline??review.headline,300);
+    review.comment=comment;review.createdAt=createdAt;
+    review.verifiedPurchase=Boolean(body.verifiedPurchase);
+    review.attributes=cleanAttributes(body.attributes||{});
+    review.importReason=reason;review.importReasonDetail=reasonDetail;
+    review.importedReviewEditedAt=new Date();review.importedReviewEditedBy='admin';
+    review.duplicateHash=hash(review.shopDomain,review);
+    await review.save();
+    res.json({ok:true,review:review.toObject()});
   } catch(e){next(e)}
 });
 
