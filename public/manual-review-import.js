@@ -110,7 +110,10 @@
       const n=Number(btn.dataset.star);const stars=row.querySelector('.mr-stars');stars.dataset.rating=n;
       stars.querySelectorAll('button').forEach(x=>x.classList.toggle('on',Number(x.dataset.star)<=n));
     });
-    row.querySelectorAll('input[type=range]').forEach(input=>input.oninput=()=>{input.closest('.mr-score-control')?.querySelector('.mr-val').textContent=input.value});
+    row.querySelectorAll('input[type=range]').forEach(input=>input.oninput=()=>{
+      const valueNode=input.closest('.mr-score-control')?.querySelector('.mr-val');
+      if(valueNode)valueNode.textContent=input.value;
+    });
     row.querySelectorAll('.mr-score-live').forEach(toggle=>toggle.addEventListener('change',()=>{const card=toggle.closest('.mr-score-card'),slider=card?.querySelector('input[type=range]');if(slider)slider.disabled=!toggle.checked;card?.querySelector('.mr-score-control')?.classList.toggle('is-off',!toggle.checked)}));
     row.querySelector('.mr-ai-title')?.addEventListener('click',async()=>{const btn=row.querySelector('.mr-ai-title'),comment=row.querySelector('.mr-comment').value.trim();if(comment.length<8)return window.showToast?.('Add the review description first');const old=btn.textContent;btn.disabled=true;btn.textContent='Generating…';try{const result=await api('/generate-title',{method:'POST',body:JSON.stringify({comment,productTitle:row.querySelector('.mr-product-title').value||row.querySelector('.mr-product-search').value,rating:Number(row.querySelector('.mr-stars').dataset.rating||5)})});row.querySelector('.mr-headline').value=result.title||''}catch(error){window.showToast?.(error.message||'Could not generate title')}finally{btn.disabled=false;btn.textContent=old}});
 
