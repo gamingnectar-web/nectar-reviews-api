@@ -23,6 +23,7 @@ const brandDirectoryV3Routes = require('./routes/brandDirectoryV3');
 const brandRulesRoutes = require('./modules/product-creation-import/catalogue-audit/brandRules.routes');
 const elev8CommercePulseRoutes = require('./routes/elev8CommercePulse');
 const manualReviewRoutes = require('./routes/manualReviews');
+const manualReviewImageImportRoutes = require('./routes/manualReviewImageImports');
 const { securityHeaders, corsOptions, makeRateLimiter, errorHandler, requireAdminSession } = require('./utils/security');
 const reviewSubmissionSecurity = require('./utils/reviewSubmissionSecurity');
 const { mountPlatformModules } = require('./modules');
@@ -134,6 +135,7 @@ app.use('/api/admin/brand-directory-v3', requireAdminSession, brandDirectoryV3Ro
 app.use('/api/admin/brand-rules', requireAdminSession, brandRulesRoutes);
 app.use('/api/admin/elev8-commerce', requireAdminSession, elev8CommercePulseRoutes);
 app.use('/api/admin/manual-reviews', requireAdminSession, manualReviewRoutes);
+app.use('/api/admin/manual-review-image-imports', requireAdminSession, manualReviewImageImportRoutes);
 mountPlatformModules(app, { makeRateLimiter, requireAdminSession });
 app.use('/api/admin/brand-directory-v2', requireAdminSession, brandDirectoryDirectRoutes);
 app.use('/api/admin/elev8', requireAdminSession, elev8DashboardRoutes);
