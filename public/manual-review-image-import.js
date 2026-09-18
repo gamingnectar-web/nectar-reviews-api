@@ -4,10 +4,23 @@
   const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   const VAULT_IMAGE='/images/elev8-vault-tub.png';
   let batchId='',items=[];
+  let manualDraftBatchId='';
 
   async function api(path,options={}){
     if(!window.adminFetch)throw new Error('Admin session unavailable');
     return window.adminFetch(`/admin/manual-review-image-imports${path}`,options);
+  }
+  async function manualApi(path,options={}){
+    if(!window.adminFetch)throw new Error('Admin session unavailable');
+    return window.adminFetch(`/admin/manual-reviews${path}`,options);
+  }
+  function ensureManualDraftBatchId(){
+    if(manualDraftBatchId)return manualDraftBatchId;
+    const bytes=new Uint8Array(3);
+    crypto.getRandomValues(bytes);
+    const suffix=[...bytes].map(v=>v.toString(16).padStart(2,'0')).join('');
+    manualDraftBatchId=`manual-${Date.now()}-${suffix}`;
+    return manualDraftBatchId;
   }
   async function compress(file){
     if(!file)throw new Error('No image file was provided.');
@@ -151,7 +164,7 @@
         </div>
         <div class="mri-card-foot">
           <span>${d.headlineGenerated?'AI title generated · ':''}${d.verifiedPurchase?'Verified buyer shown in source':''}</span>
-          <button type="button" class="mri-add-one" ${p?'':'disabled'}>Add this draft to Manual Add</button>
+          <button type="button" class="mri-add-one ${item.addedToManualDraft?'is-added':''}" ${(p&&!item.addedToManualDraft)?'':'disabled'}>${item.addedToManualDraft?'✓ Added to draft':'Add this draft to Draft Reviews'}</button>
         </div>
       </div>`;
     }).join(''):'<div class="mri-empty">Analysed image drafts will appear here.</div>';
@@ -167,12 +180,11 @@
       card.querySelector('.mri-add-one')?.addEventListener('click',()=>addItem(index));
     });
 
-    const ready=items.filter(x=>x.matchedProduct).length;
-    $('mri-add-ready').disabled=ready===0;
-    $('mri-add-ready').textContent=ready?`Add ${ready} ready draft${ready===1?'':'s'} to Manual Add`:'Add ready drafts to Manual Add';
+    updateReadySummary();
   }
 
   async function searchProducts(index){
+    syncAllCardsIntoItems();
     const item=items[index],card=document.querySelector(`.mri-card[data-index="${index}"]`);
     if(!item||!card)return;
     const q=card.querySelector('.mri-map-search-input').value.trim();
@@ -192,34 +204,61 @@
   }
 
   async function pickProduct(index,id){
+    syncAllCardsIntoItems();
     const item=items[index],product=(item.suggestions||[]).find(p=>String(p.id)===String(id));
     if(!item||!product)return;
     try{
-      const result=await api(`/batches/${batchId}/items/${item._id}`,{method:'PATCH',body:JSON.stringify({matchedProduct:product})});
+      const result=await api(`/batches/${batchId}/items/${item._id}`,{method:'PATCH',body:JSON.stringify({matchedProduct:product,draft:item.draft})});
       items[index]=result.item;renderQueue();
     }catch(error){window.showToast?.(error.message||'Could not map product')}
   }
 
   async function useVault(index){
+    syncAllCardsIntoItems();
     const item=items[index],card=document.querySelector(`.mri-card[data-index="${index}"]`);
     if(!item||!card)return;
     const title=card.querySelector('.mri-product-hint').value.trim()||item.draft?.productHint||'Archived product';
     try{
+      await persistItemDraft(index);
       const result=await api(`/batches/${batchId}/items/${item._id}/vault`,{method:'POST',body:JSON.stringify({title})});
       items[index]=result.item;renderQueue();
     }catch(error){window.showToast?.(error.message||'Could not move product to Vault')}
   }
 
+  function syncCardIntoItem(index){
+    const item=items[index],card=document.querySelector(`.mri-card[data-index="${index}"]`);
+    if(!item||!card)return item;
+    const d={...(item.draft||{})};
+    d.headline=card.querySelector('.mri-headline')?.value.trim()||'';
+    d.reviewText=card.querySelector('.mri-comment')?.value.trim()||'';
+    d.reviewerName=card.querySelector('.mri-name')?.value.trim()||'';
+    d.reviewDate=card.querySelector('.mri-date')?.value||'';
+    d.productHint=card.querySelector('.mri-product-hint')?.value.trim()||'';
+    item.draft=d;
+    return item;
+  }
+
+  function syncAllCardsIntoItems(){
+    document.querySelectorAll('.mri-card').forEach(card=>{
+      const index=Number(card.dataset.index);
+      if(Number.isFinite(index))syncCardIntoItem(index);
+    });
+  }
+
+  async function persistItemDraft(index){
+    const item=syncCardIntoItem(index);
+    if(!item||!batchId)return item;
+    const result=await api(`/batches/${batchId}/items/${item._id}`,{
+      method:'PATCH',
+      body:JSON.stringify({draft:item.draft})
+    });
+    items[index]=result.item;
+    return result.item;
+  }
+
   function currentDraft(index){
-    const item=items[index],card=document.querySelector(`.mri-card[data-index="${index}"]`),d={...(item.draft||{})};
-    if(card){
-      d.headline=card.querySelector('.mri-headline').value.trim();
-      d.reviewText=card.querySelector('.mri-comment').value.trim();
-      d.reviewerName=card.querySelector('.mri-name').value.trim();
-      d.reviewDate=card.querySelector('.mri-date').value;
-      d.productHint=card.querySelector('.mri-product-hint').value.trim();
-    }
-    return d;
+    syncCardIntoItem(index);
+    return {...(items[index]?.draft||{})};
   }
 
   function toManualDraft(item,index){
@@ -244,19 +283,89 @@
     };
   }
 
-  function addItem(index){
-    const item=items[index];if(!item?.matchedProduct)return;
-    window.Elev8ManualReviewImport?.addDraft?.(toManualDraft(item,index));
-    document.querySelector('#mr-backdrop .mr-tabs [data-tab="add"]')?.click();
-    window.showToast?.(item.matchedProduct.isVault?'Vault review draft added to Manual Add':'Image draft added to Manual Add');
+  async function addItem(index){
+    syncAllCardsIntoItems();
+    const item=items[index];
+    if(!item?.matchedProduct||item.addedToManualDraft)return;
+
+    const card=document.querySelector(`.mri-card[data-index="${index}"]`);
+    const btn=card?.querySelector('.mri-add-one');
+    if(btn){btn.disabled=true;btn.textContent='Saving draft…'}
+
+    try{
+      await persistItemDraft(index);
+      const review=toManualDraft(items[index],index);
+      const data=await manualApi('/batches',{
+        method:'POST',
+        body:JSON.stringify({
+          batchId:ensureManualDraftBatchId(),
+          reviews:[review]
+        })
+      });
+
+      item.addedToManualDraft=true;
+      item.manualReviewBatchId=data.batchId||manualDraftBatchId;
+      item.manualReviewSavedAt=new Date().toISOString();
+
+      // Persist conversion metadata on the image-import item without rebuilding the whole queue.
+      await api(`/batches/${batchId}/items/${item._id}`,{
+        method:'PATCH',
+        body:JSON.stringify({
+          draft:item.draft,
+          addedToManualDraft:true,
+          manualReviewBatchId:item.manualReviewBatchId,
+          manualReviewSavedAt:item.manualReviewSavedAt
+        })
+      }).catch(()=>{});
+
+      if(btn){
+        btn.textContent='✓ Added to draft';
+        btn.classList.add('is-added');
+        btn.disabled=true;
+      }
+      const state=card?.querySelector('.mri-state');
+      if(state){state.textContent='Added to draft';state.className='mri-state drafted'}
+      window.showToast?.('Review added to Draft Reviews — keep working through this batch');
+      updateReadySummary();
+    }catch(error){
+      if(btn){btn.disabled=false;btn.textContent='Add this draft to Draft Reviews'}
+      window.showToast?.(error.message||'Could not save review draft');
+    }
+  }
+
+  function updateReadySummary(){
+    const available=items.filter(x=>x.matchedProduct&&!x.addedToManualDraft).length;
+    const added=items.filter(x=>x.addedToManualDraft).length;
+    const bulk=$('mri-add-ready');
+    if(bulk){
+      bulk.disabled=available===0;
+      bulk.textContent=available
+        ? `Add ${available} ready draft${available===1?'':'s'}`
+        : (added?`${added} added to Draft Reviews`:'Add ready drafts');
+    }
   }
 
   async function addReady(){
-    const ready=items.map((x,i)=>({item:x,index:i})).filter(x=>x.item.matchedProduct);
-    ready.forEach(({item,index})=>window.Elev8ManualReviewImport?.addDraft?.(toManualDraft(item,index)));
-    if(batchId)await api(`/batches/${batchId}/complete`,{method:'POST',body:'{}'}).catch(()=>{});
-    document.querySelector('#mr-backdrop .mr-tabs [data-tab="add"]')?.click();
-    window.showToast?.(`${ready.length} image draft${ready.length===1?'':'s'} added to Manual Add`);
+    syncAllCardsIntoItems();
+    const indexes=items.map((item,index)=>({item,index}))
+      .filter(x=>x.item.matchedProduct&&!x.item.addedToManualDraft)
+      .map(x=>x.index);
+    if(!indexes.length)return;
+
+    const btn=$('mri-add-ready'),old=btn.textContent;
+    btn.disabled=true;
+    try{
+      for(let i=0;i<indexes.length;i++){
+        btn.textContent=`Saving ${i+1} / ${indexes.length}…`;
+        await addItem(indexes[i]);
+      }
+      window.showToast?.(`${indexes.length} review draft${indexes.length===1?'':'s'} saved — you can continue mapping here`);
+    }finally{
+      updateReadySummary();
+      if(!items.some(x=>x.matchedProduct&&!x.addedToManualDraft)&&!items.some(x=>x.addedToManualDraft)){
+        btn.textContent=old;
+      }
+    }
   }
 
   document.addEventListener('click',e=>{if(e.target.closest('#mr-open'))setTimeout(ensureTab,60)});

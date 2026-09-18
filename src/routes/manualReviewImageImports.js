@@ -186,7 +186,13 @@ router.patch('/batches/:batchId/items/:itemId',async(req,res,next)=>{
     const item=batch.items[idx];
     if(body.matchedProduct!==undefined)item.matchedProduct=body.matchedProduct||null;
     if(body.draft)item.draft={...item.draft,...normaliseDraft({...item.draft,...body.draft})};
-    item.status=item.matchedProduct?(item.matchedProduct.isVault?'vault_ready':'ready'):'needs_mapping';
+    if(body.addedToManualDraft!==undefined)item.addedToManualDraft=Boolean(body.addedToManualDraft);
+    if(body.manualReviewBatchId!==undefined)item.manualReviewBatchId=cleanText(body.manualReviewBatchId||'',120);
+    if(body.manualReviewSavedAt!==undefined){
+      const savedAt=new Date(body.manualReviewSavedAt);
+      item.manualReviewSavedAt=Number.isNaN(savedAt.getTime())?new Date():savedAt;
+    }
+    item.status=item.addedToManualDraft?'drafted':(item.matchedProduct?(item.matchedProduct.isVault?'vault_ready':'ready'):'needs_mapping');
     item.updatedAt=new Date();batch.items[idx]=item;
     await collection().updateOne({_id:batch._id},{$set:{items:batch.items,updatedAt:new Date()}});
     res.json({item});

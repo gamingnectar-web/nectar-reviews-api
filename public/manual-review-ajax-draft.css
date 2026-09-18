@@ -1,0 +1,5 @@
+.mri-state.drafted{background:#e8f8ef;color:#167642}
+.mri-add-one.is-added{background:#e8f8ef!important;color:#167642!important;border:1px solid #a9e0c3!important;opacity:1!important}
+.mri-add-one:disabled.is-added{cursor:default!important}
+.mri-card:has(.mri-state.drafted){border-color:#b9dfca}
+.mri-card:has(.mri-state.drafted) .mri-card-foot{background:#f4fbf7}
