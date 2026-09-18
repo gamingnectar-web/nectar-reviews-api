@@ -76,19 +76,31 @@ Rules:
   return normaliseDraft(parsed);
 }
 function numericId(value=''){return (String(value||'').match(/\d{5,}/g)||[]).pop()||''}
+
+async function searchShopifyProducts(shopDomain,q=''){
+  const queryText=cleanText(q,160);
+  if(!queryText)return [];
+  const payload=await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/graphql.json`,{
+    shopDomain,method:'POST',
+    body:JSON.stringify({
+      query:`query ReviewImageProductSearch($q:String!){
+        products(first:20,query:$q,sortKey:TITLE){
+          nodes{
+            id title handle status vendor
+            featuredImage{url altText}
+          }
+        }
+      }`,
+      variables:{q:queryText}
+    })
+  });
+  return (payload?.data?.products?.nodes||[]).map(p=>({
+    id:numericId(p.id),gid:p.id,title:p.title||'',handle:p.handle||'',
+    image:p.featuredImage?.url||'',status:p.status||'',vendor:p.vendor||'',isVault:false
+  }));
+}
 async function productSuggestions(shopDomain,hint=''){
-  const q=cleanText(hint,160);
-  if(!q)return [];
-  try{
-    const payload=await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/graphql.json`,{
-      shopDomain,method:'POST',
-      body:JSON.stringify({
-        query:`query ReviewImageProductSearch($q:String!){products(first:8,query:$q,sortKey:TITLE){nodes{id title handle featuredImage{url}}}}`,
-        variables:{q}
-      })
-    });
-    return (payload?.data?.products?.nodes||[]).map(p=>({id:numericId(p.id),gid:p.id,title:p.title||'',handle:p.handle||'',image:p.featuredImage?.url||''}));
-  }catch(_){return []}
+  try{return await searchShopifyProducts(shopDomain,hint)}catch(_){return []}
 }
 function autoMatch(hint,suggestions=[]){
   const norm=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
@@ -99,6 +111,25 @@ function autoMatch(hint,suggestions=[]){
   const strong=suggestions.filter(p=>{const t=norm(p.title);return t.includes(h)||h.includes(t)});
   return strong.length===1?strong[0]:null;
 }
+function makeVaultProduct(title='Archived product'){
+  return {
+    id:'',
+    gid:'',
+    title:cleanText(title||'Archived product',300)||'Archived product',
+    handle:'',
+    image:'/images/elev8-vault-tub.png',
+    status:'VAULT',
+    vendor:'',
+    isVault:true
+  };
+}
+
+router.get('/products/search',async(req,res,next)=>{
+  try{
+    const products=await searchShopifyProducts(shop(req),req.query.q||'');
+    res.json({products});
+  }catch(error){next(error)}
+});
 
 router.post('/analyse', async (req,res,next)=>{
   try{
@@ -120,8 +151,30 @@ router.post('/analyse', async (req,res,next)=>{
     res.status(201).json({batchId,item});
   }catch(error){next(error)}
 });
+
+router.post('/batches/:batchId/items/:itemId/vault',async(req,res,next)=>{
+  try{
+    const shopDomain=shop(req),title=cleanText(req.body?.title||'Archived product',300);
+    const batch=await collection().findOne({shopDomain,batchId:req.params.batchId});
+    if(!batch)return res.status(404).json({error:'Image review batch not found.'});
+    const idx=(batch.items||[]).findIndex(x=>String(x._id)===String(req.params.itemId));
+    if(idx<0)return res.status(404).json({error:'Image review item not found.'});
+    const item=batch.items[idx];
+    item.matchedProduct=makeVaultProduct(title||item.draft?.productHint||'Archived product');
+    item.status='vault_ready';
+    item.updatedAt=new Date();
+    batch.items[idx]=item;
+    await collection().updateOne({_id:batch._id},{$set:{items:batch.items,updatedAt:new Date()}});
+    res.json({item});
+  }catch(error){next(error)}
+});
+
 router.get('/batches/:batchId',async(req,res,next)=>{
-  try{const batch=await collection().findOne({shopDomain:shop(req),batchId:req.params.batchId});if(!batch)return res.status(404).json({error:'Image review batch not found.'});res.json({batch})}catch(error){next(error)}
+  try{
+    const batch=await collection().findOne({shopDomain:shop(req),batchId:req.params.batchId});
+    if(!batch)return res.status(404).json({error:'Image review batch not found.'});
+    res.json({batch});
+  }catch(error){next(error)}
 });
 router.patch('/batches/:batchId/items/:itemId',async(req,res,next)=>{
   try{
@@ -133,12 +186,16 @@ router.patch('/batches/:batchId/items/:itemId',async(req,res,next)=>{
     const item=batch.items[idx];
     if(body.matchedProduct!==undefined)item.matchedProduct=body.matchedProduct||null;
     if(body.draft)item.draft={...item.draft,...normaliseDraft({...item.draft,...body.draft})};
-    item.status=item.matchedProduct?'ready':'needs_mapping';item.updatedAt=new Date();batch.items[idx]=item;
+    item.status=item.matchedProduct?(item.matchedProduct.isVault?'vault_ready':'ready'):'needs_mapping';
+    item.updatedAt=new Date();batch.items[idx]=item;
     await collection().updateOne({_id:batch._id},{$set:{items:batch.items,updatedAt:new Date()}});
     res.json({item});
   }catch(error){next(error)}
 });
 router.post('/batches/:batchId/complete',async(req,res,next)=>{
-  try{await collection().updateOne({shopDomain:shop(req),batchId:req.params.batchId},{$set:{status:'converted',convertedAt:new Date(),updatedAt:new Date()}});res.json({ok:true})}catch(error){next(error)}
+  try{
+    await collection().updateOne({shopDomain:shop(req),batchId:req.params.batchId},{$set:{status:'converted',convertedAt:new Date(),updatedAt:new Date()}});
+    res.json({ok:true})
+  }catch(error){next(error)}
 });
 module.exports=router;

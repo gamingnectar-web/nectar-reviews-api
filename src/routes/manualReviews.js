@@ -79,14 +79,16 @@ router.post('/batches', async (req,res,next) => {
         if(!allowedImportReasons.has(String(raw.importReason||''))) throw new Error('Choose why this review is being added manually.');
         if(raw.importReason==='other'&&!cleanText(raw.importReasonDetail||'',500)) throw new Error('Add a note explaining the Other import reason.');
         const productId=numericId(raw.itemId||raw.productId||'');
-        if(scope==='product'&&!productId) throw new Error('Choose a product.');
+        const archivedProduct=Boolean(raw.archivedProduct);
+        if(scope==='product'&&!productId&&!archivedProduct) throw new Error('Choose a product or mark it as an archived Vault product.');
+        const vaultItemId=archivedProduct?`vault-${crypto.createHash('sha1').update(String(raw.productTitle||raw.comment||Date.now())).digest('hex').slice(0,16)}`:'';
         const comment=cleanText(raw.comment||'',6000);
         if(!comment) throw new Error('Review text is required.');
         const createdAt=raw.createdAt?new Date(raw.createdAt):new Date();
         if(Number.isNaN(createdAt.getTime())) throw new Error('Review date is invalid.');
 
         const doc={
-          shopDomain,itemId:scope==='site'?'site':productId,
+          shopDomain,itemId:scope==='site'?'site':(archivedProduct?vaultItemId:productId),
           userId:cleanText(raw.userId||raw.reviewerName||'Guest',120)||'Guest',
           email:cleanEmail(raw.email||''),isAnonymous:Boolean(raw.isAnonymous),
           rating:clampNumber(raw.rating,1,5,5),
@@ -95,9 +97,10 @@ router.post('/batches', async (req,res,next) => {
           productTitle:cleanText(raw.productTitle||'',300),
           productHandle:cleanText(raw.productHandle||'',200),
           productUrl:cleanText(raw.productUrl||'',1000),
-          productImage:cleanText(raw.productImage||'',1000),
-          externalProductId:productId,
-          source:'manual',sourcePlatform:'manual',sourceLabel:'Manual Add',
+          productImage:cleanText(raw.productImage||(archivedProduct?'/images/elev8-vault-tub.png':''),1000),
+          productTags:archivedProduct?['elev8:vault-product']:[],
+          externalProductId:archivedProduct?'':productId,
+          source:'manual',sourcePlatform:'manual',sourceLabel:archivedProduct?'Manual Add · Vault':'Manual Add',
           importBatchId:id,status:'pending',
           importReason:String(raw.importReason||''),importReasonDetail:cleanText(raw.importReasonDetail||'',500),
           verifiedPurchase:Boolean(raw.verifiedPurchase),

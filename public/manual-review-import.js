@@ -25,6 +25,7 @@
             <input class="mr-product-title" type="hidden">
             <input class="mr-product-handle" type="hidden">
             <input class="mr-product-image" type="hidden">
+            <input class="mr-product-archived" type="hidden" value="0">
             <div class="mr-product-results"></div>
           </div>
         </label>
@@ -150,6 +151,7 @@
         row.querySelector('.mr-product-title').value=btn.dataset.title;
         row.querySelector('.mr-product-handle').value=btn.dataset.handle;
         row.querySelector('.mr-product-image').value=btn.dataset.image;
+        row.querySelector('.mr-product-archived').value='0';
         box.classList.remove('open');
       });
     }catch(error){box.innerHTML=`<div class="mr-result muted">${esc(error.message)}</div>`}
@@ -161,6 +163,7 @@
       productTitle:row.querySelector('.mr-product-title').value,
       productHandle:row.querySelector('.mr-product-handle').value,
       productImage:row.querySelector('.mr-product-image').value,
+      archivedProduct:row.querySelector('.mr-product-archived').value==='1',
       reviewerName:row.querySelector('.mr-name').value.trim(),
       email:row.querySelector('.mr-email').value.trim(),
       orderId:row.querySelector('.mr-order').value.trim(),
@@ -320,6 +323,7 @@
     row.querySelector('.mr-product-title').value=draft.productTitle||'';
     row.querySelector('.mr-product-handle').value=draft.productHandle||'';
     row.querySelector('.mr-product-image').value=draft.productImage||'';
+    row.querySelector('.mr-product-archived').value=draft.archivedProduct?'1':'0';
     row.querySelector('.mr-name').value=draft.reviewerName||'';
     row.querySelector('.mr-email').value=draft.email||'';
     row.querySelector('.mr-order').value=draft.orderId||'';

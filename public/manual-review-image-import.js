@@ -2,6 +2,7 @@
   if(window.__ELEV8_MANUAL_IMAGE_IMPORT__)return;window.__ELEV8_MANUAL_IMAGE_IMPORT__=true;
   const $=id=>document.getElementById(id);
   const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const VAULT_IMAGE='/images/elev8-vault-tub.png';
   let batchId='',items=[];
 
   async function api(path,options={}){
@@ -10,24 +11,19 @@
   }
   async function compress(file){
     if(!file)throw new Error('No image file was provided.');
-    if(!/^image\/(png|jpeg|jpg|webp)$/i.test(String(file.type||''))){
-      throw new Error(`Unsupported image type for ${file.name||'image'}`);
-    }
-
+    if(!/^image\/(png|jpeg|jpg|webp)$/i.test(String(file.type||'')))throw new Error(`Unsupported image type for ${file.name||'image'}`);
     const dataUrl=await new Promise((resolve,reject)=>{
       const reader=new FileReader();
       reader.onload=()=>resolve(String(reader.result||''));
       reader.onerror=()=>reject(new Error(`Could not read ${file.name||'image'}`));
       reader.readAsDataURL(file);
     });
-
     const img=await new Promise((resolve,reject)=>{
       const image=new Image();
       image.onload=()=>resolve(image);
       image.onerror=()=>reject(new Error(`Could not decode ${file.name||'image'}`));
       image.src=dataUrl;
     });
-
     const max=1400,scale=Math.min(1,max/Math.max(img.width,img.height));
     const canvas=document.createElement('canvas');
     canvas.width=Math.max(1,Math.round(img.width*scale));
@@ -37,6 +33,7 @@
     ctx.drawImage(img,0,0,canvas.width,canvas.height);
     return canvas.toDataURL('image/jpeg',.75);
   }
+
   function ensureTab(){
     const tabs=document.querySelector('#mr-backdrop .mr-tabs');
     if(!tabs||tabs.querySelector('[data-tab="images"]'))return;
@@ -45,7 +42,7 @@
     const body=document.querySelector('#mr-backdrop .mr-body');
     const pane=document.createElement('section');pane.id='mr-pane-images';pane.className='mr-pane';
     pane.innerHTML=`<div class="mri-shell">
-      <div class="mri-intro"><div><h3>Import reviews from screenshots</h3><p>Upload any number of screenshots. ELEV8 transcribes each review, suggests a title and tries to map the product. Anything it cannot confidently place stays in this image batch for you to resolve.</p></div><span class="mri-ai-badge">AI assisted</span></div>
+      <div class="mri-intro"><div><h3>Import reviews from screenshots</h3><p>Upload any number of screenshots. ELEV8 transcribes each review, suggests a title and tries to map the product. Anything it cannot confidently place stays in this image batch until you resolve it.</p></div><span class="mri-ai-badge">AI assisted</span></div>
       <div class="mri-grid2">
         <label><span>Reason for import <b>required</b></span><select id="mri-reason"><option value="">Choose a reason…</option><option value="historical_migration">Historical review migration</option><option value="platform_export">Imported from previous review platform</option><option value="customer_record">Existing customer review transcribed from records</option><option value="manual_recovery">Manual recovery / reconstruction</option><option value="other">Other – explain below</option></select></label>
         <label><span>Reason note</span><input id="mri-reason-detail" placeholder="e.g. screenshots exported from Yotpo / Weebly"></label>
@@ -108,12 +105,24 @@
   }
 
   function stars(n){return '★'.repeat(Math.max(1,Math.min(5,Number(n||5))))}
+  function matchCard(p={}){
+    const img=p.image||VAULT_IMAGE;
+    const meta=p.isVault?'Vault placeholder':`${p.status||'Shopify'}${p.vendor?` · ${p.vendor}`:''}`;
+    return `<div class="mri-product-match ${p.isVault?'vault':''}">
+      <img src="${esc(img)}" alt="">
+      <div><b>${esc(p.title||'Archived product')}</b><small>${esc(meta)}</small></div>
+    </div>`;
+  }
+
   function renderQueue(){
     const box=$('mri-queue');if(!box)return;
     box.innerHTML=items.length?items.map((item,index)=>{
-      const d=item.draft||{},p=item.matchedProduct,status=p?'ready':'needs_mapping';
+      const d=item.draft||{},p=item.matchedProduct,status=p?(p.isVault?'vault_ready':'ready'):'needs_mapping';
       return `<div class="mri-card" data-index="${index}">
-        <div class="mri-card-head"><div><strong>${esc(item.filename||`Image ${index+1}`)}</strong><span class="mri-state ${status}">${p?'Ready':'Needs product mapping'}</span></div><span class="mri-confidence">${Math.round(Number(d.confidence||0)*100)}% extraction confidence</span></div>
+        <div class="mri-card-head">
+          <div><strong>${esc(item.filename||`Image ${index+1}`)}</strong><span class="mri-state ${status}">${p?(p.isVault?'Vault product':'Ready'):'Needs product mapping'}</span></div>
+          <span class="mri-confidence">${Math.round(Number(d.confidence||0)*100)}% extraction confidence</span>
+        </div>
         <div class="mri-review-grid">
           <div class="mri-review-main">
             <div class="mri-stars">${stars(d.rating)}</div>
@@ -122,51 +131,126 @@
             <div class="mri-meta-row"><input class="mri-name" value="${esc(d.reviewerName||'')}" placeholder="Reviewer name"><input class="mri-date" type="date" value="${esc(d.reviewDate||'')}"></div>
             ${(d.notes||[]).length?`<div class="mri-notes">${d.notes.map(n=>`<span>${esc(n)}</span>`).join('')}</div>`:''}
           </div>
+
           <div class="mri-map">
             <label><span>Detected product</span><input class="mri-product-hint" value="${esc(d.productHint||'')}" placeholder="Product name"></label>
-            ${p?`<div class="mri-product-match">${p.image?`<img src="${esc(p.image)}" alt="">`:''}<div><b>${esc(p.title)}</b><small>Mapped automatically</small></div></div>`:
-            `<div class="mri-suggestions">${(item.suggestions||[]).map(s=>`<button type="button" data-pick="${esc(s.id)}">${s.image?`<img src="${esc(s.image)}" alt="">`:''}<span>${esc(s.title)}</span></button>`).join('')||'<p>No confident Shopify product match. Leave this item batched until you map it.</p>'}</div>`}
+            <div class="mri-map-search-row">
+              <input class="mri-map-search-input" value="${esc(d.productHint||'')}" placeholder="Search all Shopify products">
+              <button type="button" class="mri-search-btn">Search</button>
+            </div>
+            <div class="mri-search-results"></div>
+
+            ${p?matchCard(p):`<div class="mri-unmapped">
+              <p>No confident Shopify product match yet.</p>
+              <p>Search manually. If the product no longer exists in Shopify, move it to the ELEV8 Vault instead.</p>
+            </div>`}
+
+            <button type="button" class="mri-vault-btn">${p?.isVault?'✓ Using Vault placeholder':'Use Vault / discontinued product'}</button>
             <div class="mri-attrs">${['sourness','sweetness','flavour'].map(k=>d.attributes?.[k]!=null?`<span>${esc(k)} ${d.attributes[k]}/10</span>`:'').join('')}</div>
           </div>
         </div>
-        <div class="mri-card-foot"><span>${d.headlineGenerated?'AI title generated · ':''}${d.verifiedPurchase?'Verified buyer shown in source':''}</span><button type="button" class="mri-add-one" ${p?'':'disabled'}>Add this draft to Manual Add</button></div>
+        <div class="mri-card-foot">
+          <span>${d.headlineGenerated?'AI title generated · ':''}${d.verifiedPurchase?'Verified buyer shown in source':''}</span>
+          <button type="button" class="mri-add-one" ${p?'':'disabled'}>Add this draft to Manual Add</button>
+        </div>
       </div>`;
     }).join(''):'<div class="mri-empty">Analysed image drafts will appear here.</div>';
 
     box.querySelectorAll('.mri-card').forEach(card=>{
       const index=Number(card.dataset.index),item=items[index];
-      card.querySelectorAll('[data-pick]').forEach(btn=>btn.onclick=async()=>{
-        const product=(item.suggestions||[]).find(p=>String(p.id)===btn.dataset.pick);if(!product)return;
-        const result=await api(`/batches/${batchId}/items/${item._id}`,{method:'PATCH',body:JSON.stringify({matchedProduct:product})});
-        items[index]=result.item;renderQueue();
-      });
+
+      card.querySelectorAll('[data-pick]').forEach(btn=>btn.onclick=()=>pickProduct(index,btn.dataset.pick));
+
+      card.querySelector('.mri-search-btn')?.addEventListener('click',()=>searchProducts(index));
+      card.querySelector('.mri-map-search-input')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchProducts(index)}});
+      card.querySelector('.mri-vault-btn')?.addEventListener('click',()=>useVault(index));
       card.querySelector('.mri-add-one')?.addEventListener('click',()=>addItem(index));
     });
+
     const ready=items.filter(x=>x.matchedProduct).length;
     $('mri-add-ready').disabled=ready===0;
     $('mri-add-ready').textContent=ready?`Add ${ready} ready draft${ready===1?'':'s'} to Manual Add`:'Add ready drafts to Manual Add';
   }
 
+  async function searchProducts(index){
+    const item=items[index],card=document.querySelector(`.mri-card[data-index="${index}"]`);
+    if(!item||!card)return;
+    const q=card.querySelector('.mri-map-search-input').value.trim();
+    const results=card.querySelector('.mri-search-results');
+    if(q.length<2){results.innerHTML='<p class="mri-search-help">Type at least 2 characters.</p>';return}
+    results.innerHTML='<p class="mri-search-help">Searching Shopify…</p>';
+    try{
+      const data=await api(`/products/search?q=${encodeURIComponent(q)}`);
+      const products=data.products||[];
+      item.suggestions=products;
+      results.innerHTML=products.length?products.map(p=>`<button type="button" class="mri-search-result" data-pick="${esc(p.id)}">
+        <img src="${esc(p.image||VAULT_IMAGE)}" alt="">
+        <span><strong>${esc(p.title)}</strong><small>${esc((p.status||'Shopify')+(p.vendor?` · ${p.vendor}`:''))}</small></span>
+      </button>`).join(''):'<div class="mri-search-empty"><b>No Shopify products found.</b><span>If this was discontinued, use the Vault placeholder below.</span></div>';
+      results.querySelectorAll('[data-pick]').forEach(btn=>btn.onclick=()=>pickProduct(index,btn.dataset.pick));
+    }catch(error){results.innerHTML=`<div class="mri-search-empty">${esc(error.message||'Product search failed')}</div>`}
+  }
+
+  async function pickProduct(index,id){
+    const item=items[index],product=(item.suggestions||[]).find(p=>String(p.id)===String(id));
+    if(!item||!product)return;
+    try{
+      const result=await api(`/batches/${batchId}/items/${item._id}`,{method:'PATCH',body:JSON.stringify({matchedProduct:product})});
+      items[index]=result.item;renderQueue();
+    }catch(error){window.showToast?.(error.message||'Could not map product')}
+  }
+
+  async function useVault(index){
+    const item=items[index],card=document.querySelector(`.mri-card[data-index="${index}"]`);
+    if(!item||!card)return;
+    const title=card.querySelector('.mri-product-hint').value.trim()||item.draft?.productHint||'Archived product';
+    try{
+      const result=await api(`/batches/${batchId}/items/${item._id}/vault`,{method:'POST',body:JSON.stringify({title})});
+      items[index]=result.item;renderQueue();
+    }catch(error){window.showToast?.(error.message||'Could not move product to Vault')}
+  }
+
   function currentDraft(index){
     const item=items[index],card=document.querySelector(`.mri-card[data-index="${index}"]`),d={...(item.draft||{})};
-    if(card){d.headline=card.querySelector('.mri-headline').value.trim();d.reviewText=card.querySelector('.mri-comment').value.trim();d.reviewerName=card.querySelector('.mri-name').value.trim();d.reviewDate=card.querySelector('.mri-date').value}
+    if(card){
+      d.headline=card.querySelector('.mri-headline').value.trim();
+      d.reviewText=card.querySelector('.mri-comment').value.trim();
+      d.reviewerName=card.querySelector('.mri-name').value.trim();
+      d.reviewDate=card.querySelector('.mri-date').value;
+      d.productHint=card.querySelector('.mri-product-hint').value.trim();
+    }
     return d;
   }
+
   function toManualDraft(item,index){
-    const d=currentDraft(index),p=item.matchedProduct||{};
+    const d=currentDraft(index),p=item.matchedProduct||{},isVault=Boolean(p.isVault);
     return {
-      itemId:p.id||'',productTitle:p.title||d.productHint||'',productHandle:p.handle||'',productImage:p.image||'',
-      reviewerName:d.reviewerName||'',email:d.email||'',orderId:d.orderId||'',createdAt:d.reviewDate||new Date().toISOString().slice(0,10),
-      rating:Number(d.rating||5),headline:d.headline||'',comment:d.reviewText||'',verifiedPurchase:Boolean(d.verifiedPurchase),
-      importReason:$('mri-reason').value,importReasonDetail:$('mri-reason-detail').value.trim(),attributes:d.attributes||{}
+      itemId:p.id||'',
+      productTitle:p.title||d.productHint||'',
+      productHandle:p.handle||'',
+      productImage:p.image||(isVault?VAULT_IMAGE:''),
+      archivedProduct:isVault,
+      reviewerName:d.reviewerName||'',
+      email:d.email||'',
+      orderId:d.orderId||'',
+      createdAt:d.reviewDate||new Date().toISOString().slice(0,10),
+      rating:Number(d.rating||5),
+      headline:d.headline||'',
+      comment:d.reviewText||'',
+      verifiedPurchase:Boolean(d.verifiedPurchase),
+      importReason:$('mri-reason').value,
+      importReasonDetail:$('mri-reason-detail').value.trim(),
+      attributes:d.attributes||{}
     };
   }
+
   function addItem(index){
     const item=items[index];if(!item?.matchedProduct)return;
     window.Elev8ManualReviewImport?.addDraft?.(toManualDraft(item,index));
-    const addTab=document.querySelector('#mr-backdrop .mr-tabs [data-tab="add"]');addTab?.click();
-    window.showToast?.('Image draft added to Manual Add');
+    document.querySelector('#mr-backdrop .mr-tabs [data-tab="add"]')?.click();
+    window.showToast?.(item.matchedProduct.isVault?'Vault review draft added to Manual Add':'Image draft added to Manual Add');
   }
+
   async function addReady(){
     const ready=items.map((x,i)=>({item:x,index:i})).filter(x=>x.item.matchedProduct);
     ready.forEach(({item,index})=>window.Elev8ManualReviewImport?.addDraft?.(toManualDraft(item,index)));
@@ -175,8 +259,6 @@
     window.showToast?.(`${ready.length} image draft${ready.length===1?'':'s'} added to Manual Add`);
   }
 
-  document.addEventListener('click',e=>{
-    if(e.target.closest('#mr-open'))setTimeout(ensureTab,60);
-  });
+  document.addEventListener('click',e=>{if(e.target.closest('#mr-open'))setTimeout(ensureTab,60)});
   setInterval(()=>{if($('mr-backdrop'))ensureTab()},1000);
 })();
