@@ -23,6 +23,7 @@
       imports:['Product Creation & Import'],
       discounts:['Discounts'],
       loyalty:['Loyalty'],
+      marketing:['Marketing Intelligence'],
       settings:['Settings'],
     };
     const btn=exactSidebarButton(map[kind]||[]);
@@ -100,6 +101,7 @@
         else if(text.startsWith('cart rewards'))document.body.dataset.e8Context='cart';
         else if(text.startsWith('discounts'))document.body.dataset.e8Context='discounts';
         else if(text.startsWith('loyalty'))document.body.dataset.e8Context='loyalty';
+        else if(text.startsWith('marketing intelligence'))document.body.dataset.e8Context='marketing';
         document.body.classList.remove('elev8-home-open');
         setTimeout(applyContext,20);
       });
