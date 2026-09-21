@@ -1,5 +1,15 @@
 const modules = [
   {
+    id: 'marketing-intelligence',
+    productSlug: 'marketing-intelligence',
+    label: 'Marketing Intelligence & Creative Studio',
+    description: 'Sales-led marketing opportunities, commercial product prioritisation and premium AI-assisted creative.',
+    status: 'beta',
+    adminFolder: 'public/modules/marketing-intelligence',
+    apiNamespace: '/api/admin/marketing-intelligence'
+  },
+
+  {
     id: 'notifications',
     productSlug: 'notifications',
     label: 'Notifications & Tracking',
