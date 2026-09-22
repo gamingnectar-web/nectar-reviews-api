@@ -1,10 +1,18 @@
 const express=require('express');
-const {getInsights,generateBackground}=require('./marketingIntelligence.service');
+const {getInsights,generateBackground,productCostBasis,suggestCreativeBrief}=require('./marketingIntelligence.service');
 const router=express.Router();
 const shop=req=>req.shopDomain||req.query.shopDomain||req.body?.shopDomain||'';
 
 router.get('/insights',async(req,res,next)=>{
   try{const result=await getInsights(shop(req));res.setHeader('Cache-Control','no-store');res.json(result)}catch(e){next(e)}
+});
+
+router.get('/products/:productId/cost-basis',async(req,res,next)=>{
+  try{res.json(await productCostBasis(shop(req),req.params.productId))}catch(e){next(e)}
+});
+
+router.post('/creative/suggest-brief',async(req,res,next)=>{
+  try{res.json(await suggestCreativeBrief({product:req.body?.product||{},style:String(req.body?.style||'luxury-studio'),marketing:req.body?.marketing||{}}))}catch(e){next(e)}
 });
 
 router.post('/creative/background',async(req,res,next)=>{
