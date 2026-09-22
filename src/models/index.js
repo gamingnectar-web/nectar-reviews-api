@@ -151,7 +151,7 @@ const settingsSchema = new mongoose.Schema({
     deliveryTagRequired: { type: Boolean, default: true },
     deliveryTag: { type: String, default: 'delivered' },
     deliveryAnchor: { type: String, enum: ['fulfilled_at', 'delivered_tag'], default: 'delivered_tag' },
-    delayDays: { type: Number, default: 14, min: 0, max: 365 },
+    delayDays: { type: Number, default: 7, min: 0, max: 365 },
     orderCutoffDate: { type: Date, default: null },
     maxOrderAgeDays: { type: Number, default: 0, min: 0, max: 3650 },
     sendWindowHour: { type: Number, default: 10, min: 0, max: 23 },

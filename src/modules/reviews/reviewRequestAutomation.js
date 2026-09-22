@@ -8,7 +8,7 @@ const { createReviewToken } = require('../../utils/reviewTokens');
 const { shopifyFetch, shopifyFetchOptional } = require('../../utils/shopify');
 const { numericShopifyId, splitShopifyTags, metafieldRuleKeys, matchingReviewSliders } = require('./reviewProductContext');
 
-const DEFAULT_DELAY_DAYS = 14;
+const DEFAULT_DELAY_DAYS = 7;
 const DEFAULT_CAMPAIGN = 'native_review_request';
 let schedulerStarted = false;
 let schedulerTimer = null;
