@@ -159,6 +159,8 @@
     catch(e){$('mi-products').innerHTML=`<div class="mi-empty"><strong>Could not load Marketing Intelligence</strong><span>${esc(e.message)}</span></div>`}
   }
 
+  window.Elev8MarketingIntelligence={load:()=>load(),refresh:()=>load(true),selectProduct:index=>selectProduct(index)};
+
   function install(){
     const view=$('v-marketing-intelligence');if(!view)return;
     const oldTab=window.tab;

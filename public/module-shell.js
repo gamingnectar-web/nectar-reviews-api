@@ -86,6 +86,7 @@
     if (viewId === 'v-loyalty') return 'loyalty';
     if (viewId === 'v-discounts') return 'discounts';
     if (viewId === 'v-referrals') return 'referrals';
+    if (viewId === 'v-marketing-intelligence') return 'marketing-intelligence';
     return REVIEW_MODULE;
   }
 

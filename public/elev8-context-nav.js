@@ -18,19 +18,20 @@
 
   function openModule(kind){
     const map={
-      reviews:['Reviews'],
-      cart:['Cart Rewards'],
-      imports:['Product Creation & Import'],
-      discounts:['Discounts'],
-      loyalty:['Loyalty'],
-      marketing:['Marketing Intelligence'],
-      settings:['Settings'],
+      reviews:'v-mgr',
+      cart:'v-cart-rewards',
+      imports:'v-product-creation-import',
+      discounts:'v-discounts',
+      loyalty:'v-loyalty',
+      marketing:'v-marketing-intelligence',
+      settings:'v-settings'
     };
-    const btn=exactSidebarButton(map[kind]||[]);
-    if(!btn)return;
+    const id=map[kind];
+    if(!id)return;
     document.body.classList.remove('elev8-home-open');
     document.body.dataset.e8Context=kind;
-    btn.click();
+    if(typeof window.tab==='function')window.tab(id);
+    if(id==='v-marketing-intelligence')window.Elev8MarketingIntelligence?.load?.();
     setTimeout(applyContext,20);
   }
 
