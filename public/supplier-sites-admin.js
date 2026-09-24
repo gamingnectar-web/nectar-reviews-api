@@ -6,10 +6,7 @@
 
   async function api(path,options={}){
     if(typeof window.adminFetch==='function'){
-      const res=await window.adminFetch(`${API}${path}`,options);
-      const json=await res.json().catch(()=>({}));
-      if(!res.ok) throw new Error(json.error||json.message||`Request failed (${res.status})`);
-      return json;
+      return window.adminFetch(`${API}${path}`,options);
     }
     const headers={'Content-Type':'application/json',...(options.headers||{})};
     if(window.SHOP_DOMAIN) headers['x-shop-domain']=window.SHOP_DOMAIN;
