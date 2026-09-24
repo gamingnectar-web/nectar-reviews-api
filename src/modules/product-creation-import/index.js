@@ -1,5 +1,6 @@
 const productCreationImportRoutes = require('./productCreationImport.routes');
 const catalogueAuditRoutes = require('./catalogue-audit/catalogueAudit.routes');
+const xZeroCatalogueRoutes = require('./xzero/xzeroCatalogue.routes');
 const { startSiteImportAutomation } = require('./jobs/siteImportAutomation');
 
 function mountProductCreationImportModule(app, deps = {}) {
@@ -7,8 +8,10 @@ function mountProductCreationImportModule(app, deps = {}) {
   const limiter = typeof deps.makeRateLimiter === 'function'
     ? deps.makeRateLimiter({ windowMs: 60 * 1000, max: 80, keyPrefix: 'product-import' })
     : (_req, _res, next) => next();
+
   app.use('/api/admin/product-creation-import/catalogue', limiter, requireAdminSession, catalogueAuditRoutes);
   app.use('/api/admin/brand-directory', limiter, requireAdminSession, catalogueAuditRoutes);
+  app.use('/api/admin/product-creation-import/x-zero', limiter, requireAdminSession, xZeroCatalogueRoutes);
   app.use('/api/admin/product-creation-import', limiter, requireAdminSession, productCreationImportRoutes);
 }
 

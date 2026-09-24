@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>X-Zero Catalogue Import · Gaming Nectar</title>
+  <link rel="stylesheet" href="/x-zero-import.css">
+</head>
+<body>
+  <main class="xz-shell">
+    <header class="xz-header">
+      <div>
+        <div class="xz-eyebrow">PRODUCT CREATION & IMPORT</div>
+        <h1>X-Zero catalogue</h1>
+        <p>Pull X-Zero's Shopify catalogue into MongoDB first. Nothing is published to Gaming Nectar until you approve it and create a Shopify draft.</p>
+      </div>
+      <a class="xz-secondary" id="backToAdmin" href="/admin">Back to admin</a>
+    </header>
+
+    <section class="xz-grid" id="stats">
+      <article><strong id="sourceCount">—</strong><span>Products at X-Zero</span></article>
+      <article><strong id="dbCount">—</strong><span>In MongoDB batch</span></article>
+      <article><strong id="approvedCount">—</strong><span>Approved</span></article>
+      <article><strong id="createdCount">—</strong><span>Shopify drafts created</span></article>
+    </section>
+
+    <section class="xz-card">
+      <div class="xz-card-heading">
+        <div>
+          <h2>Supplier sync</h2>
+          <p>Refreshes source data and adds new products without overwriting products you have already edited, approved or created.</p>
+        </div>
+        <button class="xz-primary" id="syncButton">Sync X-Zero to MongoDB</button>
+      </div>
+      <div class="xz-status" id="statusText">Checking catalogue…</div>
+    </section>
+
+    <section class="xz-card">
+      <div class="xz-card-heading">
+        <div>
+          <h2>Review queue</h2>
+          <p>Use the existing Gaming Nectar product importer to edit products, approve them and create Shopify drafts.</p>
+        </div>
+        <a class="xz-primary xz-link" id="openImporter" href="/admin">Open product importer</a>
+      </div>
+      <div class="xz-products" id="productList"></div>
+    </section>
+  </main>
+  <script src="/x-zero-import.js" defer></script>
+</body>
+</html>
