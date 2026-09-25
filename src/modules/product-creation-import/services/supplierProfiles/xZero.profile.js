@@ -109,6 +109,7 @@ function applyXZeroProfile(draft = {}) {
   }
   const standardMetafields = [
     meta('core','product_flavour','single_line_text_field',flavour,'Product Flavour',0.99),
+    meta('core','formula_version','single_line_text_field',defaults.facts.product_family || defaults.productType || family,'Product Line / Formula',0.99),
     meta('nutrition','servings','number_integer',servings,'Servings',0.99),
     meta('nutrition','caffeine_mg_per_serving','number_integer',['energy_powder','hydration_powder'].includes(family)?defaults.facts.caffeine_mg_per_serving:'','Caffeine MG Per Serving',0.99),
     meta('nutrition','sugar_g_per_serving','number_decimal',['energy_powder','hydration_powder'].includes(family)&&defaults.facts.zero_sugar?0:'','Sugar G Per Serving',0.99),

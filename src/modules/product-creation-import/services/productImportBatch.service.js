@@ -310,13 +310,99 @@ async function createBatch({ shopDomain, name = '', defaults = {}, links = [], m
   return { batch };
 }
 
+function siteShopifyDraft(product = {}, sourceUrl = '', defaults = {}) {
+  const variants = Array.isArray(product.variants) ? product.variants : [];
+  const first = variants.find(v => v && v.available !== false) || variants[0] || {};
+  const bodyHtml = String(product.body_html || product.description || '');
+  const images = (Array.isArray(product.images) ? product.images : []).map((image,index)=>({
+    src: typeof image === 'string' ? image : (image?.src || ''),
+    alt: cleanText(typeof image === 'object' ? image?.alt || '' : '', 180) || `${product.title || 'Product'} image ${index+1}`,
+    originalIndex: Number.isFinite(Number(image?.position)) ? Number(image.position)-1 : index,
+    source: 'shopify-products-json'
+  })).filter(x=>x.src);
+
+  let draft = normaliseDraftProduct({
+    ...defaults,
+    source:'shopify-products-json',
+    sourceUrl,
+    title:product.title || '',
+    handle:product.handle || '',
+    descriptionHtml:bodyHtml,
+    vendor:product.vendor || defaults.vendor || defaults.brand || '',
+    productType:product.product_type || product.type || defaults.productType || '',
+    price:first.price || '',
+    compareAtPrice:first.compare_at_price || '',
+    sku:(variants.find(v=>v?.sku)?.sku || first.sku || ''),
+    barcode:(variants.find(v=>v?.barcode)?.barcode || first.barcode || ''),
+    weight:Number(first.grams || 0)>0 ? String(first.grams) : '',
+    weightUnit:'g',
+    images,
+    tags:Array.isArray(product.tags) ? product.tags : String(product.tags||'').split(',').map(x=>x.trim()).filter(Boolean),
+    seo:{title:product.title || '',description:cleanText(bodyHtml.replace(/<[^>]+>/g,' '),160)}
+  });
+
+  draft = applySupplierProfile(draft);
+  return normaliseDraftProduct(draft);
+}
+
 async function createSiteImportBatch({ shopDomain, rootUrl, name = '', maxProducts = 500, useAi = true, autoApproveReady = true, autoCreateDrafts = false, batchSize = 12 }) {
   const discovery = await discoverSiteProducts({ rootUrl, maxProducts });
   const defaults = { ...discovery.supplierDefaults, ...supplierDefaultsForUrl(rootUrl) };
-  const result = await createBatch({ shopDomain, name: name || `${defaults.vendor || defaults.supplierName || 'Supplier'} full site import`, defaults, links: discovery.urls });
-  result.batch.automation = { siteImport: true, supplierProfile: profileForUrl(rootUrl), useAi: useAi !== false, autoApproveReady: autoApproveReady !== false, autoCreateDrafts: Boolean(autoCreateDrafts), batchSize: Math.max(1, Math.min(Number(batchSize || 12), 25)), discoveryMethod: discovery.method, discoveredCount: discovery.count };
+  const result = await createBatch({
+    shopDomain,
+    name: name || `${defaults.vendor || defaults.supplierName || 'Supplier'} full site import`,
+    defaults,
+    links: discovery.urls
+  });
+
+  if (Array.isArray(discovery.products) && discovery.products.length) {
+    const byHandle = new Map(discovery.products.map(product => [String(product.handle || '').toLowerCase(), product]));
+    for (const item of result.batch.items) {
+      let handle='';
+      try{ handle=new URL(item.sourceUrl).pathname.split('/products/')[1]?.split('/')[0]?.toLowerCase() || ''; }catch(_){}
+      const product=byHandle.get(handle);
+      if(!product) continue;
+
+      const draft=siteShopifyDraft(product,item.sourceUrl,defaults);
+      item.title=draft.title;
+      item.vendor=draft.vendor;
+      item.productType=draft.productType;
+      item.productCategory=draft.productCategory;
+      item.templateSuffix=draft.themeTemplate || '';
+      item.draft=draft;
+      item.extractedData={
+        source:'shopify-products-json',
+        sourceProductId:product.id || '',
+        handle:product.handle || '',
+        rawSupplierProduct:product,
+        sourceVariants:product.variants || [],
+        sourceOptions:product.options || [],
+        imageCount:draft.images?.length || 0
+      };
+      item.imageCandidates=draft.images || [];
+      item.selectedImages=draft.images || [];
+      item.metafieldPlan=draft.metafields || [];
+      item.confidence=0.99;
+      item.status='needs_review';
+      item.approvalStatus='pending';
+      item.error='';
+      item.updatedAt=new Date();
+    }
+  }
+
+  result.batch.automation = {
+    siteImport:true,
+    supplierProfile:profileForUrl(rootUrl),
+    useAi:useAi !== false,
+    autoApproveReady:autoApproveReady !== false,
+    autoCreateDrafts:Boolean(autoCreateDrafts),
+    batchSize:Math.max(1,Math.min(Number(batchSize || 12),25)),
+    discoveryMethod:discovery.method,
+    discoveredCount:discovery.count
+  };
+  refreshBatchSummary(result.batch);
   await result.batch.save();
-  return { ...result, discovery: { method: discovery.method, count: discovery.count, rootUrl: discovery.rootUrl } };
+  return {...result,discovery:{method:discovery.method,count:discovery.count,rootUrl:discovery.rootUrl,structuredSeeded:Boolean(discovery.products?.length)}};
 }
 
 async function listBatches({ shopDomain, limit = 30 }) {
@@ -618,7 +704,23 @@ async function createShopifyDraftsForBatch({ shopDomain, batchId, itemIds = [], 
     try {
       item.status = 'creating';
       item.updatedAt = new Date();
-      const product = await createShopifyProductFromDraft({ shopDomain, draft: item.draft });
+      const existing = await detectExistingProduct({ shopDomain, draft: item.draft });
+      if (existing) {
+        item.status = 'skipped';
+        item.approvalStatus = 'rejected';
+        item.error = `Skipped duplicate: ${existing.title || item.draft?.title || 'product'} already exists in Shopify.`;
+        results.push({ itemId: item.itemId, status: 'skipped', existingProduct: existing });
+        continue;
+      }
+
+      const product = await createShopifyProductFromDraft({
+        shopDomain,
+        draft: {
+          ...(item.draft || {}),
+          sourceVariants: item.extractedData?.sourceVariants || item.extractedData?.rawSupplierProduct?.variants || [],
+          sourceOptions: item.extractedData?.sourceOptions || item.extractedData?.rawSupplierProduct?.options || []
+        }
+      });
       item.shopifyProduct = product;
       item.status = 'created';
       item.createdAt = new Date();

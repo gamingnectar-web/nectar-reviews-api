@@ -307,16 +307,16 @@ function shopifyMoney(value) {
   return toMoney(raw);
 }
 
-function shopifyImageList(product = {}, title = '') {
+function shopifyImageList(product = {}, title = '', baseUrl = '') {
   const raw = [];
   if (product.featured_image) raw.push(product.featured_image);
   if (Array.isArray(product.images)) raw.push(...product.images);
   return dedupeImageCandidates(raw.map((image, index) => {
     if (typeof image === 'string') {
-      return { src:image, alt:index===0?title:`${title} product image ${index+1}`, source:'shopify-public-json', originalIndex:index };
+      return { src:absolutizeUrl(image, baseUrl), alt:index===0?title:`${title} product image ${index+1}`, source:'shopify-public-json', originalIndex:index };
     }
     return {
-      src:image?.src || image?.url || '',
+      src:absolutizeUrl(image?.src || image?.url || '', baseUrl),
       alt:cleanText(image?.alt || (index===0?title:`${title} product image ${index+1}`),180),
       source:'shopify-public-json',
       originalIndex:Number.isFinite(Number(image?.position)) ? Number(image.position)-1 : index,
@@ -332,7 +332,7 @@ function shopifyProductToDraft(product = {}, sourceUrl = '') {
   const barcode=variants.find(v=>v?.barcode)?.barcode || first.barcode || '';
   const sku=variants.find(v=>v?.sku)?.sku || first.sku || '';
   const bodyHtml=String(product.description || product.body_html || '');
-  const images=shopifyImageList(product,title);
+  const images=shopifyImageList(product,title,sourceUrl);
   const weight=first.weight !== undefined && first.weight !== null ? String(first.weight) : '';
   const unit=cleanText(first.weight_unit || 'g',10).toLowerCase();
 

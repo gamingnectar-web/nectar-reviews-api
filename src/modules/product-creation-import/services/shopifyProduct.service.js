@@ -459,9 +459,18 @@ async function updateInventoryItemCustoms({ shopDomain, inventoryItemId, harmoni
 }
 
 async function createShopifyProductFromDraft({ shopDomain, draft }) {
+  const sourceVariants = Array.isArray(draft?.sourceVariants) ? draft.sourceVariants : [];
+  const sourceOptions = Array.isArray(draft?.sourceOptions) ? draft.sourceOptions : [];
   const normalised = normaliseDraftProduct(draft || {});
   const tags = Array.isArray(normalised.tags) ? normalised.tags.join(', ') : String(normalised.tags || '');
-  const variant = {
+
+  const sourceMoney = (value, fallback='0.00') => {
+    if (value === undefined || value === null || value === '') return fallback;
+    if (typeof value === 'number' && Number.isFinite(value)) return (value / 100).toFixed(2);
+    return toMoney(value) || fallback;
+  };
+
+  const fallbackVariant = {
     price: toMoney(normalised.price) || '0.00',
     compare_at_price: toMoney(normalised.compareAtPrice) || undefined,
     sku: normalised.sku || undefined,
@@ -471,6 +480,29 @@ async function createShopifyProductFromDraft({ shopDomain, draft }) {
     inventory_management: 'shopify',
     option1: 'Default Title',
   };
+
+  const variants = sourceVariants.length > 1 ? sourceVariants.slice(0,100).map((source,index) => {
+    const grams = Number(source?.grams || 0);
+    return {
+      price: sourceMoney(source?.price, toMoney(normalised.price) || '0.00'),
+      compare_at_price: sourceMoney(source?.compare_at_price, '') || undefined,
+      sku: cleanText(source?.sku || '',120) || undefined,
+      barcode: cleanText(source?.barcode || '',120) || undefined,
+      weight: grams > 0 ? grams : (source?.weight ? Number(source.weight) : undefined),
+      weight_unit: grams > 0 ? 'g' : (source?.weight_unit || source?.weightUnit || undefined),
+      inventory_management: 'shopify',
+      option1: source?.option1 || source?.title || `Option ${index+1}`,
+      option2: source?.option2 || undefined,
+      option3: source?.option3 || undefined,
+    };
+  }) : [fallbackVariant];
+
+  const options = sourceVariants.length > 1 ? sourceOptions.map((option,index) => {
+    if (typeof option === 'string') return { name: option || `Option ${index+1}` };
+    const name = cleanText(option?.name || `Option ${index+1}`,120);
+    const values = Array.isArray(option?.values) ? option.values.map(value => typeof value === 'string' ? value : (value?.name || value?.value || '')).filter(Boolean) : [];
+    return { name, ...(values.length ? { values } : {}) };
+  }).filter(option => option.name && !/^title$/i.test(option.name)) : [];
 
   const metafields = normaliseMetafields([
     ...(normalised.sourceUrl ? [{ namespace: 'external_import', key: 'source_url', type: 'url', value: normalised.sourceUrl }] : []),
@@ -493,7 +525,8 @@ async function createShopifyProductFromDraft({ shopDomain, draft }) {
     published_scope: normalised.salesChannelPolicy === 'all' ? 'global' : 'web',
     tags: tags || undefined,
     template_suffix: normalised.themeTemplate && normalised.themeTemplate !== 'default' ? normalised.themeTemplate.replace(/^product\./i, '') : undefined,
-    variants: [variant],
+    variants,
+    ...(options.length ? { options } : {}),
     // Shopify's product SEO fields are stored through the legacy global SEO fields.
     // Set them explicitly so URL imports cannot inherit unrelated SEO from copied profiles.
     metafields_global_title_tag: normalised.seo?.title || normalised.title,

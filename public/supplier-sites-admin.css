@@ -20,3 +20,29 @@
 .supplier-empty strong,.supplier-empty span{display:block}
 @media(max-width:1100px){.supplier-site-create{grid-template-columns:1fr 1fr}.supplier-sites-layout{grid-template-columns:1fr}.supplier-products-grid{grid-template-columns:1fr}}
 @media(max-width:700px){.supplier-site-create{grid-template-columns:1fr}.supplier-products-toolbar{display:block}.supplier-product-card{grid-template-columns:90px 1fr}.supplier-product-facts{grid-template-columns:repeat(2,1fr)}}
+
+/* Supplier Sites v3 modal */
+.supplier-product-card{appearance:none;width:100%;text-align:left;cursor:pointer;color:inherit;font:inherit}
+.supplier-product-card:hover{border-color:#0f172a;box-shadow:0 3px 14px rgba(15,23,42,.08)}
+.supplier-modal[hidden]{display:none!important}
+.supplier-modal{position:fixed;inset:0;z-index:100000;display:flex;align-items:flex-start;justify-content:center;padding:22px;overflow:auto}
+.supplier-modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.55);backdrop-filter:blur(3px)}
+.supplier-modal-panel{position:relative;width:min(1180px,96vw);margin:auto;background:#f8fafc;border-radius:18px;box-shadow:0 24px 80px rgba(15,23,42,.3);padding:18px}
+.supplier-modal-head{display:flex;justify-content:space-between;gap:16px;margin-bottom:14px}
+.supplier-modal-head h3{margin:4px 0 0}
+.supplier-modal-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:14px}
+.supplier-modal-grid main,.supplier-modal-grid aside{display:grid;gap:12px;align-content:start}
+.supplier-modal-grid .pci-editor-card{background:#fff}
+.supplier-modal-grid .pci-label{display:block;margin-top:10px}
+.supplier-desc{min-height:220px}
+.supplier-modal-images{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:10px 0}
+.supplier-modal-images img{width:100%;aspect-ratio:1;object-fit:contain;border:1px solid #e2e8f0;border-radius:10px;background:#fff}
+.supplier-modal-actions{display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;margin:16px -18px -18px;padding:14px 18px;background:rgba(255,255,255,.97);border-top:1px solid #e2e8f0;border-radius:0 0 18px 18px}
+body.supplier-modal-open{overflow:hidden}
+@media(max-width:850px){
+  .supplier-modal{padding:8px}
+  .supplier-modal-panel{width:100%;padding:12px}
+  .supplier-modal-grid{grid-template-columns:1fr}
+  .supplier-modal-images{grid-template-columns:repeat(3,1fr)}
+  .supplier-modal-actions{margin:12px -12px -12px;flex-wrap:wrap}
+}
