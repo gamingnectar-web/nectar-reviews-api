@@ -345,7 +345,7 @@ function siteShopifyDraft(product = {}, sourceUrl = '', defaults = {}) {
   return normaliseDraftProduct(draft);
 }
 
-async function createSiteImportBatch({ shopDomain, rootUrl, name = '', maxProducts = 500, useAi = true, autoApproveReady = true, autoCreateDrafts = false, batchSize = 12 }) {
+async function createSiteImportBatch({ shopDomain, rootUrl, name = '', maxProducts = 500, useAi = false, autoApproveReady = false, autoCreateDrafts = false, batchSize = 1 }) {
   const discovery = await discoverSiteProducts({ rootUrl, maxProducts });
   const defaults = { ...discovery.supplierDefaults, ...supplierDefaultsForUrl(rootUrl) };
   const result = await createBatch({
@@ -393,10 +393,12 @@ async function createSiteImportBatch({ shopDomain, rootUrl, name = '', maxProduc
   result.batch.automation = {
     siteImport:true,
     supplierProfile:profileForUrl(rootUrl),
-    useAi:useAi !== false,
-    autoApproveReady:autoApproveReady !== false,
+    useAi:useAi === true,
+    backgroundEnabled:false,
+    backgroundAi:false,
+    autoApproveReady:autoApproveReady === true,
     autoCreateDrafts:Boolean(autoCreateDrafts),
-    batchSize:Math.max(1,Math.min(Number(batchSize || 12),25)),
+    batchSize:Math.max(1,Math.min(Number(batchSize || 1),10)),
     discoveryMethod:discovery.method,
     discoveredCount:discovery.count
   };
@@ -463,7 +465,7 @@ async function detectExistingProduct({ shopDomain, draft }) {
   return exact ? { exact:true, confidence:1, id:exact.id, title:exact.title, handle:exact.handle, image:exact.image||'', reason:'Exact title/handle match already exists in Shopify.' } : null;
 }
 
-async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
+async function enrichItem({ shopDomain, item, defaults, useAi = false }) {
   item.status = 'scanning';
   item.error = '';
   item.updatedAt = new Date();
@@ -497,7 +499,7 @@ async function enrichItem({ shopDomain, item, defaults, useAi = true }) {
   draft.images = byPageImageOrder(imagePlan.selected).map((image) => ({ src: image.src, alt: image.alt || draft.title, role: image.role || '', reason: image.roleReason || image.reason || '', originalIndex: image.originalIndex ?? 0 }));
   draft = applyProfileToDraft(draft, profile);
   draft.metafields = mergeMetafields(draft.metafields || [], supplementLabelMetafields(supplementImages));
-  draft = await enrichProductDraft({ shopDomain, draft });
+  draft = await enrichProductDraft({ shopDomain, draft, useAi });
   const metadata = await getProductImportMetadata({ shopDomain }).catch(() => ({}));
   draft = mapSupplierFactsToExistingMetafields(draft, metadata);
   const commercial = draft.suggestions || draft.enrichment?.suggestions || {};
@@ -547,16 +549,23 @@ async function analyseProductPhotos({ shopDomain, photos = [], brand = '', sourc
   return { ...result, items };
 }
 
-async function scanBatch({ shopDomain, batchId, itemIds = [], limit = 20, processAll = false, useAi = true }) {
+async function scanBatch({ shopDomain, batchId, itemIds = [], limit = 20, processAll = false, useAi = false }) {
   const { batch } = await getBatch({ shopDomain, batchId });
   const wanted = new Set(asArray(itemIds));
+
   const candidates = batch.items.filter((item) => {
     if (item.status === 'created' || item.status === 'creating') return false;
+
+    // Explicit item IDs are the only way to re-run a failed/review item.
     if (wanted.size) return wanted.has(item.itemId);
-    if (processAll) return ['queued', 'failed', 'needs_review', 'analysed', 'approved'].includes(item.status) || item.approvalStatus !== 'approved';
-    return ['queued', 'failed', 'needs_review'].includes(item.status);
+
+    // Default/bulk scans are first-attempt only.
+    // failed / needs_review / analysed / approved are terminal until a user
+    // explicitly targets them.
+    return item.status === 'queued';
   });
-  const selected = processAll ? candidates : candidates.slice(0, Math.max(1, Number(limit) || 20));
+
+  const selected = candidates.slice(0, Math.max(1, Number(limit) || 20));
   batch.status = 'analysing';
   selected.forEach((item) => {
     item.status = 'scanning';
@@ -583,7 +592,7 @@ async function scanBatch({ shopDomain, batchId, itemIds = [], limit = 20, proces
   return { batch, results, processed: selected.length, remaining: Math.max(0, candidates.length - selected.length) };
 }
 
-async function enrichBatch({ shopDomain, batchId, itemIds = [], useAi = true }) {
+async function enrichBatch({ shopDomain, batchId, itemIds = [], useAi = false }) {
   return scanBatch({ shopDomain, batchId, itemIds, processAll: Boolean(itemIds?.length), useAi });
 }
 

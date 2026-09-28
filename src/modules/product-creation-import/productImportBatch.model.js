@@ -91,8 +91,10 @@ const productImportBatchSchema = new mongoose.Schema({
   automation: {
     siteImport: { type: Boolean, default: false },
     supplierProfile: { type: String, default: '' },
-    useAi: { type: Boolean, default: true },
-    autoApproveReady: { type: Boolean, default: true },
+    useAi: { type: Boolean, default: false },
+    backgroundEnabled: { type: Boolean, default: false },
+    backgroundAi: { type: Boolean, default: false },
+    autoApproveReady: { type: Boolean, default: false },
     autoCreateDrafts: { type: Boolean, default: false },
     batchSize: { type: Number, default: 12, min: 1, max: 25 },
     discoveryMethod: { type: String, default: '' },

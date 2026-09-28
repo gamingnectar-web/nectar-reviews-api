@@ -96,7 +96,7 @@
                     <option value="created">Created</option>
                     <option value="failed">Failed</option>
                   </select>
-                  <button id="supplier-sites-rescan" class="secondary-btn" type="button">Scan missing / failed</button><button id="supplier-sites-stop" class="secondary-btn" type="button" hidden>Stop</button>
+                  <button id="supplier-sites-rescan" class="secondary-btn" type="button">Run one pass</button><button id="supplier-sites-stop" class="secondary-btn" type="button" hidden>Stop</button>
                   <button id="supplier-sites-open-batch" class="primary-btn" type="button">Open in Batch Import</button>
                 </div>
               </div>
@@ -280,11 +280,11 @@
       const remaining=(state.activeBatch.items||[]).filter(i=>['queued','failed'].includes(i.status)).length;
 
       if(state.stop){
-        setStatus(`Catalogue repair stopped. ${remaining} queued/failed product(s) remain. Press Repair queued / failed to resume.`,'warn');
+        setStatus(`One-pass scan stopped. ${remaining} queued/failed product(s) remain. Press Run one pass to resume.`,'warn');
       }else if(remaining){
         setStatus(`Repair pass finished: ${processed} repaired, ${failed} could not be repaired in this pass, ${remaining} still queued/failed. You can run it again safely.`,'warn');
       }else{
-        setStatus(`Catalogue repair finished. ${processed} product(s) repaired. Click any product card to review or create its Shopify draft.`,'ok');
+        setStatus(`One-pass scan finished. ${processed} product(s) repaired. Click any product card to review or create its Shopify draft.`,'ok');
       }
     }finally{
       state.scanning=false;
@@ -306,16 +306,15 @@
       const data=await api('/batches/site-import',{
         method:'POST',
         body:JSON.stringify({
-          rootUrl,name,maxProducts,useAi:true,
+          rootUrl,name,maxProducts,useAi:false,
           autoApproveReady:false,
           autoCreateDrafts:false,
-          batchSize:12
+          batchSize:1
         })
       });
       state.activeBatch=data.batch;
       await loadSites();
       await openBatch(data.batch._id);
-      await repairCatalogue();
     }catch(e){ setStatus(`Supplier scrape failed: ${esc(e.message)}`,'err'); }
     finally{ btn.disabled=false; }
   }
@@ -502,7 +501,7 @@
       modalStatus('Enriching this product only…','warn');
       const data=await api(`/batches/${state.activeBatch._id}/enrich`,{
         method:'POST',
-        body:JSON.stringify({itemIds:[id],useAi:true})
+        body:JSON.stringify({itemIds:[id],useAi:false})
       });
       state.activeBatch=data.batch;
       renderProducts();

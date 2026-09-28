@@ -107,7 +107,7 @@ router.post('/profile/suggest', asyncRoute(async (req, res) => {
 // but adds a parent batch that can contain any number of supplier/product URLs and shared defaults.
 router.post('/batches/site-import', asyncRoute(async (req, res) => {
   const body = req.body || {};
-  const result = await createSiteImportBatch({ shopDomain: shopDomainFromReq(req), rootUrl: body.rootUrl || body.url || body.supplierUrl || '', name: body.name || '', maxProducts: body.maxProducts || 500, useAi: body.useAi !== false, autoApproveReady: body.autoApproveReady !== false, autoCreateDrafts: Boolean(body.autoCreateDrafts), batchSize: body.batchSize || 12 });
+  const result = await createSiteImportBatch({ shopDomain: shopDomainFromReq(req), rootUrl: body.rootUrl || body.url || body.supplierUrl || '', name: body.name || '', maxProducts: body.maxProducts || 500, useAi: body.useAi === true, autoApproveReady: body.autoApproveReady === true, autoCreateDrafts: Boolean(body.autoCreateDrafts), batchSize: body.batchSize || 1 });
   res.json(result);
 }));
 
@@ -178,7 +178,7 @@ router.post('/batches/:batchId/scan', asyncRoute(async (req, res) => {
     itemIds: Array.isArray(body.itemIds) ? body.itemIds : [],
     limit: body.limit || 20,
     processAll: Boolean(body.processAll),
-    useAi: body.useAi !== false,
+    useAi: body.useAi === true,
   });
   res.json(result);
 }));
@@ -189,7 +189,7 @@ router.post('/batches/:batchId/enrich', asyncRoute(async (req, res) => {
     shopDomain: shopDomainFromReq(req),
     batchId: req.params.batchId,
     itemIds: Array.isArray(body.itemIds) ? body.itemIds : [],
-    useAi: body.useAi !== false,
+    useAi: body.useAi === true,
   });
   res.json(result);
 }));

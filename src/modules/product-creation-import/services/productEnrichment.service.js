@@ -4,6 +4,7 @@ const { listRecentlyUsedProductTags, listRecentlyUsedProductVendors, listRecentl
 const { getProductImportSettings, applySettingsToDraft } = require('./productImportSettings.service');
 const { buildCatalogueReferenceContext } = require('./catalogueReference.service');
 const { preserveLockedFields } = require('./fieldAuthority.service');
+const { applyMerchantCatalogueContext } = require('./merchantCatalogueContext.service');
 
 const CORE_PROFILE_METAFIELDS = [
   { namespace: 'core', key: 'product_flavour', name: 'Product Flavour', type: 'single_line_text_field', help: 'The actual flavour shown on the supplier/product page, e.g. Pomegranate Green Tea.' },
@@ -302,7 +303,7 @@ async function getProductImportMetadata({ shopDomain }) {
   };
 }
 
-async function suggestProductProfile({ shopDomain, draft }) {
+async function suggestProductProfile({ shopDomain, draft, useAi = false }) {
   const normalised = normaliseDraftProduct(draft || {});
   const metadata = await getProductImportMetadata({ shopDomain });
   const existing = await getProfileValuesFromExistingProducts({
@@ -312,7 +313,7 @@ async function suggestProductProfile({ shopDomain, draft }) {
     productType: normalised.productType,
     title: normalised.title,
   });
-  const ai = await aiSuggestProductProfile({ draft: normalised, metadata });
+  const ai = useAi === true ? await aiSuggestProductProfile({ draft: normalised, metadata }) : {};
 
   // Tags and collections must align to the merchant's site. AI can suggest, but it
   // cannot create random collection/tag names or auto-apply url-import/product-import.
@@ -368,9 +369,10 @@ async function suggestProductProfile({ shopDomain, draft }) {
   };
 }
 
-async function enrichProductDraft({ shopDomain, draft }) {
-  const normalised = normaliseDraftProduct(draft || {});
-  const suggestion = await suggestProductProfile({ shopDomain, draft: normalised });
+async function enrichProductDraft({ shopDomain, draft, useAi = false }) {
+  let normalised = normaliseDraftProduct(draft || {});
+  normalised = await applyMerchantCatalogueContext({ shopDomain, draft: normalised });
+  const suggestion = await suggestProductProfile({ shopDomain, draft: normalised, useAi });
   return normaliseDraftProduct({
     ...normalised,
     title: suggestion.title || normalised.title,
