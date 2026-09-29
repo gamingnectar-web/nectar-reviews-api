@@ -50,6 +50,19 @@ function chooseSimilarExamples(draft={},examples=[]){
     return {product,score};
   }).filter(x=>x.score>=35).sort((a,b)=>b.score-a.score).slice(0,8);
 }
+function isGenericProductType(value=''){
+  const key=keyText(value);
+  return !key || [
+    'product','tub','powder','drink','energy drink','hydration',
+    'merch','merchandise','accessory','accessories','bundle'
+  ].includes(key);
+}
+
+function sameVendorRows(draft={},examples=[]){
+  const vendor=keyText(draft.vendor||'');
+  return (examples||[]).filter(row => vendor && keyText(row.vendor||'')===vendor);
+}
+
 function mode(values=[]){
   const counts=new Map(); values.filter(Boolean).forEach(v=>counts.set(v,(counts.get(v)||0)+1));
   return [...counts.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
@@ -113,8 +126,20 @@ async function applyMerchantCatalogueContext({shopDomain,draft={}}){
   if(next.vendor)next.vendor=exactExisting(next.vendor,snapshot.vendors,'vendor');
   if(next.productType)next.productType=exactExisting(next.productType,snapshot.productTypes,'productType');
   next=await applyBrandDirectoryProfile({shopDomain,draft:next}).catch(()=>next);
-  const similar=chooseSimilarExamples(next,snapshot.seoExamples), examples=similar.map(x=>x.product);
-  if(!next.productType&&examples.length)next.productType=mode(examples.map(x=>cleanText(x.productType||'',120)));
+
+  const similar=chooseSimilarExamples(next,snapshot.seoExamples);
+  const examples=similar.map(x=>x.product);
+  const vendorExamples=sameVendorRows(next,snapshot.seoExamples);
+
+  // Supplier values such as "Tub" are descriptive but too generic to use as the
+  // merchant-facing Shopify product type. Prefer the modal type from genuinely
+  // similar existing products from the same vendor.
+  if(isGenericProductType(next.productType)){
+    const familyExamples=examples.filter(x=>cleanText(x.productType||'',120));
+    const vendorTyped=vendorExamples.filter(x=>cleanText(x.productType||'',120));
+    const learnedType=mode((familyExamples.length?familyExamples:vendorTyped).map(x=>cleanText(x.productType||'',120)));
+    if(learnedType)next.productType=learnedType;
+  }
   if(!next.themeTemplate){
     const likely=mode((snapshot.templates||[]).filter(x=>x.template&&x.template!=='default').slice(0,5).map(x=>x.template));
     if(likely&&examples.length)next.themeTemplate=likely;
@@ -124,7 +149,22 @@ async function applyMerchantCatalogueContext({shopDomain,draft={}}){
   const reusable=(profile.metafields||[]).filter(mf=>allowedProfileMetafield(mf,next)).map(mf=>({...mf,source:'shopify-catalogue-pattern',confidence:Math.min(Number(mf.confidence||0),0.92)}));
   next.metafields=mergeMetafields(next.metafields||[],reusable);
   next=applySettingsToDraft(next,snapshot.settings||{});
-  next.enrichment={...(next.enrichment||{}),merchantCatalogue:{source:'existing-shopify-products',similarProductCount:examples.length,similarProducts:examples.slice(0,5).map(x=>({title:x.title||'',handle:x.handle||'',vendor:x.vendor||'',productType:x.productType||''})),matchedProfileProducts:Number(profile.matchedProductCount||0),appliedWithoutAi:true,checkedAt:new Date().toISOString()}};
+  next.enrichment={...(next.enrichment||{}),merchantCatalogue:{
+    source:'existing-shopify-products',
+    similarProductCount:examples.length,
+    similarProducts:examples.slice(0,8).map(x=>({
+      title:x.title||'',
+      handle:x.handle||'',
+      vendor:x.vendor||'',
+      productType:x.productType||'',
+      seoTitle:x.seoTitle||'',
+      seoDescription:x.seoDescription||''
+    })),
+    matchedProfileProducts:Number(profile.matchedProductCount||0),
+    learnedProductType:next.productType||'',
+    appliedWithoutAi:true,
+    checkedAt:new Date().toISOString()
+  }};
   return normaliseDraftProduct(next);
 }
 module.exports={applyMerchantCatalogueContext,getSnapshot};

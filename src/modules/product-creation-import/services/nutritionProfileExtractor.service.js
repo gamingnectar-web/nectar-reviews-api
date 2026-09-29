@@ -60,7 +60,32 @@ function isGfuelEnergyDraft(draft = {}, text = '') {
   return /energy|formula|powder|tub|servings?|collector/.test(haystack);
 }
 
+function flavourPhraseFromTitleKeywords(title=''){
+  const value=cleanText(title,160);
+  if(!value)return '';
+
+  // Start at the first unmistakable taste/flavour token. This intentionally
+  // drops collaboration/character prefixes such as "Butters" while retaining
+  // compound flavour names such as "Strawberry Candy".
+  const flavourStart=/\b(strawberry|raspberry|blueberry|blackberry|cranberry|pomegranate|peach|mango|watermelon|lemon|lime|orange|grape|apple|cherry|pineapple|coconut|vanilla|cola|candy|bubble\s*gum|bubblegum|cotton\s*candy|sherbet|cream|creamsicle|tea|lemonade)\b/i;
+  const match=flavourStart.exec(value);
+  if(!match)return '';
+
+  let candidate=value.slice(match.index)
+    .replace(/\b(energy formula|hydration formula|hydration|tub|can|cans|collector'?s? box|bundle|powder|drink mix|40 servings?|30 servings?)\b/ig,' ')
+    .replace(/[|–—:]+/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+
+  // Avoid dragging merchandising/collab suffixes into the flavour.
+  candidate=candidate.split(/\b(?:collector'?s?|bundle|shaker|limited edition|edition)\b/i)[0].trim();
+  return cleanText(candidate,90);
+}
+
 function inferFlavourFromTitle(title = '') {
+  const keywordPhrase=flavourPhraseFromTitleKeywords(title);
+  if(keywordPhrase)return keywordPhrase.replace(/\b\w/g,(char)=>char.toUpperCase());
+
   let value = cleanText(title, 140)
     .replace(/\b(g\s*fuel|gfuel|energy formula|hydration formula|hydration|tub|can|cans|collector'?s? box|bundle|powder|drink mix|40 servings?|30 servings?)\b/ig, ' ')
     .replace(/[–—|:]+/g, ' ')
@@ -90,7 +115,7 @@ function inferKnownFlavourPhrase(text = '') {
     'pomegranate green tea', 'white cran strawberry', 'white cranberry strawberry', 'white grape lime', 'peach orange raspberry', 'grape strawberry', 'grape and strawberry', 'orange creamsicle', 'peach rings', 'blue raspberry', 'sour blue chug rug', 'rainbow sherbet',
     'snow cone', 'tropical rain', 'strawberry banana', 'watermelon limeade', 'lemon lime',
     'cherry limeade', 'green apple', 'pink lemonade', 'mango lemonade', 'mango peach',
-    'strawberry shortcake', 'cotton candy', 'bubble gum', 'sour cherry', 'sour grape',
+    'strawberry shortcake', 'strawberry candy', 'cotton candy', 'bubble gum', 'sour cherry', 'sour grape',
     'citrus cream', 'citrus lemonade', 'raspberry iced tea', 'peach iced tea', 'pineapple coconut', 'white peach', 'green tea',
   ];
   const found = known.find((phrase) => haystack.includes(` ${phrase} `));

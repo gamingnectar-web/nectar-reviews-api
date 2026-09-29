@@ -164,6 +164,50 @@ function stripFormatFromProductName(productName = '', format = '') {
   return next || cleanText(productName, 180);
 }
 
+function merchantSeoTitleFromExamples(draft={},fallback=''){
+  const rows=draft.enrichment?.merchantCatalogue?.similarProducts||[];
+  const productName=cleanText(draft.title||'',180);
+  const vendor=cleanText(draft.vendor||'',100);
+
+  for(const row of rows){
+    const exampleTitle=cleanText(row.title||'',180);
+    const seoTitle=cleanText(row.seoTitle||'',180);
+    if(!exampleTitle||!seoTitle)continue;
+
+    const lowerSeo=seoTitle.toLowerCase();
+    const lowerExample=exampleTitle.toLowerCase();
+    const at=lowerSeo.indexOf(lowerExample);
+
+    // Safest pattern transfer: only replace the known existing product title
+    // inside its own SEO title. Prefixes/suffixes/separators remain exactly as
+    // the merchant already uses them.
+    if(at>=0){
+      const learned=seoTitle.slice(0,at)+productName+seoTitle.slice(at+exampleTitle.length);
+      if(learned.trim())return cleanText(learned,120);
+    }
+
+    // If the catalogue consistently prefixes vendor, retain that convention.
+    if(vendor && lowerSeo.startsWith(vendor.toLowerCase())){
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
+function readableFlavour(draft={}){
+  return cleanText(
+    (draft.metafields||[]).find(mf=>mf.namespace==='core'&&mf.key==='product_flavour')?.value||'',
+    90
+  );
+}
+
+function readableFormula(draft={}){
+  return cleanText(
+    (draft.metafields||[]).find(mf=>mf.namespace==='core'&&mf.key==='formula_version')?.value||'',
+    50
+  );
+}
+
 function makeMerchantSeo({ draft = {}, settings = {} }) {
   const vendor = cleanText(draft.vendor || '', 80);
   const productName = stripVendorFromTitle(draft.title || '', vendor);
@@ -171,7 +215,8 @@ function makeMerchantSeo({ draft = {}, settings = {} }) {
   const seoLocation = titleLocationForSeo(draft.handleLocation || settings.handleRules?.location || 'uk');
   const handleLocation = locationForHandle(draft.handleLocation || settings.handleRules?.location || 'uk');
   const safeProductName = stripFormatFromProductName(productName, format);
-  const seoTitle = cleanText([vendor, safeProductName, format, seoLocation].filter(Boolean).join(' - '), 120);
+  const fallbackSeoTitle = cleanText([vendor, safeProductName, format, seoLocation].filter(Boolean).join(' - '), 120);
+  const seoTitle = merchantSeoTitleFromExamples(draft, fallbackSeoTitle);
   const handle = slugifyLoose([vendor, safeProductName, format, handleLocation].filter(Boolean).join('-'));
   const flavour = cleanText((draft.metafields || []).find((mf) => mf.namespace === 'core' && mf.key === 'product_flavour')?.value || '', 80);
   const flavourProfile = cleanText((draft.metafields || []).find((mf) => mf.namespace === 'core' && mf.key === 'flavour_profile')?.value || '', 120);
@@ -179,10 +224,16 @@ function makeMerchantSeo({ draft = {}, settings = {} }) {
   const flavourSentence = flavour && !new RegExp(`\\b${flavour.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(lead)
     ? `Flavour: ${flavour}.`
     : (flavourProfile ? flavourProfile.replace(/[.!?]?$/, '.') : '');
+  const formula = readableFormula(draft);
+  const flavourText = readableFlavour(draft) || flavour;
+  const descriptor = [
+    flavourText ? `${flavourText} flavour` : '',
+    formula ? `${formula} formula` : ''
+  ].filter(Boolean).join(', ');
   const description = cleanText([
-    `Buy ${lead} from Gaming Nectar with ${seoLocation}.`,
-    flavourSentence,
-    'Fast UK dispatch available.'
+    `Shop ${lead} at Gaming Nectar.`,
+    descriptor ? `${descriptor}.` : flavourSentence,
+    `Fast UK dispatch${seoLocation && seoLocation !== 'UK Stock' ? ` with ${seoLocation}` : ''}.`
   ].filter(Boolean).join(' '), 155).replace(/[,:;\s]+$/, '.');
   return { title: seoTitle || draft.seo?.title || draft.title, description, handle };
 }
@@ -313,7 +364,7 @@ async function suggestProductProfile({ shopDomain, draft, useAi = false }) {
     productType: normalised.productType,
     title: normalised.title,
   });
-  const ai = useAi === true ? await aiSuggestProductProfile({ draft: normalised, metadata }) : {};
+  const ai = useAi === true ? await aiSuggestProductProfile({ draft: normalised, metadata, shopDomain }) : {};
 
   // Tags and collections must align to the merchant's site. AI can suggest, but it
   // cannot create random collection/tag names or auto-apply url-import/product-import.
