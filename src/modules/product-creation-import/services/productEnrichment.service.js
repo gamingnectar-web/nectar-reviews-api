@@ -446,4 +446,169 @@ async function enrichProductDraft({ shopDomain, draft, useAi = false }) {
   });
 }
 
-module.exports = { getProductImportMetadata, suggestProductProfile, enrichProductDraft, CORE_PROFILE_METAFIELDS, isLikelyDrinkProduct, isClearlyNonDrinkProduct, filterMetafieldsForProductKind };
+
+async function aiRefreshProductDraft({ shopDomain, draft = {} }) {
+  const apiKey = process.env.OPENAI_API_KEY || '';
+  if (!apiKey) {
+    const error = new Error('OPENAI_API_KEY is not configured. Add the AI licence/key before using AI Refresh.');
+    error.status = 412;
+    throw error;
+  }
+
+  let base = normaliseDraftProduct(draft || {});
+  base = await applyMerchantCatalogueContext({ shopDomain, draft: base });
+  const metadata = await getProductImportMetadata({ shopDomain });
+  const catalogueContext = await buildCatalogueReferenceContext({ shopDomain, draft: base }).catch(() => null);
+  const model = process.env.OPENAI_PRODUCT_IMPORT_MODEL || process.env.OPENAI_MODULE_MODEL || 'gpt-4.1-mini';
+
+  const existingSeoExamples = (metadata.seoExamples || [])
+    .filter((row) => !base.vendor || valueKey(row.vendor || '') === valueKey(base.vendor || ''))
+    .slice(0, 20);
+
+  const prompt = `You are performing ONE explicit quality-control pass on ONE Shopify product draft.
+
+Return ONLY valid JSON with these keys:
+title, descriptionHtml, vendor, productType, productCategory, themeTemplate, handle,
+seoTitle, seoDescription, collections, recommendedTags,
+productFlavour, flavourFamily, flavourProfile, formulaVersion, groupedProfiles,
+sweetness, sourness, notes.
+
+Rules:
+- Conform the draft to the merchant's EXISTING Shopify catalogue.
+- Replace weak supplier labels such as "Tub" with the merchant's established product type when supported.
+- Follow existing naming and SEO structure rather than generic ecommerce wording.
+- title is the customer-facing product title. Do not stuff vendor, type or location into it unless the catalogue does.
+- seoTitle and handle should follow the merchant's established pattern.
+- seoDescription must be natural and product-specific. Do not use generic "available from Gaming Nectar" copy.
+- descriptionHtml should preserve useful factual supplier copy while cleaning broken/meta HTML. Do not invent claims.
+- For consumables, identify the ACTUAL flavour separately from the collaboration/product name.
+- For G FUEL current Energy Formula 2.0 / New & Improved / 40-serving energy tubs, formulaVersion should be GF-EN2.0 when supported.
+- For G FUEL Hydration, use GF-HY when supported.
+- Do not add flavour/formula fields to shakers, accessories, apparel or other non-consumables.
+- Do not invent barcode, SKU, price, nutrition, ingredients or claims.
+- collections and recommendedTags may only use existing merchant values.
+- This remains an editable draft.
+
+Merchant product types:
+${(metadata.productTypes || []).slice(0,80).map((x)=>x.productType || x).join(' | ')}
+
+Merchant categories:
+${(metadata.productCategories || []).slice(0,80).map((x)=>x.category || x.title || x).join(' | ')}
+
+Existing same-vendor SEO examples:
+${JSON.stringify(existingSeoExamples).slice(0,6000)}
+
+Merchant catalogue reference:
+${JSON.stringify(catalogueContext || {}).slice(0,6000)}
+
+Current draft:
+${JSON.stringify({
+  title: base.title,
+  descriptionHtml: base.descriptionHtml,
+  vendor: base.vendor,
+  productType: base.productType,
+  productCategory: base.productCategory,
+  themeTemplate: base.themeTemplate,
+  handle: base.handle,
+  seo: base.seo,
+  collections: base.collections,
+  tags: base.tags,
+  recommendedTags: base.recommendedTags,
+  metafields: base.metafields,
+  sourceUrl: base.sourceUrl,
+  images: (base.images || []).slice(0,8).map((img)=>({src:img.src,alt:img.alt}))
+}).slice(0,12000)}`;
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model,
+      temperature: 0.1,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: 'You calibrate one Shopify product draft against the merchant catalogue. Output JSON only.' },
+        { role: 'user', content: prompt }
+      ]
+    })
+  });
+
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(json.error?.message || `OpenAI product refresh failed (${response.status})`);
+    error.status = 502;
+    throw error;
+  }
+
+  let ai = {};
+  try { ai = JSON.parse(stripJsonFence(json.choices?.[0]?.message?.content || '{}')); }
+  catch (_) {
+    const error = new Error('AI Refresh returned invalid JSON.');
+    error.status = 502;
+    throw error;
+  }
+
+  const core = [
+    ['product_flavour', ai.productFlavour],
+    ['flavour_family', ai.flavourFamily],
+    ['flavour_profile', ai.flavourProfile],
+    ['formula_version', ai.formulaVersion],
+    ['grouped_profiles', ai.groupedProfiles],
+    ['sweetness', ai.sweetness],
+    ['sourness', ai.sourness]
+  ].filter(([,value]) => value !== undefined && value !== null && String(value).trim() !== '')
+   .map(([key,value]) => ({
+      namespace:'core',
+      key,
+      type:'single_line_text_field',
+      value:String(value).trim(),
+      source:'explicit-ai-refresh',
+      confidence:0.9
+   }));
+
+  const candidate = normaliseDraftProduct({
+    ...base,
+    title: cleanText(ai.title || base.title, 220),
+    descriptionHtml: String(ai.descriptionHtml || base.descriptionHtml || '').slice(0,20000),
+    vendor: exactSiteValue(ai.vendor || base.vendor, metadata.vendors || [], 'vendor'),
+    productType: exactSiteValue(ai.productType || base.productType, metadata.productTypes || [], 'productType'),
+    productCategory: cleanText(ai.productCategory || base.productCategory || '', 180),
+    themeTemplate: cleanText(ai.themeTemplate || base.themeTemplate || '', 80),
+    handle: slugify(ai.handle || base.handle || ai.title || base.title),
+    collections: filterToExistingCollections(
+      [...parseTags(base.collections || []), ...parseTags(ai.collections || [])],
+      metadata.collections || [],
+      base.collections || []
+    ),
+    recommendedTags: filterToExistingTags(
+      [...parseTags(base.recommendedTags || []), ...parseTags(ai.recommendedTags || [])],
+      metadata.tags || []
+    ),
+    seo: {
+      title: cleanText(ai.seoTitle || base.seo?.title || '', 70),
+      description: cleanText(ai.seoDescription || base.seo?.description || '', 155).replace(/[,:;\s]+$/, '.')
+    },
+    metafields: normaliseCoreGaugeMetafields(
+      filterMetafieldsForProductKind(
+        mergeMetafields(base.metafields || [], core),
+        { ...base, productType: ai.productType || base.productType, title: ai.title || base.title }
+      )
+    )
+  });
+
+  const next = applySettingsToDraft(candidate, metadata.settings || {});
+  return normaliseDraftProduct({
+    ...next,
+    enrichment: {
+      ...(base.enrichment || {}),
+      aiRefresh: {
+        ranAt:new Date().toISOString(),
+        model,
+        oneShot:true,
+        notes:cleanText(ai.notes || '',600)
+      }
+    }
+  });
+}
+
+module.exports = { getProductImportMetadata, suggestProductProfile, enrichProductDraft, aiRefreshProductDraft, CORE_PROFILE_METAFIELDS, isLikelyDrinkProduct, isClearlyNonDrinkProduct, filterMetafieldsForProductKind };

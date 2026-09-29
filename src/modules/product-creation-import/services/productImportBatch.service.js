@@ -2,7 +2,7 @@ const ProductImportBatch = require('../productImportBatch.model');
 const { extractProductFromUrl } = require('../extractors/urlProductExtractor');
 const { extractProductsFromPhotos } = require('../extractors/photoProductExtractor');
 const { normaliseDraftProduct } = require('./normaliseProduct.service');
-const { enrichProductDraft, getProductImportMetadata } = require('./productEnrichment.service');
+const { enrichProductDraft, getProductImportMetadata, aiRefreshProductDraft } = require('./productEnrichment.service');
 const { applyCatalogueRules, completeness } = require('./productCompleteness.service');
 const { createShopifyProductFromDraft } = require('./shopifyProduct.service');
 const { scoreAndSelectProductImages } = require('./imageCandidateScoring.service');
@@ -480,13 +480,121 @@ function byPageImageOrder(images = []) {
   return [...(images || [])].sort((a, b) => (a.originalIndex ?? 9999) - (b.originalIndex ?? 9999));
 }
 
+function duplicateNorm(value=''){
+  return cleanText(value,240).toLowerCase()
+    .replace(/\bg\s*fuel\b/g,'gfuel')
+    .replace(/\b2\.0\b/g,'')
+    .replace(/\b(new|improved|formula|energy|hydration|powder|tub|drink|40|servings?|uk|stock)\b/g,' ')
+    .replace(/[^a-z0-9]+/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+function duplicateTokens(value=''){
+  return new Set(duplicateNorm(value).split(' ').filter(x=>x.length>1));
+}
+
+function tokenSimilarity(a='',b=''){
+  const aa=duplicateTokens(a),bb=duplicateTokens(b);
+  if(!aa.size||!bb.size)return 0;
+  let hit=0;
+  aa.forEach(x=>{if(bb.has(x))hit+=1;});
+  return hit/Math.max(aa.size,bb.size);
+}
+
+function imageFingerprint(value=''){
+  try{
+    const url=new URL(String(value||''));
+    return decodeURIComponent(url.pathname.split('/').pop()||'')
+      .toLowerCase()
+      .replace(/\.(jpg|jpeg|png|webp|gif)$/i,'')
+      .replace(/[_-](pico|icon|thumb|small|compact|medium|large|grande|master|\d+x\d*|\d+x)$/i,'')
+      .replace(/[^a-z0-9]+/g,'');
+  }catch(_){
+    return String(value||'').toLowerCase().split('?')[0].split('/').pop()?.replace(/[^a-z0-9]+/g,'')||'';
+  }
+}
+
+function draftImageFingerprints(draft={}){
+  return new Set((draft.images||[]).map(img=>imageFingerprint(typeof img==='string'?img:img?.src)).filter(x=>x.length>8));
+}
+
+function candidateImageHit(candidate={},wanted=new Set()){
+  if(!wanted.size)return false;
+  return [candidate.image,...(candidate.images||[])].map(imageFingerprint).filter(Boolean).some(value=>wanted.has(value));
+}
+
 async function detectExistingProduct({ shopDomain, draft }) {
-  const title = cleanText(draft.title || '', 180); if (!title) return null;
-  const candidates = await searchShopifyProducts({ shopDomain, q: title, first: 8 }).catch(() => []);
-  const norm = (v='') => cleanText(v,220).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
-  const titleKey=norm(title), handleKey=norm(draft.handle||''), vendorKey=norm(draft.vendor||'');
-  const exact=candidates.find(product => (norm(product.title)===titleKey || (handleKey && norm(product.handle)===handleKey)) && (!vendorKey || !product.vendor || norm(product.vendor)===vendorKey));
-  return exact ? { exact:true, confidence:1, id:exact.id, title:exact.title, handle:exact.handle, image:exact.image||'', reason:'Exact title/handle match already exists in Shopify.' } : null;
+  const title=cleanText(draft.title||'',180);
+  const sku=cleanText(draft.sku||'',120);
+  const barcode=cleanText(draft.barcode||'',120);
+  const handle=cleanText(draft.handle||'',180);
+  const vendor=duplicateNorm(draft.vendor||'');
+  const wantedImages=draftImageFingerprints(draft);
+  const queries=[barcode,sku,title,handle].filter(Boolean);
+  const byKey=new Map();
+
+  for(const q of queries.slice(0,4)){
+    const rows=await searchShopifyProducts({shopDomain,q,first:12}).catch(()=>[]);
+    for(const row of rows){
+      const key=row.id||row.legacyResourceId||row.handle||row.title;
+      if(key&&!byKey.has(key))byKey.set(key,row);
+    }
+  }
+
+  let best=null;
+  for(const product of byKey.values()){
+    const signals=[];
+    let score=0;
+
+    if(barcode&&product.barcode&&barcode.toLowerCase()===String(product.barcode).toLowerCase()){
+      score=1;signals.push('barcode');
+    }
+    if(sku&&product.sku&&sku.toLowerCase()===String(product.sku).toLowerCase()){
+      score=Math.max(score,.995);signals.push('sku');
+    }
+    if(handle&&product.handle&&duplicateNorm(handle)===duplicateNorm(product.handle)){
+      score=Math.max(score,.985);signals.push('handle');
+    }
+
+    const titleExact=title&&duplicateNorm(title)===duplicateNorm(product.title||'');
+    const titleScore=tokenSimilarity(title,product.title||'');
+    const vendorHit=!vendor||!product.vendor||vendor===duplicateNorm(product.vendor||'');
+    const imageHit=candidateImageHit(product,wantedImages);
+
+    if(titleExact&&vendorHit){score=Math.max(score,.98);signals.push('title','vendor');}
+    else if(titleExact){score=Math.max(score,.94);signals.push('title');}
+
+    if(vendorHit&&titleScore>=.84){
+      score=Math.max(score,.94);signals.push('near-title','vendor');
+    }else if(titleScore>=.93){
+      score=Math.max(score,.91);signals.push('near-title');
+    }
+
+    if(imageHit&&vendorHit&&titleScore>=.45){
+      score=Math.max(score,.96);signals.push('image','vendor','title');
+    }else if(imageHit&&titleScore>=.7){
+      score=Math.max(score,.93);signals.push('image','title');
+    }
+
+    if(!best||score>best.score)best={product,score,signals:[...new Set(signals)]};
+  }
+
+  if(!best||best.score<.90)return null;
+  return {
+    exact:best.score>=.98,
+    confidence:Number(best.score.toFixed(3)),
+    id:best.product.id,
+    legacyResourceId:best.product.legacyResourceId||'',
+    title:best.product.title,
+    handle:best.product.handle,
+    vendor:best.product.vendor||'',
+    sku:best.product.sku||'',
+    barcode:best.product.barcode||'',
+    image:best.product.image||'',
+    signals:best.signals,
+    reason:`Shopify match (${Math.round(best.score*100)}%): ${best.signals.join(' + ')}.`
+  };
 }
 
 async function enrichItem({ shopDomain, item, defaults, useAi = false }) {
@@ -698,6 +806,50 @@ async function updateBatchItem({ shopDomain, batchId, itemId, patch = {} }) {
   return { batch, item };
 }
 
+async function aiRefreshBatchItem({ shopDomain, batchId, itemId }) {
+  const { batch } = await getBatch({ shopDomain, batchId });
+  const item = batch.items.find((candidate) => candidate.itemId === itemId);
+  if (!item) {
+    const error = new Error('Batch item not found.');
+    error.status = 404;
+    throw error;
+  }
+
+  const draft = await aiRefreshProductDraft({ shopDomain, draft: item.draft || {} });
+  const existingProduct = await detectExistingProduct({ shopDomain, draft });
+
+  item.draft = draft;
+  item.title = draft.title;
+  item.vendor = draft.vendor;
+  item.productType = draft.productType;
+  item.productCategory = draft.productCategory;
+  item.templateSuffix = draft.themeTemplate || '';
+  item.metafieldPlan = normaliseMetafields(draft.metafields || []);
+  item.suggestions = { ...(item.suggestions || {}), ...(draft.suggestions || {}) };
+
+  if(existingProduct){
+    item.suggestions.existingProduct=existingProduct;
+    item.status='skipped';
+    item.approvalStatus='rejected';
+    item.error='';
+  }else{
+    if(item.suggestions?.existingProduct) delete item.suggestions.existingProduct;
+    item.status='needs_review';
+    item.approvalStatus='pending';
+    item.error='';
+  }
+
+  const metadata=await getProductImportMetadata({shopDomain}).catch(()=>({}));
+  item.completeness=completeness({draft:item.draft||{},item,metadata});
+  item.validation=validateDraft(item.draft||{},item);
+  item.updatedAt=new Date();
+  refreshBatchSummary(batch);
+  await batch.save();
+
+  return { batch, item, existingProduct, aiCalls:1 };
+}
+
+
 async function setBatchItemApproval({ shopDomain, batchId, itemId, approvalStatus = 'approved' }) {
   const { batch } = await getBatch({ shopDomain, batchId });
   const item = batch.items.find((candidate) => candidate.itemId === itemId);
@@ -782,6 +934,7 @@ module.exports = {
   scanBatch,
   enrichBatch,
   updateBatchItem,
+  aiRefreshBatchItem,
   setBatchItemApproval,
   createShopifyDraftsForBatch,
 };

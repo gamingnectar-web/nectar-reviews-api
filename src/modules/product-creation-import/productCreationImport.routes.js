@@ -31,6 +31,7 @@ const {
   scanBatch,
   enrichBatch,
   updateBatchItem,
+  aiRefreshBatchItem,
   setBatchItemApproval,
   createShopifyDraftsForBatch,
 } = require('./services/productImportBatch.service');
@@ -205,6 +206,15 @@ router.post('/batches/:batchId/enrich', asyncRoute(async (req, res) => {
 
 router.patch('/batches/:batchId/items/:itemId', asyncRoute(async (req, res) => {
   const result = await updateBatchItem({ shopDomain: shopDomainFromReq(req), batchId: req.params.batchId, itemId: req.params.itemId, patch: req.body || {} });
+  res.json(result);
+}));
+
+router.post('/batches/:batchId/items/:itemId/ai-refresh', asyncRoute(async (req, res) => {
+  const result = await aiRefreshBatchItem({
+    shopDomain: shopDomainFromReq(req),
+    batchId: req.params.batchId,
+    itemId: req.params.itemId
+  });
   res.json(result);
 }));
 

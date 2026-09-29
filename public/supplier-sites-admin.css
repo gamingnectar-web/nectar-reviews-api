@@ -63,3 +63,16 @@ body.supplier-modal-open{overflow:hidden}
 .supplier-product-status-dot.exists{background:#22c55e}
 .supplier-product-status-dot.review{background:#f59e0b}
 .supplier-product-status-dot.error{background:#ef4444}
+
+
+.supplier-modal-head-actions{display:flex;align-items:center;gap:8px}
+.supplier-ai-refresh{
+  width:42px;height:42px;border:1px solid #d9e0ea;border-radius:12px;background:#fff;
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease
+}
+.supplier-ai-refresh:hover{transform:translateY(-1px);border-color:#b8c3d3;box-shadow:0 5px 14px rgba(15,23,42,.08)}
+.supplier-ai-refresh svg{width:20px;height:20px;fill:currentColor}
+.supplier-ai-refresh:disabled{opacity:.55;cursor:wait}
+.supplier-ai-refresh.is-running svg{animation:supplier-ai-spin .9s linear infinite}
+@keyframes supplier-ai-spin{to{transform:rotate(360deg)}}

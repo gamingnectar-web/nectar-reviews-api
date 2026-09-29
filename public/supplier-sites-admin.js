@@ -160,14 +160,19 @@
     const existing = Boolean(
       item?.shopifyProduct?.id ||
       item?.status === 'created' ||
-      item?.status === 'skipped' ||
+      item?.suggestions?.existingProduct?.id ||
       item?.suggestions?.existingProduct?.exact ||
+      item?.draft?.suggestions?.existingProduct?.id ||
       item?.draft?.suggestions?.existingProduct?.exact
     );
-    const hasError = item?.status === 'failed' || Boolean(String(item?.error || '').trim());
-
-    if(hasError) return { cls:'error', label:'Error present' };
     if(existing) return { cls:'exists', label:'Exists in Shopify' };
+
+    const hasError = item?.status === 'failed' || Boolean(
+      String(item?.error || '').trim() &&
+      !/already exists|skipped duplicate|exists in shopify/i.test(String(item?.error || ''))
+    );
+    if(hasError) return { cls:'error', label:'Error present' };
+
     return { cls:'review', label:'Review required' };
   }
 
@@ -436,7 +441,12 @@
         <div class="supplier-modal-panel">
           <div class="supplier-modal-head">
             <div><span class="pci-muted">SUPPLIER PRODUCT DRAFT</span><h3 id="spm-heading">Product</h3></div>
-            <button type="button" class="secondary-btn" data-supplier-close>Close</button>
+            <div class="supplier-modal-head-actions">
+              <button id="spm-ai-refresh" type="button" class="supplier-ai-refresh" title="AI refresh — one product, one AI call" aria-label="AI refresh this product">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.1A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35Z"></path></svg>
+              </button>
+              <button type="button" class="secondary-btn" data-supplier-close>Close</button>
+            </div>
           </div>
           <div id="spm-status" class="pci-status" hidden></div>
           <div class="supplier-modal-grid">
@@ -490,6 +500,7 @@
     document.querySelectorAll('[data-supplier-close]').forEach(el=>el.addEventListener('click',closeItemModal));
     $('spm-save').addEventListener('click',saveItemModal);
     $('spm-enrich').addEventListener('click',enrichItemModal);
+    $('spm-ai-refresh').addEventListener('click',aiRefreshItemModal);
     $('spm-create').addEventListener('click',createItemShopifyDraft);
   }
 
@@ -583,6 +594,50 @@
     }catch(error){
       modalStatus(error.message||'Could not save product draft.','err');
       throw error;
+    }
+  }
+
+  async function aiRefreshItemModal(){
+    const id=state.activeItem?.itemId;
+    if(!id||!state.activeBatch)return;
+
+    const btn=$('spm-ai-refresh');
+    if(btn?.disabled)return;
+
+    try{
+      if(btn){
+        btn.disabled=true;
+        btn.classList.add('is-running');
+      }
+
+      await saveItemModal();
+      modalStatus('AI refreshing this product once against your Shopify catalogue…','warn');
+
+      const data=await api(`/batches/${state.activeBatch._id}/items/${id}/ai-refresh`,{
+        method:'POST',
+        body:JSON.stringify({})
+      });
+
+      state.activeBatch=data.batch;
+      state.activeItem=data.item;
+      renderProducts();
+      openItemModal(id);
+
+      const match=data.existingProduct;
+      modalStatus(
+        match
+          ? `AI refresh complete. Shopify match found: ${match.title} (${Math.round(Number(match.confidence||0)*100)}%).`
+          : 'AI refresh complete. One AI call used; review the updated fields before creating the Shopify draft.',
+        'ok'
+      );
+    }catch(error){
+      modalStatus(error.message||'AI refresh failed. No automatic retry will occur.','err');
+    }finally{
+      const active=$('spm-ai-refresh');
+      if(active){
+        active.disabled=false;
+        active.classList.remove('is-running');
+      }
     }
   }
 
