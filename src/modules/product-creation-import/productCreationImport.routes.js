@@ -31,6 +31,7 @@ const {
   scanBatch,
   enrichBatch,
   updateBatchItem,
+  getBatchItemFieldMappings,
   aiRefreshBatchItem,
   setBatchItemApproval,
   createShopifyDraftsForBatch,
@@ -206,6 +207,16 @@ router.post('/batches/:batchId/enrich', asyncRoute(async (req, res) => {
 
 router.patch('/batches/:batchId/items/:itemId', asyncRoute(async (req, res) => {
   const result = await updateBatchItem({ shopDomain: shopDomainFromReq(req), batchId: req.params.batchId, itemId: req.params.itemId, patch: req.body || {} });
+  res.json(result);
+}));
+
+router.get('/batches/:batchId/items/:itemId/field-mappings', asyncRoute(async (req, res) => {
+  const result = await getBatchItemFieldMappings({
+    shopDomain: shopDomainFromReq(req),
+    batchId: req.params.batchId,
+    itemId: req.params.itemId,
+    field: req.query.field || '',
+  });
   res.json(result);
 }));
 

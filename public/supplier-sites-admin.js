@@ -477,11 +477,18 @@
               </section>
               <section class="pci-editor-card">
                 <h4>Organisation</h4>
-                <label class="pci-label">Vendor</label><input id="spm-vendor" class="pci-input">
-                <label class="pci-label">Product type</label><input id="spm-type" class="pci-input">
-                <label class="pci-label">Product category</label><input id="spm-category" class="pci-input">
-                <label class="pci-label">Flavour</label><input id="spm-flavour" class="pci-input">
-                <label class="pci-label">Product line / formula</label><input id="spm-line" class="pci-input">
+                <label class="pci-label">Vendor</label><div class="supplier-field-map-row"><input id="spm-vendor" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="vendor" title="Show Shopify field mapping">↗</button></div>
+                <label class="pci-label">Product type</label><div class="supplier-field-map-row"><input id="spm-type" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="productType" title="Show Shopify field mapping">↗</button></div>
+                <label class="pci-label">Product category</label><div class="supplier-field-map-row"><input id="spm-category" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="productCategory" title="Show Shopify field mapping">↗</button></div>
+                <label class="pci-label">Flavour</label><div class="supplier-field-map-row"><input id="spm-flavour" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="flavour" title="Show metafield matches">↗</button></div>
+                <label class="pci-label">Product line / formula</label><div class="supplier-field-map-row"><input id="spm-line" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="formula" title="Show metafield matches">↗</button></div>
+              </section>
+              <section id="spm-map-panel" class="pci-editor-card supplier-map-panel" hidden>
+                <div class="pci-editor-card-head">
+                  <h4 id="spm-map-title">Field mapping</h4>
+                  <button id="spm-map-close" type="button" class="supplier-map-close" aria-label="Close mapping panel">×</button>
+                </div>
+                <div id="spm-map-content" class="supplier-map-content"></div>
               </section>
               <section class="pci-editor-card">
                 <h4>Source</h4>
@@ -502,6 +509,45 @@
     $('spm-enrich').addEventListener('click',enrichItemModal);
     $('spm-ai-refresh').addEventListener('click',aiRefreshItemModal);
     $('spm-create').addEventListener('click',createItemShopifyDraft);
+    document.querySelectorAll('#supplier-product-modal [data-map-field]').forEach(btn=>{
+      btn.addEventListener('click',()=>showFieldMapping(btn.dataset.mapField));
+    });
+    $('spm-map-close')?.addEventListener('click',()=>{$('spm-map-panel').hidden=true;});
+  }
+
+  async function showFieldMapping(field){
+    if(!state.activeBatch||!state.activeItem)return;
+    const panel=$('spm-map-panel');
+    const content=$('spm-map-content');
+    const title=$('spm-map-title');
+    if(!panel||!content||!title)return;
+    const names={vendor:'Vendor',productType:'Product type',productCategory:'Product category',flavour:'Flavour',formula:'Product line / formula'};
+    panel.hidden=false;
+    title.textContent=`${names[field]||field} mapping`;
+    content.innerHTML='<div class="pci-muted">Checking Shopify definitions…</div>';
+    try{
+      await saveItemModal();
+      const data=await api(`/batches/${state.activeBatch._id}/items/${state.activeItem.itemId}/field-mappings?field=${encodeURIComponent(field)}`);
+      const matches=data.matches||[];
+      if(!matches.length){
+        content.innerHTML=`<div class="supplier-map-empty">No Shopify destination is currently matched for <strong>${esc(data.value||'this value')}</strong>.</div>`;
+        return;
+      }
+      content.innerHTML=matches.map(match=>`
+        <div class="supplier-map-match">
+          <div class="supplier-map-match-head">
+            <strong>${esc(match.label||match.target)}</strong>
+            ${match.canonical?'<span class="supplier-map-badge">Primary</span>':''}
+          </div>
+          <code>${esc(match.target||'')}</code>
+          ${match.type?`<small>${esc(match.type)}</small>`:''}
+          ${match.note?`<p>${esc(match.note)}</p>`:''}
+          <div class="supplier-map-value">← ${esc(match.value??data.value??'')}</div>
+        </div>
+      `).join('');
+    }catch(error){
+      content.innerHTML=`<div class="supplier-map-empty error">${esc(error.message||'Could not load mapping.')}</div>`;
+    }
   }
 
   function modalStatus(message,kind=''){

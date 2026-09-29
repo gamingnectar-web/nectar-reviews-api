@@ -13,7 +13,7 @@ const { cleanText, cleanUrl, makeLineId, parseTags, normaliseMetafields, slugify
 const { markMerchantEdits, preserveLockedFields } = require('./fieldAuthority.service');
 const { applySupplierProfile, supplierDefaultsForUrl, profileForUrl } = require('./supplierProfile.service');
 const { applyBrandDirectoryProfile } = require('./brandDirectoryProfile.service');
-const { mapSupplierFactsToExistingMetafields } = require('./supplierFactMapper.service');
+const { mapSupplierFactsToExistingMetafields, applyOrganisationFieldMappings, organisationFieldMappingSummary } = require('./supplierFactMapper.service');
 const { discoverSiteProducts } = require('./siteCatalogDiscovery.service');
 const { searchShopifyProducts } = require('./shopifyProduct.service');
 
@@ -754,7 +754,8 @@ async function updateBatchItem({ shopDomain, batchId, itemId, patch = {} }) {
       ...patch.draft,
       seo: { ...(existingDraft.seo || {}), ...(patch.draft.seo || {}) },
     };
-    const draft = normaliseDraftProduct(applyCatalogueRules({ draft: mergedDraft, metadata }));
+    let draft = normaliseDraftProduct(applyCatalogueRules({ draft: mergedDraft, metadata }));
+    draft = normaliseDraftProduct(applyOrganisationFieldMappings(draft, metadata));
     item.draft = draft;
     if (draft.sourceUrl) item.sourceUrl = draft.sourceUrl;
     if (Array.isArray(patch.draft.metafields)) item.metafieldPlan = normaliseMetafields(patch.draft.metafields);
@@ -850,6 +851,44 @@ async function aiRefreshBatchItem({ shopDomain, batchId, itemId }) {
 }
 
 
+async function getBatchItemFieldMappings({ shopDomain, batchId, itemId, field = '' }) {
+  const { batch } = await getBatch({ shopDomain, batchId });
+  const item = batch.items.find((candidate) => candidate.itemId === itemId);
+  if (!item) {
+    const error = new Error('Batch item not found.');
+    error.status = 404;
+    throw error;
+  }
+
+  const metadata = await getProductImportMetadata({ shopDomain }).catch(() => ({}));
+  const draft = item.draft || {};
+  const direct = {
+    vendor: [{ kind:'shopify', label:'Shopify Vendor', target:'product.vendor', value:draft.vendor||'' }],
+    productType: [{ kind:'shopify', label:'Shopify Product Type', target:'product.product_type', value:draft.productType||'' }],
+    productCategory: [{ kind:'draft', label:'Draft Product Category', target:'draft.productCategory', value:draft.productCategory||'', note:'Stored in the import draft. Native Shopify taxonomy mapping is not currently written by createShopifyProductFromDraft.' }]
+  };
+
+  if (direct[field]) return { field, value: direct[field][0].value, matches: direct[field] };
+  if (field === 'flavour' || field === 'formula') {
+    const summary = organisationFieldMappingSummary({ field, draft, metadata });
+    return {
+      field,
+      value: summary.value,
+      matches: summary.matches.map(match => ({
+        kind:'metafield',
+        label:match.name,
+        target:match.compound,
+        type:match.type,
+        canonical:match.canonical,
+        score:match.score,
+        value:summary.value
+      }))
+    };
+  }
+  return { field, value:'', matches:[] };
+}
+
+
 async function setBatchItemApproval({ shopDomain, batchId, itemId, approvalStatus = 'approved' }) {
   const { batch } = await getBatch({ shopDomain, batchId });
   const item = batch.items.find((candidate) => candidate.itemId === itemId);
@@ -934,6 +973,7 @@ module.exports = {
   scanBatch,
   enrichBatch,
   updateBatchItem,
+  getBatchItemFieldMappings,
   aiRefreshBatchItem,
   setBatchItemApproval,
   createShopifyDraftsForBatch,
