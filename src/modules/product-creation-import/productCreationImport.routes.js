@@ -23,6 +23,7 @@ const {
   createBatch,
   createSiteImportBatch,
   listBatches,
+  listSiteImportBatches,
   analyseProductPhotos,
   getBatch,
   updateBatchDefaults,
@@ -113,6 +114,14 @@ router.post('/batches/site-import', asyncRoute(async (req, res) => {
 
 router.get('/batches', asyncRoute(async (req, res) => {
   const result = await listBatches({ shopDomain: shopDomainFromReq(req), limit: req.query.limit || 30 });
+  res.json(result);
+}));
+
+router.get('/batches/site-imports', asyncRoute(async (req, res) => {
+  const result = await listSiteImportBatches({
+    shopDomain: shopDomainFromReq(req),
+    limit: req.query.limit || 250,
+  });
   res.json(result);
 }));
 

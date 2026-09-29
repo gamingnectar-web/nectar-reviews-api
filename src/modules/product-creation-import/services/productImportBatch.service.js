@@ -412,6 +412,30 @@ async function listBatches({ shopDomain, limit = 30 }) {
   return { batches };
 }
 
+async function listSiteImportBatches({ shopDomain, limit = 250 }) {
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 250, 500));
+  const batches = await ProductImportBatch.find({
+    shopDomain,
+    'automation.siteImport': true,
+  })
+    .select({
+      name: 1,
+      supplierName: 1,
+      supplierUrl: 1,
+      status: 1,
+      summary: 1,
+      automation: 1,
+      'defaults.supplierUrl': 1,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    .sort({ updatedAt: -1, createdAt: -1 })
+    .limit(safeLimit)
+    .lean();
+
+  return { batches };
+}
+
 async function getBatch({ shopDomain, batchId }) {
   const batch = await ProductImportBatch.findOne({ _id: batchId, shopDomain });
   if (!batch) {
@@ -751,6 +775,7 @@ module.exports = {
   createSiteImportBatch,
   analyseProductPhotos,
   listBatches,
+  listSiteImportBatches,
   getBatch,
   updateBatchDefaults,
   addBatchItems,

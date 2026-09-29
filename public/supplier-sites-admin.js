@@ -156,6 +156,21 @@
     el.querySelectorAll('[data-id]').forEach(btn=>btn.onclick=()=>openBatch(btn.dataset.id));
   }
 
+  function productStatusDot(item){
+    const existing = Boolean(
+      item?.shopifyProduct?.id ||
+      item?.status === 'created' ||
+      item?.status === 'skipped' ||
+      item?.suggestions?.existingProduct?.exact ||
+      item?.draft?.suggestions?.existingProduct?.exact
+    );
+    const hasError = item?.status === 'failed' || Boolean(String(item?.error || '').trim());
+
+    if(hasError) return { cls:'error', label:'Error present' };
+    if(existing) return { cls:'exists', label:'Exists in Shopify' };
+    return { cls:'review', label:'Review required' };
+  }
+
   function renderProducts(){
     const batch=state.activeBatch;
     $('supplier-products-empty').hidden=!!batch;
@@ -179,13 +194,14 @@
       const line=getMeta(item,'core.formula_version')||item.nutrition?.productLine||d.productType||'—';
       const img=image(item);
       const ready=item.completeness?.ready===true||item.validation?.status==='ready';
+      const statusDot=productStatusDot(item);
       return `
         <button type="button" class="supplier-product-card" data-item-id="${esc(item.itemId)}">
+          <span class="supplier-product-status-dot ${statusDot.cls}" title="${esc(statusDot.label)}" aria-label="${esc(statusDot.label)}"></span>
           <div class="supplier-product-image">${img?`<img src="${esc(img)}" alt="">`:'No image'}</div>
           <div>
             <div class="supplier-product-head">
               <strong>${esc(d.title||item.title||'Untitled product')}</strong>
-              <span class="pci-pill ${item.status==='created'?'ok':item.status==='failed'?'err':ready?'ok':'warn'}">${esc(item.status||'queued')}</span>
             </div>
             <small>${esc(d.vendor||item.vendor||'')}</small>
             <div class="supplier-product-facts">
@@ -206,10 +222,9 @@
   async function loadSites(){
     if(!ensureUi()) return;
     try{
-      const data=await api('/batches?limit=100');
-      state.batches=(data.batches||[]).filter(b=>b.automation?.siteImport);
+      const data=await api('/batches/site-imports?limit=250');
+      state.batches=data.batches||[];
       renderSites();
-      if(state.activeBatch?._id) await openBatch(state.activeBatch._id);
     }catch(e){ setStatus(`Could not load supplier catalogues: ${esc(e.message)}`,'err'); }
   }
 
@@ -627,8 +642,11 @@
     $('supplier-products-filter')?.addEventListener('change',renderProducts);
   }
 
+  let booted=false;
   function boot(){
+    if(booted) return;
     if(!ensureUi()) return;
+    booted=true;
     loadSites();
   }
 
