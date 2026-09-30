@@ -503,6 +503,7 @@
           <div class="supplier-modal-actions">
             <button id="spm-enrich" type="button" class="secondary-btn">Enrich this product</button>
             <button id="spm-save" type="button" class="secondary-btn">Save MongoDB draft</button>
+            <button id="spm-override-create" type="button" class="supplier-override-btn" hidden>Override match & create draft</button>
             <button id="spm-create" type="button" class="primary-btn">Create Shopify Draft</button>
           </div>
         </div>
@@ -511,7 +512,8 @@
     $('spm-save').addEventListener('click',saveItemModal);
     $('spm-enrich').addEventListener('click',enrichItemModal);
     $('spm-ai-refresh').addEventListener('click',aiRefreshItemModal);
-    $('spm-create').addEventListener('click',createItemShopifyDraft);
+    $('spm-create').addEventListener('click',()=>createItemShopifyDraft(false));
+    $('spm-override-create').addEventListener('click',()=>createItemShopifyDraft(true));
     document.querySelectorAll('#supplier-product-modal [data-map-field]').forEach(btn=>{
       btn.addEventListener('click',()=>showFieldMapping(btn.dataset.mapField));
     });
@@ -585,6 +587,9 @@
     $('spm-source').href=item.sourceUrl||d.sourceUrl||'#';
     $('spm-source').textContent=item.sourceUrl||d.sourceUrl||'No source URL';
     $('spm-validation').textContent=`Status: ${item.status||'queued'} · ${(item.validation?.issues||[]).join(' · ')||item.error||'No validation message'}`;
+    const existingMatch=item?.suggestions?.existingProduct||item?.draft?.suggestions?.existingProduct;
+    const overrideBtn=$('spm-override-create');
+    if(overrideBtn) overrideBtn.hidden=!existingMatch || item.status==='created';
     $('spm-status').hidden=true;
     $('supplier-product-modal').hidden=false;
     document.body.classList.add('supplier-modal-open');
@@ -709,15 +714,20 @@
     }
   }
 
-  async function createItemShopifyDraft(){
+  async function createItemShopifyDraft(forceCreate=false){
     const id=state.activeItem?.itemId;
     if(!id)return;
     try{
       await saveItemModal();
-      modalStatus('Creating an unpublished Shopify draft product…','warn');
+      modalStatus(
+        forceCreate
+          ? 'Override confirmed — creating a NEW unpublished Shopify draft despite the similarity match…'
+          : 'Creating an unpublished Shopify draft product…',
+        'warn'
+      );
       const data=await api(`/batches/${state.activeBatch._id}/create-shopify-drafts`,{
         method:'POST',
-        body:JSON.stringify({itemIds:[id],approvedOnly:false})
+        body:JSON.stringify({itemIds:[id],approvedOnly:false,forceCreate:forceCreate===true})
       });
       const result=(data.results||[]).find(x=>x.itemId===id);
       if(!result) throw new Error('Shopify returned no result for this product.');
@@ -735,7 +745,9 @@
             : 'No draft created — Shopify duplicate protection skipped this product.',
           'warn'
         );
-        $('spm-validation').textContent='Status: exists in Shopify · No duplicate draft created';
+        $('spm-validation').textContent='Status: possible existing Shopify match · No duplicate draft created';
+        const overrideBtn=$('spm-override-create');
+        if(overrideBtn) overrideBtn.hidden=false;
         return;
       }
 
@@ -743,8 +755,17 @@
         throw new Error('Shopify draft creation could not be verified. No success state has been saved.');
       }
 
-      modalStatus(`Shopify draft created successfully: ${result.product.title||$('spm-title').value}.`,'ok');
-      $('spm-validation').textContent='Status: created in Shopify';
+      modalStatus(
+        forceCreate
+          ? `New Shopify draft created after duplicate override: ${result.product.title||$('spm-title').value}.`
+          : `Shopify draft created successfully: ${result.product.title||$('spm-title').value}.`,
+        'ok'
+      );
+      $('spm-validation').textContent=forceCreate
+        ? 'Status: created in Shopify · duplicate match manually overridden'
+        : 'Status: created in Shopify';
+      const overrideBtn=$('spm-override-create');
+      if(overrideBtn) overrideBtn.hidden=true;
     }catch(error){
       modalStatus(error.message||'Could not create Shopify draft.','err');
     }

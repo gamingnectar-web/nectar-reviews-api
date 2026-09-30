@@ -241,6 +241,7 @@ router.post('/batches/:batchId/create-shopify-drafts', asyncRoute(async (req, re
     batchId: req.params.batchId,
     itemIds: Array.isArray(body.itemIds) ? body.itemIds : [],
     approvedOnly: body.approvedOnly !== false,
+    forceCreate: body.forceCreate === true,
   });
   res.json(result);
 }));

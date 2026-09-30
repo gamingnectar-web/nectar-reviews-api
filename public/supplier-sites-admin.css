@@ -80,3 +80,17 @@ body.supplier-modal-open{overflow:hidden}
 /* Mapping controls: intentionally visible rather than icon-only */
 .supplier-field-map-row{grid-template-columns:minmax(0,1fr) 52px !important}
 .supplier-map-btn{width:52px !important;min-width:52px;font-size:11px !important;letter-spacing:.02em;text-transform:uppercase;font-weight:800 !important}
+
+.supplier-override-btn{
+  border:1px solid #f59e0b;
+  background:#fff7ed;
+  color:#9a3412;
+  border-radius:10px;
+  padding:10px 14px;
+  font-weight:800;
+  cursor:pointer;
+}
+.supplier-override-btn:hover{
+  background:#ffedd5;
+  border-color:#ea580c;
+}

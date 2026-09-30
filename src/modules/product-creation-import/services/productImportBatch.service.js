@@ -999,7 +999,7 @@ async function setBatchItemApproval({ shopDomain, batchId, itemId, approvalStatu
   return { batch, item };
 }
 
-async function createShopifyDraftsForBatch({ shopDomain, batchId, itemIds = [], approvedOnly = true }) {
+async function createShopifyDraftsForBatch({ shopDomain, batchId, itemIds = [], approvedOnly = true, forceCreate = false }) {
   const { batch } = await getBatch({ shopDomain, batchId });
   const wanted = new Set(asArray(itemIds));
   const items = batch.items.filter((item) => {
@@ -1015,7 +1015,7 @@ async function createShopifyDraftsForBatch({ shopDomain, batchId, itemIds = [], 
     try {
       item.status = 'creating';
       item.updatedAt = new Date();
-      const existing = await detectExistingProduct({ shopDomain, draft: item.draft });
+      const existing = forceCreate ? null : await detectExistingProduct({ shopDomain, draft: item.draft });
       if (existing) {
         item.status = 'skipped';
         item.approvalStatus = 'rejected';
@@ -1044,6 +1044,13 @@ async function createShopifyDraftsForBatch({ shopDomain, batchId, itemIds = [], 
       }
       item.shopifyProduct = product;
       item.status = 'created';
+      if (forceCreate) {
+        item.duplicateOverride = {
+          used: true,
+          usedAt: new Date(),
+          reason: 'merchant-confirmed-different-product'
+        };
+      }
       item.createdAt = new Date();
       item.error = '';
       item.suggestions = { ...(item.suggestions || {}) };
