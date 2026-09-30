@@ -1502,6 +1502,7 @@
               <button type="button" class="pci-import-launch-card" onclick="window.pciTab('batch')"><span class="pci-launch-number">02</span><strong>Import multiple products</strong><small>Bring in a known list of product URLs and review them together.</small><b>Open batch import →</b></button>
               <button type="button" class="pci-import-launch-card featured" onclick="window.openSupplierImportWorkspace?.('build')"><span class="pci-launch-number">03</span><strong>Build brand catalogue</strong><small>Give us a supplier or brand site once. Discover the range and identify what is genuinely new.</small><b>Build catalogue →</b></button>
               <button type="button" class="pci-import-launch-card" onclick="window.openSupplierImportWorkspace?.('catalogue')"><span class="pci-launch-number">04</span><strong>Brand product catalogue</strong><small>Open saved brand catalogues, cross-check Shopify and work only on missing products.</small><b>Review catalogues →</b></button>
+              <button type="button" class="pci-import-launch-card seo" onclick="window.openProductSeoAudit?.()"><span class="pci-launch-number">05</span><strong>SEO health</strong><small>Audit titles, SEO titles, meta descriptions and product URLs across Shopify.</small><b>Audit product SEO →</b></button>
             </div>
             <div class="pci-launch-tools"><span>More tools</span><div class="pci-tabs" role="tablist">
               <button type="button" class="pci-tab active" data-pci-tab="url" onclick="window.pciTab('url')">Single</button>
@@ -1518,6 +1519,14 @@
             <h3>Connection status</h3>
             <div id="pci-health" class="pci-status">Loading product import status…</div><datalist id="pci-tag-list"></datalist><datalist id="pci-vendor-list"></datalist><datalist id="pci-metafield-list"></datalist><datalist id="pci-collection-list"></datalist><datalist id="pci-template-list"></datalist>
           </div>
+        </div>
+
+        <div class="pci-card pci-pane pci-full-product-pane" id="pci-pane-seo-health">
+          <div class="pci-pane-head"><div><h3>SEO health</h3><p>A transparent catalogue audit for product title structure, SEO titles, meta descriptions and URL handles. This is an internal health score, not a Google-provided metric.</p></div><button class="secondary-btn" type="button" onclick="window.refreshProductSeoAudit?.()">Refresh audit</button></div>
+          <div id="pci-seo-status" class="pci-status">Open SEO Health to run an audit.</div>
+          <div id="pci-seo-summary" class="pci-seo-summary"></div>
+          <div class="pci-seo-toolbar"><input id="pci-seo-search" class="pci-input" placeholder="Search products, brands or handles"><select id="pci-seo-filter" class="pci-input"><option value="all">All products</option><option value="poor">Poor: under 60</option><option value="work">Needs work: under 80</option><option value="good">Good: 80+</option></select></div>
+          <div id="pci-seo-results" class="pci-seo-results"></div>
         </div>
 
         <div class="pci-card pci-pane pci-full-product-pane" id="pci-pane-batch">
@@ -1721,8 +1730,8 @@
 </main>
   </div>
 
-  <link rel="stylesheet" href="/product-creation-import.css?v=pci-v42">
-  <link rel="stylesheet" href="/supplier-sites-admin.css?v=supplier-sites-11">
+  <link rel="stylesheet" href="/product-creation-import.css?v=pci-v43">
+  <link rel="stylesheet" href="/supplier-sites-admin.css?v=supplier-sites-12">
   <script src="/admin.js?v=secure-6"></script>
   <script src="/admin-review-manager-enhancements.js?v=secure-6"></script>
   <script src="/nectar-score-notch-fix.js?v=secure-6"></script>
@@ -1733,7 +1742,7 @@
   <script src="/admin-review-migrations.js?v=review-migrations-v28" defer></script>
   <script src="/admin-help-drawer.js?v=context-help-v28" defer></script>
   <script src="/product-creation-import.js?v=pci-v41" defer></script>
-  <script src="/supplier-sites-admin.js?v=supplier-sites-11" defer></script>
+  <script src="/supplier-sites-admin.js?v=supplier-sites-12" defer></script>
   <script src="/reviews-launch-checklist.js?v=launch-v28" defer></script>
   <script src="/admin-product-context.js?v=context-nav-v28" defer></script>
   <script src="/admin-loyalty-foundation.js?v=secure-24"></script>
@@ -1748,5 +1757,6 @@
   <script src="/modules/marketing-intelligence/marketing-intelligence.js?v=cost-creative-2" defer></script>
   <script src="/modules/settings-center/settings-center.js?v=settings-centre-1" defer></script>
   <script src="/review-experience-studio.js?v=journey-studio-1" defer></script>
+<script src="/product-seo-audit.js?v=seo-health-1"></script>
 </body>
 </html>

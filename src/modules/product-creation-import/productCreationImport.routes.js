@@ -45,6 +45,8 @@ const {
   scrapeAndSaveBrand: scrapeAndSaveCatalogueBrand,
 } = require('./catalogue-audit/catalogueAudit.service');
 
+const { auditShopifySeo, suggestSeoWithAi } = require('./services/productSeoAudit.service');
+
 const router = express.Router();
 
 function shopDomainFromReq(req) {
@@ -54,6 +56,16 @@ function shopDomainFromReq(req) {
 function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 }
+
+router.get('/seo/audit', asyncRoute(async (req, res) => {
+  const result = await auditShopifySeo({ shopDomain: shopDomainFromReq(req), maxProducts: req.query.limit || 2500 });
+  res.json(result);
+}));
+
+router.post('/seo/suggest', asyncRoute(async (req, res) => {
+  const result = await suggestSeoWithAi({ shopDomain: shopDomainFromReq(req), product: req.body?.product || {} });
+  res.json(result);
+}));
 
 router.get('/health', asyncRoute(async (req, res) => {
   const shopDomain = shopDomainFromReq(req);

@@ -301,6 +301,8 @@ async function listShopifyProductsForMatching({ shopDomain, maxProducts = 2500 }
         productType:product.productType||'',
         tags:Array.isArray(product.tags)?product.tags:[],
         status:product.status||'',
+        seoTitle:product.seo?.title||'',
+        seoDescription:product.seo?.description||'',
         image:featured,
         images:(product.images?.nodes||[]).map(image=>image.url).filter(Boolean),
         variantId:firstVariant.id||'',

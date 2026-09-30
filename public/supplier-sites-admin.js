@@ -482,11 +482,11 @@
               </section>
               <section class="pci-editor-card">
                 <h4>Organisation</h4>
-                <label class="pci-label">Vendor</label><div class="supplier-field-map-row"><input id="spm-vendor" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="vendor" title="Show Shopify field mapping">Map</button></div>
-                <label class="pci-label">Product type</label><div class="supplier-field-map-row"><input id="spm-type" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="productType" title="Show Shopify field mapping">Map</button></div>
-                <label class="pci-label">Product category</label><div class="supplier-field-map-row"><input id="spm-category" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="productCategory" title="Show Shopify field mapping">Map</button></div>
-                <label class="pci-label">Flavour</label><div class="supplier-field-map-row"><input id="spm-flavour" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="flavour" title="Show metafield matches">Map</button></div>
-                <label class="pci-label">Product line / formula</label><div class="supplier-field-map-row"><input id="spm-line" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="formula" title="Show metafield matches">Map</button></div>
+                <label class="pci-label">Vendor</label><div class="supplier-field-map-row"><input id="spm-vendor" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="vendor" title="Show Shopify field mapping"><span class="supplier-map-state">?</span></button></div>
+                <label class="pci-label">Product type</label><div class="supplier-field-map-row"><input id="spm-type" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="productType" title="Show Shopify field mapping"><span class="supplier-map-state">?</span></button></div>
+                <label class="pci-label">Product category</label><div class="supplier-field-map-row"><input id="spm-category" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="productCategory" title="Show Shopify field mapping"><span class="supplier-map-state">?</span></button></div>
+                <label class="pci-label">Flavour</label><div class="supplier-field-map-row"><input id="spm-flavour" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="flavour" title="Show metafield matches"><span class="supplier-map-state">?</span></button></div>
+                <label class="pci-label">Product line / formula</label><div class="supplier-field-map-row"><input id="spm-line" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="formula" title="Show metafield matches"><span class="supplier-map-state">?</span></button></div>
               </section>
               <section id="spm-map-panel" class="pci-editor-card supplier-map-panel" hidden>
                 <div class="pci-editor-card-head">
@@ -520,6 +520,23 @@
     $('spm-map-close')?.addEventListener('click',()=>{$('spm-map-panel').hidden=true;});
   }
 
+  async function refreshMappingIndicators(){
+    if(!state.activeBatch||!state.activeItem)return;
+    const buttons=[...document.querySelectorAll('#supplier-product-modal [data-map-field]')];
+    await Promise.all(buttons.map(async btn=>{
+      try{
+        const field=btn.dataset.mapField;
+        const data=await api(`/batches/${state.activeBatch._id}/items/${state.activeItem.itemId}/field-mappings?field=${encodeURIComponent(field)}`);
+        const count=(data.matches||[]).length;
+        btn.classList.toggle('mapped',count>0);
+        btn.classList.toggle('unmapped',count===0);
+        const stateEl=btn.querySelector('.supplier-map-state');
+        if(stateEl)stateEl.textContent=count>0?'✓':'×';
+        btn.title=count>0?`${count} destination${count===1?'':'s'} mapped`:'Not mapped — click to map';
+      }catch(_){}
+    }));
+  }
+
   async function showFieldMapping(field){
     if(!state.activeBatch||!state.activeItem)return;
     const panel=$('spm-map-panel');
@@ -535,7 +552,8 @@
       const data=await api(`/batches/${state.activeBatch._id}/items/${state.activeItem.itemId}/field-mappings?field=${encodeURIComponent(field)}`);
       const matches=data.matches||[];
       if(!matches.length){
-        content.innerHTML=`<div class="supplier-map-empty">No Shopify destination is currently matched for <strong>${esc(data.value||'this value')}</strong>.</div>`;
+        content.innerHTML=`<div class="supplier-map-empty">No Shopify destination is currently matched for <strong>${esc(data.value||'this value')}</strong>.<div style="margin-top:10px"><button type="button" class="secondary-btn" id="spm-open-metafield-mapper">Map this field</button></div></div>`;
+        setTimeout(()=>$('spm-open-metafield-mapper')?.addEventListener('click',()=>{closeItemModal();window.pciTab?.('metafields');}),0);
         return;
       }
       content.innerHTML=matches.map(match=>`
@@ -598,6 +616,7 @@
     const existingMatch=item?.suggestions?.existingProduct||item?.draft?.suggestions?.existingProduct;
     if(existingMatch)showMatchWarning(existingMatch);
     $('supplier-product-modal').hidden=false;
+    refreshMappingIndicators();
     document.body.classList.add('supplier-modal-open');
   }
 
