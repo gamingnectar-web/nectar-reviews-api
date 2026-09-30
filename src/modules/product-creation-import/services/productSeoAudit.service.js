@@ -14,24 +14,47 @@ function scoreProduct(product={}, duplicates={}){
   const vendor=cleanText(product.vendor||'',120);
   const issues=[];
   const checks=[];
-  const add=(name,points,ok,note='')=>{ checks.push({name,points:ok?points:0,max:points,ok,note}); if(!ok&&note)issues.push(note); };
+  const titleNorm=norm(title);
+  const seoNorm=norm(seoTitle);
+  const firstUsefulTokens=titleNorm.split(' ').filter(Boolean).slice(0,2);
+  const titleRelevant=Boolean(seoTitle)&&firstUsefulTokens.every(token=>seoNorm.includes(token));
 
-  add('Product title',15,titleLooksUseful(title),'Product title is missing, unusually short or unusually long.');
-  add('SEO title present',10,Boolean(seoTitle),'SEO title is missing.');
-  add('SEO title length',10,seoTitle.length>=30&&seoTitle.length<=65,'SEO title is outside the working range of roughly 30–65 characters.');
-  add('SEO title relevance',10,Boolean(seoTitle)&&norm(seoTitle).includes(norm(title).split(' ').slice(0,2).join(' ')),'SEO title does not clearly reflect the product title.');
-  add('Meta description present',10,Boolean(meta),'Meta description is missing.');
-  add('Meta description length',10,meta.length>=110&&meta.length<=165,'Meta description is outside the working range of roughly 110–165 characters.');
-  add('Meta description specific',10,Boolean(meta)&&(!vendor||norm(meta).includes(norm(vendor)))&&words(meta).length>=12,'Meta description looks generic or too thin.');
-  add('URL handle',10,slugOkay(handle),'URL handle is missing, too long or untidy.');
-  add('URL relevance',5,Boolean(handle)&&norm(handle).split(' ').some(token=>norm(title).includes(token)),'URL handle does not appear closely related to the product title.');
-  add('Unique SEO title',5,!seoTitle||!duplicates.seoTitle,'SEO title duplicates another product.');
-  add('Unique meta description',5,!meta||!duplicates.meta,'Meta description duplicates another product.');
-  add('Unique URL',5,!handle||!duplicates.handle,'URL handle duplicates another product.');
+  const add=(name,max,ok,note='')=>{
+    checks.push({name,points:ok?max:0,max,ok,note});
+    if(!ok&&note)issues.push(note);
+  };
 
-  return { score:checks.reduce((sum,c)=>sum+c.points,0), checks, issues };
+  add('Product title',10,titleLooksUseful(title),
+    'Product title is missing, unusually short or unusually long.');
+  add('SEO title present',10,Boolean(seoTitle),
+    'SEO title is missing.');
+  add('SEO title display length',15,seoTitle.length>=25&&seoTitle.length<=70,
+    'SEO title is outside the preferred working range of roughly 25–70 characters.');
+  add('SEO title relevance',10,titleRelevant,
+    'SEO title does not clearly represent the product title.');
+  add('Meta description present',10,Boolean(meta),
+    'Meta description is missing.');
+  add('Meta description display length',15,meta.length>=80&&meta.length<=160,
+    'Meta description is outside the preferred working range of roughly 80–160 characters.');
+  add('Meta description specificity',10,
+    Boolean(meta)&&words(meta).length>=12&&
+    (titleNorm.split(' ').some(token=>token.length>3&&norm(meta).includes(token)) || (!vendor||norm(meta).includes(norm(vendor)))),
+    'Meta description looks too generic or too thin for this product.');
+  add('URL handle format',10,slugOkay(handle),
+    'URL handle is missing, too long or untidy.');
+  add('URL relevance',5,
+    Boolean(handle)&&norm(handle).split(' ').some(token=>token.length>2&&titleNorm.includes(token)),
+    'URL handle does not appear closely related to the product title.');
+  add('Unique SEO title',2,!seoTitle||!duplicates.seoTitle,
+    'SEO title duplicates another product.');
+  add('Unique meta description',2,!meta||!duplicates.meta,
+    'Meta description duplicates another product.');
+  add('Unique URL',1,!handle||!duplicates.handle,
+    'URL handle duplicates another product.');
+
+  const score=Math.min(100,checks.reduce((sum,c)=>sum+c.points,0));
+  return {score,checks,issues};
 }
-
 async function auditShopifySeo({shopDomain,maxProducts=2500}){
   const products=await listShopifyProductsForMatching({shopDomain,maxProducts});
   const seoTitleCounts=new Map(), metaCounts=new Map(), handleCounts=new Map();

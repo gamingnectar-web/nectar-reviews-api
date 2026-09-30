@@ -276,6 +276,7 @@ async function listShopifyProductsForMatching({ shopDomain, maxProducts = 2500 }
       pageInfo{hasNextPage endCursor}
       nodes{
         id legacyResourceId title handle vendor productType tags status
+        seo{title description}
         featuredMedia{preview{image{url}}}
         images(first:12){nodes{url}}
         variants(first:100){nodes{id legacyResourceId sku barcode price compareAtPrice inventoryQuantity inventoryItem{id legacyResourceId}}}
@@ -326,13 +327,18 @@ async function listShopifyProductsForMatching({ shopDomain, maxProducts = 2500 }
   }
 
   if(!products.length){
-    const data=await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products.json?limit=250&fields=id,title,handle,image,images,variants,tags,vendor,product_type,status`,{shopDomain});
+    const data=await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products.json?limit=250&fields=id,title,handle,image,images,variants,tags,vendor,product_type,status,metafields_global_title_tag,metafields_global_description_tag`,{shopDomain});
     for(const product of data?.products||[]){
-      products.push(restProductToCard(product,{
+      const card=restProductToCard(product,{
         status:product.status||'',
         skus:(product.variants||[]).map(v=>cleanText(v.sku||'',120)).filter(Boolean),
         barcodes:(product.variants||[]).map(v=>cleanText(v.barcode||'',120)).filter(Boolean),
-      }));
+      });
+      products.push({
+        ...card,
+        seoTitle:product.metafields_global_title_tag||'',
+        seoDescription:product.metafields_global_description_tag||'',
+      });
     }
   }
 

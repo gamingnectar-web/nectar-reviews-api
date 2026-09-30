@@ -524,6 +524,41 @@ function duplicateNorm(value=''){
     .trim();
 }
 
+function duplicateBaseTitle(value=''){
+  return strictDuplicateNorm(value)
+    .replace(/\b(shaker cup|shaker|energy drink powder|energy powder|powder tub|tub|collector s box|collector box|bundle|can pack|case|cans|can)\b/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+function duplicateVersionTokens(value=''){
+  return Array.from(String(value||'').matchAll(/\b(?:v(?:ersion)?\s*)?(\d+(?:\.\d+)?)\b/ig))
+    .map(match=>match[1])
+    .filter(token=>Number(token)>0);
+}
+
+function duplicateVersionConflict(a='',b=''){
+  const aa=duplicateVersionTokens(a);
+  const bb=duplicateVersionTokens(b);
+  if(!aa.length&&!bb.length)return false;
+  if(!aa.length||!bb.length)return true;
+  return aa.join('|')!==bb.join('|');
+}
+
+function compatibleProductType(a='',b=''){
+  const aa=duplicateNorm(a||'');
+  const bb=duplicateNorm(b||'');
+  if(!aa||!bb)return true;
+  if(aa===bb)return true;
+  const groups=[
+    ['shaker','shaker cup','cup'],
+    ['energy drink powder','energy powder','powder','tub'],
+    ['collector box','collectors box','bundle'],
+    ['hydration','hydration tub'],
+  ];
+  return groups.some(group=>group.some(x=>aa.includes(x))&&group.some(x=>bb.includes(x)));
+}
+
 function duplicateTokens(value=''){
   return new Set(duplicateNorm(value).split(' ').filter(x=>x.length>1));
 }
@@ -563,21 +598,16 @@ async function detectExistingProduct({ shopDomain, draft }) {
   const sku=cleanText(draft.sku||'',120);
   const barcode=cleanText(draft.barcode||'',120);
   const handle=cleanText(draft.handle||'',180);
-  const vendor=duplicateNorm(draft.vendor||'');
-  const wantedImages=draftImageFingerprints(draft);
   let sourceHandle='';
   try{
     sourceHandle=new URL(draft.sourceUrl||'').pathname.split('/products/')[1]?.split('/')[0]||'';
   }catch(_){}
 
   const simplerTitle=cleanText(title
-    .replace(/\b2\.0\b/ig,' ')
     .replace(/\b(new|improved|energy|formula|powder|tub|drink|40 servings?)\b/ig,' ')
     .replace(/\s+/g,' '),180);
 
-  const queries=Array.from(new Set([
-    barcode,sku,handle,sourceHandle,title,simplerTitle
-  ].filter(Boolean)));
+  const queries=Array.from(new Set([barcode,sku,handle,sourceHandle,title,simplerTitle].filter(Boolean)));
   const byKey=new Map();
 
   for(const q of queries.slice(0,6)){
@@ -588,52 +618,85 @@ async function detectExistingProduct({ shopDomain, draft }) {
     }
   }
 
+  return matchDraftAgainstCatalogue(draft,[...byKey.values()]);
+}
+
+function matchDraftAgainstCatalogue(draft={},catalogue=[]){
+  const title=cleanText(draft.title||'',180);
+  const sku=cleanText(draft.sku||'',120).toLowerCase();
+  const barcode=cleanText(draft.barcode||'',120).toLowerCase();
+  const handle=cleanText(draft.handle||'',180);
+  const vendor=duplicateNorm(draft.vendor||'');
+  const wantedImages=draftImageFingerprints(draft);
+  const draftType=cleanText(draft.productType||'',120);
   let best=null;
-  for(const product of byKey.values()){
+
+  for(const product of catalogue||[]){
     const signals=[];
     let score=0;
 
-    if(barcode&&product.barcode&&barcode.toLowerCase()===String(product.barcode).toLowerCase()){
-      score=1;signals.push('barcode');
-    }
-    if(sku&&product.sku&&sku.toLowerCase()===String(product.sku).toLowerCase()){
-      score=Math.max(score,.995);signals.push('sku');
-    }
-    if(handle&&product.handle&&duplicateNorm(handle)===duplicateNorm(product.handle)){
-      score=Math.max(score,.985);signals.push('handle');
-    }
+    const skus=[product.sku,...(product.skus||[])].filter(Boolean).map(x=>String(x).toLowerCase());
+    const barcodes=[product.barcode,...(product.barcodes||[])].filter(Boolean).map(x=>String(x).toLowerCase());
 
-    const titleExact=title&&duplicateNorm(title)===duplicateNorm(product.title||'');
-    const titleScore=tokenSimilarity(title,product.title||'');
+    const skuHit=Boolean(sku&&skus.includes(sku));
+    const barcodeHit=Boolean(barcode&&barcodes.includes(barcode));
+    const handleHit=Boolean(handle&&product.handle&&duplicateNorm(handle)===duplicateNorm(product.handle));
     const vendorHit=!vendor||!product.vendor||vendor===duplicateNorm(product.vendor||'');
+    const strictTitleMatch=Boolean(strictDuplicateNorm(title)&&strictDuplicateNorm(title)===strictDuplicateNorm(product.title||''));
+    const baseTitleMatch=Boolean(duplicateBaseTitle(title)&&duplicateBaseTitle(title)===duplicateBaseTitle(product.title||''));
+    const titleScore=tokenSimilarity(title,product.title||'');
     const imageHit=candidateImageHit(product,wantedImages);
+    const versionConflict=duplicateVersionConflict(title,product.title||'');
+    const typeHit=compatibleProductType(draftType,product.productType||'');
 
-    if(titleExact&&vendorHit){score=Math.max(score,.98);signals.push('title','vendor');}
-    else if(titleExact){score=Math.max(score,.94);signals.push('title');}
+    if(barcodeHit){score=1;signals.push('barcode');}
+    if(skuHit){score=Math.max(score,.995);signals.push('sku');}
+    if(handleHit){score=Math.max(score,.985);signals.push('handle');}
 
-    if(vendorHit&&titleScore>=.84){
+    if(strictTitleMatch&&vendorHit){
+      score=Math.max(score,.99);signals.push('strict-title','vendor');
+    }else if(baseTitleMatch&&vendorHit){
+      score=Math.max(score,.965);signals.push('base-title','vendor');
+    }else if(titleScore>=.90&&vendorHit){
       score=Math.max(score,.94);signals.push('near-title','vendor');
-    }else if(titleScore>=.93){
-      score=Math.max(score,.91);signals.push('near-title');
     }
 
-    if(imageHit&&vendorHit&&titleScore>=.45){
-      score=Math.max(score,.96);signals.push('image','vendor','title');
-    }else if(imageHit&&titleScore>=.7){
-      score=Math.max(score,.93);signals.push('image','title');
+    if(imageHit&&vendorHit&&titleScore>=.40){
+      score=Math.max(score,.975);signals.push('image','vendor');
+    }
+    if(typeHit&&vendorHit&&(baseTitleMatch||titleScore>=.75)){
+      score=Math.max(score,.955);signals.push('product-type');
     }
 
-    if(!best||score>best.score)best={product,score,signals:[...new Set(signals)]};
+    const hardIdentifier=barcodeHit||skuHit||handleHit;
+    const corroboratedSameProduct=
+      !versionConflict &&
+      vendorHit &&
+      (
+        strictTitleMatch ||
+        (baseTitleMatch&&(imageHit||typeHit)) ||
+        (imageHit&&typeHit&&titleScore>=.65)
+      );
+
+    const confirmed=Boolean(hardIdentifier||corroboratedSameProduct);
+
+    if(!best||score>best.score){
+      best={
+        product,
+        score,
+        confirmed,
+        signals:[...new Set(signals)],
+        versionConflict,
+      };
+    }
   }
 
   if(!best||best.score<.90)return null;
-  const strictTitleMatch=strictDuplicateNorm(title)&&strictDuplicateNorm(title)===strictDuplicateNorm(best.product.title||'');
-  const strongIdentifier=best.signals.some(signal=>['barcode','sku','handle'].includes(signal));
-  const confirmed=Boolean(strongIdentifier||(strictTitleMatch&&best.signals.includes('vendor')));
+
   return {
-    exact:confirmed,
-    confirmed,
-    matchLevel:confirmed?'confirmed':'possible',
+    exact:best.confirmed,
+    confirmed:best.confirmed,
+    matchLevel:best.confirmed?'confirmed':'possible',
     confidence:Number(best.score.toFixed(3)),
     id:best.product.id,
     legacyResourceId:best.product.legacyResourceId||'',
@@ -644,39 +707,9 @@ async function detectExistingProduct({ shopDomain, draft }) {
     barcode:best.product.barcode||'',
     image:best.product.image||'',
     signals:best.signals,
-    reason:`Shopify ${confirmed?'confirmed':'possible'} match (${Math.round(best.score*100)}%): ${best.signals.join(' + ')}.`
+    versionConflict:best.versionConflict,
+    reason:`Shopify ${best.confirmed?'confirmed':'possible'} match (${Math.round(best.score*100)}%): ${best.signals.join(' + ')}${best.versionConflict?' · version differs':''}.`
   };
-}
-
-function matchDraftAgainstCatalogue(draft={},catalogue=[]){
-  const title=cleanText(draft.title||'',180);
-  const sku=cleanText(draft.sku||'',120).toLowerCase();
-  const barcode=cleanText(draft.barcode||'',120).toLowerCase();
-  const handle=cleanText(draft.handle||'',180);
-  const vendor=duplicateNorm(draft.vendor||'');
-  const wantedImages=draftImageFingerprints(draft);
-  let best=null;
-  for(const product of catalogue||[]){
-    const signals=[]; let score=0;
-    const skus=[product.sku,...(product.skus||[])].filter(Boolean).map(x=>String(x).toLowerCase());
-    const barcodes=[product.barcode,...(product.barcodes||[])].filter(Boolean).map(x=>String(x).toLowerCase());
-    if(barcode&&barcodes.includes(barcode)){score=1;signals.push('barcode');}
-    if(sku&&skus.includes(sku)){score=Math.max(score,.995);signals.push('sku');}
-    if(handle&&product.handle&&duplicateNorm(handle)===duplicateNorm(product.handle)){score=Math.max(score,.985);signals.push('handle');}
-    const strictTitleMatch=strictDuplicateNorm(title)&&strictDuplicateNorm(title)===strictDuplicateNorm(product.title||'');
-    const looseTitleMatch=title&&duplicateNorm(title)===duplicateNorm(product.title||'');
-    const titleScore=tokenSimilarity(title,product.title||'');
-    const vendorHit=!vendor||!product.vendor||vendor===duplicateNorm(product.vendor||'');
-    const imageHit=candidateImageHit(product,wantedImages);
-    if(strictTitleMatch&&vendorHit){score=Math.max(score,.99);signals.push('strict-title','vendor');}
-    else if(looseTitleMatch&&vendorHit){score=Math.max(score,.94);signals.push('near-title','vendor');}
-    else if(titleScore>=.93&&vendorHit){score=Math.max(score,.93);signals.push('near-title','vendor');}
-    if(imageHit&&vendorHit&&titleScore>=.45){score=Math.max(score,.97);signals.push('image','vendor','title');}
-    const confirmed=signals.some(signal=>['barcode','sku','handle'].includes(signal))||(strictTitleMatch&&vendorHit);
-    if(!best||score>best.score)best={product,score,signals:[...new Set(signals)],confirmed};
-  }
-  if(!best||best.score<.90)return null;
-  return {exact:best.confirmed,confirmed:best.confirmed,matchLevel:best.confirmed?'confirmed':'possible',confidence:Number(best.score.toFixed(3)),id:best.product.id,legacyResourceId:best.product.legacyResourceId||'',title:best.product.title,handle:best.product.handle,vendor:best.product.vendor||'',sku:best.product.sku||'',barcode:best.product.barcode||'',image:best.product.image||'',signals:best.signals,reason:`Shopify ${best.confirmed?'confirmed':'possible'} match (${Math.round(best.score*100)}%): ${best.signals.join(' + ')}.`};
 }
 
 async function reconcileBatchShopifyMatches({shopDomain,batchId,maxProducts=2500}){
