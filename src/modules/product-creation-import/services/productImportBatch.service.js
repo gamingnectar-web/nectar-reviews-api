@@ -341,6 +341,32 @@ function siteShopifyDraft(product = {}, sourceUrl = '', defaults = {}) {
     seo:{title:product.title || '',description:cleanText(bodyHtml.replace(/<[^>]+>/g,' '),160)}
   });
 
+  // A product title should come from the supplier/source before a human has to
+  // type anything. Prefer extracted Shopify/JSON-LD/page titles, then the URL slug.
+  if (!cleanText(draft.title || '', 220) || /^imported product$/i.test(cleanText(draft.title || '', 220))) {
+    const raw = item.extractedData || {};
+    let sourceTitle = cleanText(
+      raw.rawSupplierProduct?.title ||
+      raw.productTitle ||
+      raw.pageTitle ||
+      raw.title ||
+      '',
+      220
+    );
+    if (!sourceTitle && item.sourceUrl) {
+      try {
+        const slug = new URL(item.sourceUrl).pathname.split('/').filter(Boolean).pop() || '';
+        sourceTitle = cleanText(
+          decodeURIComponent(slug)
+            .replace(/[-_]+/g, ' ')
+            .replace(/\b\w/g, (char) => char.toUpperCase()),
+          220
+        );
+      } catch (_) {}
+    }
+    if (sourceTitle) draft.title = sourceTitle;
+  }
+
   draft = applySupplierProfile(draft);
   return normaliseDraftProduct(draft);
 }
@@ -531,10 +557,22 @@ async function detectExistingProduct({ shopDomain, draft }) {
   const handle=cleanText(draft.handle||'',180);
   const vendor=duplicateNorm(draft.vendor||'');
   const wantedImages=draftImageFingerprints(draft);
-  const queries=[barcode,sku,title,handle].filter(Boolean);
+  let sourceHandle='';
+  try{
+    sourceHandle=new URL(draft.sourceUrl||'').pathname.split('/products/')[1]?.split('/')[0]||'';
+  }catch(_){}
+
+  const simplerTitle=cleanText(title
+    .replace(/\b2\.0\b/ig,' ')
+    .replace(/\b(new|improved|energy|formula|powder|tub|drink|40 servings?)\b/ig,' ')
+    .replace(/\s+/g,' '),180);
+
+  const queries=Array.from(new Set([
+    barcode,sku,handle,sourceHandle,title,simplerTitle
+  ].filter(Boolean)));
   const byKey=new Map();
 
-  for(const q of queries.slice(0,4)){
+  for(const q of queries.slice(0,6)){
     const rows=await searchShopifyProducts({shopDomain,q,first:12}).catch(()=>[]);
     for(const row of rows){
       const key=row.id||row.legacyResourceId||row.handle||row.title;
@@ -615,6 +653,32 @@ async function enrichItem({ shopDomain, item, defaults, useAi = false }) {
     }
   }
 
+  // A product title should come from the supplier/source before a human has to
+  // type anything. Prefer extracted Shopify/JSON-LD/page titles, then the URL slug.
+  if (!cleanText(draft.title || '', 220) || /^imported product$/i.test(cleanText(draft.title || '', 220))) {
+    const raw = item.extractedData || {};
+    let sourceTitle = cleanText(
+      raw.rawSupplierProduct?.title ||
+      raw.productTitle ||
+      raw.pageTitle ||
+      raw.title ||
+      '',
+      220
+    );
+    if (!sourceTitle && item.sourceUrl) {
+      try {
+        const slug = new URL(item.sourceUrl).pathname.split('/').filter(Boolean).pop() || '';
+        sourceTitle = cleanText(
+          decodeURIComponent(slug)
+            .replace(/[-_]+/g, ' ')
+            .replace(/\b\w/g, (char) => char.toUpperCase()),
+          220
+        );
+      } catch (_) {}
+    }
+    if (sourceTitle) draft.title = sourceTitle;
+  }
+
   draft = applySupplierProfile(draft);
   draft = await applyBrandDirectoryProfile({ shopDomain, draft });
   draft = applyMerchantSeoPattern(applyLockedBatchDefaults(draft, defaults), defaults);
@@ -668,7 +732,11 @@ async function enrichItem({ shopDomain, item, defaults, useAi = false }) {
   item.validation = validateDraft(draft, item);
   if (!item.completeness.ready) { item.validation.status = 'blocked'; item.validation.blockers = item.completeness.blockers; item.validation.issues = Array.from(new Set([...(item.validation.issues || []), ...item.completeness.blockers])); }
   item.status = existingProduct ? 'skipped' : (item.validation.status === 'ready' ? 'analysed' : 'needs_review');
-  if (existingProduct) { item.approvalStatus = 'rejected'; item.error = 'Skipped: an exact Shopify product already exists.'; }
+  if (existingProduct) {
+    item.approvalStatus = 'rejected';
+    item.error = '';
+    item.suggestions = { ...(item.suggestions || {}), existingProduct };
+  }
   item.scannedAt = new Date();
   item.updatedAt = new Date();
   return item;
@@ -801,6 +869,25 @@ async function updateBatchItem({ shopDomain, batchId, itemId, patch = {} }) {
   item.completeness = completeness({ draft: item.draft || {}, item, metadata });
   item.validation = validateDraft(item.draft || {}, item);
   if (!item.completeness.ready) { item.validation.status = 'blocked'; item.validation.blockers = item.completeness.blockers; item.validation.issues = Array.from(new Set([...(item.validation.issues || []), ...item.completeness.blockers])); }
+
+  if (patch.draft && item.status !== 'created') {
+    const existingProduct = await detectExistingProduct({ shopDomain, draft: item.draft || {} }).catch(() => null);
+    if (existingProduct) {
+      item.suggestions = { ...(item.suggestions || {}), existingProduct };
+      item.status = 'skipped';
+      item.approvalStatus = 'rejected';
+      item.error = '';
+    } else {
+      if (item.suggestions?.existingProduct) {
+        const nextSuggestions = { ...(item.suggestions || {}) };
+        delete nextSuggestions.existingProduct;
+        item.suggestions = nextSuggestions;
+      }
+      if (item.status === 'skipped') item.status = 'needs_review';
+      if (item.approvalStatus === 'rejected') item.approvalStatus = 'pending';
+    }
+  }
+
   item.updatedAt = new Date();
   refreshBatchSummary(batch);
   await batch.save();
@@ -932,8 +1019,15 @@ async function createShopifyDraftsForBatch({ shopDomain, batchId, itemIds = [], 
       if (existing) {
         item.status = 'skipped';
         item.approvalStatus = 'rejected';
-        item.error = `Skipped duplicate: ${existing.title || item.draft?.title || 'product'} already exists in Shopify.`;
-        results.push({ itemId: item.itemId, status: 'skipped', existingProduct: existing });
+        item.error = '';
+        item.suggestions = { ...(item.suggestions || {}), existingProduct: existing };
+        results.push({
+          itemId: item.itemId,
+          status: 'skipped',
+          created: false,
+          existingProduct: existing,
+          message: `${existing.title || item.draft?.title || 'Product'} already exists in Shopify. No new draft was created.`
+        });
         continue;
       }
 
@@ -945,11 +1039,16 @@ async function createShopifyDraftsForBatch({ shopDomain, batchId, itemIds = [], 
           sourceOptions: item.extractedData?.sourceOptions || item.extractedData?.rawSupplierProduct?.options || []
         }
       });
+      if (!product?.id && !product?.legacyResourceId) {
+        throw new Error('Shopify returned no product ID, so draft creation could not be verified.');
+      }
       item.shopifyProduct = product;
       item.status = 'created';
       item.createdAt = new Date();
       item.error = '';
-      results.push({ itemId: item.itemId, status: 'created', product });
+      item.suggestions = { ...(item.suggestions || {}) };
+      if (item.suggestions.existingProduct) delete item.suggestions.existingProduct;
+      results.push({ itemId: item.itemId, status: 'created', created: true, product });
     } catch (error) {
       item.status = 'failed';
       item.error = cleanText(error.message || 'Shopify draft creation failed.', 1000);

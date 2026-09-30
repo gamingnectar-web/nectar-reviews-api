@@ -165,7 +165,10 @@
       item?.draft?.suggestions?.existingProduct?.id ||
       item?.draft?.suggestions?.existingProduct?.exact
     );
-    if(existing) return { cls:'exists', label:'Exists in Shopify' };
+    if(existing) {
+      const match=item?.suggestions?.existingProduct||item?.draft?.suggestions?.existingProduct;
+      return { cls:'exists', label:match?.title ? `Exists in Shopify: ${match.title}` : 'Exists in Shopify' };
+    }
 
     const hasError = item?.status === 'failed' || Boolean(
       String(item?.error || '').trim() &&
@@ -477,11 +480,11 @@
               </section>
               <section class="pci-editor-card">
                 <h4>Organisation</h4>
-                <label class="pci-label">Vendor</label><div class="supplier-field-map-row"><input id="spm-vendor" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="vendor" title="Show Shopify field mapping">↗</button></div>
-                <label class="pci-label">Product type</label><div class="supplier-field-map-row"><input id="spm-type" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="productType" title="Show Shopify field mapping">↗</button></div>
-                <label class="pci-label">Product category</label><div class="supplier-field-map-row"><input id="spm-category" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="productCategory" title="Show Shopify field mapping">↗</button></div>
-                <label class="pci-label">Flavour</label><div class="supplier-field-map-row"><input id="spm-flavour" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="flavour" title="Show metafield matches">↗</button></div>
-                <label class="pci-label">Product line / formula</label><div class="supplier-field-map-row"><input id="spm-line" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="formula" title="Show metafield matches">↗</button></div>
+                <label class="pci-label">Vendor</label><div class="supplier-field-map-row"><input id="spm-vendor" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="vendor" title="Show Shopify field mapping">Map</button></div>
+                <label class="pci-label">Product type</label><div class="supplier-field-map-row"><input id="spm-type" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="productType" title="Show Shopify field mapping">Map</button></div>
+                <label class="pci-label">Product category</label><div class="supplier-field-map-row"><input id="spm-category" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="productCategory" title="Show Shopify field mapping">Map</button></div>
+                <label class="pci-label">Flavour</label><div class="supplier-field-map-row"><input id="spm-flavour" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="flavour" title="Show metafield matches">Map</button></div>
+                <label class="pci-label">Product line / formula</label><div class="supplier-field-map-row"><input id="spm-line" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="formula" title="Show metafield matches">Map</button></div>
               </section>
               <section id="spm-map-panel" class="pci-editor-card supplier-map-panel" hidden>
                 <div class="pci-editor-card-head">
@@ -716,12 +719,32 @@
         method:'POST',
         body:JSON.stringify({itemIds:[id],approvedOnly:false})
       });
-      const failed=(data.results||[]).find(x=>x.itemId===id&&x.status==='failed');
-      if(failed) throw new Error(failed.error||'Shopify draft creation failed.');
+      const result=(data.results||[]).find(x=>x.itemId===id);
+      if(!result) throw new Error('Shopify returned no result for this product.');
+      if(result.status==='failed') throw new Error(result.error||'Shopify draft creation failed.');
+
       state.activeBatch=data.batch;
       renderProducts();
-      modalStatus('Shopify draft product created successfully.','ok');
-      $('spm-validation').textContent='Status: created';
+      openItemModal(id);
+
+      if(result.status==='skipped'){
+        const existing=result.existingProduct;
+        modalStatus(
+          existing
+            ? `No draft created — this matches existing Shopify product "${existing.title}" (${Math.round(Number(existing.confidence||0)*100)}% match).`
+            : 'No draft created — Shopify duplicate protection skipped this product.',
+          'warn'
+        );
+        $('spm-validation').textContent='Status: exists in Shopify · No duplicate draft created';
+        return;
+      }
+
+      if(result.status!=='created' || (!result.product?.id && !result.product?.legacyResourceId)){
+        throw new Error('Shopify draft creation could not be verified. No success state has been saved.');
+      }
+
+      modalStatus(`Shopify draft created successfully: ${result.product.title||$('spm-title').value}.`,'ok');
+      $('spm-validation').textContent='Status: created in Shopify';
     }catch(error){
       modalStatus(error.message||'Could not create Shopify draft.','err');
     }

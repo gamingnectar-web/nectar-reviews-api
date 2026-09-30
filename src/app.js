@@ -127,6 +127,15 @@ app.get('/review-widget.js', (req, res) => {
   return res.send(js);
 });
 
+// Supplier Sites admin assets are intentionally no-store.
+app.get(['/supplier-sites-admin.js', '/supplier-sites-admin.css'], (req, res) => {
+  const asset = path.basename(req.path);
+  const filePath = path.join(publicDir, asset);
+  if (!fs.existsSync(filePath)) return res.status(404).end();
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  return res.sendFile(filePath);
+});
+
 app.use(express.static(publicDir, { etag: true, maxAge: env.nodeEnv === 'production' ? '5m' : 0, index: false }));
 app.use('/auth', authRoutes);
 app.use('/api/auth', authRoutes);
