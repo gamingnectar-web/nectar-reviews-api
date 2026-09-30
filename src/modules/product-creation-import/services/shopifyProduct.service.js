@@ -267,6 +267,29 @@ async function searchShopifyProducts({ shopDomain, q = '', first = 10 }) {
 }
 
 
+async function listShopifyProductsForMatching({ shopDomain, maxProducts = 2500 }) {
+  const wanted=Math.max(1,Math.min(Number(maxProducts)||2500,2500));
+  const products=[];
+  let page=1;
+  while(products.length<wanted && page<=10){
+    const data=await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products.json?limit=250&page=${page}&fields=id,title,handle,image,images,variants,tags,vendor,product_type,status`,{shopDomain});
+    const rows=data?.products||[];
+    if(!rows.length)break;
+    for(const product of rows){
+      products.push(restProductToCard(product,{
+        status:product.status||'',
+        skus:(product.variants||[]).map(v=>cleanText(v.sku||'',120)).filter(Boolean),
+        barcodes:(product.variants||[]).map(v=>cleanText(v.barcode||'',120)).filter(Boolean),
+      }));
+      if(products.length>=wanted)break;
+    }
+    if(rows.length<250)break;
+    page+=1;
+  }
+  return products;
+}
+
+
 function isValidJsonString(value = '') {
   try { JSON.parse(String(value || '')); return true; } catch (_) { return false; }
 }
@@ -872,6 +895,7 @@ async function getProfileValuesFromExistingProducts({ shopDomain, tags = [], ven
 module.exports = {
   healthCheckShopify,
   searchShopifyProducts,
+  listShopifyProductsForMatching,
   createShopifyProductFromDraft,
   assignImportLineToProduct,
   restProductToCard,

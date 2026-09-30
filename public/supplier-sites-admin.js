@@ -1,6 +1,6 @@
 (function SupplierSitesAdmin(){
   const API='/admin/product-creation-import';
-  const state={batches:[],activeBatch:null,activeItem:null,scanning:false,stop:false};
+  const state={batches:[],activeBatch:null,activeItem:null,scanning:false,stop:false,reconciled:new Set(),reconciling:false};
   const $=id=>document.getElementById(id);
   const esc=(v='')=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
@@ -96,7 +96,7 @@
                     <option value="created">Created</option>
                     <option value="failed">Failed</option>
                   </select>
-                  <button id="supplier-sites-rescan" class="secondary-btn" type="button">Run one pass</button><button id="supplier-sites-stop" class="secondary-btn" type="button" hidden>Stop</button>
+                  <button id="supplier-sites-check-shopify" class="secondary-btn" type="button">Check Shopify matches</button><button id="supplier-sites-rescan" class="secondary-btn" type="button">Run one pass</button><button id="supplier-sites-stop" class="secondary-btn" type="button" hidden>Stop</button>
                   <button id="supplier-sites-open-batch" class="primary-btn" type="button">Open in Batch Import</button>
                 </div>
               </div>
@@ -157,26 +157,14 @@
   }
 
   function productStatusDot(item){
-    const existing = Boolean(
-      item?.shopifyProduct?.id ||
-      item?.status === 'created' ||
-      item?.suggestions?.existingProduct?.id ||
-      item?.suggestions?.existingProduct?.exact ||
-      item?.draft?.suggestions?.existingProduct?.id ||
-      item?.draft?.suggestions?.existingProduct?.exact
-    );
-    if(existing) {
-      const match=item?.suggestions?.existingProduct||item?.draft?.suggestions?.existingProduct;
-      return { cls:'exists', label:match?.title ? `Exists in Shopify: ${match.title}` : 'Exists in Shopify' };
-    }
-
-    const hasError = item?.status === 'failed' || Boolean(
-      String(item?.error || '').trim() &&
-      !/already exists|skipped duplicate|exists in shopify/i.test(String(item?.error || ''))
-    );
-    if(hasError) return { cls:'error', label:'Error present' };
-
-    return { cls:'review', label:'Review required' };
+    const match=item?.suggestions?.existingProduct||item?.draft?.suggestions?.existingProduct;
+    const created=Boolean(item?.shopifyProduct?.id||item?.status==='created');
+    const confirmed=Boolean(match?.confirmed===true||match?.matchLevel==='confirmed'||match?.exact===true);
+    if(created||confirmed)return {cls:'exists',label:created?'Created / exists in Shopify':`Confirmed Shopify match${match?.title?`: ${match.title}`:''}`};
+    const hasError=item?.status==='failed'||Boolean(String(item?.error||'').trim()&&!/already exists|skipped duplicate|exists in shopify/i.test(String(item?.error||'')));
+    if(hasError)return {cls:'error',label:'Error present'};
+    if(match)return {cls:'review',label:`Possible Shopify match${match.title?`: ${match.title}`:''} — review`};
+    return {cls:'review',label:'Review required'};
   }
 
   function renderProducts(){
@@ -236,11 +224,25 @@
     }catch(e){ setStatus(`Could not load supplier catalogues: ${esc(e.message)}`,'err'); }
   }
 
+  async function reconcileShopifyMatches(manual=false){
+    if(!state.activeBatch||state.reconciling)return;
+    state.reconciling=true;
+    const btn=$('supplier-sites-check-shopify'); if(btn)btn.disabled=true;
+    try{
+      if(manual)setStatus('Checking this supplier catalogue against Shopify…','warn');
+      const data=await api(`/batches/${state.activeBatch._id}/reconcile-shopify`,{method:'POST',body:JSON.stringify({maxProducts:2500})});
+      state.activeBatch=data.batch; state.reconciled.add(String(data.batch._id)); renderProducts();
+      if(manual)setStatus(`Shopify check complete: ${data.confirmed||0} confirmed existing, ${data.possible||0} possible matches to review, ${data.unmatched||0} unmatched.`,'ok');
+    }catch(error){if(manual)setStatus(`Shopify match check failed: ${esc(error.message)}`,'err');}
+    finally{state.reconciling=false;if(btn)btn.disabled=false;}
+  }
+
   async function openBatch(id){
     const data=await api(`/batches/${id}`);
     state.activeBatch=data.batch;
     renderSites();
     renderProducts();
+    if(!state.reconciled.has(String(id)))reconcileShopifyMatches(false);
   }
 
   async function repairCatalogue(){
@@ -503,7 +505,6 @@
           <div class="supplier-modal-actions">
             <button id="spm-enrich" type="button" class="secondary-btn">Enrich this product</button>
             <button id="spm-save" type="button" class="secondary-btn">Save MongoDB draft</button>
-            <button id="spm-override-create" type="button" class="supplier-override-btn" hidden>Override match & create draft</button>
             <button id="spm-create" type="button" class="primary-btn">Create Shopify Draft</button>
           </div>
         </div>
@@ -513,7 +514,6 @@
     $('spm-enrich').addEventListener('click',enrichItemModal);
     $('spm-ai-refresh').addEventListener('click',aiRefreshItemModal);
     $('spm-create').addEventListener('click',()=>createItemShopifyDraft(false));
-    $('spm-override-create').addEventListener('click',()=>createItemShopifyDraft(true));
     document.querySelectorAll('#supplier-product-modal [data-map-field]').forEach(btn=>{
       btn.addEventListener('click',()=>showFieldMapping(btn.dataset.mapField));
     });
@@ -555,6 +555,13 @@
     }
   }
 
+  function showMatchWarning(match){
+    const el=$('spm-status'); if(!el||!match)return;
+    el.hidden=false; el.className='pci-status warn supplier-match-warning';
+    el.innerHTML=`<div><strong>${match.confirmed?'Existing Shopify product':'Possible Shopify match'}</strong><span>${esc(match.title||'Product')} · ${Math.round(Number(match.confidence||0)*100)}% confidence</span></div><div class="supplier-match-actions"><button id="spm-force-create-top" type="button" class="supplier-override-btn">This is different · Create new draft</button></div>`;
+    $('spm-force-create-top')?.addEventListener('click',()=>createItemShopifyDraft(true));
+  }
+
   function modalStatus(message,kind=''){
     const el=$('spm-status'); if(!el)return;
     el.hidden=false; el.className=`pci-status ${kind}`.trim(); el.textContent=message;
@@ -587,10 +594,9 @@
     $('spm-source').href=item.sourceUrl||d.sourceUrl||'#';
     $('spm-source').textContent=item.sourceUrl||d.sourceUrl||'No source URL';
     $('spm-validation').textContent=`Status: ${item.status||'queued'} · ${(item.validation?.issues||[]).join(' · ')||item.error||'No validation message'}`;
-    const existingMatch=item?.suggestions?.existingProduct||item?.draft?.suggestions?.existingProduct;
-    const overrideBtn=$('spm-override-create');
-    if(overrideBtn) overrideBtn.hidden=!existingMatch || item.status==='created';
     $('spm-status').hidden=true;
+    const existingMatch=item?.suggestions?.existingProduct||item?.draft?.suggestions?.existingProduct;
+    if(existingMatch)showMatchWarning(existingMatch);
     $('supplier-product-modal').hidden=false;
     document.body.classList.add('supplier-modal-open');
   }
@@ -739,15 +745,9 @@
 
       if(result.status==='skipped'){
         const existing=result.existingProduct;
-        modalStatus(
-          existing
-            ? `No draft created — this matches existing Shopify product "${existing.title}" (${Math.round(Number(existing.confidence||0)*100)}% match).`
-            : 'No draft created — Shopify duplicate protection skipped this product.',
-          'warn'
-        );
+        if(existing)showMatchWarning(existing);
+        else modalStatus('No draft created — Shopify duplicate protection skipped this product.','warn');
         $('spm-validation').textContent='Status: possible existing Shopify match · No duplicate draft created';
-        const overrideBtn=$('spm-override-create');
-        if(overrideBtn) overrideBtn.hidden=false;
         return;
       }
 
@@ -764,8 +764,6 @@
       $('spm-validation').textContent=forceCreate
         ? 'Status: created in Shopify · duplicate match manually overridden'
         : 'Status: created in Shopify';
-      const overrideBtn=$('spm-override-create');
-      if(overrideBtn) overrideBtn.hidden=true;
     }catch(error){
       modalStatus(error.message||'Could not create Shopify draft.','err');
     }
@@ -780,6 +778,7 @@
   function wire(){
     $('supplier-sites-refresh')?.addEventListener('click',loadSites);
     $('supplier-site-scrape')?.addEventListener('click',createSite);
+    $('supplier-sites-check-shopify')?.addEventListener('click',()=>reconcileShopifyMatches(true));
     $('supplier-sites-rescan')?.addEventListener('click',repairCatalogue);
     $('supplier-sites-stop')?.addEventListener('click',()=>{state.stop=true;});
     $('supplier-sites-open-batch')?.addEventListener('click',openBatchImporter);
@@ -794,6 +793,8 @@
     booted=true;
     loadSites();
   }
+
+  window.openSupplierImportWorkspace=(mode='build')=>{ window.pciTab?.('supplier-sites'); setTimeout(()=>{ if(mode==='catalogue'){ document.querySelector('.supplier-sites-list-wrap')?.scrollIntoView({behavior:'smooth',block:'start'}); loadSites(); } else { $('supplier-site-url')?.focus(); } },80); };
 
   document.addEventListener('DOMContentLoaded',boot);
   window.addEventListener('load',boot);

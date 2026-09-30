@@ -32,6 +32,7 @@ const {
   enrichBatch,
   updateBatchItem,
   getBatchItemFieldMappings,
+  reconcileBatchShopifyMatches,
   aiRefreshBatchItem,
   setBatchItemApproval,
   createShopifyDraftsForBatch,
@@ -163,6 +164,11 @@ router.get('/batches/:batchId', asyncRoute(async (req, res) => {
   const result = await getBatch({ shopDomain: shopDomainFromReq(req), batchId: req.params.batchId });
   res.json(result);
 }));
+router.post('/batches/:batchId/reconcile-shopify', asyncRoute(async (req, res) => {
+  const result = await reconcileBatchShopifyMatches({ shopDomain: shopDomainFromReq(req), batchId: req.params.batchId, maxProducts: req.body?.maxProducts || 2500 });
+  res.json(result);
+}));
+
 
 router.patch('/batches/:batchId/defaults', asyncRoute(async (req, res) => {
   const result = await updateBatchDefaults({ shopDomain: shopDomainFromReq(req), batchId: req.params.batchId, defaults: req.body?.defaults || {} });

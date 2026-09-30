@@ -15,7 +15,7 @@ const { applySupplierProfile, supplierDefaultsForUrl, profileForUrl } = require(
 const { applyBrandDirectoryProfile } = require('./brandDirectoryProfile.service');
 const { mapSupplierFactsToExistingMetafields, applyOrganisationFieldMappings, organisationFieldMappingSummary } = require('./supplierFactMapper.service');
 const { discoverSiteProducts } = require('./siteCatalogDiscovery.service');
-const { searchShopifyProducts } = require('./shopifyProduct.service');
+const { searchShopifyProducts, listShopifyProductsForMatching } = require('./shopifyProduct.service');
 
 function asArray(value) {
   if (Array.isArray(value)) return value;
@@ -506,6 +506,14 @@ function byPageImageOrder(images = []) {
   return [...(images || [])].sort((a, b) => (a.originalIndex ?? 9999) - (b.originalIndex ?? 9999));
 }
 
+function strictDuplicateNorm(value=''){
+  return cleanText(value,240).toLowerCase()
+    .replace(/\bg\s*fuel\b/g,'gfuel')
+    .replace(/[^a-z0-9]+/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
 function duplicateNorm(value=''){
   return cleanText(value,240).toLowerCase()
     .replace(/\bg\s*fuel\b/g,'gfuel')
@@ -619,8 +627,13 @@ async function detectExistingProduct({ shopDomain, draft }) {
   }
 
   if(!best||best.score<.90)return null;
+  const strictTitleMatch=strictDuplicateNorm(title)&&strictDuplicateNorm(title)===strictDuplicateNorm(best.product.title||'');
+  const strongIdentifier=best.signals.some(signal=>['barcode','sku','handle'].includes(signal));
+  const confirmed=Boolean(strongIdentifier||(strictTitleMatch&&best.signals.includes('vendor')));
   return {
-    exact:best.score>=.98,
+    exact:confirmed,
+    confirmed,
+    matchLevel:confirmed?'confirmed':'possible',
     confidence:Number(best.score.toFixed(3)),
     id:best.product.id,
     legacyResourceId:best.product.legacyResourceId||'',
@@ -631,9 +644,63 @@ async function detectExistingProduct({ shopDomain, draft }) {
     barcode:best.product.barcode||'',
     image:best.product.image||'',
     signals:best.signals,
-    reason:`Shopify match (${Math.round(best.score*100)}%): ${best.signals.join(' + ')}.`
+    reason:`Shopify ${confirmed?'confirmed':'possible'} match (${Math.round(best.score*100)}%): ${best.signals.join(' + ')}.`
   };
 }
+
+function matchDraftAgainstCatalogue(draft={},catalogue=[]){
+  const title=cleanText(draft.title||'',180);
+  const sku=cleanText(draft.sku||'',120).toLowerCase();
+  const barcode=cleanText(draft.barcode||'',120).toLowerCase();
+  const handle=cleanText(draft.handle||'',180);
+  const vendor=duplicateNorm(draft.vendor||'');
+  const wantedImages=draftImageFingerprints(draft);
+  let best=null;
+  for(const product of catalogue||[]){
+    const signals=[]; let score=0;
+    const skus=[product.sku,...(product.skus||[])].filter(Boolean).map(x=>String(x).toLowerCase());
+    const barcodes=[product.barcode,...(product.barcodes||[])].filter(Boolean).map(x=>String(x).toLowerCase());
+    if(barcode&&barcodes.includes(barcode)){score=1;signals.push('barcode');}
+    if(sku&&skus.includes(sku)){score=Math.max(score,.995);signals.push('sku');}
+    if(handle&&product.handle&&duplicateNorm(handle)===duplicateNorm(product.handle)){score=Math.max(score,.985);signals.push('handle');}
+    const strictTitleMatch=strictDuplicateNorm(title)&&strictDuplicateNorm(title)===strictDuplicateNorm(product.title||'');
+    const looseTitleMatch=title&&duplicateNorm(title)===duplicateNorm(product.title||'');
+    const titleScore=tokenSimilarity(title,product.title||'');
+    const vendorHit=!vendor||!product.vendor||vendor===duplicateNorm(product.vendor||'');
+    const imageHit=candidateImageHit(product,wantedImages);
+    if(strictTitleMatch&&vendorHit){score=Math.max(score,.99);signals.push('strict-title','vendor');}
+    else if(looseTitleMatch&&vendorHit){score=Math.max(score,.94);signals.push('near-title','vendor');}
+    else if(titleScore>=.93&&vendorHit){score=Math.max(score,.93);signals.push('near-title','vendor');}
+    if(imageHit&&vendorHit&&titleScore>=.45){score=Math.max(score,.97);signals.push('image','vendor','title');}
+    const confirmed=signals.some(signal=>['barcode','sku','handle'].includes(signal))||(strictTitleMatch&&vendorHit);
+    if(!best||score>best.score)best={product,score,signals:[...new Set(signals)],confirmed};
+  }
+  if(!best||best.score<.90)return null;
+  return {exact:best.confirmed,confirmed:best.confirmed,matchLevel:best.confirmed?'confirmed':'possible',confidence:Number(best.score.toFixed(3)),id:best.product.id,legacyResourceId:best.product.legacyResourceId||'',title:best.product.title,handle:best.product.handle,vendor:best.product.vendor||'',sku:best.product.sku||'',barcode:best.product.barcode||'',image:best.product.image||'',signals:best.signals,reason:`Shopify ${best.confirmed?'confirmed':'possible'} match (${Math.round(best.score*100)}%): ${best.signals.join(' + ')}.`};
+}
+
+async function reconcileBatchShopifyMatches({shopDomain,batchId,maxProducts=2500}){
+  const {batch}=await getBatch({shopDomain,batchId});
+  const catalogue=await listShopifyProductsForMatching({shopDomain,maxProducts});
+  let confirmed=0,possible=0,unmatched=0;
+  for(const item of batch.items||[]){
+    if(item.status==='created'||item.shopifyProduct?.id)continue;
+    const match=matchDraftAgainstCatalogue(item.draft||{},catalogue);
+    const suggestions={...(item.suggestions||{})};
+    if(match){
+      suggestions.existingProduct=match; item.suggestions=suggestions;
+      if(match.confirmed){confirmed+=1;item.status='skipped';item.approvalStatus='rejected';item.error='';}
+      else {possible+=1;if(item.status==='skipped')item.status='needs_review';if(item.approvalStatus==='rejected')item.approvalStatus='pending';}
+    }else{
+      unmatched+=1; if(suggestions.existingProduct)delete suggestions.existingProduct; item.suggestions=suggestions;
+      if(item.status==='skipped')item.status='needs_review';if(item.approvalStatus==='rejected')item.approvalStatus='pending';
+    }
+    item.updatedAt=new Date();
+  }
+  refreshBatchSummary(batch); await batch.save();
+  return {batch,shopifyProducts:catalogue.length,confirmed,possible,unmatched};
+}
+
 
 async function enrichItem({ shopDomain, item, defaults, useAi = false }) {
   item.status = 'scanning';
@@ -1080,6 +1147,7 @@ module.exports = {
   enrichBatch,
   updateBatchItem,
   getBatchItemFieldMappings,
+  reconcileBatchShopifyMatches,
   aiRefreshBatchItem,
   setBatchItemApproval,
   createShopifyDraftsForBatch,
