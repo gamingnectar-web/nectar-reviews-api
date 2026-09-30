@@ -270,25 +270,72 @@ async function searchShopifyProducts({ shopDomain, q = '', first = 10 }) {
 async function listShopifyProductsForMatching({ shopDomain, maxProducts = 2500 }) {
   const wanted=Math.max(1,Math.min(Number(maxProducts)||2500,2500));
   const products=[];
-  let page=1;
-  while(products.length<wanted && page<=10){
-    const data=await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products.json?limit=250&page=${page}&fields=id,title,handle,image,images,variants,tags,vendor,product_type,status`,{shopDomain});
-    const rows=data?.products||[];
-    if(!rows.length)break;
-    for(const product of rows){
+  let after=null;
+  const query=`query ProductImportCatalogue($first:Int!,$after:String){
+    products(first:$first,after:$after,sortKey:ID){
+      pageInfo{hasNextPage endCursor}
+      nodes{
+        id legacyResourceId title handle vendor productType tags status
+        featuredMedia{preview{image{url}}}
+        images(first:12){nodes{url}}
+        variants(first:100){nodes{id legacyResourceId sku barcode price compareAtPrice inventoryQuantity inventoryItem{id legacyResourceId}}}
+      }
+    }
+  }`;
+
+  while(products.length<wanted){
+    const first=Math.min(100,wanted-products.length);
+    const data=await shopifyGraphqlOptional({shopDomain,query,variables:{first,after}});
+    if(!data?.products) break;
+
+    for(const product of data.products.nodes||[]){
+      const variants=product.variants?.nodes||[];
+      const firstVariant=variants[0]||{};
+      const featured=product.featuredMedia?.preview?.image?.url||product.images?.nodes?.[0]?.url||'';
+      products.push({
+        id:product.id||'',
+        legacyResourceId:String(product.legacyResourceId||numericId(product.id)||''),
+        title:product.title||'Product',
+        handle:product.handle||'',
+        vendor:product.vendor||'',
+        productType:product.productType||'',
+        tags:Array.isArray(product.tags)?product.tags:[],
+        status:product.status||'',
+        image:featured,
+        images:(product.images?.nodes||[]).map(image=>image.url).filter(Boolean),
+        variantId:firstVariant.id||'',
+        legacyVariantId:String(firstVariant.legacyResourceId||numericId(firstVariant.id)||''),
+        inventoryItemId:firstVariant.inventoryItem?.id||'',
+        legacyInventoryItemId:String(firstVariant.inventoryItem?.legacyResourceId||numericId(firstVariant.inventoryItem?.id)||''),
+        sku:firstVariant.sku||'',
+        barcode:firstVariant.barcode||'',
+        skus:variants.map(v=>cleanText(v.sku||'',120)).filter(Boolean),
+        barcodes:variants.map(v=>cleanText(v.barcode||'',120)).filter(Boolean),
+        price:firstVariant.price||'',
+        compareAtPrice:firstVariant.compareAtPrice||'',
+        inventoryQuantity:Number(firstVariant.inventoryQuantity||0),
+      });
+      if(products.length>=wanted) break;
+    }
+
+    const pageInfo=data.products.pageInfo||{};
+    if(!pageInfo.hasNextPage||!pageInfo.endCursor) break;
+    after=pageInfo.endCursor;
+  }
+
+  if(!products.length){
+    const data=await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products.json?limit=250&fields=id,title,handle,image,images,variants,tags,vendor,product_type,status`,{shopDomain});
+    for(const product of data?.products||[]){
       products.push(restProductToCard(product,{
         status:product.status||'',
         skus:(product.variants||[]).map(v=>cleanText(v.sku||'',120)).filter(Boolean),
         barcodes:(product.variants||[]).map(v=>cleanText(v.barcode||'',120)).filter(Boolean),
       }));
-      if(products.length>=wanted)break;
     }
-    if(rows.length<250)break;
-    page+=1;
   }
+
   return products;
 }
-
 
 function isValidJsonString(value = '') {
   try { JSON.parse(String(value || '')); return true; } catch (_) { return false; }

@@ -3,8 +3,8 @@ const { cleanText, normaliseMetafields } = require('../utils/safe');
 const ORGANISATION_FIELD_ALIASES = {
   flavour: {
     canonical: 'core.product_flavour',
-    labels: ['product flavour','product flavor','flavour','flavor','flavour name','flavor name','taste'],
-    exclude: ['family','profile','sweet','sour','description']
+    labels: ['product flavour','product flavor','flavour','flavor','flavour name','flavor name','taste','flavour profile','flavor profile'],
+    exclude: ['family','sweet','sour','description']
   },
   formula: {
     canonical: 'core.formula_version',
@@ -67,6 +67,8 @@ function applyOrganisationFieldMappings(draft={},metadata={}) {
     const value=getOrganisationFieldValue({...draft,metafields},field);
     if(value===undefined||value===null||String(value).trim()==='')continue;
     const matches=organisationFieldDefinitionMatches(field,definitions);
+    const matchedKeys=new Set(matches.map(match=>`${match.namespace}.${match.key}`));
+    metafields=metafields.filter(mf=>!matchedKeys.has(`${mf.namespace}.${mf.key}`));
     for(const match of matches){
       metafields=normaliseMetafields([
         ...metafields,
@@ -77,7 +79,7 @@ function applyOrganisationFieldMappings(draft={},metadata={}) {
           label:match.name,
           value:String(value).trim(),
           source:'organisation-field-mapper',
-          confidence:match.canonical?1:0.96
+          confidence:match.canonical?1:0.99
         }
       ]);
     }
