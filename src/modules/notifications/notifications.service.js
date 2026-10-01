@@ -109,65 +109,114 @@ async function resolveSubscriptionVariant(shopDomain, variantId) {
   };
 }
 
+function safeRestockTag(value = '') {
+  return String(value || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50);
+}
+
+function legacyProductPath(resolved = {}) {
+  if (resolved.productHandle) return `/products/${resolved.productHandle}`;
+  try { const u = new URL(String(resolved.productUrl || '')); return u.pathname || ''; } catch (_) { return String(resolved.productUrl || '').replace(/^https?:\/\/[^/]+/i, ''); }
+}
+function legacyNotificationLatest(resolved = {}) { return legacyProductPath(resolved).replace(/^\//, '').replace(/[\/\-]/g, '_').toLowerCase(); }
+function restockTagsFor(resolved = {}) {
+  const path = legacyProductPath(resolved);
+  return [
+    'restock-notif',
+    resolved.productTitle ? `restock_${safeRestockTag(resolved.productTitle)}` : '',
+    resolved.variantId ? `restock_id_${String(resolved.variantId).replace(/[^0-9]/g, '')}` : '',
+    path ? `restock_url_${safeRestockTag(path)}` : '',
+  ].filter(Boolean);
+}
+
+function flowAdminFallback(shopDomain) {
+  const handle = String(shopDomain || '').replace(/\.myshopify\.com$/i, '');
+  return handle ? `https://admin.shopify.com/store/${encodeURIComponent(handle)}/apps/flow` : 'https://admin.shopify.com';
+}
+
+async function findShopifyCustomerByEmail(shopDomain, email) {
+  const escaped = String(email || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const data = await shopifyGraphql(shopDomain, `query NotificationCustomerByEmail($query: String!) {
+    customers(first: 1, query: $query) { nodes { id legacyResourceId email tags } }
+  }`, { query: `email:"${escaped}"` });
+  return data?.customers?.nodes?.[0] || null;
+}
+
+async function syncShopifyRestockTags({ shopDomain, email, resolved, action = 'add' }) {
+  const customer = await findShopifyCustomerByEmail(shopDomain, email);
+  const wanted = restockTagsFor(resolved);
+  if (!customer && action === 'remove') return { ok: true, skipped: 'customer_missing' };
+  if (!customer && action === 'add') {
+    const created = await shopifyGraphql(shopDomain, `mutation NotificationCustomerCreate($input: CustomerInput!) {
+      customerCreate(input: $input) { customer { id email tags } userErrors { field message } }
+    }`, { input: { email, tags: wanted, metafields: resolved.productUrl ? [{ namespace: 'custom', key: 'notification_latest', value: legacyNotificationLatest(resolved), type: 'single_line_text_field' }] : [] } });
+    const errors = created?.customerCreate?.userErrors || [];
+    if (errors.length) throw new Error(errors.map((x) => x.message).join('; '));
+    return { ok: true, created: true };
+  }
+  const current = Array.isArray(customer.tags) ? customer.tags : [];
+  let tags;
+  if (action === 'remove') {
+    const removeSet = new Set(wanted.filter((t) => t !== 'restock-notif').map((t) => t.toLowerCase()));
+    tags = current.filter((tag) => !removeSet.has(String(tag).toLowerCase()));
+    const hasOtherRestockIds = tags.some((tag) => /^restock_id_\d+$/i.test(String(tag)));
+    if (!hasOtherRestockIds) tags = tags.filter((tag) => String(tag).toLowerCase() !== 'restock-notif');
+  } else {
+    const seen = new Map(current.map((tag) => [String(tag).toLowerCase(), tag]));
+    wanted.forEach((tag) => { if (!seen.has(tag.toLowerCase())) current.push(tag); });
+    tags = current;
+  }
+  const input = { id: customer.id, tags };
+  if (action === 'add' && resolved.productUrl) input.metafields = [{ namespace: 'custom', key: 'notification_latest', value: legacyNotificationLatest(resolved), type: 'single_line_text_field' }];
+  const updated = await shopifyGraphql(shopDomain, `mutation NotificationCustomerUpdate($input: CustomerInput!) {
+    customerUpdate(input: $input) { customer { id email tags } userErrors { field message } }
+  }`, { input });
+  const errors = updated?.customerUpdate?.userErrors || [];
+  if (errors.length) throw new Error(errors.map((x) => x.message).join('; '));
+  return { ok: true, created: false };
+}
+
 async function subscribeRestock({ shopDomain, email, variantId, source = 'storefront' }) {
   const normalizedEmail = cleanEmail(email);
   if (!normalizedEmail) throw publicError('Please enter a valid email address.', 400);
   if (!variantId) throw publicError('Missing variant id.', 400);
   const config = await getOrCreateConfig(shopDomain);
-  if (config.enabled === false || config.restockEnabled === false) {
-    throw publicError('Back-in-stock notifications are not enabled for this store.', 409);
-  }
+  if (config.enabled === false || config.restockEnabled === false) throw publicError('Back-in-stock notifications are not enabled for this store.', 409);
   const resolved = await resolveSubscriptionVariant(shopDomain, variantId);
   if (resolved.availableForSale) throw publicError('This item is already back in stock. Refresh the page to add it to your cart.', 409);
   const key = emailHash(shopDomain, normalizedEmail);
   const now = new Date();
   const row = await RestockSubscription.findOneAndUpdate(
     { shopDomain, emailHash: key, variantId: resolved.variantId },
-    {
-      $set: {
-        emailEncrypted: encryptSecret(normalizedEmail),
-        productId: cleanText(resolved.productId, 80),
-        productTitle: cleanText(resolved.productTitle, 240),
-        productHandle: cleanText(resolved.productHandle, 240),
-        productUrl: cleanText(resolved.productUrl, 800),
-        productImage: cleanText(resolved.productImage, 1200),
-        variantTitle: cleanText(resolved.variantTitle, 240),
-        source: cleanText(source, 60) || 'storefront',
-        status: 'active',
-        subscribedAt: now,
-        sentAt: null,
-        unsubscribedAt: null,
-        lastError: '',
-      },
-      $setOnInsert: { shopDomain, emailHash: key, variantId: resolved.variantId, sendAttempts: 0 },
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { $set: { emailEncrypted: encryptSecret(normalizedEmail), productId: cleanText(resolved.productId,80), productTitle: cleanText(resolved.productTitle,240), productHandle: cleanText(resolved.productHandle,240), productUrl: cleanText(resolved.productUrl,800), productImage: cleanText(resolved.productImage,1200), variantTitle: cleanText(resolved.variantTitle,240), source: cleanText(source,60)||'storefront', status:'active', subscribedAt:now, sentAt:null, unsubscribedAt:null, lastError:'' }, $setOnInsert: { shopDomain, emailHash:key, variantId:resolved.variantId, sendAttempts:0 } },
+    { upsert:true, new:true, setDefaultsOnInsert:true }
   );
-  await recordEvent(shopDomain, 'restock_subscribed', {
-    variantId: row.variantId,
-    productId: row.productId,
-    productTitle: row.productTitle,
-    emailHash: key,
-  });
-  return { success: true, subscribed: true, status: row.status };
+  let shopifySynced = false;
+  if (config.delivery?.syncShopifyTags !== false) {
+    try { await syncShopifyRestockTags({ shopDomain, email: normalizedEmail, resolved, action: 'add' }); shopifySynced = true; }
+    catch (error) {
+      await RestockSubscription.updateOne({ _id: row._id }, { $set: { lastError: `Shopify tag sync: ${String(error.message || error).slice(0,420)}` } });
+      await recordEvent(shopDomain,'restock_tag_sync_failed',{variantId:row.variantId,productId:row.productId,productTitle:row.productTitle,emailHash:key,detail:String(error.message||error).slice(0,500)});
+      if ((config.delivery?.mode || 'flow') === 'flow') throw publicError('Your alert was saved, but Shopify Flow tag sync failed. Check the write_customers permission in Notifications Center.', 502);
+    }
+  }
+  await recordEvent(shopDomain, 'restock_subscribed', { variantId: row.variantId, productId: row.productId, productTitle: row.productTitle, emailHash: key, meta: { shopifySynced } });
+  return { success:true, subscribed:true, status:row.status, deliveryMode:config.delivery?.mode || 'flow', shopifySynced };
 }
 
 async function unsubscribeRestock({ shopDomain, email, variantId }) {
   const normalizedEmail = cleanEmail(email);
-  if (!normalizedEmail || !variantId) return { success: true, subscribed: false, status: 'none' };
+  if (!normalizedEmail || !variantId) return { success:true, subscribed:false, status:'none' };
   const key = emailHash(shopDomain, normalizedEmail);
-  const row = await RestockSubscription.findOneAndUpdate(
-    { shopDomain, emailHash: key, variantId: String(variantId) },
-    { $set: { status: 'unsubscribed', unsubscribedAt: new Date(), lastError: '' } },
-    { new: true }
-  );
-  if (row) await recordEvent(shopDomain, 'restock_unsubscribed', {
-    variantId: row.variantId,
-    productId: row.productId,
-    productTitle: row.productTitle,
-    emailHash: key,
-  });
-  return { success: true, subscribed: false, status: row ? 'unsubscribed' : 'none' };
+  const row = await RestockSubscription.findOne({ shopDomain, emailHash:key, variantId:String(variantId) });
+  const config = await getOrCreateConfig(shopDomain);
+  if (row && config.delivery?.syncShopifyTags !== false) {
+    const resolved = { variantId:row.variantId, productId:row.productId, productTitle:row.productTitle, productHandle:row.productHandle, productUrl:row.productUrl, productImage:row.productImage, variantTitle:row.variantTitle };
+    try { await syncShopifyRestockTags({ shopDomain, email:normalizedEmail, resolved, action:'remove' }); }
+    catch (error) { await recordEvent(shopDomain,'restock_tag_sync_failed',{variantId:row.variantId,productId:row.productId,productTitle:row.productTitle,emailHash:key,detail:String(error.message||error).slice(0,500),meta:{action:'remove'}}); }
+  }
+  const updated = await RestockSubscription.findOneAndUpdate({ shopDomain, emailHash:key, variantId:String(variantId) }, { $set:{ status:'unsubscribed', unsubscribedAt:new Date(), lastError:'' } }, { new:true });
+  if (updated) await recordEvent(shopDomain,'restock_unsubscribed',{variantId:updated.variantId,productId:updated.productId,productTitle:updated.productTitle,emailHash:key});
+  return { success:true, subscribed:false, status:updated?'unsubscribed':'none' };
 }
 
 function createTransporter(settings) {
@@ -200,31 +249,47 @@ function absoluteProductUrl(shopDomain, productUrl = '') {
   return raw ? `https://${shopDomain}/${raw.replace(/^\/+/, '')}` : `https://${shopDomain}`;
 }
 
+function validHex(value, fallback) { return /^#[0-9a-f]{6}$/i.test(String(value || '')) ? String(value) : fallback; }
+function renderRestockEmailHtml(config, tokens = {}) {
+  const e = config?.email || {};
+  const subject = replaceTokens(e.subject || '{{ product_title }} is back in stock', tokens);
+  const preheader = replaceTokens(e.preheader || '', tokens);
+  const eyebrow = replaceTokens(e.eyebrow || 'Back in stock', tokens);
+  const heading = replaceTokens(e.heading || 'It’s back.', tokens);
+  const body = replaceTokens(e.body || '{{ product_title }} is available again.', tokens);
+  const buttonLabel = replaceTokens(e.buttonLabel || 'Shop now', tokens);
+  const footer = replaceTokens(e.footer || '', tokens);
+  const productUrl = tokens.product_url || '#';
+  const productImage = tokens.product_image || '';
+  const variantTitle = tokens.variant_title || '';
+  const align = e.align === 'left' ? 'left' : 'center';
+  const width = clampNumber(e.contentWidth,420,760,620);
+  const background = validHex(e.backgroundColor,'#f5f7f8');
+  const card = validHex(e.cardColor,'#ffffff');
+  const accent = validHex(e.accentColor,'#17657a');
+  const textColor = validHex(e.textColor,'#111827');
+  const muted = validHex(e.mutedTextColor,'#667085');
+  const buttonBg = validHex(e.buttonBackground,'#111827');
+  const buttonText = validHex(e.buttonTextColor,'#ffffff');
+  const buttonRadius = clampNumber(e.buttonRadius,0,30,9);
+  const cardRadius = clampNumber(e.cardRadius,0,36,18);
+  const imageRadius = clampNumber(e.imageRadius,0,36,14);
+  const logo = e.logoUrl ? `<img src="${escapeHtml(e.logoUrl)}" alt="" style="display:block;max-width:180px;max-height:60px;width:auto;height:auto;margin:${align==='center'?'0 auto 24px':'0 0 24px'}">` : '';
+  const image = e.showProductImage !== false && productImage ? `<img src="${escapeHtml(productImage)}" alt="" style="display:block;width:100%;max-width:360px;height:auto;margin:${align==='center'?'0 auto 24px':'0 0 24px'};border-radius:${imageRadius}px">` : '';
+  const variant = e.showVariant !== false && variantTitle ? `<p style="margin:8px 0 0;color:${muted};font-size:13px">${escapeHtml(variantTitle)}</p>` : '';
+  const hiddenPreheader = preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${escapeHtml(preheader)}</div>` : '';
+  const html = `<!doctype html><html><body style="margin:0;background:${background};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:${textColor}">${hiddenPreheader}<div style="max-width:${width}px;margin:0 auto;padding:34px 18px"><div style="background:${card};border:1px solid #e5e7eb;border-radius:${cardRadius}px;padding:34px;text-align:${align}">${logo}${image}<p style="margin:0 0 8px;color:${accent};font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase">${escapeHtml(eyebrow)}</p><h1 style="margin:0 0 10px;font-size:30px;line-height:1.15;letter-spacing:-.03em;color:${textColor}">${escapeHtml(heading)}</h1>${variant}<p style="margin:16px ${align==='center'?'auto':'0'} 24px;max-width:500px;color:${muted};line-height:1.65;font-size:15px">${escapeHtml(body)}</p><a href="${escapeHtml(productUrl)}" style="display:inline-block;background:${buttonBg};color:${buttonText};text-decoration:none;border-radius:${buttonRadius}px;padding:14px 24px;font-weight:800">${escapeHtml(buttonLabel)}</a>${footer?`<p style="margin:28px ${align==='center'?'auto':'0'} 0;max-width:520px;color:${muted};font-size:12px;line-height:1.55">${escapeHtml(footer)}</p>`:''}</div></div></body></html>`;
+  return { subject, html, text:`${heading}\n\n${body}\n\n${productUrl}` };
+}
+
 async function sendRestockEmail({ shopDomain, subscription, config }) {
   const emailSettings = await activeEmailSettings(shopDomain);
   const recipient = decryptSecret(subscription.emailEncrypted);
   const productUrl = absoluteProductUrl(shopDomain, subscription.productUrl || (subscription.productHandle ? `/products/${subscription.productHandle}` : ''));
-  const tokens = {
-    product_title: subscription.productTitle || 'Your item',
-    variant_title: subscription.variantTitle || '',
-    product_url: productUrl,
-  };
-  const subject = replaceTokens(config.email?.subject || '{{ product_title }} is back in stock', tokens);
-  const heading = replaceTokens(config.email?.heading || 'It’s back.', tokens);
-  const body = replaceTokens(config.email?.body || '{{ product_title }} is available again.', tokens);
-  const buttonLabel = replaceTokens(config.email?.buttonLabel || 'Shop now', tokens);
-  const footer = replaceTokens(config.email?.footer || '', tokens);
-  const image = subscription.productImage ? `<img src="${escapeHtml(subscription.productImage)}" alt="" style="display:block;width:100%;max-width:360px;height:auto;margin:0 auto 24px;border-radius:14px">` : '';
-  const html = `<!doctype html><html><body style="margin:0;background:#f5f7f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827"><div style="max-width:620px;margin:0 auto;padding:34px 18px"><div style="background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:34px;text-align:center">${image}<p style="margin:0 0 8px;color:#17657a;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase">Back in stock</p><h1 style="margin:0 0 14px;font-size:30px;letter-spacing:-.03em">${escapeHtml(heading)}</h1><p style="margin:0 auto 24px;max-width:470px;color:#5f6b76;line-height:1.6">${escapeHtml(body)}</p><a href="${escapeHtml(productUrl)}" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;border-radius:9px;padding:14px 24px;font-weight:800">${escapeHtml(buttonLabel)}</a>${footer ? `<p style="margin:28px auto 0;max-width:500px;color:#8a949e;font-size:12px;line-height:1.5">${escapeHtml(footer)}</p>` : ''}</div></div></body></html>`;
+  const tokens = { product_title:subscription.productTitle||'Your item', variant_title:subscription.variantTitle||'', product_url:productUrl, product_image:subscription.productImage||'' };
+  const rendered = renderRestockEmailHtml(config,tokens);
   const transporter = createTransporter(emailSettings);
-  await transporter.sendMail({
-    from: emailSettings.fromName ? `"${String(emailSettings.fromName).replace(/"/g, '')}" <${emailSettings.fromEmail}>` : emailSettings.fromEmail,
-    to: recipient,
-    replyTo: emailSettings.replyToEmail || emailSettings.fromEmail,
-    subject,
-    html,
-    text: `${heading}\n\n${body}\n\n${productUrl}`,
-  });
+  await transporter.sendMail({ from:emailSettings.fromName?`"${String(emailSettings.fromName).replace(/"/g,'')}" <${emailSettings.fromEmail}>`:emailSettings.fromEmail, to:recipient, replyTo:emailSettings.replyToEmail||emailSettings.fromEmail, subject:rendered.subject, html:rendered.html, text:rendered.text });
 }
 
 async function shopifyGraphql(shopDomain, query, variables = {}) {
@@ -262,6 +327,10 @@ async function processInventoryLevelUpdate({ shopDomain, inventoryItemId, availa
   if (Number(available || 0) < Number(config.sendThreshold || 1)) return { skipped: 'below_threshold' };
   const resolved = await resolveInventoryVariant(shopDomain, inventoryItemId);
   if (!resolved?.variantId || !resolved.availableForSale) return { skipped: 'not_available_for_sale' };
+  if ((config.delivery?.mode || 'flow') === 'flow') {
+    await recordEvent(shopDomain, 'restock_flow_inventory_ready', { variantId: resolved.variantId, productId: resolved.productId, productTitle: resolved.productTitle, meta: { webhookId, available: Number(available || 0) } });
+    return { delegated: 'shopify_flow', variantId: resolved.variantId };
+  }
 
   const candidates = await RestockSubscription.find({
     shopDomain,
@@ -314,10 +383,8 @@ async function scopeReadiness(shopDomain) {
   try {
     const data = await shopifyFetch(`/admin/oauth/access_scopes.json`, { shopDomain });
     const scopes = (data.access_scopes || []).map((x) => x.handle);
-    return { readInventory: scopes.includes('read_inventory'), scopes };
-  } catch (error) {
-    return { readInventory: false, scopes: [], error: error.message };
-  }
+    return { readInventory:scopes.includes('read_inventory'), readCustomers:scopes.includes('read_customers'), writeCustomers:scopes.includes('write_customers'), scopes };
+  } catch (error) { return { readInventory:false, readCustomers:false, writeCustomers:false, scopes:[], error:error.message }; }
 }
 
 async function registerInventoryWebhook(shopDomain) {
@@ -354,6 +421,33 @@ async function inspectInventoryWebhook(shopDomain) {
   }
 }
 
+async function listLegacyRestockCustomers(shopDomain, maxCustomers = 1000) {
+  const rows=[]; let after=null; let pages=0;
+  while(rows.length < maxCustomers && pages < 20){
+    const data=await shopifyGraphql(shopDomain,`query NotificationLegacyDemand($first:Int!,$after:String,$query:String!){customers(first:$first,after:$after,query:$query){pageInfo{hasNextPage endCursor}nodes{id legacyResourceId email tags updatedAt metafield(namespace:"custom",key:"notification_latest"){value}}}}`,{first:Math.min(100,maxCustomers-rows.length),after,query:'tag:restock-notif'});
+    const conn=data?.customers; rows.push(...(conn?.nodes||[])); pages+=1; if(!conn?.pageInfo?.hasNextPage)break; after=conn.pageInfo.endCursor;
+  }
+  return rows;
+}
+async function resolveVariantsBulk(shopDomain, variantIds = []) {
+  const ids=Array.from(new Set(variantIds.map((v)=>String(v).replace(/[^0-9]/g,'')).filter(Boolean))); const out=new Map();
+  for(let i=0;i<ids.length;i+=50){const chunk=ids.slice(i,i+50);const data=await shopifyGraphql(shopDomain,`query NotificationDemandVariants($ids:[ID!]!){nodes(ids:$ids){... on ProductVariant{id legacyResourceId title availableForSale inventoryQuantity product{id legacyResourceId title handle featuredImage{url}}}}}`,{ids:chunk.map((id)=>`gid://shopify/ProductVariant/${id}`)});for(const v of data?.nodes||[]){if(!v)continue;const id=String(v.legacyResourceId||String(v.id||'').split('/').pop());out.set(id,{variantId:id,variantTitle:v.title||'',availableForSale:Boolean(v.availableForSale),inventoryQuantity:Number(v.inventoryQuantity||0),productId:String(v.product?.legacyResourceId||String(v.product?.id||'').split('/').pop()),productTitle:v.product?.title||'',productHandle:v.product?.handle||'',productImage:v.product?.featuredImage?.url||'',productUrl:v.product?.handle?`https://${shopDomain}/products/${v.product.handle}?variant=${id}`:''});}}
+  return out;
+}
+async function listRestockDemand(shopDomain) {
+  const [legacy,local]=await Promise.all([listLegacyRestockCustomers(shopDomain),RestockSubscription.find({shopDomain,status:{$in:['active','sending']}}).select('variantId emailHash subscribedAt productTitle productId variantTitle productUrl productImage').lean()]);
+  const map=new Map(); const ensure=(id)=>{const key=String(id||'').replace(/[^0-9]/g,'');if(!key)return null;if(!map.has(key))map.set(key,{variantId:key,legacyKeys:new Set(),localKeys:new Set(),legacyCustomers:[],firstRequestedAt:null});return map.get(key)};
+  for(const c of legacy){for(const tag of c.tags||[]){const m=String(tag).match(/^restock_id_(\d+)$/i);if(!m)continue;const item=ensure(m[1]);if(!item)continue;let key=String(c.id||c.email||'');try{if(c.email)key=emailHash(shopDomain,c.email)}catch(_){}item.legacyKeys.add(key);if(item.legacyCustomers.length<6)item.legacyCustomers.push({email:maskEmail(c.email||''),updatedAt:c.updatedAt||null});if(c.updatedAt&&(!item.firstRequestedAt||new Date(c.updatedAt)<new Date(item.firstRequestedAt)))item.firstRequestedAt=c.updatedAt;}}
+  for(const row of local){const item=ensure(row.variantId);if(!item)continue;item.localKeys.add(row.emailHash);if(row.subscribedAt&&(!item.firstRequestedAt||new Date(row.subscribedAt)<new Date(item.firstRequestedAt)))item.firstRequestedAt=row.subscribedAt;item.local=row;}
+  const resolved=await resolveVariantsBulk(shopDomain,[...map.keys()]);
+  const items=[...map.values()].map((item)=>{const all=new Set([...item.legacyKeys,...item.localKeys]);const r=resolved.get(item.variantId)||{};return {...r,variantId:item.variantId,productTitle:r.productTitle||item.local?.productTitle||'Unknown product',productId:r.productId||item.local?.productId||'',variantTitle:r.variantTitle||item.local?.variantTitle||'',productUrl:r.productUrl||item.local?.productUrl||'',productImage:r.productImage||item.local?.productImage||'',legacyWaiting:item.legacyKeys.size,elev8Waiting:item.localKeys.size,totalWaiting:all.size,firstRequestedAt:item.firstRequestedAt,legacyCustomers:item.legacyCustomers};}).sort((a,b)=>b.totalWaiting-a.totalWaiting||String(a.productTitle).localeCompare(String(b.productTitle)));
+  return {items,totals:{products:items.length,customers:items.reduce((n,x)=>n+x.totalWaiting,0),legacyCustomers:new Set(legacy.map((c)=>c.id)).size,elev8Subscriptions:local.length},refreshedAt:new Date().toISOString(),source:'shopify_customer_tags+elev8'};
+}
+function buildFlowTemplate(config, shopDomain) {
+  const vars=config.delivery?.flowVariables||{};const tokens={product_title:vars.productTitle||'{{ product.title }}',variant_title:vars.variantTitle||'{{ productVariant.title }}',product_url:vars.productUrl||'https://{{ shop.myShopifyDomain }}/products/{{ product.handle }}?variant={{ productVariant.legacyResourceId }}',product_image:vars.productImage||''};
+  const rendered=renderRestockEmailHtml(config,tokens);return {subject:rendered.subject,html:rendered.html,flowUrl:config.delivery?.flowUrl||flowAdminFallback(shopDomain),flowName:config.delivery?.flowName||'Back in stock notifications',variables:vars};
+}
+
 async function adminSummary(shopDomain) {
   const since30 = new Date(Date.now() - 30 * 86400 * 1000);
   const [active, sent30, failed30, waitingProducts, recent, config, emailOk, webhook, scopes] = await Promise.all([
@@ -376,7 +470,7 @@ async function adminSummary(shopDomain) {
     stats: { active, productsWaiting: waitingProducts.length, sent30, failed30 },
     waitingProducts: waitingProducts.map((x) => ({ variantId: x._id.variantId, productId: x._id.productId, productTitle: x._id.productTitle, variantTitle: x._id.variantTitle, waiting: x.waiting, firstSubscribedAt: x.firstSubscribedAt })),
     recent,
-    readiness: { email: emailOk, webhook: webhook.connected, readInventoryScope: scopes.readInventory, webhookAddress: webhook.address || '', webhookReason: webhook.reason || '', scopeError: scopes.error || '' },
+    readiness: { email: emailOk, webhook: webhook.connected, readInventoryScope: scopes.readInventory, readCustomersScope: scopes.readCustomers, writeCustomersScope: scopes.writeCustomers, deliveryMode: config.delivery?.mode || 'flow', flowConfigured: Boolean(config.delivery?.flowUrl), flowUrl: config.delivery?.flowUrl || flowAdminFallback(shopDomain), webhookAddress: webhook.address || '', webhookReason: webhook.reason || '', scopeError: scopes.error || '' },
     config: publicStorefrontConfig(config),
   };
 }
@@ -413,6 +507,16 @@ async function updateAdminConfig(shopDomain, body = {}) {
   if (body.restockEnabled !== undefined) config.restockEnabled = Boolean(body.restockEnabled);
   if (body.sendThreshold !== undefined) config.sendThreshold = clampNumber(body.sendThreshold, 1, 9999, 1);
   if (body.oneShot !== undefined) config.oneShot = Boolean(body.oneShot);
+  const delivery = body.delivery || {};
+  if (['flow','elev8'].includes(delivery.mode)) config.delivery.mode = delivery.mode;
+  if (delivery.syncShopifyTags !== undefined) config.delivery.syncShopifyTags = Boolean(delivery.syncShopifyTags);
+  if (delivery.flowUrl !== undefined) config.delivery.flowUrl = cleanText(delivery.flowUrl, 1000);
+  if (delivery.flowName !== undefined) config.delivery.flowName = cleanText(delivery.flowName, 160);
+  const fv = delivery.flowVariables || {};
+  if (fv.productTitle !== undefined) config.delivery.flowVariables.productTitle = cleanText(fv.productTitle, 500);
+  if (fv.variantTitle !== undefined) config.delivery.flowVariables.variantTitle = cleanText(fv.variantTitle, 500);
+  if (fv.productUrl !== undefined) config.delivery.flowVariables.productUrl = cleanText(fv.productUrl, 1000);
+  if (fv.productImage !== undefined) config.delivery.flowVariables.productImage = cleanText(fv.productImage, 1000);
   const sf = body.storefront || {};
   if (sf.inStockLabel !== undefined) config.storefront.inStockLabel = cleanText(sf.inStockLabel, 80);
   if (/^#[0-9a-f]{6}$/i.test(String(sf.inStockBackground || ''))) config.storefront.inStockBackground = sf.inStockBackground;
@@ -431,10 +535,21 @@ async function updateAdminConfig(shopDomain, body = {}) {
   if (sf.showBellIcon !== undefined) config.storefront.showBellIcon = Boolean(sf.showBellIcon);
   const em = body.email || {};
   if (em.subject !== undefined) config.email.subject = cleanText(em.subject, 180);
+  if (em.preheader !== undefined) config.email.preheader = cleanText(em.preheader, 320);
+  if (em.eyebrow !== undefined) config.email.eyebrow = cleanText(em.eyebrow, 80);
   if (em.heading !== undefined) config.email.heading = cleanText(em.heading, 180);
   if (em.body !== undefined) config.email.body = cleanText(em.body, 1200);
   if (em.buttonLabel !== undefined) config.email.buttonLabel = cleanText(em.buttonLabel, 80);
   if (em.footer !== undefined) config.email.footer = cleanText(em.footer, 500);
+  if (em.logoUrl !== undefined) config.email.logoUrl = cleanText(em.logoUrl, 1000);
+  if (em.showProductImage !== undefined) config.email.showProductImage = Boolean(em.showProductImage);
+  if (em.showVariant !== undefined) config.email.showVariant = Boolean(em.showVariant);
+  if (['left','center'].includes(em.align)) config.email.align = em.align;
+  for (const [key,fallback] of [['backgroundColor','#f5f7f8'],['cardColor','#ffffff'],['accentColor','#17657a'],['textColor','#111827'],['mutedTextColor','#667085'],['buttonBackground','#111827'],['buttonTextColor','#ffffff']]) if (/^#[0-9a-f]{6}$/i.test(String(em[key]||''))) config.email[key]=em[key];
+  if (em.buttonRadius !== undefined) config.email.buttonRadius = clampNumber(em.buttonRadius,0,30,9);
+  if (em.cardRadius !== undefined) config.email.cardRadius = clampNumber(em.cardRadius,0,36,18);
+  if (em.imageRadius !== undefined) config.email.imageRadius = clampNumber(em.imageRadius,0,36,14);
+  if (em.contentWidth !== undefined) config.email.contentWidth = clampNumber(em.contentWidth,420,760,620);
   await config.save();
   return config.toObject();
 }
@@ -464,6 +579,8 @@ module.exports = {
   adminSummary,
   listSubscriptions,
   listEvents,
+  listRestockDemand,
+  buildFlowTemplate,
   getAdminConfig,
   updateAdminConfig,
   sendTestEmail,

@@ -26,7 +26,7 @@ const env = {
   shopifyAccessToken: process.env.SHOPIFY_ACCESS_TOKEN || process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || '',
   shopifyApiVersion: process.env.SHOPIFY_API_VERSION || '2026-04',
   buildCommit: process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || process.env.COMMIT_SHA || '',
-  shopifyScopes: process.env.SHOPIFY_SCOPES || 'read_products,write_products,read_inventory,write_inventory,read_customers,read_orders,write_files,read_content,write_content,read_online_store_pages',
+  shopifyScopes: process.env.SHOPIFY_SCOPES || 'read_products,write_products,read_inventory,write_inventory,read_customers,write_customers,read_orders,write_files,read_content,write_content,read_online_store_pages',
   emailCredentialSecret: process.env.EMAIL_CREDENTIAL_SECRET || process.env.SESSION_SECRET || process.env.JWT_SECRET || '',
   adminSharedSecret: process.env.ADMIN_SHARED_SECRET || '',
   allowUnauthenticatedAdmin: bool(process.env.ALLOW_UNAUTHENTICATED_ADMIN, false),

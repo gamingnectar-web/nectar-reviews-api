@@ -9,6 +9,8 @@ const {
   adminSummary,
   listSubscriptions,
   listEvents,
+  listRestockDemand,
+  buildFlowTemplate,
   getAdminConfig,
   updateAdminConfig,
   registerInventoryWebhook,
@@ -74,6 +76,16 @@ adminRouter.get('/subscriptions', async (req, res, next) => {
 
 adminRouter.get('/events', async (req, res, next) => {
   try { res.setHeader('Cache-Control', 'no-store'); return res.json(await listEvents(req.shopDomain, req.query.limit)); }
+  catch (error) { next(error); }
+});
+
+adminRouter.get('/demand', async (req, res, next) => {
+  try { res.setHeader('Cache-Control', 'no-store'); return res.json(await listRestockDemand(req.shopDomain)); }
+  catch (error) { next(error); }
+});
+
+adminRouter.get('/flow-template', async (req, res, next) => {
+  try { const config = await getOrCreateConfig(req.shopDomain); res.setHeader('Cache-Control', 'no-store'); return res.json(buildFlowTemplate(config, req.shopDomain)); }
   catch (error) { next(error); }
 });
 

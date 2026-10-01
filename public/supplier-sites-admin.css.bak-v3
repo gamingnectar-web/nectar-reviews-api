@@ -1,0 +1,22 @@
+.supplier-site-create{display:grid;grid-template-columns:2fr 1.2fr .6fr auto;gap:12px;align-items:end;margin:16px 0;padding:16px;border:1px solid #e2e8f0;border-radius:14px;background:#fff}
+.supplier-sites-layout{display:grid;grid-template-columns:310px 1fr;gap:16px;margin-top:16px}
+.supplier-sites-list-wrap,.supplier-products-wrap{border:1px solid #e2e8f0;border-radius:14px;background:#fff;padding:14px}
+#supplier-sites-list{display:grid;gap:8px;margin-top:10px}
+.supplier-site-row{display:grid;gap:4px;width:100%;text-align:left;border:1px solid #e2e8f0;background:#fff;border-radius:12px;padding:12px;cursor:pointer}
+.supplier-site-row.active,.supplier-site-row:hover{border-color:#0f172a}
+.supplier-site-row small{color:#64748b;overflow:hidden;text-overflow:ellipsis}
+.supplier-site-row span{font-size:11px;color:#475569}
+.supplier-products-toolbar{display:flex;justify-content:space-between;gap:12px;margin-bottom:14px}
+.supplier-products-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.supplier-product-card{display:grid;grid-template-columns:115px 1fr;gap:12px;border:1px solid #e2e8f0;border-radius:14px;padding:10px;background:#fff}
+.supplier-product-image{display:flex;align-items:center;justify-content:center;min-height:120px;background:#f8fafc;border-radius:10px;color:#94a3b8;font-size:11px}
+.supplier-product-image img{max-width:100%;max-height:120px;object-fit:contain}
+.supplier-product-head{display:flex;justify-content:space-between;gap:8px}
+.supplier-product-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:10px}
+.supplier-product-facts span{font-size:11px;color:#334155;overflow:hidden;text-overflow:ellipsis}
+.supplier-product-facts b{display:block;font-size:9px;color:#94a3b8;text-transform:uppercase}
+.supplier-product-card p{font-size:11px;color:#64748b;line-height:1.45}
+.supplier-empty{padding:24px;border:1px dashed #cbd5e1;border-radius:12px;text-align:center;color:#64748b}
+.supplier-empty strong,.supplier-empty span{display:block}
+@media(max-width:1100px){.supplier-site-create{grid-template-columns:1fr 1fr}.supplier-sites-layout{grid-template-columns:1fr}.supplier-products-grid{grid-template-columns:1fr}}
+@media(max-width:700px){.supplier-site-create{grid-template-columns:1fr}.supplier-products-toolbar{display:block}.supplier-product-card{grid-template-columns:90px 1fr}.supplier-product-facts{grid-template-columns:repeat(2,1fr)}}
