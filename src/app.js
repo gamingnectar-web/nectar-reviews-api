@@ -18,6 +18,8 @@ const aiEmailModuleRoutes = require('./routes/aiEmailModules');
 const emailModuleLibraryRoutes = require('./routes/emailModuleLibrary');
 const reviewMigrationRoutes = require('./routes/reviewMigrations');
 const elev8DashboardRoutes = require('./routes/elev8Dashboard');
+const { publicRouter: notificationsPublicRoutes, adminRouter: notificationsAdminRoutes } = require('./routes/notifications');
+const notificationWebhookRoutes = require('./routes/notificationWebhooks');
 const brandDirectoryDirectRoutes = require('./routes/brandDirectoryDirect');
 const brandDirectoryV3Routes = require('./routes/brandDirectoryV3');
 const brandRulesRoutes = require('./modules/product-creation-import/catalogue-audit/brandRules.routes');
@@ -68,6 +70,8 @@ app.set('trust proxy', 1);
 app.use(securityHeaders);
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
+// ELEV8 Notifications: raw Shopify inventory webhook must run before express.json().
+app.use('/api/webhooks/notifications', notificationWebhookRoutes);
 app.use('/api/webhooks', shopifyWebhookRoutes);
 app.use(express.json({ limit: env.jsonLimit }));
 app.use(express.urlencoded({ extended: true, limit: env.jsonLimit }));
@@ -102,7 +106,9 @@ app.get('/admin', async (req, res, next) => {
     const filePath = path.join(publicDir, 'admin.html');
     let html = injectProductImportCleanupAssets(fs.readFileSync(filePath, 'utf8'));
     if (!html.includes('/elev8-dashboard.css')) html = html.replace('</head>', '<link rel="stylesheet" href="/elev8-dashboard.css?v=elev8-1"></head>');
+    if (!html.includes('/notifications-center.css')) html = html.replace('</head>', '<link rel="stylesheet" href="/notifications-center.css?v=notifications-1"></head>');
     if (!html.includes('/elev8-dashboard.js')) html = html.replace('</body>', '<script src="/elev8-dashboard.js?v=elev8-1" defer></script></body>');
+    if (!html.includes('/notifications-center.js')) html = html.replace('</body>', '<script src="/notifications-center.js?v=notifications-1" defer></script></body>');
     html = html
       .replace(/__SHOPIFY_API_KEY__/g, env.shopifyApiKey || '').replace(/__APP_URL__/g, env.appUrl || '');
     res.setHeader('Cache-Control', 'no-store');
@@ -139,6 +145,7 @@ app.get(['/supplier-sites-admin.js', '/supplier-sites-admin.css'], (req, res) =>
 app.use(express.static(publicDir, { etag: true, maxAge: env.nodeEnv === 'production' ? '5m' : 0, index: false }));
 app.use('/auth', authRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/notifications', makeRateLimiter({ windowMs: 60 * 1000, max: 40, keyPrefix: 'notifications-public' }), notificationsPublicRoutes);
 app.use('/api/loyalty/checkout', makeRateLimiter({ windowMs: 60 * 1000, max: 60, keyPrefix: 'loyalty-checkout' }), loyaltyCheckoutRoutes);
 app.use('/api/admin/brand-directory-v3', requireAdminSession, brandDirectoryV3Routes);
 app.use('/api/admin/brand-rules', requireAdminSession, brandRulesRoutes);
@@ -148,6 +155,7 @@ app.use('/api/admin/manual-review-image-imports', requireAdminSession, manualRev
 mountPlatformModules(app, { makeRateLimiter, requireAdminSession });
 app.use('/api/admin/brand-directory-v2', requireAdminSession, brandDirectoryDirectRoutes);
 app.use('/api/admin/elev8', requireAdminSession, elev8DashboardRoutes);
+app.use('/api/admin/notifications', makeRateLimiter({ windowMs: 60 * 1000, max: 120, keyPrefix: 'notifications-admin' }), requireAdminSession, notificationsAdminRoutes);
 app.use('/api/admin/ai', makeRateLimiter({ windowMs: 60 * 1000, max: 30, keyPrefix: 'admin-ai' }), requireAdminSession, aiEmailModuleRoutes);
 app.use('/api/admin/email-module-library', requireAdminSession, emailModuleLibraryRoutes);
 app.use('/api/admin/review-migrations', reviewMigrationRoutes);
