@@ -7,8 +7,12 @@ const notificationConfigSchema = new mongoose.Schema({
   delivery: {
     mode: { type: String, enum: ['flow', 'elev8'], default: 'flow' },
     syncShopifyTags: { type: Boolean, default: true },
+    // Legacy URL fields remain for backward compatibility but V3 uses Flow Connections instead.
     flowUrl: { type: String, default: '' },
     flowName: { type: String, default: 'Back in stock notifications' },
+    flowConnectionKey: { type: String, default: 'legacy-tags' },
+    archivedFlowConnectionKey: { type: String, default: 'none' },
+    flowLifecycle: { type: mongoose.Schema.Types.Mixed, default: {} },
     flowVariables: {
       productTitle: { type: String, default: '{{ product.title }}' },
       variantTitle: { type: String, default: '{{ productVariant.title }}' },
@@ -32,6 +36,10 @@ const notificationConfigSchema = new mongoose.Schema({
     radius: { type: Number, default: 8, min: 0, max: 30 },
     height: { type: Number, default: 56, min: 44, max: 72 },
     showBellIcon: { type: Boolean, default: true },
+  },
+  archiveNotifications: {
+    enabled: { type: Boolean, default: true },
+    autoSend: { type: Boolean, default: false },
   },
   email: {
     subject: { type: String, default: '{{ product_title }} is back in stock' },
@@ -57,6 +65,30 @@ const notificationConfigSchema = new mongoose.Schema({
     imageRadius: { type: Number, default: 14, min: 0, max: 36 },
     contentWidth: { type: Number, default: 620, min: 420, max: 760 },
   },
+  archivedEmail: {
+    subject: { type: String, default: 'An update about {{ product_title }}' },
+    preheader: { type: String, default: 'An update on the item you asked us to restock.' },
+    eyebrow: { type: String, default: 'Product update' },
+    heading: { type: String, default: 'A quick update.' },
+    body: { type: String, default: '{{ product_title }} is no longer part of our current range. We’re sorry we couldn’t get this one back for you.' },
+    buttonLabel: { type: String, default: 'Browse alternatives' },
+    footer: { type: String, default: 'You received this message because you asked us to notify you about this product.' },
+    logoUrl: { type: String, default: '' },
+    showProductImage: { type: Boolean, default: true },
+    showVariant: { type: Boolean, default: true },
+    align: { type: String, enum: ['left', 'center'], default: 'center' },
+    backgroundColor: { type: String, default: '#f5f7f8' },
+    cardColor: { type: String, default: '#ffffff' },
+    accentColor: { type: String, default: '#8a5a00' },
+    textColor: { type: String, default: '#111827' },
+    mutedTextColor: { type: String, default: '#667085' },
+    buttonBackground: { type: String, default: '#111827' },
+    buttonTextColor: { type: String, default: '#ffffff' },
+    buttonRadius: { type: Number, default: 9, min: 0, max: 30 },
+    cardRadius: { type: Number, default: 18, min: 0, max: 36 },
+    imageRadius: { type: Number, default: 14, min: 0, max: 36 },
+    contentWidth: { type: Number, default: 620, min: 420, max: 760 },
+  },
   sendThreshold: { type: Number, default: 1, min: 1, max: 9999 },
   oneShot: { type: Boolean, default: true },
   webhook: {
@@ -66,6 +98,10 @@ const notificationConfigSchema = new mongoose.Schema({
     installedAt: { type: Date, default: null },
     lastReceivedAt: { type: Date, default: null },
     lastInventoryItemId: { type: String, default: '' },
+    productWebhookId: { type: String, default: '' },
+    productWebhookAddress: { type: String, default: '' },
+    productWebhookStatus: { type: String, default: '' },
+    lastProductUpdateAt: { type: Date, default: null },
   },
 }, { timestamps: true });
 
@@ -107,8 +143,33 @@ const notificationEventSchema = new mongoose.Schema({
 }, { timestamps: true });
 notificationEventSchema.index({ shopDomain: 1, occurredAt: -1 });
 
+
+const stockObservationSchema = new mongoose.Schema({
+  shopDomain: { type: String, required: true, index: true },
+  inventoryItemId: { type: String, default: '', index: true },
+  variantId: { type: String, required: true, index: true },
+  productId: { type: String, default: '', index: true },
+  productTitle: { type: String, default: '' },
+  variantTitle: { type: String, default: '' },
+  productHandle: { type: String, default: '' },
+  productImage: { type: String, default: '' },
+  productStatus: { type: String, default: '' },
+  publishedAt: { type: Date, default: null },
+  quantity: { type: Number, default: 0 },
+  inStock: { type: Boolean, default: false, index: true },
+  firstObservedAt: { type: Date, default: Date.now },
+  lastObservedAt: { type: Date, default: Date.now },
+  lastInStockAt: { type: Date, default: null },
+  outOfStockSince: { type: Date, default: null },
+  lastPositiveQuantity: { type: Number, default: 0 },
+  archivedAt: { type: Date, default: null },
+}, { timestamps: true });
+stockObservationSchema.index({ shopDomain: 1, variantId: 1 }, { unique: true });
+stockObservationSchema.index({ shopDomain: 1, productId: 1, productStatus: 1 });
+
 module.exports = {
   NotificationConfig: mongoose.models.NotificationConfig || mongoose.model('NotificationConfig', notificationConfigSchema, 'notification_configs'),
   RestockSubscription: mongoose.models.RestockSubscription || mongoose.model('RestockSubscription', restockSubscriptionSchema, 'restock_subscriptions'),
   NotificationEvent: mongoose.models.NotificationEvent || mongoose.model('NotificationEvent', notificationEventSchema, 'notification_events'),
+  StockObservation: mongoose.models.NotificationStockObservation || mongoose.model('NotificationStockObservation', stockObservationSchema, 'notification_stock_observations'),
 };

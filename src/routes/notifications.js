@@ -11,6 +11,8 @@ const {
   listEvents,
   listRestockDemand,
   buildFlowTemplate,
+  listFlowConnections,
+  dispatchArchivedDemand,
   getAdminConfig,
   updateAdminConfig,
   registerInventoryWebhook,
@@ -85,7 +87,17 @@ adminRouter.get('/demand', async (req, res, next) => {
 });
 
 adminRouter.get('/flow-template', async (req, res, next) => {
-  try { const config = await getOrCreateConfig(req.shopDomain); res.setHeader('Cache-Control', 'no-store'); return res.json(buildFlowTemplate(config, req.shopDomain)); }
+  try { const config = await getOrCreateConfig(req.shopDomain); res.setHeader('Cache-Control', 'no-store'); return res.json(buildFlowTemplate(config, req.shopDomain, req.query.type === 'archived' ? 'archived' : 'restock')); }
+  catch (error) { next(error); }
+});
+
+adminRouter.get('/flow-connections', async (req, res, next) => {
+  try { res.setHeader('Cache-Control', 'no-store'); return res.json(await listFlowConnections(req.shopDomain)); }
+  catch (error) { next(error); }
+});
+
+adminRouter.post('/archived-demand/:variantId/dispatch', async (req, res, next) => {
+  try { res.setHeader('Cache-Control', 'no-store'); return res.json(await dispatchArchivedDemand(req.shopDomain, req.params.variantId)); }
   catch (error) { next(error); }
 });
 
@@ -110,7 +122,7 @@ adminRouter.post('/webhook/register', async (req, res, next) => {
 });
 
 adminRouter.post('/test-email', async (req, res, next) => {
-  try { return res.json(await sendTestEmail(req.shopDomain, req.body?.email)); }
+  try { return res.json(await sendTestEmail(req.shopDomain, req.body?.email, req.body?.templateType === 'archived' ? 'archived' : 'restock')); }
   catch (error) { next(error); }
 });
 

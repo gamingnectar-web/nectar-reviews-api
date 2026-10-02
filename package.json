@@ -11,7 +11,9 @@
     "verify:requires": "node scripts/verify-relative-requires.js",
     "security:smoke": "node scripts/security-smoke-test.js",
     "deploy:preflight": "node scripts/verify-relative-requires.js && node --check server.js && node --check src/app.js && find src public Shopify-Liquid/assets extensions/review-widget-extension/assets -name '*.js' -print0 | xargs -0 -n1 node --check && npm run reviews:smoke && npm run security:smoke",
-    "reviews:smoke": "node scripts/reviews-smoke-test.js"
+    "reviews:smoke": "node scripts/reviews-smoke-test.js",
+    "notifications:privacy:migrate": "node scripts/notifications-privacy-migrate.js",
+    "notifications:privacy:audit": "node scripts/notifications-privacy-audit.js"
   },
   "engines": {
     "node": "22.x",

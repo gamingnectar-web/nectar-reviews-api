@@ -72,6 +72,8 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 // ELEV8 Notifications: raw Shopify inventory webhook must run before express.json().
 app.use('/api/webhooks/notifications', notificationWebhookRoutes);
+// ELEV8 Notifications: raw Shopify notification webhooks before JSON parsing.
+app.use('/api/webhooks/notifications', notificationWebhookRoutes);
 app.use('/api/webhooks', shopifyWebhookRoutes);
 app.use(express.json({ limit: env.jsonLimit }));
 app.use(express.urlencoded({ extended: true, limit: env.jsonLimit }));
@@ -106,11 +108,15 @@ app.get('/admin', async (req, res, next) => {
     const filePath = path.join(publicDir, 'admin.html');
     let html = injectProductImportCleanupAssets(fs.readFileSync(filePath, 'utf8'));
     if (!html.includes('/elev8-dashboard.css')) html = html.replace('</head>', '<link rel="stylesheet" href="/elev8-dashboard.css?v=elev8-1"></head>');
-    if (!html.includes('/notifications-center.css')) html = html.replace('</head>', '<link rel="stylesheet" href="/notifications-center.css?v=notifications-2"></head>');
-    if (!html.includes('/notifications-center.css')) html = html.replace('</head>', '<link rel="stylesheet" href="/notifications-center.css?v=notifications-2"></head>');
+    if (!html.includes('/notifications-center.css')) html = html.replace('</head>', '<link rel="stylesheet" href="/notifications-center.css?v=notifications-4"></head>');
+    if (!html.includes('/notifications-center.css')) html = html.replace('</head>', '<link rel="stylesheet" href="/notifications-center.css?v=notifications-4"></head>');
+    if (!html.includes('/notifications-center.css')) html = html.replace('</head>', '<link rel="stylesheet" href="/notifications-center.css?v=notifications-4"></head>');
+    if (!html.includes('/notifications-center.css')) html = html.replace('</head>', '<link rel="stylesheet" href="/notifications-center.css?v=notifications-4"></head>');
     if (!html.includes('/elev8-dashboard.js')) html = html.replace('</body>', '<script src="/elev8-dashboard.js?v=elev8-1" defer></script></body>');
-    if (!html.includes('/notifications-center.js')) html = html.replace('</body>', '<script src="/notifications-center.js?v=notifications-2" defer></script></body>');
-    if (!html.includes('/notifications-center.js')) html = html.replace('</body>', '<script src="/notifications-center.js?v=notifications-2" defer></script></body>');
+    if (!html.includes('/notifications-center.js')) html = html.replace('</body>', '<script src="/notifications-center.js?v=notifications-4" defer></script></body>');
+    if (!html.includes('/notifications-center.js')) html = html.replace('</body>', '<script src="/notifications-center.js?v=notifications-4" defer></script></body>');
+    if (!html.includes('/notifications-center.js')) html = html.replace('</body>', '<script src="/notifications-center.js?v=notifications-4" defer></script></body>');
+    if (!html.includes('/notifications-center.js')) html = html.replace('</body>', '<script src="/notifications-center.js?v=notifications-4" defer></script></body>');
     html = html
       .replace(/__SHOPIFY_API_KEY__/g, env.shopifyApiKey || '').replace(/__APP_URL__/g, env.appUrl || '');
     res.setHeader('Cache-Control', 'no-store');

@@ -3,11 +3,14 @@ const nodemailer = require('nodemailer');
 const { env } = require('../../config/env');
 const { EmailProviderSettings } = require('../../models');
 const { encryptSecret, decryptSecret } = require('../../utils/crypto');
+const { anonymousRef, publicRef, redactText, scrubMeta } = require('./services/privacyVault');
 const { cleanEmail, cleanText, clampNumber } = require('../../utils/validation');
 const { shopifyFetch } = require('../../utils/shopify');
-const { NotificationConfig, RestockSubscription, NotificationEvent } = require('./notifications.models');
+const { NotificationConfig, RestockSubscription, NotificationEvent, StockObservation } = require('./notifications.models');
 
 const RESTOCK_TOPIC = 'inventory_levels/update';
+const PRODUCT_UPDATE_TOPIC = 'products/update';
+const FLOW_TRIGGER_HANDLES = { restock: 'elev8-product-restocked', archived: 'elev8-product-archived' };
 
 function publicError(message, status = 400) {
   const error = new Error(message);
@@ -68,7 +71,152 @@ function publicStorefrontConfig(config) {
 }
 
 async function recordEvent(shopDomain, type, payload = {}) {
-  return NotificationEvent.create({ shopDomain, type, ...payload, occurredAt: new Date() });
+  const safe = { ...payload };
+  if (safe.detail) safe.detail = redactText(safe.detail);
+  if (safe.meta) safe.meta = scrubMeta(safe.meta, shopDomain);
+  return NotificationEvent.create({ shopDomain, type, ...safe, occurredAt: new Date() });
+}
+
+
+function flowConnectionDefinitions(config = {}) {
+  const lifecycle = config.delivery?.flowLifecycle || {};
+  const legacyReady = config.delivery?.syncShopifyTags !== false;
+  const builtIns = [
+    {
+      key: 'legacy-tags',
+      label: 'Existing Shopify tag Flow',
+      purpose: 'restock',
+      kind: 'legacy',
+      handle: '',
+      enabled: legacyReady,
+      connected: legacyReady,
+      description: 'Keeps the existing restock_id_* customer tags and lets your current Shopify Flow continue to send.',
+    },
+    {
+      key: 'elev8-restock',
+      label: 'ELEV8 · Back in stock',
+      purpose: 'restock',
+      kind: 'trigger',
+      handle: FLOW_TRIGGER_HANDLES.restock,
+      enabled: Boolean(lifecycle.restock?.hasEnabledFlow),
+      connected: Boolean(lifecycle.restock?.hasEnabledFlow),
+      lastChangedAt: lifecycle.restock?.timestamp || null,
+      definitionId: lifecycle.restock?.definitionId || '',
+      description: 'ELEV8 fires a Shopify Flow trigger for each waiting customer when stock returns.',
+    },
+    {
+      key: 'elev8-archived',
+      label: 'ELEV8 · Archived product demand',
+      purpose: 'archived',
+      kind: 'trigger',
+      handle: FLOW_TRIGGER_HANDLES.archived,
+      enabled: Boolean(lifecycle.archived?.hasEnabledFlow),
+      connected: Boolean(lifecycle.archived?.hasEnabledFlow),
+      lastChangedAt: lifecycle.archived?.timestamp || null,
+      definitionId: lifecycle.archived?.definitionId || '',
+      description: 'Optional Flow for customers who were waiting when a product is archived.',
+    },
+  ];
+  const known = new Set(['restock','archived']);
+  Object.entries(lifecycle).forEach(([key, value]) => {
+    if (known.has(key) || !value) return;
+    builtIns.push({
+      key: `shopify-${key}`,
+      label: value.definitionId || `Shopify Flow ${key}`,
+      purpose: 'other',
+      kind: 'discovered',
+      handle: '',
+      enabled: Boolean(value.hasEnabledFlow),
+      connected: Boolean(value.hasEnabledFlow),
+      lastChangedAt: value.timestamp || null,
+      definitionId: value.definitionId || '',
+      description: 'A Shopify Flow trigger lifecycle callback discovered by ELEV8.',
+    });
+  });
+  return builtIns;
+}
+
+function classifyFlowDefinition(definitionId = '') {
+  const value = String(definitionId || '').toLowerCase();
+  if (/archiv|discontinu|retir/.test(value)) return 'archived';
+  if (/restock|back.?in.?stock|stock/.test(value)) return 'restock';
+  return value.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'unknown';
+}
+
+async function recordFlowLifecycle({ shopDomain, definitionId, hasEnabledFlow, timestamp }) {
+  const config = await getOrCreateConfig(shopDomain);
+  const key = classifyFlowDefinition(definitionId);
+  const incoming = timestamp ? new Date(timestamp) : new Date();
+  const existing = config.delivery?.flowLifecycle?.[key];
+  if (existing?.timestamp && new Date(existing.timestamp) > incoming) {
+    return { ok: true, ignored: 'older_callback', key };
+  }
+  const next = { ...(config.delivery?.flowLifecycle || {}) };
+  next[key] = {
+    definitionId: cleanText(definitionId, 200),
+    hasEnabledFlow: Boolean(hasEnabledFlow),
+    timestamp: incoming.toISOString(),
+  };
+  config.delivery.flowLifecycle = next;
+  config.markModified('delivery.flowLifecycle');
+  await config.save();
+  await recordEvent(shopDomain, 'flow_connection_changed', { detail: `${definitionId}: ${hasEnabledFlow ? 'enabled' : 'disabled'}`, meta: { key, definitionId, hasEnabledFlow: Boolean(hasEnabledFlow) } });
+  return { ok: true, key, enabled: Boolean(hasEnabledFlow) };
+}
+
+async function listFlowConnections(shopDomain) {
+  const config = await getOrCreateConfig(shopDomain);
+  return {
+    selectedRestock: config.delivery?.flowConnectionKey || 'legacy-tags',
+    selectedArchived: config.delivery?.archivedFlowConnectionKey || 'none',
+    connections: flowConnectionDefinitions(config),
+  };
+}
+
+async function sendFlowTrigger(shopDomain, handle, payload = {}) {
+  if (!handle) throw new Error('Missing Shopify Flow trigger handle.');
+  const data = await shopifyGraphql(shopDomain, `mutation Elev8FlowTrigger($handle:String!,$payload:JSON!){flowTriggerReceive(handle:$handle,payload:$payload){userErrors{field message}}}`, { handle, payload });
+  const errors = data?.flowTriggerReceive?.userErrors || [];
+  if (errors.length) throw new Error(errors.map((x) => x.message).join('; '));
+  return { ok: true };
+}
+
+async function recordStockObservation(shopDomain, resolved = {}, inventoryItemId = '') {
+  if (!resolved.variantId) return { observation: null, becameAvailable: false, becameUnavailable: false };
+  const now = new Date();
+  const previous = await StockObservation.findOne({ shopDomain, variantId: String(resolved.variantId) }).lean();
+  const quantity = Number(resolved.inventoryQuantity ?? resolved.quantity ?? 0);
+  const inStock = Boolean(resolved.availableForSale) && quantity > 0;
+  const becameAvailable = previous ? !previous.inStock && inStock : inStock;
+  const becameUnavailable = previous ? previous.inStock && !inStock : false;
+  const update = {
+    inventoryItemId: String(inventoryItemId || previous?.inventoryItemId || ''),
+    productId: String(resolved.productId || previous?.productId || ''),
+    productTitle: cleanText(resolved.productTitle || previous?.productTitle || '', 240),
+    variantTitle: cleanText(resolved.title || resolved.variantTitle || previous?.variantTitle || '', 240),
+    productHandle: cleanText(resolved.productHandle || previous?.productHandle || '', 240),
+    productImage: cleanText(resolved.productImage || previous?.productImage || '', 1200),
+    productStatus: String(resolved.productStatus || previous?.productStatus || '').toUpperCase(),
+    publishedAt: resolved.publishedAt || previous?.publishedAt || null,
+    quantity,
+    inStock,
+    lastObservedAt: now,
+  };
+  if (!previous) update.firstObservedAt = now;
+  if (inStock) {
+    update.lastInStockAt = now;
+    update.outOfStockSince = null;
+    update.lastPositiveQuantity = Math.max(0, quantity);
+  } else if (becameUnavailable || !previous) {
+    update.outOfStockSince = previous?.outOfStockSince || now;
+  }
+  if (String(update.productStatus).toUpperCase() === 'ARCHIVED') update.archivedAt = previous?.archivedAt || now;
+  const observation = await StockObservation.findOneAndUpdate(
+    { shopDomain, variantId: String(resolved.variantId) },
+    { $set: update, $setOnInsert: { shopDomain, variantId: String(resolved.variantId) } },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  ).lean();
+  return { observation, becameAvailable, becameUnavailable };
 }
 
 async function getSubscriptionStatus({ shopDomain, email, variantId }) {
@@ -101,6 +249,7 @@ async function resolveSubscriptionVariant(shopDomain, variantId) {
     variantId: String(variant.legacyResourceId || numericId),
     variantTitle: variant.title || '',
     availableForSale: Boolean(variant.availableForSale),
+    inventoryQuantity: Number(variant.inventoryQuantity || 0),
     productId: String(variant.product?.legacyResourceId || String(variant.product?.id || '').split('/').pop()),
     productTitle: variant.product?.title || '',
     productHandle: handle,
@@ -192,7 +341,10 @@ async function subscribeRestock({ shopDomain, email, variantId, source = 'storef
   );
   let shopifySynced = false;
   if (config.delivery?.syncShopifyTags !== false) {
-    try { await syncShopifyRestockTags({ shopDomain, email: normalizedEmail, resolved, action: 'add' }); shopifySynced = true; }
+    try {
+      await syncShopifyRestockTags({ shopDomain, email: normalizedEmail, resolved, action: 'add' });
+      shopifySynced = true;
+    }
     catch (error) {
       await RestockSubscription.updateOne({ _id: row._id }, { $set: { lastError: `Shopify tag sync: ${String(error.message || error).slice(0,420)}` } });
       await recordEvent(shopDomain,'restock_tag_sync_failed',{variantId:row.variantId,productId:row.productId,productTitle:row.productTitle,emailHash:key,detail:String(error.message||error).slice(0,500)});
@@ -282,6 +434,11 @@ function renderRestockEmailHtml(config, tokens = {}) {
   return { subject, html, text:`${heading}\n\n${body}\n\n${productUrl}` };
 }
 
+
+function renderArchivedEmailHtml(config, tokens = {}) {
+  return renderRestockEmailHtml({ ...config, email: config?.archivedEmail || {} }, tokens);
+}
+
 async function sendRestockEmail({ shopDomain, subscription, config }) {
   const emailSettings = await activeEmailSettings(shopDomain);
   const recipient = decryptSecret(subscription.emailEncrypted);
@@ -304,7 +461,7 @@ async function shopifyGraphql(shopDomain, query, variables = {}) {
 
 async function resolveInventoryVariant(shopDomain, inventoryItemId) {
   const gid = String(inventoryItemId).startsWith('gid://') ? String(inventoryItemId) : `gid://shopify/InventoryItem/${inventoryItemId}`;
-  const data = await shopifyGraphql(shopDomain, `query NotificationInventoryItem($id: ID!) { inventoryItem(id: $id) { id variants(first: 1) { nodes { id legacyResourceId title availableForSale product { id legacyResourceId title handle featuredImage { url } } } } } }`, { id: gid });
+  const data = await shopifyGraphql(shopDomain, `query NotificationInventoryItem($id: ID!) { inventoryItem(id: $id) { id variants(first: 1) { nodes { id legacyResourceId title availableForSale inventoryQuantity product { id legacyResourceId title handle status publishedAt featuredImage { url } } } } } }`, { id: gid });
   const variant = data?.inventoryItem?.variants?.nodes?.[0];
   if (!variant) return null;
   return {
@@ -315,7 +472,64 @@ async function resolveInventoryVariant(shopDomain, inventoryItemId) {
     productTitle: variant.product?.title || '',
     productHandle: variant.product?.handle || '',
     productImage: variant.product?.featuredImage?.url || '',
+    productStatus: variant.product?.status || '',
+    publishedAt: variant.product?.publishedAt || null,
   };
+}
+
+
+async function listCustomersWaitingForVariant(shopDomain, variantId, maxCustomers = 1000) {
+  const tag = `restock_id_${String(variantId || '').replace(/[^0-9]/g, '')}`;
+  if (!/\d+$/.test(tag)) return [];
+  const rows = []; let after = null; let pages = 0;
+  while (rows.length < maxCustomers && pages < 20) {
+    const data = await shopifyGraphql(shopDomain, `query NotificationVariantCustomers($first:Int!,$after:String,$query:String!){customers(first:$first,after:$after,query:$query){pageInfo{hasNextPage endCursor}nodes{id legacyResourceId email tags}}}`, { first: Math.min(100, maxCustomers - rows.length), after, query: `tag:${tag}` });
+    const conn = data?.customers; rows.push(...(conn?.nodes || [])); pages += 1;
+    if (!conn?.pageInfo?.hasNextPage) break; after = conn.pageInfo.endCursor;
+  }
+  return rows;
+}
+
+async function dispatchConnectedFlow({ shopDomain, resolved, config, purpose = 'restock', eventKey = '' }) {
+  const selected = purpose === 'archived' ? (config.delivery?.archivedFlowConnectionKey || 'none') : (config.delivery?.flowConnectionKey || 'legacy-tags');
+  if (selected === 'none') return { skipped: 'no_connection' };
+  if (selected === 'legacy-tags') return { delegated: 'legacy_tag_flow' };
+  const connection = flowConnectionDefinitions(config).find((x) => x.key === selected);
+  if (!connection?.connected || !connection.handle) return { skipped: 'flow_not_enabled', connection: selected };
+  const customers = await listCustomersWaitingForVariant(shopDomain, resolved.variantId);
+  const productUrl = resolved.productUrl || (resolved.productHandle ? `https://${shopDomain}/products/${resolved.productHandle}?variant=${resolved.variantId}` : `https://${shopDomain}`);
+  const rendered = purpose === 'archived'
+    ? renderArchivedEmailHtml(config, { product_title: resolved.productTitle || 'Product', variant_title: resolved.variantTitle || resolved.title || '', product_url: productUrl, product_image: resolved.productImage || '' })
+    : renderRestockEmailHtml(config, { product_title: resolved.productTitle || 'Product', variant_title: resolved.variantTitle || resolved.title || '', product_url: productUrl, product_image: resolved.productImage || '' });
+  let triggered = 0; let failed = 0;
+  for (const customer of customers) {
+    const customerId = String(customer.legacyResourceId || String(customer.id || '').split('/').pop()).replace(/[^0-9]/g, '');
+    if (!customerId) continue;
+    const customerRef = anonymousRef(shopDomain, 'customer', customerId);
+    const dedupeRef = anonymousRef(shopDomain, 'flow-dedupe', `${eventKey || purpose}:${customerId}:${resolved.variantId}`);
+    const duplicate = await NotificationEvent.findOne({ shopDomain, type: 'flow_triggered', 'meta.dedupeRef': dedupeRef }).select('_id').lean();
+    if (duplicate) continue;
+    try {
+      await sendFlowTrigger(shopDomain, connection.handle, {
+        customer_id: Number(customerId),
+        product_id: Number(String(resolved.productId || '').replace(/[^0-9]/g, '')),
+        'Variant ID': String(resolved.variantId || ''),
+        'Product title': String(resolved.productTitle || ''),
+        'Variant title': String(resolved.variantTitle || resolved.title || ''),
+        'Product URL': String(productUrl),
+        'Product image': String(resolved.productImage || productUrl),
+        'Template': purpose,
+        'Email subject': String(rendered.subject || ''),
+        'Email HTML': String(rendered.html || '').slice(0, 42000),
+      });
+      await recordEvent(shopDomain, 'flow_triggered', { variantId: String(resolved.variantId || ''), productId: String(resolved.productId || ''), productTitle: resolved.productTitle || '', detail: connection.label, meta: { dedupeRef, purpose, customerRef, connectionKey: connection.key } });
+      triggered += 1;
+    } catch (error) {
+      await recordEvent(shopDomain, 'flow_trigger_failed', { variantId: String(resolved.variantId || ''), productId: String(resolved.productId || ''), productTitle: resolved.productTitle || '', detail: String(error.message || error).slice(0, 500), meta: { purpose, customerRef, connectionKey: connection.key } });
+      failed += 1;
+    }
+  }
+  return { triggered, failed, connection: connection.key, customers: customers.length };
 }
 
 async function processInventoryLevelUpdate({ shopDomain, inventoryItemId, available, webhookId = '' }) {
@@ -323,34 +537,25 @@ async function processInventoryLevelUpdate({ shopDomain, inventoryItemId, availa
   config.webhook.lastReceivedAt = new Date();
   config.webhook.lastInventoryItemId = String(inventoryItemId || '');
   await config.save();
-  if (config.enabled === false || config.restockEnabled === false) return { skipped: 'disabled' };
-  if (Number(available || 0) < Number(config.sendThreshold || 1)) return { skipped: 'below_threshold' };
   const resolved = await resolveInventoryVariant(shopDomain, inventoryItemId);
-  if (!resolved?.variantId || !resolved.availableForSale) return { skipped: 'not_available_for_sale' };
+  if (!resolved?.variantId) return { skipped: 'variant_not_found' };
+  const stock = await recordStockObservation(shopDomain, resolved, inventoryItemId);
+  if (config.enabled === false || config.restockEnabled === false) return { skipped: 'disabled', telemetry: true };
+  const totalAvailable = Number(resolved.inventoryQuantity || 0);
+  if (!resolved.availableForSale || totalAvailable < Number(config.sendThreshold || 1)) return { skipped: 'not_available_for_sale', variantId: resolved.variantId };
+  if (!stock.becameAvailable) return { skipped: 'already_in_stock', variantId: resolved.variantId };
   if ((config.delivery?.mode || 'flow') === 'flow') {
-    await recordEvent(shopDomain, 'restock_flow_inventory_ready', { variantId: resolved.variantId, productId: resolved.productId, productTitle: resolved.productTitle, meta: { webhookId, available: Number(available || 0) } });
-    return { delegated: 'shopify_flow', variantId: resolved.variantId };
+    const result = await dispatchConnectedFlow({ shopDomain, resolved, config, purpose: 'restock', eventKey: webhookId || String(stock.observation?.lastInStockAt || Date.now()) });
+    await recordEvent(shopDomain, 'restock_flow_inventory_ready', { variantId: resolved.variantId, productId: resolved.productId, productTitle: resolved.productTitle, meta: { webhookId, available: totalAvailable, ...result } });
+    return { delegated: 'shopify_flow', variantId: resolved.variantId, ...result };
   }
 
-  const candidates = await RestockSubscription.find({
-    shopDomain,
-    variantId: resolved.variantId,
-    status: 'active',
-    sendAttempts: { $lt: 3 },
-  }).sort({ subscribedAt: 1 }).limit(1000);
-
-  let sent = 0;
-  let failed = 0;
-  const workers = Math.min(5, Math.max(1, candidates.length));
-  let cursor = 0;
+  const candidates = await RestockSubscription.find({ shopDomain, variantId: resolved.variantId, status: 'active', sendAttempts: { $lt: 3 } }).sort({ subscribedAt: 1 }).limit(1000);
+  let sent = 0; let failed = 0; const workers = Math.min(5, Math.max(1, candidates.length)); let cursor = 0;
   async function worker() {
     while (cursor < candidates.length) {
       const item = candidates[cursor++];
-      const claimed = await RestockSubscription.findOneAndUpdate(
-        { _id: item._id, status: 'active' },
-        { $set: { status: 'sending', lastAttemptAt: new Date(), lastWebhookId: webhookId }, $inc: { sendAttempts: 1 } },
-        { new: true }
-      );
+      const claimed = await RestockSubscription.findOneAndUpdate({ _id: item._id, status: 'active' }, { $set: { status: 'sending', lastAttemptAt: new Date(), lastWebhookId: webhookId }, $inc: { sendAttempts: 1 } }, { new: true });
       if (!claimed) continue;
       if (!claimed.productTitle && resolved.productTitle) claimed.productTitle = resolved.productTitle;
       if (!claimed.productId && resolved.productId) claimed.productId = resolved.productId;
@@ -361,17 +566,60 @@ async function processInventoryLevelUpdate({ shopDomain, inventoryItemId, availa
         await sendRestockEmail({ shopDomain, subscription: claimed, config });
         const nextStatus = config.oneShot === false ? 'active' : 'sent';
         await RestockSubscription.updateOne({ _id: claimed._id }, { $set: { status: nextStatus, sentAt: new Date(), lastError: '', productTitle: claimed.productTitle, productId: claimed.productId, productHandle: claimed.productHandle, productImage: claimed.productImage, variantTitle: claimed.variantTitle } });
-        await recordEvent(shopDomain, 'restock_sent', { variantId: claimed.variantId, productId: claimed.productId, productTitle: claimed.productTitle, emailHash: claimed.emailHash, meta: { webhookId } });
-        sent += 1;
+        await recordEvent(shopDomain, 'restock_sent', { variantId: claimed.variantId, productId: claimed.productId, productTitle: claimed.productTitle, emailHash: claimed.emailHash, meta: { webhookId } }); sent += 1;
       } catch (error) {
         await RestockSubscription.updateOne({ _id: claimed._id }, { $set: { status: 'active', lastError: String(error.message || error).slice(0, 500) } });
-        await recordEvent(shopDomain, 'restock_failed', { variantId: claimed.variantId, productId: claimed.productId, productTitle: claimed.productTitle, emailHash: claimed.emailHash, detail: String(error.message || error).slice(0, 500), meta: { webhookId } });
-        failed += 1;
+        await recordEvent(shopDomain, 'restock_failed', { variantId: claimed.variantId, productId: claimed.productId, productTitle: claimed.productTitle, emailHash: claimed.emailHash, detail: String(error.message || error).slice(0, 500), meta: { webhookId } }); failed += 1;
       }
     }
   }
   await Promise.all(Array.from({ length: workers }, () => worker()));
   return { sent, failed, variantId: resolved.variantId };
+}
+
+
+async function getProductWithVariants(shopDomain, productId) {
+  const numeric = String(productId || '').replace(/[^0-9]/g, '');
+  if (!numeric) return null;
+  const data = await shopifyGraphql(shopDomain, `query NotificationProductState($id:ID!){product(id:$id){id legacyResourceId title handle status publishedAt featuredImage{url} variants(first:100){nodes{id legacyResourceId title availableForSale inventoryQuantity}}}}`, { id: `gid://shopify/Product/${numeric}` });
+  const p = data?.product; if (!p) return null;
+  return {
+    productId: String(p.legacyResourceId || numeric), productTitle: p.title || '', productHandle: p.handle || '', productImage: p.featuredImage?.url || '', productStatus: String(p.status || '').toUpperCase(), publishedAt: p.publishedAt || null,
+    variants: (p.variants?.nodes || []).map((v) => ({ variantId: String(v.legacyResourceId || String(v.id || '').split('/').pop()), variantTitle: v.title || '', title: v.title || '', availableForSale: Boolean(v.availableForSale), inventoryQuantity: Number(v.inventoryQuantity || 0), productId: String(p.legacyResourceId || numeric), productTitle: p.title || '', productHandle: p.handle || '', productImage: p.featuredImage?.url || '', productStatus: String(p.status || '').toUpperCase(), publishedAt: p.publishedAt || null, productUrl: p.handle ? `https://${shopDomain}/products/${p.handle}?variant=${String(v.legacyResourceId || '').replace(/[^0-9]/g, '')}` : '' })),
+  };
+}
+
+async function processProductUpdate({ shopDomain, productId, status = '', webhookId = '' }) {
+  const config = await getOrCreateConfig(shopDomain);
+  config.webhook.lastProductUpdateAt = new Date(); await config.save();
+  const product = await getProductWithVariants(shopDomain, productId);
+  if (!product) return { skipped: 'product_not_found' };
+  const productStatus = String(product.productStatus || status || '').toUpperCase();
+  let waiting = 0; const archiveActions = [];
+  for (const variant of product.variants) {
+    await recordStockObservation(shopDomain, { ...variant, productStatus }, '');
+    if (productStatus === 'ARCHIVED') {
+      const customers = await listCustomersWaitingForVariant(shopDomain, variant.variantId);
+      if (!customers.length) continue;
+      waiting += customers.length;
+      const existing = await NotificationEvent.findOne({ shopDomain, type: 'product_archived_with_demand', variantId: variant.variantId, 'meta.productStatus': 'ARCHIVED' }).select('_id').lean();
+      if (!existing) await recordEvent(shopDomain, 'product_archived_with_demand', { variantId: variant.variantId, productId: product.productId, productTitle: product.productTitle, detail: `${customers.length} customer${customers.length === 1 ? '' : 's'} waiting`, meta: { webhookId, productStatus: 'ARCHIVED', waiting: customers.length } });
+      if (config.archiveNotifications?.enabled !== false && config.archiveNotifications?.autoSend === true) {
+        archiveActions.push(await dispatchConnectedFlow({ shopDomain, resolved: variant, config, purpose: 'archived', eventKey: webhookId || `archive:${product.productId}` }));
+      }
+    }
+  }
+  return { productId: product.productId, status: productStatus, variants: product.variants.length, waiting, archiveActions };
+}
+
+async function dispatchArchivedDemand(shopDomain, variantId) {
+  const config = await getOrCreateConfig(shopDomain);
+  const resolved = (await resolveVariantsBulk(shopDomain, [variantId])).get(String(variantId).replace(/[^0-9]/g, ''));
+  if (!resolved) throw publicError('The archived product variant could not be found in Shopify.', 404);
+  if (String(resolved.productStatus || '').toUpperCase() !== 'ARCHIVED') throw publicError('This product is not archived.', 409);
+  const result = await dispatchConnectedFlow({ shopDomain, resolved, config, purpose: 'archived', eventKey: `manual-archive:${Date.now()}` });
+  await recordEvent(shopDomain, 'archived_demand_dispatch_requested', { variantId: resolved.variantId, productId: resolved.productId, productTitle: resolved.productTitle, meta: result });
+  return { success: true, ...result };
 }
 
 async function emailReady(shopDomain) {
@@ -387,37 +635,61 @@ async function scopeReadiness(shopDomain) {
   } catch (error) { return { readInventory:false, readCustomers:false, writeCustomers:false, scopes:[], error:error.message }; }
 }
 
-async function registerInventoryWebhook(shopDomain) {
-  if (!env.appUrl) throw new Error('APP_URL must be configured before registering the inventory webhook.');
-  const address = `${env.appUrl.replace(/\/$/, '')}/api/webhooks/notifications/inventory-levels-update`;
-  const list = await shopifyFetch(`/admin/api/${env.shopifyApiVersion}/webhooks.json?topic=${encodeURIComponent(RESTOCK_TOPIC)}&limit=250`, { shopDomain });
-  let webhook = (list.webhooks || []).find((x) => x.topic === RESTOCK_TOPIC && String(x.address || '').replace(/\/$/, '') === address.replace(/\/$/, ''));
+async function ensureWebhook(shopDomain, topic, address) {
+  const list = await shopifyFetch(`/admin/api/${env.shopifyApiVersion}/webhooks.json?topic=${encodeURIComponent(topic)}&limit=250`, { shopDomain });
+  let webhook = (list.webhooks || []).find((x) => x.topic === topic && String(x.address || '').replace(/\/$/, '') === address.replace(/\/$/, ''));
   if (!webhook) {
     const created = await shopifyFetch(`/admin/api/${env.shopifyApiVersion}/webhooks.json`, {
       shopDomain,
       method: 'POST',
-      body: JSON.stringify({ webhook: { topic: RESTOCK_TOPIC, address, format: 'json' } }),
+      body: JSON.stringify({ webhook: { topic, address, format: 'json' } }),
     });
     webhook = created.webhook;
   }
+  return webhook || null;
+}
+
+async function registerInventoryWebhook(shopDomain) {
+  if (!env.appUrl) throw new Error('APP_URL must be configured before registering notification webhooks.');
+  const base = env.appUrl.replace(/\/$/, '');
+  const inventoryAddress = `${base}/api/webhooks/notifications/inventory-levels-update`;
+  const productAddress = `${base}/api/webhooks/notifications/products-update`;
+  const [inventoryWebhook, productWebhook] = await Promise.all([
+    ensureWebhook(shopDomain, RESTOCK_TOPIC, inventoryAddress),
+    ensureWebhook(shopDomain, PRODUCT_UPDATE_TOPIC, productAddress),
+  ]);
   const config = await getOrCreateConfig(shopDomain);
-  config.webhook.id = String(webhook?.id || '');
-  config.webhook.address = address;
-  config.webhook.status = webhook ? 'connected' : 'unknown';
-  config.webhook.installedAt = webhook ? new Date() : null;
+  config.webhook.id = String(inventoryWebhook?.id || '');
+  config.webhook.address = inventoryAddress;
+  config.webhook.status = inventoryWebhook ? 'connected' : 'unknown';
+  config.webhook.installedAt = inventoryWebhook ? new Date() : null;
+  config.webhook.productWebhookId = String(productWebhook?.id || '');
+  config.webhook.productWebhookAddress = productAddress;
+  config.webhook.productWebhookStatus = productWebhook ? 'connected' : 'unknown';
   await config.save();
-  return { connected: Boolean(webhook), webhook: webhook ? { id: String(webhook.id), topic: webhook.topic, address: webhook.address } : null };
+  return {
+    connected: Boolean(inventoryWebhook),
+    productConnected: Boolean(productWebhook),
+    webhook: inventoryWebhook ? { id: String(inventoryWebhook.id), topic: inventoryWebhook.topic, address: inventoryWebhook.address } : null,
+    productWebhook: productWebhook ? { id: String(productWebhook.id), topic: productWebhook.topic, address: productWebhook.address } : null,
+  };
 }
 
 async function inspectInventoryWebhook(shopDomain) {
-  if (!env.appUrl) return { connected: false, address: '', reason: 'APP_URL not configured' };
-  const address = `${env.appUrl.replace(/\/$/, '')}/api/webhooks/notifications/inventory-levels-update`;
+  if (!env.appUrl) return { connected: false, productConnected: false, address: '', reason: 'APP_URL not configured' };
+  const base = env.appUrl.replace(/\/$/, '');
+  const address = `${base}/api/webhooks/notifications/inventory-levels-update`;
+  const productAddress = `${base}/api/webhooks/notifications/products-update`;
   try {
-    const list = await shopifyFetch(`/admin/api/${env.shopifyApiVersion}/webhooks.json?topic=${encodeURIComponent(RESTOCK_TOPIC)}&limit=250`, { shopDomain });
-    const webhook = (list.webhooks || []).find((x) => x.topic === RESTOCK_TOPIC && String(x.address || '').replace(/\/$/, '') === address.replace(/\/$/, ''));
-    return { connected: Boolean(webhook), address, webhookId: webhook ? String(webhook.id) : '' };
+    const [inventoryList, productList] = await Promise.all([
+      shopifyFetch(`/admin/api/${env.shopifyApiVersion}/webhooks.json?topic=${encodeURIComponent(RESTOCK_TOPIC)}&limit=250`, { shopDomain }),
+      shopifyFetch(`/admin/api/${env.shopifyApiVersion}/webhooks.json?topic=${encodeURIComponent(PRODUCT_UPDATE_TOPIC)}&limit=250`, { shopDomain }),
+    ]);
+    const webhook = (inventoryList.webhooks || []).find((x) => x.topic === RESTOCK_TOPIC && String(x.address || '').replace(/\/$/, '') === address.replace(/\/$/, ''));
+    const productWebhook = (productList.webhooks || []).find((x) => x.topic === PRODUCT_UPDATE_TOPIC && String(x.address || '').replace(/\/$/, '') === productAddress.replace(/\/$/, ''));
+    return { connected: Boolean(webhook), productConnected: Boolean(productWebhook), address, productAddress, webhookId: webhook ? String(webhook.id) : '', productWebhookId: productWebhook ? String(productWebhook.id) : '' };
   } catch (error) {
-    return { connected: false, address, reason: error.message };
+    return { connected: false, productConnected: false, address, productAddress, reason: error.message };
   }
 }
 
@@ -430,22 +702,131 @@ async function listLegacyRestockCustomers(shopDomain, maxCustomers = 1000) {
   return rows;
 }
 async function resolveVariantsBulk(shopDomain, variantIds = []) {
-  const ids=Array.from(new Set(variantIds.map((v)=>String(v).replace(/[^0-9]/g,'')).filter(Boolean))); const out=new Map();
-  for(let i=0;i<ids.length;i+=50){const chunk=ids.slice(i,i+50);const data=await shopifyGraphql(shopDomain,`query NotificationDemandVariants($ids:[ID!]!){nodes(ids:$ids){... on ProductVariant{id legacyResourceId title availableForSale inventoryQuantity product{id legacyResourceId title handle featuredImage{url}}}}}`,{ids:chunk.map((id)=>`gid://shopify/ProductVariant/${id}`)});for(const v of data?.nodes||[]){if(!v)continue;const id=String(v.legacyResourceId||String(v.id||'').split('/').pop());out.set(id,{variantId:id,variantTitle:v.title||'',availableForSale:Boolean(v.availableForSale),inventoryQuantity:Number(v.inventoryQuantity||0),productId:String(v.product?.legacyResourceId||String(v.product?.id||'').split('/').pop()),productTitle:v.product?.title||'',productHandle:v.product?.handle||'',productImage:v.product?.featuredImage?.url||'',productUrl:v.product?.handle?`https://${shopDomain}/products/${v.product.handle}?variant=${id}`:''});}}
+  const ids = Array.from(new Set(variantIds.map((v) => String(v).replace(/[^0-9]/g, '')).filter(Boolean)));
+  const out = new Map();
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50);
+    const data = await shopifyGraphql(shopDomain, `query NotificationDemandVariants($ids:[ID!]!){nodes(ids:$ids){... on ProductVariant{id legacyResourceId title availableForSale inventoryQuantity product{id legacyResourceId title handle status publishedAt featuredImage{url}}}}}`, { ids: chunk.map((id) => `gid://shopify/ProductVariant/${id}`) });
+    for (const v of data?.nodes || []) {
+      if (!v) continue;
+      const id = String(v.legacyResourceId || String(v.id || '').split('/').pop());
+      out.set(id, {
+        variantId: id,
+        variantTitle: v.title || '',
+        availableForSale: Boolean(v.availableForSale),
+        inventoryQuantity: Number(v.inventoryQuantity || 0),
+        productId: String(v.product?.legacyResourceId || String(v.product?.id || '').split('/').pop()),
+        productTitle: v.product?.title || '',
+        productHandle: v.product?.handle || '',
+        productImage: v.product?.featuredImage?.url || '',
+        productUrl: v.product?.handle ? `https://${shopDomain}/products/${v.product.handle}?variant=${id}` : '',
+        productStatus: String(v.product?.status || '').toUpperCase(),
+        publishedAt: v.product?.publishedAt || null,
+      });
+    }
+  }
   return out;
 }
+
 async function listRestockDemand(shopDomain) {
-  const [legacy,local]=await Promise.all([listLegacyRestockCustomers(shopDomain),RestockSubscription.find({shopDomain,status:{$in:['active','sending']}}).select('variantId emailHash subscribedAt productTitle productId variantTitle productUrl productImage').lean()]);
-  const map=new Map(); const ensure=(id)=>{const key=String(id||'').replace(/[^0-9]/g,'');if(!key)return null;if(!map.has(key))map.set(key,{variantId:key,legacyKeys:new Set(),localKeys:new Set(),legacyCustomers:[],firstRequestedAt:null});return map.get(key)};
-  for(const c of legacy){for(const tag of c.tags||[]){const m=String(tag).match(/^restock_id_(\d+)$/i);if(!m)continue;const item=ensure(m[1]);if(!item)continue;let key=String(c.id||c.email||'');try{if(c.email)key=emailHash(shopDomain,c.email)}catch(_){}item.legacyKeys.add(key);if(item.legacyCustomers.length<6)item.legacyCustomers.push({email:maskEmail(c.email||''),updatedAt:c.updatedAt||null});if(c.updatedAt&&(!item.firstRequestedAt||new Date(c.updatedAt)<new Date(item.firstRequestedAt)))item.firstRequestedAt=c.updatedAt;}}
-  for(const row of local){const item=ensure(row.variantId);if(!item)continue;item.localKeys.add(row.emailHash);if(row.subscribedAt&&(!item.firstRequestedAt||new Date(row.subscribedAt)<new Date(item.firstRequestedAt)))item.firstRequestedAt=row.subscribedAt;item.local=row;}
-  const resolved=await resolveVariantsBulk(shopDomain,[...map.keys()]);
-  const items=[...map.values()].map((item)=>{const all=new Set([...item.legacyKeys,...item.localKeys]);const r=resolved.get(item.variantId)||{};return {...r,variantId:item.variantId,productTitle:r.productTitle||item.local?.productTitle||'Unknown product',productId:r.productId||item.local?.productId||'',variantTitle:r.variantTitle||item.local?.variantTitle||'',productUrl:r.productUrl||item.local?.productUrl||'',productImage:r.productImage||item.local?.productImage||'',legacyWaiting:item.legacyKeys.size,elev8Waiting:item.localKeys.size,totalWaiting:all.size,firstRequestedAt:item.firstRequestedAt,legacyCustomers:item.legacyCustomers};}).sort((a,b)=>b.totalWaiting-a.totalWaiting||String(a.productTitle).localeCompare(String(b.productTitle)));
-  return {items,totals:{products:items.length,customers:items.reduce((n,x)=>n+x.totalWaiting,0),legacyCustomers:new Set(legacy.map((c)=>c.id)).size,elev8Subscriptions:local.length},refreshedAt:new Date().toISOString(),source:'shopify_customer_tags+elev8'};
+  const [legacy, local] = await Promise.all([
+    listLegacyRestockCustomers(shopDomain),
+    RestockSubscription.find({ shopDomain, status: { $in: ['active', 'sending'] } })
+      .select('variantId emailHash subscribedAt productTitle productId variantTitle productUrl productImage')
+      .lean(),
+  ]);
+  const map = new Map();
+  const ensure = (id) => {
+    const key = String(id || '').replace(/[^0-9]/g, '');
+    if (!key) return null;
+    if (!map.has(key)) map.set(key, { variantId: key, legacyKeys: new Set(), localKeys: new Set(), firstRequestedAt: null });
+    return map.get(key);
+  };
+  for (const c of legacy) {
+    for (const tag of c.tags || []) {
+      const m = String(tag).match(/^restock_id_(\d+)$/i);
+      if (!m) continue;
+      const item = ensure(m[1]); if (!item) continue;
+      let key = String(c.id || c.email || '');
+      try { if (c.email) key = emailHash(shopDomain, c.email); } catch (_) {}
+      item.legacyKeys.add(key);
+      if (c.updatedAt && (!item.firstRequestedAt || new Date(c.updatedAt) < new Date(item.firstRequestedAt))) item.firstRequestedAt = c.updatedAt;
+    }
+  }
+  for (const row of local) {
+    const item = ensure(row.variantId); if (!item) continue;
+    item.localKeys.add(row.emailHash);
+    if (row.subscribedAt && (!item.firstRequestedAt || new Date(row.subscribedAt) < new Date(item.firstRequestedAt))) item.firstRequestedAt = row.subscribedAt;
+    item.local = row;
+  }
+  const variantIds = [...map.keys()];
+  const [resolved, observations] = await Promise.all([
+    resolveVariantsBulk(shopDomain, variantIds),
+    StockObservation.find({ shopDomain, variantId: { $in: variantIds } }).lean(),
+  ]);
+  const obsByVariant = new Map(observations.map((x) => [String(x.variantId), x]));
+  const allItems = [...map.values()].map((item) => {
+    const all = new Set([...item.legacyKeys, ...item.localKeys]);
+    const r = resolved.get(item.variantId) || {};
+    const obs = obsByVariant.get(item.variantId) || {};
+    const productStatus = String(r.productStatus || obs.productStatus || '').toUpperCase();
+    const publishedAt = r.publishedAt || obs.publishedAt || null;
+    const missing = !resolved.has(item.variantId);
+    const live = !missing && productStatus === 'ACTIVE' && Boolean(publishedAt);
+    const archived = productStatus === 'ARCHIVED';
+    return {
+      ...r,
+      variantId: item.variantId,
+      productTitle: r.productTitle || item.local?.productTitle || obs.productTitle || 'Unknown product',
+      productId: r.productId || item.local?.productId || obs.productId || '',
+      variantTitle: r.variantTitle || item.local?.variantTitle || obs.variantTitle || '',
+      productUrl: r.productUrl || item.local?.productUrl || '',
+      productImage: r.productImage || item.local?.productImage || obs.productImage || '',
+      productStatus,
+      publishedAt,
+      live,
+      archived,
+      missing,
+      legacyWaiting: item.legacyKeys.size,
+      elev8Waiting: item.localKeys.size,
+      totalWaiting: all.size,
+      firstRequestedAt: item.firstRequestedAt,
+      lastInStockAt: obs.lastInStockAt || null,
+      outOfStockSince: obs.outOfStockSince || null,
+      lastObservedAt: obs.lastObservedAt || null,
+    };
+  }).sort((a, b) => b.totalWaiting - a.totalWaiting || String(a.productTitle).localeCompare(String(b.productTitle)));
+  const items = allItems.filter((x) => x.live);
+  const archivedItems = allItems.filter((x) => x.archived);
+  const hiddenItems = allItems.filter((x) => !x.live && !x.archived && !x.missing);
+  const missingItems = allItems.filter((x) => x.missing);
+  const totalCustomers = (rows) => rows.reduce((n, x) => n + Number(x.totalWaiting || 0), 0);
+  return {
+    items,
+    archivedItems,
+    hiddenItems,
+    missingItems,
+    totals: {
+      products: items.length,
+      customers: totalCustomers(items),
+      archivedProducts: archivedItems.length,
+      archivedCustomers: totalCustomers(archivedItems),
+      hiddenProducts: hiddenItems.length,
+      missingProducts: missingItems.length,
+      allWatchedVariants: allItems.length,
+      legacyCustomers: new Set(legacy.map((c) => c.id)).size,
+      elev8Subscriptions: local.length,
+    },
+    refreshedAt: new Date().toISOString(),
+    source: 'shopify_customer_tags+elev8+stock_history',
+  };
 }
-function buildFlowTemplate(config, shopDomain) {
-  const vars=config.delivery?.flowVariables||{};const tokens={product_title:vars.productTitle||'{{ product.title }}',variant_title:vars.variantTitle||'{{ productVariant.title }}',product_url:vars.productUrl||'https://{{ shop.myShopifyDomain }}/products/{{ product.handle }}?variant={{ productVariant.legacyResourceId }}',product_image:vars.productImage||''};
-  const rendered=renderRestockEmailHtml(config,tokens);return {subject:rendered.subject,html:rendered.html,flowUrl:config.delivery?.flowUrl||flowAdminFallback(shopDomain),flowName:config.delivery?.flowName||'Back in stock notifications',variables:vars};
+
+function buildFlowTemplate(config, shopDomain, templateType = 'restock') {
+  const vars=config.delivery?.flowVariables||{};
+  const tokens={product_title:vars.productTitle||'{{ product.title }}',variant_title:vars.variantTitle||'{{ productVariant.title }}',product_url:vars.productUrl||'https://{{ shop.myShopifyDomain }}/products/{{ product.handle }}?variant={{ productVariant.legacyResourceId }}',product_image:vars.productImage||''};
+  const rendered=templateType==='archived'?renderArchivedEmailHtml(config,tokens):renderRestockEmailHtml(config,tokens);
+  return {templateType,subject:rendered.subject,html:rendered.html,variables:vars,connections:flowConnectionDefinitions(config),selectedConnection:templateType==='archived'?(config.delivery?.archivedFlowConnectionKey||'none'):(config.delivery?.flowConnectionKey||'legacy-tags')};
 }
 
 async function adminSummary(shopDomain) {
@@ -470,7 +851,7 @@ async function adminSummary(shopDomain) {
     stats: { active, productsWaiting: waitingProducts.length, sent30, failed30 },
     waitingProducts: waitingProducts.map((x) => ({ variantId: x._id.variantId, productId: x._id.productId, productTitle: x._id.productTitle, variantTitle: x._id.variantTitle, waiting: x.waiting, firstSubscribedAt: x.firstSubscribedAt })),
     recent,
-    readiness: { email: emailOk, webhook: webhook.connected, readInventoryScope: scopes.readInventory, readCustomersScope: scopes.readCustomers, writeCustomersScope: scopes.writeCustomers, deliveryMode: config.delivery?.mode || 'flow', flowConfigured: Boolean(config.delivery?.flowUrl), flowUrl: config.delivery?.flowUrl || flowAdminFallback(shopDomain), webhookAddress: webhook.address || '', webhookReason: webhook.reason || '', scopeError: scopes.error || '' },
+    readiness: { email: emailOk, webhook: webhook.connected, productWebhook: Boolean(webhook.productConnected), readInventoryScope: scopes.readInventory, readCustomersScope: scopes.readCustomers, writeCustomersScope: scopes.writeCustomers, deliveryMode: config.delivery?.mode || 'flow', flowConfigured: flowConnectionDefinitions(config).some((x)=>x.purpose==='restock'&&x.connected), flowConnections: flowConnectionDefinitions(config), selectedFlowConnection: config.delivery?.flowConnectionKey || 'legacy-tags', selectedArchivedFlowConnection: config.delivery?.archivedFlowConnectionKey || 'none', webhookAddress: webhook.address || '', webhookReason: webhook.reason || '', scopeError: scopes.error || '' },
     config: publicStorefrontConfig(config),
   };
 }
@@ -480,16 +861,12 @@ async function listSubscriptions(shopDomain, { status = '', search = '', limit =
   if (status && ['active','sending','sent','unsubscribed'].includes(status)) query.status = status;
   if (search) query.$or = [{ productTitle: { $regex: cleanText(search, 120), $options: 'i' } }, { variantTitle: { $regex: cleanText(search, 120), $options: 'i' } }];
   const rows = await RestockSubscription.find(query).sort({ updatedAt: -1 }).limit(clampNumber(limit, 1, 250, 100)).lean();
-  return rows.map((row) => {
-    let email = '';
-    try { email = decryptSecret(row.emailEncrypted); } catch (_) {}
-    return {
-      id: String(row._id), variantId: row.variantId, productId: row.productId, productTitle: row.productTitle,
-      variantTitle: row.variantTitle, productUrl: row.productUrl, productImage: row.productImage, status: row.status,
-      email: maskEmail(email), subscribedAt: row.subscribedAt, sentAt: row.sentAt, unsubscribedAt: row.unsubscribedAt,
-      sendAttempts: row.sendAttempts, lastError: row.lastError,
-    };
-  });
+  return rows.map((row) => ({
+    id: String(row._id), requesterRef: publicRef(row.emailHash), variantId: row.variantId, productId: row.productId, productTitle: row.productTitle,
+    variantTitle: row.variantTitle, productUrl: row.productUrl, productImage: row.productImage, status: row.status,
+    subscribedAt: row.subscribedAt, sentAt: row.sentAt, unsubscribedAt: row.unsubscribedAt,
+    sendAttempts: row.sendAttempts, lastError: redactText(row.lastError || ''),
+  }));
 }
 
 async function listEvents(shopDomain, limit = 100) {
@@ -507,11 +884,15 @@ async function updateAdminConfig(shopDomain, body = {}) {
   if (body.restockEnabled !== undefined) config.restockEnabled = Boolean(body.restockEnabled);
   if (body.sendThreshold !== undefined) config.sendThreshold = clampNumber(body.sendThreshold, 1, 9999, 1);
   if (body.oneShot !== undefined) config.oneShot = Boolean(body.oneShot);
+  if (body.archiveNotifications?.enabled !== undefined) config.archiveNotifications.enabled = Boolean(body.archiveNotifications.enabled);
+  if (body.archiveNotifications?.autoSend !== undefined) config.archiveNotifications.autoSend = Boolean(body.archiveNotifications.autoSend);
   const delivery = body.delivery || {};
   if (['flow','elev8'].includes(delivery.mode)) config.delivery.mode = delivery.mode;
   if (delivery.syncShopifyTags !== undefined) config.delivery.syncShopifyTags = Boolean(delivery.syncShopifyTags);
   if (delivery.flowUrl !== undefined) config.delivery.flowUrl = cleanText(delivery.flowUrl, 1000);
   if (delivery.flowName !== undefined) config.delivery.flowName = cleanText(delivery.flowName, 160);
+  if (delivery.flowConnectionKey !== undefined) config.delivery.flowConnectionKey = cleanText(delivery.flowConnectionKey, 80) || 'legacy-tags';
+  if (delivery.archivedFlowConnectionKey !== undefined) config.delivery.archivedFlowConnectionKey = cleanText(delivery.archivedFlowConnectionKey, 80) || 'none';
   const fv = delivery.flowVariables || {};
   if (fv.productTitle !== undefined) config.delivery.flowVariables.productTitle = cleanText(fv.productTitle, 500);
   if (fv.variantTitle !== undefined) config.delivery.flowVariables.variantTitle = cleanText(fv.variantTitle, 500);
@@ -550,30 +931,57 @@ async function updateAdminConfig(shopDomain, body = {}) {
   if (em.cardRadius !== undefined) config.email.cardRadius = clampNumber(em.cardRadius,0,36,18);
   if (em.imageRadius !== undefined) config.email.imageRadius = clampNumber(em.imageRadius,0,36,14);
   if (em.contentWidth !== undefined) config.email.contentWidth = clampNumber(em.contentWidth,420,760,620);
+  const ae = body.archivedEmail || {};
+  if (ae.subject !== undefined) config.archivedEmail.subject = cleanText(ae.subject, 180);
+  if (ae.preheader !== undefined) config.archivedEmail.preheader = cleanText(ae.preheader, 320);
+  if (ae.eyebrow !== undefined) config.archivedEmail.eyebrow = cleanText(ae.eyebrow, 80);
+  if (ae.heading !== undefined) config.archivedEmail.heading = cleanText(ae.heading, 180);
+  if (ae.body !== undefined) config.archivedEmail.body = cleanText(ae.body, 1200);
+  if (ae.buttonLabel !== undefined) config.archivedEmail.buttonLabel = cleanText(ae.buttonLabel, 80);
+  if (ae.footer !== undefined) config.archivedEmail.footer = cleanText(ae.footer, 500);
+  if (ae.logoUrl !== undefined) config.archivedEmail.logoUrl = cleanText(ae.logoUrl, 1000);
+  if (ae.showProductImage !== undefined) config.archivedEmail.showProductImage = Boolean(ae.showProductImage);
+  if (ae.showVariant !== undefined) config.archivedEmail.showVariant = Boolean(ae.showVariant);
+  if (['left','center'].includes(ae.align)) config.archivedEmail.align = ae.align;
+  for (const [key] of [['backgroundColor'],['cardColor'],['accentColor'],['textColor'],['mutedTextColor'],['buttonBackground'],['buttonTextColor']]) if (/^#[0-9a-f]{6}$/i.test(String(ae[key]||''))) config.archivedEmail[key]=ae[key];
+  if (ae.buttonRadius !== undefined) config.archivedEmail.buttonRadius = clampNumber(ae.buttonRadius,0,30,9);
+  if (ae.cardRadius !== undefined) config.archivedEmail.cardRadius = clampNumber(ae.cardRadius,0,36,18);
+  if (ae.imageRadius !== undefined) config.archivedEmail.imageRadius = clampNumber(ae.imageRadius,0,36,14);
+  if (ae.contentWidth !== undefined) config.archivedEmail.contentWidth = clampNumber(ae.contentWidth,420,760,620);
   await config.save();
   return config.toObject();
 }
 
-async function sendTestEmail(shopDomain, email) {
+async function sendTestEmail(shopDomain, email, templateType = 'restock') {
   const recipient = cleanEmail(email);
   if (!recipient) throw publicError('Enter a valid test email.', 400);
   const config = await getOrCreateConfig(shopDomain);
-  const fake = {
-    emailEncrypted: encryptSecret(recipient), productTitle: 'Example product', variantTitle: 'Example variant',
-    productUrl: `https://${shopDomain}/collections/all`, productImage: '',
-  };
-  await sendRestockEmail({ shopDomain, subscription: fake, config });
-  return { success: true };
+  const fake = { emailEncrypted: encryptSecret(recipient), productTitle: 'Example product', variantTitle: 'Example variant', productUrl: `https://${shopDomain}/collections/all`, productImage: '' };
+  if (templateType === 'archived') {
+    const emailSettings = await activeEmailSettings(shopDomain);
+    const tokens = { product_title: fake.productTitle, variant_title: fake.variantTitle, product_url: fake.productUrl, product_image: '' };
+    const rendered = renderArchivedEmailHtml(config, tokens);
+    const transporter = createTransporter(emailSettings);
+    await transporter.sendMail({ from:emailSettings.fromName?`"${String(emailSettings.fromName).replace(/"/g,'')}" <${emailSettings.fromEmail}>`:emailSettings.fromEmail, to:recipient, replyTo:emailSettings.replyToEmail||emailSettings.fromEmail, subject:rendered.subject, html:rendered.html, text:rendered.text });
+  } else {
+    await sendRestockEmail({ shopDomain, subscription: fake, config });
+  }
+  return { success: true, templateType };
 }
 
 module.exports = {
   RESTOCK_TOPIC,
+  PRODUCT_UPDATE_TOPIC,
   getOrCreateConfig,
   publicStorefrontConfig,
   getSubscriptionStatus,
   subscribeRestock,
   unsubscribeRestock,
   processInventoryLevelUpdate,
+  processProductUpdate,
+  dispatchArchivedDemand,
+  recordFlowLifecycle,
+  listFlowConnections,
   registerInventoryWebhook,
   inspectInventoryWebhook,
   adminSummary,
