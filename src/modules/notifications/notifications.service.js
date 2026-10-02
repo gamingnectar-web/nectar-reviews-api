@@ -339,36 +339,245 @@ async function subscribeRestock({ shopDomain, email, variantId, source = 'storef
     { $set: { emailEncrypted: encryptSecret(normalizedEmail), productId: cleanText(resolved.productId,80), productTitle: cleanText(resolved.productTitle,240), productHandle: cleanText(resolved.productHandle,240), productUrl: cleanText(resolved.productUrl,800), productImage: cleanText(resolved.productImage,1200), variantTitle: cleanText(resolved.variantTitle,240), source: cleanText(source,60)||'storefront', status:'active', subscribedAt:now, sentAt:null, unsubscribedAt:null, lastError:'' }, $setOnInsert: { shopDomain, emailHash:key, variantId:resolved.variantId, sendAttempts:0 } },
     { upsert:true, new:true, setDefaultsOnInsert:true }
   );
+  const storefrontSource = /^shopify_(?:product_page|app_proxy)/i.test(String(source || ''));
+  const mustSyncShopify = storefrontSource || config.delivery?.syncShopifyTags !== false;
+
   let shopifySynced = false;
-  if (config.delivery?.syncShopifyTags !== false) {
+
+  if (mustSyncShopify) {
     try {
-      await syncShopifyRestockTags({ shopDomain, email: normalizedEmail, resolved, action: 'add' });
+      await syncShopifyRestockTags({
+        shopDomain,
+        email: normalizedEmail,
+        resolved,
+        action: 'add'
+      });
+
       shopifySynced = true;
     }
     catch (error) {
-      await RestockSubscription.updateOne({ _id: row._id }, { $set: { lastError: `Shopify tag sync: ${String(error.message || error).slice(0,420)}` } });
-      await recordEvent(shopDomain,'restock_tag_sync_failed',{variantId:row.variantId,productId:row.productId,productTitle:row.productTitle,emailHash:key,detail:String(error.message||error).slice(0,500)});
-      if ((config.delivery?.mode || 'flow') === 'flow') throw publicError('Your alert was saved, but Shopify Flow tag sync failed. Check the write_customers permission in Notifications Center.', 502);
+      await RestockSubscription.updateOne(
+        { _id: row._id },
+        {
+          $set: {
+            lastError: `Shopify tag sync: ${String(error.message || error).slice(0,420)}`
+          }
+        }
+      );
+
+      await recordEvent(
+        shopDomain,
+        'restock_tag_sync_failed',
+        {
+          variantId:row.variantId,
+          productId:row.productId,
+          productTitle:row.productTitle,
+          emailHash:key,
+          detail:String(error.message||error).slice(0,500)
+        }
+      );
+
+      if (storefrontSource) {
+        await RestockSubscription.updateOne(
+          { _id: row._id },
+          {
+            $set: {
+              status:'unsubscribed',
+              unsubscribedAt:new Date()
+            }
+          }
+        );
+
+        throw publicError(
+          'Your alert could not be confirmed in Shopify. Please try again, or check the write_customers permission in Notifications Center.',
+          502
+        );
+      }
+
+      if ((config.delivery?.mode || 'flow') === 'flow') {
+        throw publicError(
+          'Your alert was saved, but Shopify Flow tag sync failed. Check the write_customers permission in Notifications Center.',
+          502
+        );
+      }
     }
   }
   await recordEvent(shopDomain, 'restock_subscribed', { variantId: row.variantId, productId: row.productId, productTitle: row.productTitle, emailHash: key, meta: { shopifySynced } });
   return { success:true, subscribed:true, status:row.status, deliveryMode:config.delivery?.mode || 'flow', shopifySynced };
 }
 
-async function unsubscribeRestock({ shopDomain, email, variantId }) {
+async function unsubscribeRestock({
+  shopDomain,
+  email,
+  variantId,
+  source = 'storefront'
+}) {
   const normalizedEmail = cleanEmail(email);
-  if (!normalizedEmail || !variantId) return { success:true, subscribed:false, status:'none' };
-  const key = emailHash(shopDomain, normalizedEmail);
-  const row = await RestockSubscription.findOne({ shopDomain, emailHash:key, variantId:String(variantId) });
-  const config = await getOrCreateConfig(shopDomain);
-  if (row && config.delivery?.syncShopifyTags !== false) {
-    const resolved = { variantId:row.variantId, productId:row.productId, productTitle:row.productTitle, productHandle:row.productHandle, productUrl:row.productUrl, productImage:row.productImage, variantTitle:row.variantTitle };
-    try { await syncShopifyRestockTags({ shopDomain, email:normalizedEmail, resolved, action:'remove' }); }
-    catch (error) { await recordEvent(shopDomain,'restock_tag_sync_failed',{variantId:row.variantId,productId:row.productId,productTitle:row.productTitle,emailHash:key,detail:String(error.message||error).slice(0,500),meta:{action:'remove'}}); }
+
+  if (!normalizedEmail || !variantId) {
+    return {
+      success:true,
+      subscribed:false,
+      status:'none'
+    };
   }
-  const updated = await RestockSubscription.findOneAndUpdate({ shopDomain, emailHash:key, variantId:String(variantId) }, { $set:{ status:'unsubscribed', unsubscribedAt:new Date(), lastError:'' } }, { new:true });
-  if (updated) await recordEvent(shopDomain,'restock_unsubscribed',{variantId:updated.variantId,productId:updated.productId,productTitle:updated.productTitle,emailHash:key});
-  return { success:true, subscribed:false, status:updated?'unsubscribed':'none' };
+
+  const numericVariantId =
+    String(variantId).replace(/[^0-9]/g, '');
+
+  const key =
+    emailHash(shopDomain, normalizedEmail);
+
+  const row =
+    await RestockSubscription.findOne({
+      shopDomain,
+      emailHash:key,
+      variantId:numericVariantId
+    });
+
+  const config =
+    await getOrCreateConfig(shopDomain);
+
+  const storefrontSource =
+    /^shopify_(?:product_page|app_proxy)/i.test(
+      String(source || '')
+    );
+
+  /*
+   * Older Gaming Nectar alerts may only exist as
+   * Shopify customer tags and have no ELEV8 database row.
+   */
+  let resolved = row
+    ? {
+        variantId: row.variantId,
+        productId: row.productId,
+        productTitle: row.productTitle,
+        productHandle: row.productHandle,
+        productUrl: row.productUrl,
+        productImage: row.productImage,
+        variantTitle: row.variantTitle
+      }
+    : null;
+
+  if (!resolved) {
+    try {
+      resolved =
+        await resolveSubscriptionVariant(
+          shopDomain,
+          numericVariantId
+        );
+    }
+    catch (error) {
+      if (storefrontSource) {
+        throw error;
+      }
+    }
+  }
+
+  let shopifySynced = false;
+
+  if (
+    resolved &&
+    (
+      storefrontSource ||
+      config.delivery?.syncShopifyTags !== false
+    )
+  ) {
+    try {
+      await syncShopifyRestockTags({
+        shopDomain,
+        email: normalizedEmail,
+        resolved,
+        action: 'remove'
+      });
+
+      shopifySynced = true;
+    }
+    catch (error) {
+      await recordEvent(
+        shopDomain,
+        'restock_tag_sync_failed',
+        {
+          variantId:numericVariantId,
+          productId:
+            row?.productId ||
+            resolved?.productId ||
+            '',
+          productTitle:
+            row?.productTitle ||
+            resolved?.productTitle ||
+            '',
+          emailHash:key,
+          detail:
+            String(
+              error.message ||
+              error
+            ).slice(0,500),
+          meta:{
+            action:'remove',
+            legacyOnly:!row
+          }
+        }
+      );
+
+      if (storefrontSource) {
+        throw publicError(
+          'Your alert could not be removed from Shopify. Please try again.',
+          502
+        );
+      }
+    }
+  }
+
+  const updated =
+    await RestockSubscription.findOneAndUpdate(
+      {
+        shopDomain,
+        emailHash:key,
+        variantId:numericVariantId
+      },
+      {
+        $set:{
+          status:'unsubscribed',
+          unsubscribedAt:new Date(),
+          lastError:''
+        }
+      },
+      {
+        new:true
+      }
+    );
+
+  await recordEvent(
+    shopDomain,
+    'restock_unsubscribed',
+    {
+      variantId:numericVariantId,
+      productId:
+        updated?.productId ||
+        resolved?.productId ||
+        '',
+      productTitle:
+        updated?.productTitle ||
+        resolved?.productTitle ||
+        '',
+      emailHash:key,
+      meta:{
+        shopifySynced,
+        legacyOnly:!row
+      }
+    }
+  );
+
+  return {
+    success:true,
+    subscribed:false,
+    status:
+      updated
+        ? 'unsubscribed'
+        : 'none',
+    shopifySynced
+  };
 }
 
 function createTransporter(settings) {

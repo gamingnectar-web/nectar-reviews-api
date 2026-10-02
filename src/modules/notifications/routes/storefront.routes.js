@@ -76,7 +76,8 @@ router.post('/notifications/restock/unsubscribe',async(req,res,next)=>{try{
   const result=await unsubscribeRestock({
     shopDomain:req.shopDomain,
     email,
-    variantId:req.body?.variantId
+    variantId:req.body?.variantId,
+    source:'shopify_app_proxy'
   });
   res.setHeader('Cache-Control','no-store');
   res.json({...result,customerSignedIn:Boolean(req.customerId)});

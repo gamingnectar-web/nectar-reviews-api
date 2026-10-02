@@ -53,7 +53,7 @@ publicRouter.post('/restock/subscribe', async (req, res, next) => {
     const shopDomain = publicShop(req);
     if (!shopDomain) return res.status(400).json({ error: 'Valid shopDomain is required.' });
     res.setHeader('Cache-Control', 'no-store');
-    return res.json(await subscribeRestock({ ...req.body, shopDomain }));
+    return res.json(await subscribeRestock({ ...req.body, shopDomain, source: 'shopify_product_page_direct' }));
   } catch (error) { next(error); }
 });
 
@@ -62,7 +62,7 @@ publicRouter.post('/restock/unsubscribe', async (req, res, next) => {
     const shopDomain = publicShop(req);
     if (!shopDomain) return res.status(400).json({ error: 'Valid shopDomain is required.' });
     res.setHeader('Cache-Control', 'no-store');
-    return res.json(await unsubscribeRestock({ shopDomain, email: req.body.email, variantId: req.body.variantId }));
+    return res.json(await unsubscribeRestock({ shopDomain, email: req.body.email, variantId: req.body.variantId, source: 'shopify_product_page_direct' }));
   } catch (error) { next(error); }
 });
 
