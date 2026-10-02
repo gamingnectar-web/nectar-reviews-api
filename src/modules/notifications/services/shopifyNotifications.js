@@ -32,6 +32,14 @@ function resolveOrderDelivery(order={},trackingNumber=''){
   };
 }
 
+async function getCustomerIdentity(shopDomain,customerId){
+  const query=`query Elev8NotificationCustomerIdentity($id: ID!) {
+    customer(id:$id){ id email }
+  }`;
+  const data=await shopifyAdminGraphql({shopDomain,query,variables:{id:customerGid(customerId)}});
+  return data?.customer||null;
+}
+
 async function getCustomerSnapshot(shopDomain,customerId){
   const query=`query Elev8NotificationCustomer($id: ID!) {
     customer(id:$id){
@@ -74,4 +82,4 @@ async function getProductSnapshot(shopDomain,{productId,variantId,productHandle}
   return {productId:product.id,title:product.title,handle:product.handle,imageUrl:product.featuredMedia?.preview?.image?.url||'',variantId:variant?.id||'',variantTitle:variant?.title||'',price:Number(variant?.price||0),availableForSale:Boolean(variant?.availableForSale),inventoryQuantity:Number(variant?.inventoryQuantity||0)};
 }
 
-module.exports={getCustomerSnapshot,getOrderDeliverySnapshot,getProductSnapshot,resolveOrderDelivery,fulfilmentDeliveryState};
+module.exports={getCustomerIdentity,getCustomerSnapshot,getOrderDeliverySnapshot,getProductSnapshot,resolveOrderDelivery,fulfilmentDeliveryState};

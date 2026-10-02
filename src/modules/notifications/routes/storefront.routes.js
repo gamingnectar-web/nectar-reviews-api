@@ -3,11 +3,87 @@ const NotificationSubscription=require('../models/NotificationSubscription');
 const NotificationEvent=require('../models/NotificationEvent');
 const NotificationConfig=require('../models/NotificationConfig');
 const { verifyAppProxy,requireProxyCustomer }=require('../services/appProxyAuth');
-const { getCustomerSnapshot }=require('../services/shopifyNotifications');
+const { getCustomerIdentity,getCustomerSnapshot }=require('../services/shopifyNotifications');
 const { trackByNumber,normalizeTrackingNumber }=require('../services/trackingService');
 const { eventForSignedCustomer }=require('../services/notificationEvents');
 const { anonymousRef, sealText, openText, openJson }=require('../services/privacyVault');
-const router=express.Router();router.use(verifyAppProxy);router.use(requireProxyCustomer);
+const {
+  getOrCreateConfig,
+  publicStorefrontConfig,
+  getSubscriptionStatus,
+  subscribeRestock,
+  unsubscribeRestock,
+}=require('../notifications.service');
+const router=express.Router();
+router.use(verifyAppProxy);
+
+function proxyError(message,status=400){
+  const error=new Error(message);
+  error.status=status;
+  error.publicMessage=message;
+  return error;
+}
+
+async function restockEmailForProxyRequest(req,{required=true}={}){
+  // If Shopify says this is a signed-in customer, trust Shopify as the identity
+  // source and ignore any browser-supplied email.
+  if(req.customerId){
+    const identity=await getCustomerIdentity(req.shopDomain,req.customerId);
+    if(!identity)throw proxyError('Your Shopify customer account could not be verified.',401);
+    const email=String(identity.email||'').trim();
+    if(!email&&required)throw proxyError('Your Shopify customer account does not have an email address.',409);
+    return email;
+  }
+
+  const email=String(req.body?.email||'').trim();
+  if(!email&&required)throw proxyError('Please enter an email address.',400);
+  return email;
+}
+
+// Public storefront restock endpoints.
+// These still require a valid Shopify App Proxy signature, but a Shopify login
+// is not required because guests may legitimately request a stock alert.
+router.get('/notifications/config',async(req,res,next)=>{try{
+  const config=await getOrCreateConfig(req.shopDomain);
+  res.setHeader('Cache-Control','private, max-age=30');
+  res.json({...publicStorefrontConfig(config),customerSignedIn:Boolean(req.customerId)});
+}catch(e){next(e)}});
+
+router.post('/notifications/restock/status',async(req,res,next)=>{try{
+  const variantId=String(req.body?.variantId||'').trim();
+  if(!variantId)return res.status(400).json({error:'Missing variant id.'});
+  const email=await restockEmailForProxyRequest(req,{required:false});
+  if(!email)return res.json({subscribed:false,status:'none',customerSignedIn:Boolean(req.customerId),requiresEmail:!req.customerId});
+  const result=await getSubscriptionStatus({shopDomain:req.shopDomain,email,variantId});
+  res.setHeader('Cache-Control','no-store');
+  res.json({...result,customerSignedIn:Boolean(req.customerId),requiresEmail:false});
+}catch(e){next(e)}});
+
+router.post('/notifications/restock/subscribe',async(req,res,next)=>{try{
+  const email=await restockEmailForProxyRequest(req);
+  const result=await subscribeRestock({
+    shopDomain:req.shopDomain,
+    email,
+    variantId:req.body?.variantId,
+    source:'shopify_app_proxy'
+  });
+  res.setHeader('Cache-Control','no-store');
+  res.json({...result,customerSignedIn:Boolean(req.customerId)});
+}catch(e){next(e)}});
+
+router.post('/notifications/restock/unsubscribe',async(req,res,next)=>{try{
+  const email=await restockEmailForProxyRequest(req);
+  const result=await unsubscribeRestock({
+    shopDomain:req.shopDomain,
+    email,
+    variantId:req.body?.variantId
+  });
+  res.setHeader('Cache-Control','no-store');
+  res.json({...result,customerSignedIn:Boolean(req.customerId)});
+}catch(e){next(e)}});
+
+// Everything below this point is the signed-in customer notification centre.
+router.use(requireProxyCustomer);
 
 function customerRef(req){return anonymousRef(req.shopDomain,'customer',req.customerId)}
 function rawResourceKey(b={}){return b.type==='order_tracking'?`order:${b.orderId||b.orderName||''}:${normalizeTrackingNumber(b.trackingNumber)}`:`product:${b.variantId||b.productId||b.productHandle||''}`}
