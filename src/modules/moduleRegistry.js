@@ -20,6 +20,16 @@ const modules = [
   },
 
   {
+    id: 'customer-hub',
+    productSlug: 'customer-hub',
+    label: 'Customer Hub Builder',
+    description: 'Draft, preview, version and publish the signed-in customer account experience.',
+    status: 'beta',
+    adminFolder: 'public/modules/customer-hub',
+    apiNamespace: '/api/admin/customer-hub'
+  },
+
+  {
     id: 'reviews',
     productSlug: 'review-widget',
     label: 'review-widget',

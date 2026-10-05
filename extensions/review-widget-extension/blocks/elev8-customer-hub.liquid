@@ -1,0 +1,36 @@
+<section
+  class="elev8-customer-hub"
+  data-elev8-customer-hub
+  data-proxy-root="/apps/elev8/customer-hub"
+  data-account-url="{{ routes.account_url }}"
+  data-addresses-url="{{ routes.account_addresses_url }}"
+  data-login-url="{{ routes.account_login_url }}"
+  data-customer-signed-in="{% if customer %}true{% else %}false{% endif %}"
+>
+  {% if customer %}
+    <div class="elev8-customer-hub__app" data-elev8-customer-hub-app>
+      <div class="e8hub-loading">Loading your account…</div>
+    </div>
+  {% else %}
+    <div class="e8hub-login">
+      <h2>{{ block.settings.login_title }}</h2>
+      <p>{{ block.settings.login_copy }}</p>
+      <a href="{{ routes.account_login_url }}">{{ block.settings.login_button }}</a>
+    </div>
+  {% endif %}
+</section>
+
+{{ 'elev8-customer-hub.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'elev8-customer-hub.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "ELEV8 Customer Hub",
+  "target": "section",
+  "settings": [
+    { "type": "text", "id": "login_title", "label": "Login heading", "default": "Sign in to your account" },
+    { "type": "textarea", "id": "login_copy", "label": "Login copy", "default": "Orders, stock alerts and account updates are private to your customer account." },
+    { "type": "text", "id": "login_button", "label": "Login button", "default": "Sign in" }
+  ]
+}
+{% endschema %}

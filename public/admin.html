@@ -729,6 +729,7 @@
   <link rel="stylesheet" href="/modules/settings-center/settings-center.css?v=settings-centre-1">
   <link rel="stylesheet" href="/review-experience-studio.css?v=journey-studio-1">
   <link rel="stylesheet" href="/review-operations-countdown.css?v=shopify-countdown-1">
+  <link rel="stylesheet" href="/modules/customer-hub/admin.css?v=customer-hub-1">
 </head>
 <body>
   <div id="custom-toast"></div>
@@ -764,6 +765,10 @@
           <button class="tab-btn product-tab-btn" data-product-key="cart-rewards" onclick="window.tab('v-cart-rewards')"><span>Cart Rewards <span id="nav-status-cart-rewards" class="tab-status-dot hidden"></span></span><span class="pill">Beta</span></button>
           <button class="tab-btn product-tab-btn" data-product-key="marketing-intelligence" onclick="window.tab('v-marketing-intelligence')"><span>Marketing Intelligence <span class="tab-status-dot warning" title="Marketing Intelligence beta"></span></span><span class="pill">Beta</span></button>
           <button class="tab-btn product-tab-btn" data-product-key="referrals" onclick="window.tab('v-referrals')"><span>Referrals <span id="nav-status-referrals" class="tab-status-dot hidden"></span></span><span class="pill">Soon</span></button>
+        </div>
+        <div class="nav-group">
+          <p class="nav-title">Storefront</p>
+          <button class="tab-btn" onclick="window.tab('v-customer-hub')"><span>Customer Hub <span class="pill">Beta</span></span></button>
         </div>
         <div class="nav-group">
           <p class="nav-title">Developers</p>
@@ -1662,6 +1667,10 @@
       </section>
       <div id="pci-product-search-modal" class="pci-modal" aria-hidden="true"></div>
 
+      <section id="v-customer-hub" class="view">
+        <div id="elev8-customer-hub-admin"><div class="e8hub-empty">Loading Customer Hub Builder…</div></div>
+      </section>
+
       <section id="v-referrals" class="view"><h2 class="page-title">Referrals</h2><div class="panel lock-box"><h3>Referrals module placeholder</h3><p class="muted">Reserved for referral tracking, advocate links, friend offers, and attribution. The module is intentionally inactive while the foundation is secured.</p></div></section>
 
 
@@ -1758,5 +1767,6 @@
   <script src="/modules/settings-center/settings-center.js?v=settings-centre-1" defer></script>
   <script src="/review-experience-studio.js?v=journey-studio-1" defer></script>
 <script src="/product-seo-audit.js?v=seo-health-1"></script>
+  <script src="/modules/customer-hub/admin.js?v=customer-hub-1" defer></script>
 </body>
 </html>
