@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ELEV8 Automations</title>
+  <link rel="stylesheet" href="/modules/workflows/admin.css">
+</head>
+<body>
+  <main class="e8w-shell">
+    <header class="e8w-header">
+      <div>
+        <p class="eyebrow">ELEV8</p>
+        <h1>Automations</h1>
+        <p class="sub">Trigger, route and automate Shopify work without another monthly app.</p>
+      </div>
+      <button class="btn primary" id="new-workflow">New workflow</button>
+    </header>
+
+    <section class="stats" id="stats">
+      <article><span>Workflows</span><strong id="stat-workflows">—</strong></article>
+      <article><span>Runs · 24h</span><strong id="stat-runs">—</strong></article>
+      <article><span>Status</span><strong id="stat-status">Loading</strong></article>
+    </section>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="workflows">Workflows</button>
+      <button class="tab" data-tab="runs">Runs</button>
+      <button class="tab" data-tab="templates">Templates</button>
+      <button class="tab" data-tab="integrations">Integrations</button>
+    </nav>
+
+    <section class="panel active" data-panel="workflows">
+      <div class="panel-head"><div><h2>Workflows</h2><p>Disabled workflows can be prepared safely before switching them on.</p></div></div>
+      <div id="workflow-list" class="cards"></div>
+    </section>
+
+    <section class="panel" data-panel="runs">
+      <div class="panel-head"><div><h2>Run history</h2><p>Every run, action, output and failure in one place.</p></div><button class="btn" id="refresh-runs">Refresh</button></div>
+      <div id="run-list" class="table-wrap"></div>
+    </section>
+
+    <section class="panel" data-panel="templates">
+      <div class="panel-head"><div><h2>Templates</h2><p>Install a starting point, then edit it before enabling.</p></div></div>
+      <div id="template-list" class="cards"></div>
+    </section>
+
+    <section class="panel" data-panel="integrations">
+      <div class="grid2">
+        <article class="box">
+          <h2>Credentials</h2>
+          <p>Stored encrypted. Values are never returned by the API.</p>
+          <div id="credential-list"></div>
+          <button class="btn" id="add-credential">Add credential</button>
+        </article>
+        <article class="box">
+          <h2>REST API tokens</h2>
+          <p>Start ELEV8 workflows from scripts or external systems.</p>
+          <div id="token-list"></div>
+          <button class="btn" id="add-token">Create token</button>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="workflow-dialog">
+    <form method="dialog" class="dialog-card" id="workflow-form">
+      <div class="dialog-head"><div><p class="eyebrow">AUTOMATION BUILDER</p><h2 id="workflow-dialog-title">New workflow</h2></div><button class="icon-btn" value="cancel" aria-label="Close">×</button></div>
+      <input type="hidden" id="workflow-id">
+      <label>Name<input id="workflow-name" required placeholder="e.g. Product changed → SEO check"></label>
+      <label>Description<textarea id="workflow-description" rows="2"></textarea></label>
+      <div class="grid2">
+        <label>Trigger
+          <select id="trigger-kind">
+            <option value="resource_event">Shopify event</option>
+            <option value="field_changed">Field changed</option>
+            <option value="metafield_changed">Metafield changed</option>
+            <option value="tags_added">Tag added</option>
+            <option value="tags_removed">Tag removed</option>
+            <option value="attributes_changed">Custom attribute changed</option>
+            <option value="line_items_changed">Line items changed</option>
+            <option value="product_options_changed">Product option values changed</option>
+            <option value="lifecycle">Resource lifecycle</option>
+            <option value="custom">Custom / REST trigger</option>
+            <option value="schedule">Scheduled</option>
+          </select>
+        </label>
+        <label>Resource
+          <select id="trigger-resource">
+            <option value="">Any / generic</option><option>order</option><option>draft_order</option><option>product</option>
+            <option>product_variant</option><option>collection</option><option>customer</option><option>company</option>
+            <option>company_location</option><option>location</option><option>market</option><option>shop</option>
+            <option>page</option><option>blog</option><option>blog_post</option><option>metaobject</option>
+            <option>discount</option><option>customer_segment</option><option>inventory_level</option>
+          </select>
+        </label>
+      </div>
+      <div class="grid2">
+        <label>Event / topic<input id="trigger-event" placeholder="products/update"></label>
+        <label>Field path<input id="trigger-field" placeholder="title or status"></label>
+      </div>
+      <div class="grid3">
+        <label>Metafield namespace<input id="trigger-namespace"></label>
+        <label>Metafield key<input id="trigger-key"></label>
+        <label>Every N minutes<input id="trigger-every" type="number" min="1" placeholder="60"></label>
+      </div>
+      <label>Specifier<input id="trigger-specifier" placeholder="Optional custom trigger identifier"></label>
+      <details>
+        <summary>Conditions</summary>
+        <p class="help">JSON array. Example: <code>[{"path":"resource.total_price","operator":"gt","value":"100"}]</code></p>
+        <select id="condition-mode"><option value="all">All conditions</option><option value="any">Any condition</option></select>
+        <textarea id="workflow-conditions" class="code" rows="5">[]</textarea>
+      </details>
+      <div class="actions-head"><div><strong>Actions</strong><span>Executed top to bottom</span></div><button class="btn" type="button" id="add-action">Add action</button></div>
+      <div id="actions"></div>
+      <label class="switch-row"><input type="checkbox" id="workflow-enabled"><span>Enabled</span><small>Leave off until you've tested it.</small></label>
+      <div class="dialog-actions"><button class="btn" value="cancel">Cancel</button><button type="submit" class="btn primary" value="default">Save workflow</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="credential-dialog">
+    <form method="dialog" class="dialog-card" id="credential-form">
+      <div class="dialog-head"><h2>Add credential</h2><button class="icon-btn" value="cancel">×</button></div>
+      <label>Name<input id="credential-name" required placeholder="openai, smtp-default, my-api"></label>
+      <label>Type<select id="credential-type"><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="gemini">Google Gemini</option><option value="bearer">Bearer token</option><option value="basic">Basic auth</option><option value="header">Custom header</option><option value="smtp">SMTP</option></select></label>
+      <label>Credential JSON<textarea id="credential-value" class="code" rows="8" placeholder='{"apiKey":"..."}'></textarea></label>
+      <p class="help">SMTP example: {"host":"smtp.example.com","port":587,"secure":false,"username":"...","password":"...","from":"GamingNectar <hello@example.com>"}</p>
+      <div class="dialog-actions"><button class="btn" value="cancel">Cancel</button><button class="btn primary" type="submit" value="default">Save credential</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="token-dialog">
+    <form method="dialog" class="dialog-card" id="token-form">
+      <div class="dialog-head"><h2>Create REST token</h2><button class="icon-btn" value="cancel">×</button></div>
+      <label>Name<input id="token-name" value="REST API"></label>
+      <div class="dialog-actions"><button class="btn" value="cancel">Cancel</button><button class="btn primary" type="submit" value="default">Create</button></div>
+      <pre id="created-token" class="token-output" hidden></pre>
+    </form>
+  </dialog>
+
+  <script src="/modules/workflows/admin.js"></script>
+</body>
+</html>

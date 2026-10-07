@@ -29,6 +29,7 @@ const manualReviewImageImportRoutes = require('./routes/manualReviewImageImports
 const { securityHeaders, corsOptions, makeRateLimiter, errorHandler, requireAdminSession } = require('./utils/security');
 const reviewSubmissionSecurity = require('./utils/reviewSubmissionSecurity');
 const { mountPlatformModules } = require('./modules');
+const elev8Workflows = require('./modules/workflows');
 
 const app = express();
 const publicDir = path.join(__dirname, '..', 'public');
@@ -175,4 +176,8 @@ app.patch('/api/reviews/:id', requireAdminSession, (req, res, next) => { req.url
 app.post('/api/reviews/import', requireAdminSession, (req, res, next) => { req.url = '/reviews/import'; return adminRoutes(req, res, next); });
 app.use((req, res) => res.status(404).json({ error: 'Not found', path: req.path }));
 app.use(errorHandler);
+// ELEV8 Automations
+app.use('/api/workflows', elev8Workflows.publicRouter);
+elev8Workflows.startWorkflowWorker();
+
 module.exports = app;

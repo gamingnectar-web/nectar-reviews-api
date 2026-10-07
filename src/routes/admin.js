@@ -1,3 +1,4 @@
+const { adminRouter: elev8WorkflowsAdminRouter } = require('../modules/workflows');
 const express = require('express');
 const { env } = require('../config/env');
 const nodemailer = require('nodemailer');
@@ -3172,5 +3173,8 @@ router.post('/context-assistant', async (req, res) => {
   const aiAnswer = await callOpenAiForContextAssistant(payload).catch(() => null);
   return res.json({ ok: true, answer: aiAnswer || fallbackContextAssistant(payload), source: aiAnswer ? 'openai' : 'fallback' });
 });
+
+// ELEV8 Automations
+router.use('/workflows', elev8WorkflowsAdminRouter);
 
 module.exports = router;
