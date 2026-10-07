@@ -27,6 +27,7 @@
       <button class="tab active" data-tab="workflows">Workflows</button>
       <button class="tab" data-tab="runs">Runs</button>
       <button class="tab" data-tab="templates">Templates</button>
+      <button class="tab" data-tab="webhooks">Webhooks</button>
       <button class="tab" data-tab="integrations">Integrations</button>
     </nav>
 
@@ -43,6 +44,52 @@
     <section class="panel" data-panel="templates">
       <div class="panel-head"><div><h2>Templates</h2><p>Install a starting point, then edit it before enabling.</p></div></div>
       <div id="template-list" class="cards"></div>
+    </section>
+
+    <section class="panel" data-panel="webhooks">
+      <div class="panel-head">
+        <div>
+          <h2>Shopify webhooks</h2>
+          <p>ELEV8-owned Shopify event coverage, delivery telemetry and migration away from Workflow Companion / Workflow Webhooks.</p>
+        </div>
+        <div class="card-actions">
+          <button class="btn" id="webhook-refresh" type="button">Refresh</button>
+          <button class="btn" id="webhook-sync" type="button">Sync required</button>
+        </div>
+      </div>
+
+      <section class="stats" id="webhook-stats" style="margin-bottom:16px">
+        <article><span>Required</span><strong id="wh-required">-</strong></article>
+        <article><span>Connected</span><strong id="wh-connected">-</strong></article>
+        <article><span>Receiving</span><strong id="wh-receiving">-</strong></article>
+        <article><span>Failures</span><strong id="wh-failures">-</strong></article>
+      </section>
+
+      <article class="box" style="margin-bottom:16px">
+        <div class="panel-head">
+          <div>
+            <h3>Workflow Companion migration</h3>
+            <p>Shopify prevents one app from reading or taking over another app's webhook subscriptions. ELEV8 can mirror equivalent event coverage under its own app, then track every ELEV8 delivery here.</p>
+          </div>
+          <span class="pill" id="companion-profile-status">Not enabled</span>
+        </div>
+        <div class="card-actions">
+          <button class="btn primary" id="adopt-companion" type="button">Mirror Workflow Companion coverage</button>
+        </div>
+      </article>
+
+      <article class="box" style="margin-bottom:16px">
+        <div class="panel-head">
+          <div>
+            <h3>Shopify presence & reviews</h3>
+            <p>Checks the Shopify app identity, granted scopes, ELEV8 review volume and Shopify's standard review fields.</p>
+          </div>
+          <span class="pill" id="review-presence-status">Checking...</span>
+        </div>
+        <div id="review-presence-detail" class="help">Checking Shopify review visibility...</div>
+      </article>
+
+      <div id="webhook-registry" class="table-wrap"></div>
     </section>
 
     <section class="panel" data-panel="integrations">

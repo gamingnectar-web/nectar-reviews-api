@@ -119,6 +119,34 @@ const leaseSchema = new Schema({
   lockedUntil: { type: Date, required: true, index: true },
 }, { timestamps: true });
 
+
+const webhookStatSchema = new Schema({
+  shopDomain: { type: String, required: true, index: true },
+  topic: { type: String, required: true },
+  resourceType: { type: String, default: '' },
+  endpoint: { type: String, default: '' },
+  required: { type: Boolean, default: false },
+  subscriptionStatus: { type: String, default: 'not_synced', index: true },
+  shopifyWebhookId: { type: String, default: '' },
+  dependencyReasons: { type: [String], default: [] },
+  dependentWorkflowIds: { type: [String], default: [] },
+  dependentWorkflowNames: { type: [String], default: [] },
+  receivedCount: { type: Number, default: 0 },
+  duplicateCount: { type: Number, default: 0 },
+  failureCount: { type: Number, default: 0 },
+  runCount: { type: Number, default: 0 },
+  lastReceivedAt: { type: Date, default: null },
+  lastDuplicateAt: { type: Date, default: null },
+  lastFailedAt: { type: Date, default: null },
+  lastWebhookId: { type: String, default: '' },
+  lastStatus: { type: String, default: '' },
+  lastError: { type: String, default: '' },
+  lastEnriched: { type: Boolean, default: false },
+  lastSyncAt: { type: Date, default: null },
+  lastSyncError: { type: String, default: '' },
+}, { timestamps: true });
+webhookStatSchema.index({ shopDomain: 1, topic: 1 }, { unique: true });
+
 const settingsSchema = new Schema({
   shopDomain: { type: String, required: true, unique: true, index: true },
   enabled: { type: Boolean, default: true },
@@ -133,6 +161,8 @@ const settingsSchema = new Schema({
   lastIndexAt: { type: Date, default: null },
   indexReady: { type: Boolean, default: null },
   lastIndexResults: { type: [Mixed], default: [] },
+  migrationProfile: { type: String, default: '' },
+  migrationProfileEnabledAt: { type: Date, default: null },
 }, { timestamps: true });
 
 module.exports = {
@@ -143,5 +173,6 @@ module.exports = {
   WorkflowToken: model('Elev8WorkflowToken', tokenSchema),
   WorkflowEvent: model('Elev8WorkflowEvent', eventSchema),
   WorkflowLease: model('Elev8WorkflowLease', leaseSchema),
+  WorkflowWebhookStat: model('Elev8WorkflowWebhookStat', webhookStatSchema),
   WorkflowSettings: model('Elev8WorkflowSettings', settingsSchema),
 };

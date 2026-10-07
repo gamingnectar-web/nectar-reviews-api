@@ -146,6 +146,79 @@
   async function loadRuns(){runs=(await request('/runs?limit=100')).runs||[];renderRuns();loadHealth().catch(()=>{});}
   async function loadTemplates(){templates=(await request('/templates')).templates||[];renderTemplates();}
   async function loadIntegrations(){const [c,t]=await Promise.all([request('/credentials'),request('/tokens')]);credentials=c.credentials||[];tokens=t.tokens||[];renderIntegrations();}
+  async function loadWebhookRegistry(){
+    const root=$('#webhook-registry');
+    if(!root)return;
+    try{
+      const d=await request('/shopify/webhooks');
+      const rows=d.rows||[], sum=d.summary||{};
+      $('#wh-required').textContent=Number(sum.required||0);
+      $('#wh-connected').textContent=Number(sum.connected||0);
+      $('#wh-receiving').textContent=Number(sum.receiving||0);
+      $('#wh-failures').textContent=Number(sum.failures||0);
+      const badge=$('#companion-profile-status');
+      if(badge){
+        badge.textContent=d.migrationProfile==='workflow_companion'?'Mirroring':'Not enabled';
+        badge.className=`pill ${d.migrationProfile==='workflow_companion'?'live':'off'}`;
+      }
+      root.innerHTML=rows.length?`<table><thead><tr><th>Topic</th><th>Shopify</th><th>Last received</th><th>Received</th><th>Runs</th><th>Duplicates</th><th>Errors</th><th>Used by</th></tr></thead><tbody>${rows.map(r=>`
+        <tr>
+          <td><strong>${escapeHtml(r.topic)}</strong><br><small>${escapeHtml(r.endpoint||'')}</small></td>
+          <td><span class="pill ${r.subscriptionStatus==='connected'?'live':'off'}">${escapeHtml(r.subscriptionStatus||'not synced')}</span></td>
+          <td>${r.lastReceivedAt?escapeHtml(new Date(r.lastReceivedAt).toLocaleString()):'-'}</td>
+          <td>${Number(r.receivedCount||0).toLocaleString()}</td>
+          <td>${Number(r.runCount||0).toLocaleString()}</td>
+          <td>${Number(r.duplicateCount||0).toLocaleString()}</td>
+          <td>${Number(r.failureCount||0).toLocaleString()}${r.lastError?`<br><small>${escapeHtml(r.lastError)}</small>`:''}</td>
+          <td>${(r.dependentWorkflowNames||[]).map(escapeHtml).join(', ')||escapeHtml((r.dependencyReasons||[]).join(', '))||'-'}</td>
+        </tr>`).join('')}</tbody></table>`:'<div class="empty">No ELEV8 webhook topics are tracked yet.</div>';
+    }catch(error){root.innerHTML=`<div class="empty">${escapeHtml(error.message)}</div>`;}
+  }
+
+  async function syncWebhookRegistry(){
+    const btn=$('#webhook-sync'); if(btn){btn.disabled=true;btn.textContent='Syncing...';}
+    try{
+      const d=await request('/shopify/webhooks/sync',{method:'POST',body:'{}'});
+      toast(`${Number(d.connected||0)}/${Number(d.desired||0)} webhook topics connected`);
+      await loadWebhookRegistry();
+    }catch(error){alert(error.message);}
+    finally{if(btn){btn.disabled=false;btn.textContent='Sync required';}}
+  }
+
+  async function adoptCompanionCoverage(){
+    const btn=$('#adopt-companion');
+    if(!confirm('Mirror Workflow Companion event coverage under ELEV8? This creates ELEV8-owned Shopify webhook subscriptions where your current Shopify scopes allow it. It does not delete or modify Workflow Companion.'))return;
+    if(btn){btn.disabled=true;btn.textContent='Mirroring...';}
+    try{
+      const d=await request('/shopify/webhooks/adopt-companion',{method:'POST',body:'{}'});
+      toast(`${Number(d.connected||0)}/${Number(d.desired||0)} companion topics covered by ELEV8`);
+      await loadWebhookRegistry();
+      await loadReviewPresence();
+    }catch(error){alert(error.message);}
+    finally{if(btn){btn.disabled=false;btn.textContent='Mirror Workflow Companion coverage';}}
+  }
+
+  async function loadReviewPresence(){
+    const badge=$('#review-presence-status'), detail=$('#review-presence-detail');
+    if(!badge||!detail)return;
+    try{
+      const d=await request('/shopify/review-presence');
+      const identity=d.identity||{}, program=d.standardReviewProgram||{}, local=d.localReviews||{}, native=d.nativeRatingFields||{}, parity=d.automationParity||{};
+      const ok=Boolean(identity.ok && program.ready && parity.ready);
+      badge.textContent=ok?'Native-ready':'Needs attention';
+      badge.className=`pill ${ok?'live':'off'}`;
+      detail.innerHTML=`
+        <strong>Shopify app:</strong> ${escapeHtml(identity.currentTitle||d.app?.title||'Unknown')} ${identity.ok?'':'- rename to ELEV8 in Shopify Dev Dashboard'}<br>
+        <strong>ELEV8 accepted reviews:</strong> ${Number(local.accepted||0).toLocaleString()} across ${Number(local.productsWithAcceptedReviews||0).toLocaleString()} products<br>
+        <strong>Shopify standard rating fields:</strong> ${Number(native.populated||0)}/${Number(native.sampled||0)} sampled products populated<br>
+        <strong>Shop review syndication:</strong> ${program.ready?'Scope ready':'Shopify approval / write_product_reviews required'}<br>
+        <strong>Workflow Companion scope parity:</strong> ${parity.ready?'Ready':`${Number((parity.missingScopes||[]).length)} scope(s) still missing`}
+        ${parity.missingScopes?.length?`<br><small>Missing: ${escapeHtml(parity.missingScopes.join(', '))}</small>`:''}`;
+    }catch(error){
+      badge.textContent='Needs attention'; badge.className='pill off'; detail.textContent=error.message;
+    }
+  }
+
   async function loadShopifyStatus(){
     const statusEl=$('#shopify-automation-status'), detail=$('#shopify-automation-detail');
     if(!statusEl||!detail)return;
@@ -171,7 +244,7 @@
     catch(error){alert(error.message);}finally{if(btn){btn.disabled=false;btn.textContent='Index current Shopify data';}}
   }
 
-  $$('.tab').forEach((tab)=>tab.onclick=()=>{$$('.tab').forEach((x)=>x.classList.remove('active'));$$('.panel').forEach((x)=>x.classList.remove('active'));tab.classList.add('active');$(`[data-panel="${tab.dataset.tab}"]`).classList.add('active');if(tab.dataset.tab==='runs')loadRuns();if(tab.dataset.tab==='templates')loadTemplates();if(tab.dataset.tab==='integrations'){loadIntegrations();loadShopifyStatus();}});
+  $$('.tab').forEach((tab)=>tab.onclick=()=>{$$('.tab').forEach((x)=>x.classList.remove('active'));$$('.panel').forEach((x)=>x.classList.remove('active'));tab.classList.add('active');$(`[data-panel="${tab.dataset.tab}"]`).classList.add('active');if(tab.dataset.tab==='runs')loadRuns();if(tab.dataset.tab==='templates')loadTemplates();if(tab.dataset.tab==='webhooks'){loadWebhookRegistry();loadReviewPresence();}if(tab.dataset.tab==='integrations'){loadIntegrations();loadShopifyStatus();}});
   $('#new-workflow').onclick=()=>{fillForm();$('#workflow-dialog').showModal();};
   $('#add-action').onclick=()=>$('#actions').appendChild(actionRow({type:'http_request',config:{method:'POST',url:'https://example.com'}}));
   $('#refresh-runs').onclick=loadRuns;
@@ -180,6 +253,9 @@
   if($('#shopify-sync')) $('#shopify-sync').onclick=syncShopify;
   if($('#shopify-index')) $('#shopify-index').onclick=indexShopify;
   if($('#shopify-status-refresh')) $('#shopify-status-refresh').onclick=loadShopifyStatus;
+  if($('#webhook-refresh')) $('#webhook-refresh').onclick=()=>{loadWebhookRegistry();loadReviewPresence();};
+  if($('#webhook-sync')) $('#webhook-sync').onclick=syncWebhookRegistry;
+  if($('#adopt-companion')) $('#adopt-companion').onclick=adoptCompanionCoverage;
 
   $('#workflow-form').addEventListener('submit',async(e)=>{
     if(e.submitter?.value==='cancel')return;

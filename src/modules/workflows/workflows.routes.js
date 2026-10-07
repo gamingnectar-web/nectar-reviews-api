@@ -15,6 +15,12 @@ const {
   syncAutomationWebhookSubscriptions,
   indexRequiredSnapshots,
 } = require('./workflows.shopify');
+const {
+  getWebhookRegistry,
+  syncTrackedWebhooks,
+  adoptWorkflowCompanionProfile,
+} = require('./workflows.webhookRegistry');
+const { getShopifyReviewPresence } = require('../reviews/shopifyReviewPresence');
 
 const adminRouter = express.Router();
 const publicRouter = express.Router();
@@ -132,6 +138,39 @@ adminRouter.post('/events/test', async (req, res) => {
     const shopDomain = shopFromReq(req);
     const result = await ingestEvent({ ...req.body, shopDomain, source: 'test' });
     res.json(result);
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+
+adminRouter.get('/shopify/webhooks', async (req, res) => {
+  try {
+    const shopDomain = shopFromReq(req);
+    if (!shopDomain) return res.status(400).json({ error: 'Authenticated shop is required.' });
+    res.json(await getWebhookRegistry(shopDomain));
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+adminRouter.post('/shopify/webhooks/sync', async (req, res) => {
+  try {
+    const shopDomain = shopFromReq(req);
+    if (!shopDomain) return res.status(400).json({ error: 'Authenticated shop is required.' });
+    res.json(await syncTrackedWebhooks(shopDomain));
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+adminRouter.post('/shopify/webhooks/adopt-companion', async (req, res) => {
+  try {
+    const shopDomain = shopFromReq(req);
+    if (!shopDomain) return res.status(400).json({ error: 'Authenticated shop is required.' });
+    res.json(await adoptWorkflowCompanionProfile(shopDomain));
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+adminRouter.get('/shopify/review-presence', async (req, res) => {
+  try {
+    const shopDomain = shopFromReq(req);
+    if (!shopDomain) return res.status(400).json({ error: 'Authenticated shop is required.' });
+    res.json(await getShopifyReviewPresence(shopDomain));
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 

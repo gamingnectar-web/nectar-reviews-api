@@ -8,6 +8,11 @@ const {
   WorkflowSettings,
 } = require('./workflows.models');
 const { ingestEvent, normalizeType, normalizeId } = require('./workflows.service');
+const {
+  recordWebhookAccepted,
+  recordWebhookDuplicate,
+  recordWebhookFailure,
+} = require('./workflows.webhookRegistry');
 
 const RESOURCE_GID = {
   product: 'Product',
@@ -265,7 +270,10 @@ async function ingestShopifyWebhookEvent({
   const type = normalizeType(resourceType || topicToResourceType(topic));
   const id = String(resourceId || normalizeId(payload));
   const claim = await claimWebhookEvent({ shopDomain, webhookId, topic, resourceType: type, resourceId: id });
-  if (claim.duplicate) return { duplicate: true, started: 0, runs: [] };
+  if (claim.duplicate) {
+    await recordWebhookDuplicate({ shopDomain, topic, webhookId }).catch(() => {});
+    return { duplicate: true, started: 0, runs: [] };
+  }
 
   try {
     const enriched = await enrichShopifyResource({ shopDomain, resourceType: type, resourceId: id, payload });
@@ -286,11 +294,20 @@ async function ingestShopifyWebhookEvent({
         finishedAt: new Date(),
       },
     });
+    await recordWebhookAccepted({
+      shopDomain,
+      topic,
+      webhookId,
+      resourceType: type,
+      enriched: Boolean(enriched.enriched),
+      runCount: Number(result.started || 0),
+    }).catch(() => {});
     return { ...result, duplicate: false, enriched: Boolean(enriched.enriched), warning: enriched.warning || '' };
   } catch (error) {
     await WorkflowEvent.updateOne({ _id: claim.row._id }, {
       $set: { status: 'failed', error: String(error.message || error).slice(0, 2000), finishedAt: new Date() },
     }).catch(() => {});
+    await recordWebhookFailure({ shopDomain, topic, webhookId, error }).catch(() => {});
     throw error;
   }
 }
