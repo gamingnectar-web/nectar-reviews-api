@@ -168,6 +168,7 @@ app.use('/api/admin/notifications', makeRateLimiter({ windowMs: 60 * 1000, max: 
 app.use('/api/admin/ai', makeRateLimiter({ windowMs: 60 * 1000, max: 30, keyPrefix: 'admin-ai' }), requireAdminSession, aiEmailModuleRoutes);
 app.use('/api/admin/email-module-library', requireAdminSession, emailModuleLibraryRoutes);
 app.use('/api/admin/review-migrations', reviewMigrationRoutes);
+app.use('/api/workflows', elev8Workflows.publicRouter);
 app.use('/api', publicRoutes);
 app.use('/api/admin/loyalty', loyaltyRoutes);
 app.use('/api/admin', adminRoutes);
@@ -176,8 +177,6 @@ app.patch('/api/reviews/:id', requireAdminSession, (req, res, next) => { req.url
 app.post('/api/reviews/import', requireAdminSession, (req, res, next) => { req.url = '/reviews/import'; return adminRoutes(req, res, next); });
 app.use((req, res) => res.status(404).json({ error: 'Not found', path: req.path }));
 app.use(errorHandler);
-// ELEV8 Automations
-app.use('/api/workflows', elev8Workflows.publicRouter);
 elev8Workflows.startWorkflowWorker();
 
 module.exports = app;

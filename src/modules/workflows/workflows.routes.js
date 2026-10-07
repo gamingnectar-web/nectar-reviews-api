@@ -10,6 +10,11 @@ const {
 const { encrypt, createToken, tokenHash } = require('./workflows.crypto');
 const { templates } = require('./workflows.templates');
 const { ingestEvent, runManual, ensureSettings } = require('./workflows.service');
+const {
+  workflowShopifyReadiness,
+  syncAutomationWebhookSubscriptions,
+  indexRequiredSnapshots,
+} = require('./workflows.shopify');
 
 const adminRouter = express.Router();
 const publicRouter = express.Router();
@@ -19,13 +24,9 @@ function shopFromReq(req) {
     req.shopDomain ||
     req.session?.shopDomain ||
     req.session?.shop ||
-    resSafe(req)?.locals?.shopDomain ||
-    req.query?.shopDomain ||
-    req.body?.shopDomain ||
     ''
   ).toLowerCase().trim();
 }
-function resSafe(req) { return req.res || {}; }
 
 function cleanWorkflow(input, shopDomain) {
   const safe = {
@@ -134,6 +135,33 @@ adminRouter.post('/events/test', async (req, res) => {
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
+adminRouter.get('/shopify/status', async (req, res) => {
+  try {
+    const shopDomain = shopFromReq(req);
+    if (!shopDomain) return res.status(400).json({ error: 'Authenticated shop is required.' });
+    res.json(await workflowShopifyReadiness(shopDomain));
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+adminRouter.post('/shopify/sync', async (req, res) => {
+  try {
+    const shopDomain = shopFromReq(req);
+    if (!shopDomain) return res.status(400).json({ error: 'Authenticated shop is required.' });
+    res.json(await syncAutomationWebhookSubscriptions(shopDomain));
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+adminRouter.post('/shopify/index', async (req, res) => {
+  try {
+    const shopDomain = shopFromReq(req);
+    if (!shopDomain) return res.status(400).json({ error: 'Authenticated shop is required.' });
+    res.json(await indexRequiredSnapshots(shopDomain, {
+      maxItems: Math.min(Math.max(Number(req.body?.maxItems || 5000), 1), 20000),
+      orderCoverageDays: Math.min(Math.max(Number(req.body?.orderCoverageDays || 90), 1), 3650),
+    }));
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
 adminRouter.get('/settings', async (req, res) => {
   const shopDomain = shopFromReq(req);
   const settings = await ensureSettings(shopDomain);
@@ -203,7 +231,7 @@ adminRouter.delete('/tokens/:id', async (req, res) => {
 publicRouter.post('/trigger/:resourceType?', async (req, res) => {
   try {
     const auth = String(req.headers.authorization || '');
-    const bearer = auth.match(/^Bearer\s+(.+)$/i)?.[1] || req.body?.bearerToken || '';
+    const bearer = auth.match(/^Bearer\s+(.+)$/i)?.[1] || '';
     if (!bearer) return res.status(401).json({ error: 'Bearer token required.' });
     const hash = tokenHash(bearer);
     const token = await WorkflowToken.findOne({ hash, revokedAt: null });

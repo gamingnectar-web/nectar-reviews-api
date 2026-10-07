@@ -96,6 +96,29 @@ const tokenSchema = new Schema({
   revokedAt: { type: Date, default: null },
 }, { timestamps: true });
 
+const eventSchema = new Schema({
+  eventKey: { type: String, required: true, unique: true, index: true },
+  shopDomain: { type: String, required: true, index: true },
+  webhookId: { type: String, default: '', index: true },
+  topic: { type: String, default: '' },
+  resourceType: { type: String, default: '' },
+  resourceId: { type: String, default: '' },
+  status: { type: String, enum: ['processing','completed','failed'], default: 'processing', index: true },
+  enriched: { type: Boolean, default: false },
+  runCount: { type: Number, default: 0 },
+  error: { type: String, default: '' },
+  receivedAt: { type: Date, default: Date.now, index: true },
+  finishedAt: { type: Date, default: null },
+}, { timestamps: true });
+eventSchema.index({ shopDomain: 1, receivedAt: -1 });
+eventSchema.index({ receivedAt: 1 }, { expireAfterSeconds: 2592000 });
+
+const leaseSchema = new Schema({
+  key: { type: String, required: true, unique: true, index: true },
+  owner: { type: String, required: true },
+  lockedUntil: { type: Date, required: true, index: true },
+}, { timestamps: true });
+
 const settingsSchema = new Schema({
   shopDomain: { type: String, required: true, unique: true, index: true },
   enabled: { type: Boolean, default: true },
@@ -103,6 +126,13 @@ const settingsSchema = new Schema({
   orderCoverageDays: { type: Number, default: 90 },
   maxRunsPerMinute: { type: Number, default: 120 },
   storePayloads: { type: Boolean, default: true },
+  webhookSyncAt: { type: Date, default: null },
+  webhookSyncOk: { type: Boolean, default: false },
+  webhookTopics: { type: [String], default: [] },
+  webhookSyncResults: { type: [Mixed], default: [] },
+  lastIndexAt: { type: Date, default: null },
+  indexReady: { type: Boolean, default: null },
+  lastIndexResults: { type: [Mixed], default: [] },
 }, { timestamps: true });
 
 module.exports = {
@@ -111,5 +141,7 @@ module.exports = {
   WorkflowSnapshot: model('Elev8WorkflowSnapshot', snapshotSchema),
   WorkflowCredential: model('Elev8WorkflowCredential', credentialSchema),
   WorkflowToken: model('Elev8WorkflowToken', tokenSchema),
+  WorkflowEvent: model('Elev8WorkflowEvent', eventSchema),
+  WorkflowLease: model('Elev8WorkflowLease', leaseSchema),
   WorkflowSettings: model('Elev8WorkflowSettings', settingsSchema),
 };

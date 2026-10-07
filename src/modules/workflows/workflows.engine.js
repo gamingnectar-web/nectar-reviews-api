@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { Workflow, WorkflowRun, WorkflowCredential, WorkflowSettings } = require('./workflows.models');
 const { decrypt } = require('./workflows.crypto');
+const { getAccessTokenForShop } = require('../../utils/shopify');
 
 function getPath(obj, path) {
   if (!path) return obj;
@@ -114,12 +115,12 @@ async function httpRequest(config, context, shopDomain) {
 
 async function shopifyGraphql(config, context, shopDomain) {
   const rendered = deepTemplate(config, context);
-  let token = process.env.ELEV8_SHOPIFY_ADMIN_TOKEN || process.env.SHOPIFY_ACCESS_TOKEN || '';
+  let token = await getAccessTokenForShop(shopDomain);
   if (rendered.credential) {
     const c = await credential(shopDomain, rendered.credential);
     token = c.token || c.accessToken || token;
   }
-  if (!token) throw new Error('No Shopify Admin token available. Add a bearer credential or set ELEV8_SHOPIFY_ADMIN_TOKEN.');
+  if (!token) throw new Error('No Shopify Admin token is available for this shop. Reinstall/connect the Shopify store in ELEV8.');
   const apiVersion = rendered.apiVersion || '2026-07';
   const response = await fetch(`https://${shopDomain}/admin/api/${apiVersion}/graphql.json`, {
     method: 'POST',

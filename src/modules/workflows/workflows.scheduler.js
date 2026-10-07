@@ -1,13 +1,43 @@
-const { Workflow, WorkflowRun } = require('./workflows.models');
+const { Workflow, WorkflowRun, WorkflowLease } = require('./workflows.models');
 const { queueWorkflow, executeRun } = require('./workflows.engine');
 
 let timer = null;
 let busy = false;
 
+const leaseOwner = `${process.env.RENDER_INSTANCE_ID || process.env.HOSTNAME || 'local'}:${process.pid}`;
+
+async function acquireLease() {
+  const now = new Date();
+  const lockedUntil = new Date(Date.now() + 45000);
+  let lease = await WorkflowLease.findOneAndUpdate(
+    { key: 'workflow-worker', lockedUntil: { $lte: now } },
+    { $set: { owner: leaseOwner, lockedUntil } },
+    { new: true }
+  );
+  if (lease) return true;
+  try {
+    await WorkflowLease.create({ key: 'workflow-worker', owner: leaseOwner, lockedUntil });
+    return true;
+  } catch (error) {
+    if (error?.code === 11000) return false;
+    throw error;
+  }
+}
+
+async function releaseLease() {
+  await WorkflowLease.updateOne(
+    { key: 'workflow-worker', owner: leaseOwner },
+    { $set: { lockedUntil: new Date() } }
+  ).catch(() => {});
+}
+
 async function processQueued() {
   if (busy) return;
   busy = true;
+  let leased = false;
   try {
+    leased = await acquireLease();
+    if (!leased) return;
     const now = new Date();
     const runs = await WorkflowRun.find({ status: 'queued', scheduledFor: { $lte: now } }).sort({ scheduledFor: 1 }).limit(20);
     for (const run of runs) {
@@ -33,6 +63,7 @@ async function processQueued() {
   } catch (error) {
     console.error('[ELEV8 Workflows] worker error', error);
   } finally {
+    if (leased) await releaseLease();
     busy = false;
   }
 }

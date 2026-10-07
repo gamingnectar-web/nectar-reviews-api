@@ -146,13 +146,40 @@
   async function loadRuns(){runs=(await request('/runs?limit=100')).runs||[];renderRuns();loadHealth().catch(()=>{});}
   async function loadTemplates(){templates=(await request('/templates')).templates||[];renderTemplates();}
   async function loadIntegrations(){const [c,t]=await Promise.all([request('/credentials'),request('/tokens')]);credentials=c.credentials||[];tokens=t.tokens||[];renderIntegrations();}
+  async function loadShopifyStatus(){
+    const statusEl=$('#shopify-automation-status'), detail=$('#shopify-automation-detail');
+    if(!statusEl||!detail)return;
+    try{
+      const d=await request('/shopify/status');
+      const hooks=d.webhooks||{}, snaps=d.snapshots||{}, events=d.events||{};
+      statusEl.textContent=d.ok?'Ready':'Needs setup';
+      statusEl.className=`pill ${d.ok?'live':'off'}`;
+      const required=(hooks.topics||[]).length, missing=(hooks.results||[]).filter(x=>!x.ok).length;
+      detail.innerHTML=`<strong>${required-missing}/${required} required webhook topics connected</strong> · ${Number(snaps.count||0).toLocaleString()} snapshots · ${Number(events.failedLast24h||0)} failed events in 24h${snaps.lastIndexAt?`<br><small>Last index: ${escapeHtml(new Date(snaps.lastIndexAt).toLocaleString())}</small>`:''}`;
+    }catch(error){statusEl.textContent='Needs setup';statusEl.className='pill off';detail.textContent=error.message;}
+  }
 
-  $$('.tab').forEach((tab)=>tab.onclick=()=>{$$('.tab').forEach((x)=>x.classList.remove('active'));$$('.panel').forEach((x)=>x.classList.remove('active'));tab.classList.add('active');$(`[data-panel="${tab.dataset.tab}"]`).classList.add('active');if(tab.dataset.tab==='runs')loadRuns();if(tab.dataset.tab==='templates')loadTemplates();if(tab.dataset.tab==='integrations')loadIntegrations();});
+  async function syncShopify(){
+    const btn=$('#shopify-sync'); if(btn){btn.disabled=true;btn.textContent='Syncing…';}
+    try{const d=await request('/shopify/sync',{method:'POST',body:'{}'});toast(d.ok?'Shopify webhooks connected':'Shopify sync finished with warnings');await loadShopifyStatus();}
+    catch(error){alert(error.message);}finally{if(btn){btn.disabled=false;btn.textContent='Sync Shopify webhooks';}}
+  }
+
+  async function indexShopify(){
+    const btn=$('#shopify-index'); if(btn){btn.disabled=true;btn.textContent='Indexing…';}
+    try{const d=await request('/shopify/index',{method:'POST',body:JSON.stringify({maxItems:5000,orderCoverageDays:90})});const total=(d.results||[]).reduce((n,x)=>n+Number(x.indexed||0),0);toast(`Indexed ${total.toLocaleString()} Shopify records`);await loadShopifyStatus();}
+    catch(error){alert(error.message);}finally{if(btn){btn.disabled=false;btn.textContent='Index current Shopify data';}}
+  }
+
+  $$('.tab').forEach((tab)=>tab.onclick=()=>{$$('.tab').forEach((x)=>x.classList.remove('active'));$$('.panel').forEach((x)=>x.classList.remove('active'));tab.classList.add('active');$(`[data-panel="${tab.dataset.tab}"]`).classList.add('active');if(tab.dataset.tab==='runs')loadRuns();if(tab.dataset.tab==='templates')loadTemplates();if(tab.dataset.tab==='integrations'){loadIntegrations();loadShopifyStatus();}});
   $('#new-workflow').onclick=()=>{fillForm();$('#workflow-dialog').showModal();};
   $('#add-action').onclick=()=>$('#actions').appendChild(actionRow({type:'http_request',config:{method:'POST',url:'https://example.com'}}));
   $('#refresh-runs').onclick=loadRuns;
   $('#add-credential').onclick=()=>{$('#credential-form').reset();$('#credential-dialog').showModal();};
   $('#add-token').onclick=()=>{$('#token-form').reset();$('#created-token').hidden=true;$('#token-dialog').showModal();};
+  if($('#shopify-sync')) $('#shopify-sync').onclick=syncShopify;
+  if($('#shopify-index')) $('#shopify-index').onclick=indexShopify;
+  if($('#shopify-status-refresh')) $('#shopify-status-refresh').onclick=loadShopifyStatus;
 
   $('#workflow-form').addEventListener('submit',async(e)=>{
     if(e.submitter?.value==='cancel')return;
