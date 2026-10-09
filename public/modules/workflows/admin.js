@@ -155,21 +155,22 @@
       $('#wh-required').textContent=Number(sum.required||0);
       $('#wh-connected').textContent=Number(sum.connected||0);
       $('#wh-receiving').textContent=Number(sum.receiving||0);
-      $('#wh-failures').textContent=Number(sum.failures||0);
+      $('#wh-failures').textContent=Number(sum.deliveryFailures||0);
       const badge=$('#companion-profile-status');
       if(badge){
         badge.textContent=d.migrationProfile==='workflow_companion'?'Mirroring':'Not enabled';
         badge.className=`pill ${d.migrationProfile==='workflow_companion'?'live':'off'}`;
       }
-      root.innerHTML=rows.length?`<table><thead><tr><th>Topic</th><th>Shopify</th><th>Last received</th><th>Received</th><th>Runs</th><th>Duplicates</th><th>Errors</th><th>Used by</th></tr></thead><tbody>${rows.map(r=>`
+      root.innerHTML=rows.length?`<table><thead><tr><th>Topic</th><th>Shopify</th><th>Last received</th><th>Received</th><th>Runs</th><th>Duplicates</th><th>Delivery failures</th><th>Sync issue</th><th>Used by</th></tr></thead><tbody>${rows.map(r=>`
         <tr>
           <td><strong>${escapeHtml(r.topic)}</strong><br><small>${escapeHtml(r.endpoint||'')}</small></td>
-          <td><span class="pill ${r.subscriptionStatus==='connected'?'live':'off'}">${escapeHtml(r.subscriptionStatus||'not synced')}</span></td>
+          <td><span class="pill ${r.subscriptionStatus==='connected'?'live':'off'}">${escapeHtml((r.subscriptionStatus||'not_synced').replaceAll('_',' '))}</span></td>
           <td>${r.lastReceivedAt?escapeHtml(new Date(r.lastReceivedAt).toLocaleString()):'-'}</td>
           <td>${Number(r.receivedCount||0).toLocaleString()}</td>
           <td>${Number(r.runCount||0).toLocaleString()}</td>
           <td>${Number(r.duplicateCount||0).toLocaleString()}</td>
-          <td>${Number(r.failureCount||0).toLocaleString()}${r.lastError?`<br><small>${escapeHtml(r.lastError)}</small>`:''}</td>
+          <td>${Number(r.failureCount||0).toLocaleString()}</td>
+          <td>${r.lastSyncError?`<small>${escapeHtml(r.lastSyncError)}</small>`:(r.subscriptionStatus==='connected'?'—':'Not synced')}</td>
           <td>${(r.dependentWorkflowNames||[]).map(escapeHtml).join(', ')||escapeHtml((r.dependencyReasons||[]).join(', '))||'-'}</td>
         </tr>`).join('')}</tbody></table>`:'<div class="empty">No ELEV8 webhook topics are tracked yet.</div>';
     }catch(error){root.innerHTML=`<div class="empty">${escapeHtml(error.message)}</div>`;}

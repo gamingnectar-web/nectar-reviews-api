@@ -107,7 +107,7 @@ const eventSchema = new Schema({
   enriched: { type: Boolean, default: false },
   runCount: { type: Number, default: 0 },
   error: { type: String, default: '' },
-  receivedAt: { type: Date, default: Date.now, index: true },
+  receivedAt: { type: Date, default: Date.now },
   finishedAt: { type: Date, default: null },
 }, { timestamps: true });
 eventSchema.index({ shopDomain: 1, receivedAt: -1 });
@@ -134,6 +134,7 @@ const webhookStatSchema = new Schema({
   receivedCount: { type: Number, default: 0 },
   duplicateCount: { type: Number, default: 0 },
   failureCount: { type: Number, default: 0 },
+  syncFailureCount: { type: Number, default: 0 },
   runCount: { type: Number, default: 0 },
   lastReceivedAt: { type: Date, default: null },
   lastDuplicateAt: { type: Date, default: null },
@@ -143,6 +144,8 @@ const webhookStatSchema = new Schema({
   lastError: { type: String, default: '' },
   lastEnriched: { type: Boolean, default: false },
   lastSyncAt: { type: Date, default: null },
+  lastSyncStatus: { type: String, default: '' },
+  graphqlTopic: { type: String, default: '' },
   lastSyncError: { type: String, default: '' },
 }, { timestamps: true });
 webhookStatSchema.index({ shopDomain: 1, topic: 1 }, { unique: true });

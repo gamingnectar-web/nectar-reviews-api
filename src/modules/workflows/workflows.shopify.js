@@ -12,6 +12,8 @@ const {
   recordWebhookAccepted,
   recordWebhookDuplicate,
   recordWebhookFailure,
+  inspectDesiredWebhooks,
+  syncTrackedWebhooks,
 } = require('./workflows.webhookRegistry');
 
 const RESOURCE_GID = {
@@ -32,20 +34,30 @@ const TOPIC_RESOURCE = {
   'products/create': 'product',
   'products/update': 'product',
   'products/delete': 'product',
+  'product_publications/create': 'product',
+  'product_publications/update': 'product',
+  'product_publications/delete': 'product',
   'orders/create': 'order',
   'orders/updated': 'order',
   'orders/fulfilled': 'order',
   'orders/cancelled': 'order',
   'orders/delete': 'order',
+  'orders/edited': 'order',
+  'orders/paid': 'order',
   'draft_orders/create': 'draft_order',
   'draft_orders/update': 'draft_order',
   'draft_orders/delete': 'draft_order',
   'customers/create': 'customer',
   'customers/update': 'customer',
   'customers/delete': 'customer',
+  'customer_tags_added': 'customer',
+  'customer_tags_removed': 'customer',
   'collections/create': 'collection',
   'collections/update': 'collection',
   'collections/delete': 'collection',
+  'collection_publications/create': 'collection',
+  'collection_publications/update': 'collection',
+  'collection_publications/delete': 'collection',
   'metaobjects/create': 'metaobject',
   'metaobjects/update': 'metaobject',
   'metaobjects/delete': 'metaobject',
@@ -60,6 +72,17 @@ const TOPIC_RESOURCE = {
   'markets/delete': 'market',
   'locations/activate': 'location',
   'locations/deactivate': 'location',
+  'locations/create': 'location',
+  'locations/update': 'location',
+  'locations/delete': 'location',
+  'discounts/create': 'discount',
+  'discounts/update': 'discount',
+  'discounts/delete': 'discount',
+  'discounts/redeemcode_added': 'discount',
+  'discounts/redeemcode_removed': 'discount',
+  'segments/create': 'customer_segment',
+  'segments/update': 'customer_segment',
+  'segments/delete': 'customer_segment',
 };
 
 const RESOURCE_TOPICS = {
@@ -334,66 +357,12 @@ function automationWebhookAddress() {
 }
 
 async function inspectAutomationWebhookSubscriptions(shopDomain) {
-  const topics = await requiredWebhookTopics(shopDomain);
-  const address = automationWebhookAddress();
-  const results = [];
-  for (const topic of topics) {
-    if (EXISTING_DEDICATED_TOPICS.has(topic)) {
-      results.push({ topic, ok: true, dedicated: true, address: topic === 'orders/fulfilled'
-        ? `${String(env.appUrl || '').replace(/\/$/, '')}/api/webhooks/shopify/orders-fulfilled`
-        : `${String(env.appUrl || '').replace(/\/$/, '')}/api/webhooks/shopify/orders-updated` });
-      continue;
-    }
-    const existing = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/webhooks.json?topic=${encodeURIComponent(topic)}`, { shopDomain });
-    if (!existing) {
-      results.push({ topic, ok: false, unknown: true, address, reason: 'Could not inspect Shopify webhook subscriptions.' });
-      continue;
-    }
-    const match = (existing.webhooks || []).find((item) => String(item.address || '').replace(/\/$/, '') === address);
-    results.push({ topic, ok: Boolean(match), address, webhookId: match?.id ? String(match.id) : '', missing: !match });
-  }
-  return { ok: results.every((x) => x.ok), topics, address, results, checkedAt: new Date() };
+  const result = await inspectDesiredWebhooks(shopDomain);
+  return { ok: result.ok, topics: result.results.map((x) => x.topic), results: result.results, checkedAt: new Date() };
 }
 
 async function syncAutomationWebhookSubscriptions(shopDomain) {
-  if (!env.appUrl) throw new Error('APP_URL is required before Shopify automation webhooks can be registered.');
-  const topics = await requiredWebhookTopics(shopDomain);
-  const address = automationWebhookAddress();
-  const results = [];
-
-  for (const topic of topics) {
-    if (EXISTING_DEDICATED_TOPICS.has(topic)) {
-      results.push({ topic, ok: true, dedicated: true });
-      continue;
-    }
-
-    const existing = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/webhooks.json?topic=${encodeURIComponent(topic)}`, { shopDomain });
-    const match = (existing?.webhooks || []).find((item) => String(item.address || '').replace(/\/$/, '') === address);
-    if (match) {
-      results.push({ topic, ok: true, already: true, webhookId: String(match.id) });
-      continue;
-    }
-
-    const created = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/webhooks.json`, {
-      shopDomain,
-      method: 'POST',
-      body: JSON.stringify({ webhook: { topic, address, format: 'json' } }),
-    });
-    if (created?.webhook?.id) results.push({ topic, ok: true, created: true, webhookId: String(created.webhook.id) });
-    else results.push({ topic, ok: false, reason: 'Shopify did not confirm webhook creation. The app may need an additional Shopify access scope or this topic may not be available for the installed API version.' });
-  }
-
-  await WorkflowSettings.findOneAndUpdate(
-    { shopDomain },
-    { $set: {
-      webhookSyncAt: new Date(),
-      webhookSyncOk: results.every((x) => x.ok),
-      webhookTopics: topics,
-      webhookSyncResults: results,
-    }, $setOnInsert: { shopDomain } },
-    { upsert: true, new: true }
-  );
-  return { ok: results.every((x) => x.ok), topics, address, results };
+  return syncTrackedWebhooks(shopDomain);
 }
 
 const INDEX_QUERIES = {
