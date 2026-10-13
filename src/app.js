@@ -30,6 +30,16 @@ const { securityHeaders, corsOptions, makeRateLimiter, errorHandler, requireAdmi
 const reviewSubmissionSecurity = require('./utils/reviewSubmissionSecurity');
 const { mountPlatformModules } = require('./modules');
 const elev8Workflows = require('./modules/workflows');
+const elev8BrowserAuth = require('./modules/elev8BrowserAuth');
+// Browser identities are checked first; existing Shopify auth remains the fallback.
+function hybridAdminSession(req,res,next) {
+  elev8BrowserAuth.browserAdminMiddleware(req,res,(error)=>{
+    if(error)return next(error);
+    if(req.adminAuthMode === 'elev8-browser')return next();
+    return requireAdminSession(req,res,next);
+  });
+}
+
 
 const app = express();
 const publicDir = path.join(__dirname, '..', 'public');
@@ -155,8 +165,15 @@ Open Shopify Admin
 </html>`);
 }
 
+app.use('/elev8', elev8BrowserAuth.router);
 app.get('/admin', async (req, res, next) => {
   try {
+    if (elev8BrowserAuth.featureEnabled()) {
+      const browserAuth = await elev8BrowserAuth.browserSession(req);
+      if (browserAuth && !req.query.shop && !req.query.shopDomain) {
+        return res.redirect(302, `/admin?shop=${encodeURIComponent(browserAuth.member.shopDomain)}`);
+      }
+    }
     // Direct visits require an existing authenticated admin cookie.
     // Embedded Shopify visits retain their existing bootstrap flow.
     const launchShop = cleanShopDomain(req.query.shop || req.query.shopDomain || '');
@@ -224,25 +241,25 @@ app.use('/auth', authRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/notifications', makeRateLimiter({ windowMs: 60 * 1000, max: 40, keyPrefix: 'notifications-public' }), notificationsPublicRoutes);
 app.use('/api/loyalty/checkout', makeRateLimiter({ windowMs: 60 * 1000, max: 60, keyPrefix: 'loyalty-checkout' }), loyaltyCheckoutRoutes);
-app.use('/api/admin/brand-directory-v3', requireAdminSession, brandDirectoryV3Routes);
-app.use('/api/admin/brand-rules', requireAdminSession, brandRulesRoutes);
-app.use('/api/admin/elev8-commerce', requireAdminSession, elev8CommercePulseRoutes);
-app.use('/api/admin/manual-reviews', requireAdminSession, manualReviewRoutes);
-app.use('/api/admin/manual-review-image-imports', requireAdminSession, manualReviewImageImportRoutes);
-mountPlatformModules(app, { makeRateLimiter, requireAdminSession });
-app.use('/api/admin/brand-directory-v2', requireAdminSession, brandDirectoryDirectRoutes);
-app.use('/api/admin/elev8', requireAdminSession, elev8DashboardRoutes);
-app.use('/api/admin/notifications', makeRateLimiter({ windowMs: 60 * 1000, max: 120, keyPrefix: 'notifications-admin' }), requireAdminSession, notificationsAdminRoutes);
-app.use('/api/admin/ai', makeRateLimiter({ windowMs: 60 * 1000, max: 30, keyPrefix: 'admin-ai' }), requireAdminSession, aiEmailModuleRoutes);
-app.use('/api/admin/email-module-library', requireAdminSession, emailModuleLibraryRoutes);
+app.use('/api/admin/brand-directory-v3', hybridAdminSession, brandDirectoryV3Routes);
+app.use('/api/admin/brand-rules', hybridAdminSession, brandRulesRoutes);
+app.use('/api/admin/elev8-commerce', hybridAdminSession, elev8CommercePulseRoutes);
+app.use('/api/admin/manual-reviews', hybridAdminSession, manualReviewRoutes);
+app.use('/api/admin/manual-review-image-imports', hybridAdminSession, manualReviewImageImportRoutes);
+mountPlatformModules(app, { makeRateLimiter, requireAdminSession: hybridAdminSession });
+app.use('/api/admin/brand-directory-v2', hybridAdminSession, brandDirectoryDirectRoutes);
+app.use('/api/admin/elev8', hybridAdminSession, elev8DashboardRoutes);
+app.use('/api/admin/notifications', makeRateLimiter({ windowMs: 60 * 1000, max: 120, keyPrefix: 'notifications-admin' }), hybridAdminSession, notificationsAdminRoutes);
+app.use('/api/admin/ai', makeRateLimiter({ windowMs: 60 * 1000, max: 30, keyPrefix: 'admin-ai' }), hybridAdminSession, aiEmailModuleRoutes);
+app.use('/api/admin/email-module-library', hybridAdminSession, emailModuleLibraryRoutes);
 app.use('/api/admin/review-migrations', reviewMigrationRoutes);
 app.use('/api/workflows', elev8Workflows.publicRouter);
 app.use('/api', publicRoutes);
 app.use('/api/admin/loyalty', loyaltyRoutes);
-app.use('/api/admin', adminRoutes);
+app.use('/api/admin', hybridAdminSession, adminRoutes);
 
-app.patch('/api/reviews/:id', requireAdminSession, (req, res, next) => { req.url = `/reviews/${req.params.id}`; return adminRoutes(req, res, next); });
-app.post('/api/reviews/import', requireAdminSession, (req, res, next) => { req.url = '/reviews/import'; return adminRoutes(req, res, next); });
+app.patch('/api/reviews/:id', hybridAdminSession, (req, res, next) => { req.url = `/reviews/${req.params.id}`; return adminRoutes(req, res, next); });
+app.post('/api/reviews/import', hybridAdminSession, (req, res, next) => { req.url = '/reviews/import'; return adminRoutes(req, res, next); });
 app.use((req, res) => res.status(404).json({ error: 'Not found', path: req.path }));
 app.use(errorHandler);
 elev8Workflows.startWorkflowWorker();
