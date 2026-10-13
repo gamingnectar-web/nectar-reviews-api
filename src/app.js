@@ -26,7 +26,7 @@ const brandRulesRoutes = require('./modules/product-creation-import/catalogue-au
 const elev8CommercePulseRoutes = require('./routes/elev8CommercePulse');
 const manualReviewRoutes = require('./routes/manualReviews');
 const manualReviewImageImportRoutes = require('./routes/manualReviewImageImports');
-const { securityHeaders, corsOptions, makeRateLimiter, errorHandler, requireAdminSession } = require('./utils/security');
+const { securityHeaders, corsOptions, makeRateLimiter, errorHandler, requireAdminSession, verifyAdminAuthToken } = require('./utils/security');
 const reviewSubmissionSecurity = require('./utils/reviewSubmissionSecurity');
 const { mountPlatformModules } = require('./modules');
 const elev8Workflows = require('./modules/workflows');
@@ -98,9 +98,77 @@ app.get('/health/db', (req, res) => {
   });
 });
 
+
+function getValidDirectAdminShop(req) {
+  const cookies = {};
+  for (const part of String(req.headers.cookie || '').split(';')) {
+    const index = part.indexOf('=');
+    if (index < 0) continue;
+    try {
+      cookies[part.slice(0, index).trim()] =
+        decodeURIComponent(part.slice(index + 1).trim());
+    } catch (_) {}
+  }
+
+  for (const name of ['platform_admin_session', 'nectar_admin_session']) {
+    const token = cookies[name];
+    if (!token) continue;
+    const result = verifyAdminAuthToken(token);
+    if (result.ok) return result.shopDomain;
+  }
+
+  return '';
+}
+
+function directAdminLoginPage(res) {
+  res.setHeader('Cache-Control', 'no-store');
+  return res.status(401).type('html').send(`
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ELEV8 — Sign in required</title>
+<style>
+body{margin:0;min-height:100vh;display:grid;place-items:center;
+font:16px system-ui,sans-serif;background:#f5f7f9;color:#142638}
+main{background:white;padding:40px;border:1px solid #e0e6eb;
+border-radius:18px;max-width:440px;margin:20px;text-align:center;
+box-shadow:0 12px 36px #12263a09}
+h1{margin:0 0 12px;font-size:28px}
+p{line-height:1.6;color:#536574}
+a{display:inline-block;padding:13px 20px;background:#116981;
+color:white;border-radius:10px;text-decoration:none;font-weight:600}
+</style>
+</head>
+<body>
+<main>
+<h1>ELEV8</h1>
+<p>Your admin session is missing or has expired.</p>
+<p>Open ELEV8 through your Shopify Admin to sign in securely.
+Your existing store data is unaffected.</p>
+<a href="https://admin.shopify.com/" rel="noopener">
+Open Shopify Admin
+</a>
+</main>
+</body>
+</html>`);
+}
+
 app.get('/admin', async (req, res, next) => {
   try {
-    const shopDomain = cleanShopDomain(req.query.shop || req.query.shopDomain || '');
+    // Direct visits require an existing authenticated admin cookie.
+    // Embedded Shopify visits retain their existing bootstrap flow.
+    const launchShop = cleanShopDomain(req.query.shop || req.query.shopDomain || '');
+    const isDirectVisit = !launchShop;
+
+    if (isDirectVisit) {
+      const authenticatedShop = getValidDirectAdminShop(req);
+      if (!authenticatedShop) return directAdminLoginPage(res);
+      return res.redirect(302, `/admin?shop=${encodeURIComponent(authenticatedShop)}`);
+    }
+
+    const shopDomain = launchShop;
     const justInstalled = Boolean(req.query.installed);
     if (shopDomain && isValidShopDomain(shopDomain) && !justInstalled && env.shopifyApiKey && env.shopifyApiSecret && env.appUrl) {
       const shop = await Shop.findOne({ shopDomain }).select('accessTokenEncrypted').lean();
