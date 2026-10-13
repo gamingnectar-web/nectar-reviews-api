@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const express = require('express');
+const mongoose = require('mongoose');
 const { env } = require('../config/env');
 const { Shop } = require('../models');
 const { encryptSecret, base64UrlEncode, base64UrlDecode, timingSafeEqualString } = require('../utils/crypto');
@@ -29,8 +30,52 @@ function verifyState(state, expectedShop) {
   let payload;
   try { payload = JSON.parse(base64UrlDecode(encoded)); } catch (_) { return false; }
   if (cleanShopDomain(payload.shop) !== expectedShop) return false;
-  if (!payload.ts || Date.now() - Number(payload.ts) > 10 * 60 * 1000) return false;
+  const timestamp = Number(payload.ts);
+  const now = Date.now();
+  if (!Number.isSafeInteger(timestamp) || timestamp > now || now - timestamp > 10 * 60 * 1000) return false;
+  if (typeof payload.nonce !== 'string' || !/^[0-9a-f]{32}$/.test(payload.nonce)) return false;
   return true;
+}
+
+// Persist consumed OAuth states across deployments and instances.
+let oauthNonceIndexPromise;
+
+function oauthNonceCollection() {
+  if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) {
+    throw new Error('OAuth replay protection storage is unavailable');
+  }
+  return mongoose.connection.db.collection('shopify_oauth_used_states');
+}
+
+async function consumeOAuthState(state, shopDomain) {
+  const [encoded] = String(state || '').split('.');
+  const payload = JSON.parse(base64UrlDecode(encoded));
+  const collection = oauthNonceCollection();
+
+  if (!oauthNonceIndexPromise) {
+    oauthNonceIndexPromise = Promise.all([
+      collection.createIndex({ nonce: 1 }, { unique: true, name: 'unique_oauth_nonce' }),
+      collection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0, name: 'oauth_nonce_ttl' }),
+    ]).catch(error => {
+      oauthNonceIndexPromise = undefined;
+      throw error;
+    });
+  }
+
+  await oauthNonceIndexPromise;
+
+  try {
+    await collection.insertOne({
+      nonce: payload.nonce,
+      shopDomain,
+      consumedAt: new Date(),
+      expiresAt: new Date(Number(payload.ts) + 15 * 60 * 1000),
+    });
+    return true;
+  } catch (error) {
+    if (error?.code === 11000) return false;
+    throw error;
+  }
 }
 
 function verifyShopifyOAuthHmac(query) {
@@ -72,6 +117,9 @@ async function callbackHandler(req, res, next) {
     if (!code) return res.status(400).send('Missing OAuth code.');
     if (!verifyShopifyOAuthHmac(req.query)) return res.status(400).send('Invalid Shopify OAuth HMAC.');
     if (!verifyState(state, shopDomain)) return res.status(400).send('Invalid or expired OAuth state. Please install again.');
+
+    const firstUse = await consumeOAuthState(state, shopDomain);
+    if (!firstUse) return res.status(400).send('OAuth state has already been used. Please install again.');
 
     const tokenResponse = await fetch(`https://${shopDomain}/admin/oauth/access_token`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
