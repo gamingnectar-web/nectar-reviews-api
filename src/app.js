@@ -31,6 +31,7 @@ const reviewSubmissionSecurity = require('./utils/reviewSubmissionSecurity');
 const { mountPlatformModules } = require('./modules');
 const elev8Workflows = require('./modules/workflows');
 const elev8BrowserAuth = require('./modules/elev8BrowserAuth');
+const elev8Workspaces = require('./modules/elev8Workspaces/router');
 const { unifiedAdminSession: hybridAdminSession } = require('./modules/elev8BrowserAuth/middleware');
 
 
@@ -159,6 +160,8 @@ Open Shopify Admin
 }
 
 app.use('/elev8', elev8BrowserAuth.router);
+// Additive workspace/proposal API. Feature flagged, no Shopify writes.
+app.use('/api/elev8/v2', elev8Workspaces.router);
 app.get('/admin', async (req, res, next) => {
   try {
     if (elev8BrowserAuth.featureEnabled()) {
