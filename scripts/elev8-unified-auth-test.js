@@ -1,0 +1,16 @@
+'use strict';
+const assert=require('node:assert/strict');
+const p=require('../src/modules/elev8BrowserAuth/policy');
+assert.equal(p.canAccess('owner','POST'),true);
+assert.equal(p.canAccess('admin','DELETE'),true);
+assert.equal(p.canAccess('editor','POST'),false);
+assert.equal(p.canAccess('viewer','PATCH'),false);
+assert.equal(p.canAccess('editor','GET'),true);
+assert.equal(p.canAccess('viewer','GET'),true);
+assert.equal(p.canAccess('invalid','GET'),false);
+assert.equal(p.shopMatches('a.myshopify.com','b.myshopify.com'),false);
+assert.equal(p.shopMatches('a.myshopify.com','a.myshopify.com'),true);
+assert.equal(p.userIdFromShopifyPayload({sub:'12345'}),'12345');
+assert.equal(p.userIdFromShopifyPayload({sub:'wrong'}),'');
+assert.equal(p.userIdFromShopifyPayload({}), '');
+console.log('Unified auth policy checks passed (12 assertions)');
