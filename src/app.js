@@ -31,14 +31,7 @@ const reviewSubmissionSecurity = require('./utils/reviewSubmissionSecurity');
 const { mountPlatformModules } = require('./modules');
 const elev8Workflows = require('./modules/workflows');
 const elev8BrowserAuth = require('./modules/elev8BrowserAuth');
-// Browser identities are checked first; existing Shopify auth remains the fallback.
-function hybridAdminSession(req,res,next) {
-  elev8BrowserAuth.browserAdminMiddleware(req,res,(error)=>{
-    if(error)return next(error);
-    if(req.adminAuthMode === 'elev8-browser')return next();
-    return requireAdminSession(req,res,next);
-  });
-}
+const { unifiedAdminSession: hybridAdminSession } = require('./modules/elev8BrowserAuth/middleware');
 
 
 const app = express();
