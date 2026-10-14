@@ -1,0 +1,15 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const {roleCan}=require('../src/modules/elev8Workspaces/router');
+for(const role of ['owner','admin','editor','viewer'])assert.equal(roleCan(role,'read'),true);
+for(const role of ['owner','admin'])assert.equal(roleCan(role,'manage'),true);
+for(const role of ['editor','viewer'])assert.equal(roleCan(role,'approve'),false);
+assert.equal(roleCan('viewer','create'),false);
+assert.equal(roleCan('editor','create'),true);
+const r=fs.readFileSync('src/modules/elev8Workspaces/router.js','utf8');
+assert.ok(r.includes("ELEV8_WORKSPACES_ENABLED==='true'"));
+assert.ok(r.includes("shopifyMutationPerformed:false"));
+assert.ok(!/fetch\(|decryptSecret\(/.test(r));
+assert.ok(r.includes('self-approval is not allowed'));
+console.log('ELEV8 workspace foundation checks passed (14 assertions).');
