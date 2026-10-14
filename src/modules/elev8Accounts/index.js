@@ -88,10 +88,9 @@ function readStateCookie(req){const row=String(req.headers.cookie||'').split(';'
 router.get('/me',async(req,res,next)=>{try{const auth=await accountSession(req);if(!auth)return fail(res,401,'Sign in required');res.json({account:{id:auth.account._id,email:auth.account.email,name:auth.account.displayName}});}catch(e){next(e)}});
 router.post('/logout',async(req,res,next)=>{try{if(!originOk(req))return fail(res,403,'Untrusted origin');const token=readCookie(req);if(token)await AccountSession.updateOne({tokenHash:h(token)},{$set:{revokedAt:new Date()}});res.clearCookie(COOKIE,{httpOnly:true,secure:true,sameSite:'lax',path:'/'});res.status(204).end();}catch(e){next(e)}});
 router.get('/home',async(req,res,next)=>{
- try {
-  const auth=await accountSession(req);
-  if(!auth)return res.redirect(302,'/elev8/account/login');
-  return res.status(200).type('html').send('<!doctype html><meta charset="utf-8"><title>ELEV8</title><main style="font:16px system-ui;max-width:680px;margin:10vh auto"><h1>ELEV8 account</h1><p>Signed-in account dashboard foundation. Use <code>/elev8/account/me</code> to inspect your verified session. Shopify store permissions are not granted by signing in.</p></main>');
- } catch(error) { next(error); }
+ try {const auth=await accountSession(req);if(!auth)return res.redirect(302,'/elev8/account/login');
+ if(process.env.ELEV8_COMMAND_ENABLED!=='true')return res.status(503).send('ELEV8 Command Centre not enabled');
+ res.set('Cache-Control','no-store');return res.sendFile(require('path').join(__dirname,'../../../public/elev8-command.html'));
+ }catch(error){next(error)}
 });
 module.exports={router,accountSession,verifyIdToken};

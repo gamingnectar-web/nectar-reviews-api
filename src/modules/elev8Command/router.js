@@ -1,0 +1,13 @@
+'use strict';
+const express=require('express');
+const {accountSession}=require('../elev8Accounts');
+const {Workspace,Membership,Connection,Proposal,Audit}=require('../elev8Workspaces/models');
+const router=express.Router();
+const error=(res,c,m)=>res.status(c).json({error:m});
+router.use((req,res,next)=>process.env.ELEV8_COMMAND_ENABLED==='true'?next():res.status(404).end());
+router.use(async(req,res,next)=>{try{res.set('Cache-Control','no-store');const auth=await accountSession(req);if(!auth)return error(res,401,'Sign in required');req.actor=auth.account;next();}catch(e){next(e)}});
+router.use((req,res,next)=>{if(['GET','HEAD','OPTIONS'].includes(req.method))return next();try{if(req.get('Origin')!==new URL(process.env.APP_URL).origin)return error(res,403,'Invalid origin');}catch{return error(res,503,'Invalid configuration');}next();});
+router.get('/overview',async(req,res,next)=>{try{const memberships=await Membership.find({memberId:req.actor._id,active:true}).lean();const ids=memberships.map(x=>x.workspaceId);const workspaces=await Workspace.find({_id:{$in:ids},status:'active'}).select('name createdAt').lean();const stores=await Connection.find({workspaceId:{$in:ids}}).select('shopDomain state workspaceId verifiedAt').lean();const counts=await Proposal.aggregate([{$match:{workspaceId:{$in:ids}}},{$group:{_id:'$status',n:{$sum:1}}}]);res.json({account:{name:req.actor.displayName||'',email:req.actor.email},workspaces:workspaces.map(x=>({id:x._id,name:x.name,role:memberships.find(y=>String(y.workspaceId)===String(x._id))?.role})),stores,counts:Object.fromEntries(counts.map(x=>[x._id,x.n]))});}catch(e){next(e)}});
+router.get('/workspaces/:id/drafts',async(req,res,next)=>{try{if(!await Membership.exists({workspaceId:req.params.id,memberId:req.actor._id,active:true}))return error(res,404,'Workspace not found');const drafts=await Proposal.find({workspaceId:req.params.id}).select('title kind status connectionId createdAt updatedAt').sort({updatedAt:-1}).limit(100).lean();res.json({drafts});}catch(e){next(e)}});
+router.get('/workspaces/:id/activity',async(req,res,next)=>{try{if(!await Membership.exists({workspaceId:req.params.id,memberId:req.actor._id,active:true}))return error(res,404,'Workspace not found');const events=await Audit.find({workspaceId:req.params.id}).select('action subjectType createdAt').sort({createdAt:-1}).limit(50).lean();res.json({events});}catch(e){next(e)}});
+module.exports={router};
