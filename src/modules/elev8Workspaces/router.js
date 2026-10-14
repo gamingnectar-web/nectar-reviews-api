@@ -2,6 +2,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const { browserSession } = require('../elev8BrowserAuth');
+const { accountSession } = require('../elev8Accounts');
 const { Workspace, Membership, Connection, Proposal, Audit } = require('./models');
 const router=express.Router();
 const oid=x=>mongoose.isValidObjectId(x);
@@ -21,9 +22,10 @@ router.use((req,res,next)=>process.env.ELEV8_WORKSPACES_ENABLED==='true'?next():
 router.use(noStore,requireOrigin);
 router.use(async(req,res,next)=>{
  try {
-  const session=await browserSession(req);
-  if(!session)return fail(res,401,'Sign in to ELEV8');
-  req.actor=session.member;
+  const independent=await accountSession(req);
+  const legacy=independent?null:await browserSession(req);
+  if(!independent&&!legacy)return fail(res,401,'Sign in to ELEV8');
+  req.actor=independent?independent.account:legacy.member;
   next();
  }catch(error){next(error);}
 });
