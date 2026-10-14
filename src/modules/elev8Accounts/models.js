@@ -1,0 +1,11 @@
+'use strict';
+const mongoose=require('mongoose');
+const S=mongoose.Schema;
+const account=new S({email:{type:String,required:true,lowercase:true,trim:true},googleSub:{type:String,required:true},displayName:{type:String,default:''},status:{type:String,enum:['active','disabled'],default:'active'},lastLoginAt:Date},{timestamps:true});
+account.index({googleSub:1},{unique:true});account.index({email:1});
+const authState=new S({stateHash:{type:String,required:true,unique:true},nonceHash:{type:String,required:true},verifier:{type:String,required:true},expiresAt:{type:Date,required:true},consumedAt:{type:Date,default:null}},{timestamps:true});
+authState.index({expiresAt:1},{expireAfterSeconds:0});
+const session=new S({tokenHash:{type:String,required:true,unique:true},accountId:{type:S.Types.ObjectId,required:true,index:true},expiresAt:{type:Date,required:true},revokedAt:{type:Date,default:null}},{timestamps:true});
+session.index({expiresAt:1},{expireAfterSeconds:0});
+const use=(name,schema)=>mongoose.models[name]||mongoose.model(name,schema);
+module.exports={Account:use('Elev8AccountV3',account),AuthState:use('Elev8OidcStateV3',authState),AccountSession:use('Elev8AccountSessionV3',session)};
