@@ -775,6 +775,7 @@
           <button class="tab-btn" onclick="window.tab('v-docs')">Documentation</button>
           <button class="tab-btn" onclick="window.tab('v-manual')">Manual Setup</button>
         </div>
+        <div class="nav-group"><p class="nav-title">Drafts &amp; Approvals</p><button class="tab-btn" onclick="window.tab('v-elev8-approvals');window.elev8LoadApprovals?.()">Approval Inbox <span class="pill">Beta</span></button></div>
       </nav>
       <div class="admin-build-version" id="admin-build-version">Build loading…</div>
     </aside>
@@ -784,6 +785,7 @@
         <div><strong id="review-live-alert-title">New reviews need attention</strong><span id="review-live-alert-copy"></span></div>
         <div class="review-live-alert-actions"><button type="button" class="secondary-btn compact" onclick="window.openPendingReviews?.()">Review now</button><button type="button" class="review-alert-close" aria-label="Dismiss review notification" onclick="window.dismissReviewAlert?.()">×</button></div>
       </div>
+       <section id="v-elev8-approvals" class="view"><h2 class="page-title">Drafts &amp; Approvals</h2><div class="panel" id="elev8-approval-root"><p>Proposals prepared in ELEV8 Web appear here after a verified Shopify workspace connection has been established.</p><div class="filter-row"><select class="filter-select" id="elev8-approval-connection" aria-label="Verified connection"></select><select class="filter-select" id="elev8-approval-filter"><option value="">All statuses</option><option value="submitted">Pending review</option><option value="draft">Drafts</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select><button type="button" class="secondary-btn" id="elev8-approval-refresh">Refresh</button></div><p id="elev8-approval-message" role="status">Open this section to load proposals.</p><div id="elev8-approval-list"></div></div></section>
       <section id="v-dash" class="view active">
         <div class="dash-header">
           <div>
@@ -1769,5 +1771,6 @@
 <script src="/product-seo-audit.js?v=seo-health-1"></script>
   <script src="/modules/customer-hub/admin.js?v=customer-hub-1" defer></script>
   <script src="/elev8-workflows-nav.js" defer></script>
+<style>.e8-approval-item{border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:12px 0;background:white}.e8-approval-item>div{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.e8-approval-item span,.e8-approval-item small{color:#6b7280;font-size:12px}.e8-approval-item pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f8fafc;padding:12px;border-radius:8px;max-height:300px;overflow:auto}</style><script src="/elev8-approval-ui.js?v=1" defer></script>
 </body>
 </html>

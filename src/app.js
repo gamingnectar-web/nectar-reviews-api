@@ -34,6 +34,7 @@ const elev8BrowserAuth = require('./modules/elev8BrowserAuth');
 const elev8Workspaces = require('./modules/elev8Workspaces/router');
 const elev8Accounts = require('./modules/elev8Accounts');
 const elev8Command = require('./modules/elev8Command/router');
+const elev8Approval = require('./modules/elev8Approval/router');
 const { unifiedAdminSession: hybridAdminSession } = require('./modules/elev8BrowserAuth/middleware');
 
 
@@ -163,6 +164,7 @@ Open Shopify Admin
 
 app.use('/elev8/account', elev8Accounts.router);
 app.use('/api/elev8/command', elev8Command.router);
+app.use('/api/admin/elev8-approvals', elev8Approval.router);
 app.use('/elev8', elev8BrowserAuth.router);
 // Additive workspace/proposal API. Feature flagged, no Shopify writes.
 app.use('/api/elev8/v2', elev8Workspaces.router);
