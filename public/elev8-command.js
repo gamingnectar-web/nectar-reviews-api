@@ -8,4 +8,17 @@ async function refresh(){data=await call('/api/elev8/command/overview');el('work
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>section(b.dataset.view).catch(error)));document.querySelectorAll('[data-jump]').forEach(b=>b.addEventListener('click',()=>section(b.dataset.jump).catch(error)));el('workspace').addEventListener('change',()=>{const current=document.querySelector('[data-view].selected');if(current)section(current.dataset.view).catch(error)});
 el('create').addEventListener('click',async()=>{const name=prompt('Workspace name');if(!name)return;try{await call('/api/elev8/v2/workspaces',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name})});await refresh()}catch(e){error(e)}});
 el('logout').addEventListener('click',async()=>{try{await call('/elev8/account/logout',{method:'POST'});location.assign('/elev8/account/login')}catch(e){error(e)}});
+
+el('elev8-connect-store').addEventListener('click',async()=>{
+ const workspaceId=el('workspace').value;
+ const shopDomain=el('elev8-shop-domain').value.trim().toLowerCase();
+ if(!workspaceId)return error(new Error('Choose a workspace first'));
+ if(!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shopDomain))return error(new Error('Enter a valid .myshopify.com domain'));
+ try{
+  const result=await call('/elev8/store-link/start',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({workspaceId,shopDomain})});
+  const target=new URL(result.authorizeUrl);if(target.protocol!=='https:'||target.hostname!==shopDomain)throw Error('Unexpected Shopify authorisation destination');
+  window.location.assign(target.toString());
+ }catch(e){error(e)}
+});
+
 refresh().catch(error);
