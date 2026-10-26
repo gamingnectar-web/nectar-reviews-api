@@ -101,6 +101,11 @@ const settingsSchema = new mongoose.Schema({
     badgePosition: { type: String, default: 'below' },
     badgePadding: { type: String, default: '6px 12px' },
     badgeLabel: { type: String, default: '4.8 (12)' },
+    // ELEV8_PRODUCT_CARD_CONTEXTS_V1
+    displayPreset: { type: String, enum: ['pill','minimal','stars','score','outline'], default: 'pill' },
+    collectionPreset: { type: String, enum: ['inherit','pill','minimal','stars','score','outline'], default: 'inherit' },
+    searchPreset: { type: String, enum: ['inherit','pill','minimal','stars','score','outline'], default: 'inherit' },
+    recommendationPreset: { type: String, enum: ['inherit','pill','minimal','stars','score','outline'], default: 'inherit' },
   },
   carouselStyles: {
     layout: { type: String, enum: ['grid', 'infinite', 'masonry'], default: 'infinite' },

@@ -1010,6 +1010,11 @@ router.patch('/settings', async (req, res, next) => {
         badgePosition: ['above','below','inline','under_title_right','image_top_left','image_top_right','image_bottom_left','image_bottom_right'].includes(body.cardStyles?.badgePosition) ? body.cardStyles.badgePosition : 'below',
         badgePadding: cleanText(body.cardStyles?.badgePadding || '6px 12px', 40),
         badgeLabel: cleanText(body.cardStyles?.badgeLabel || '4.8 (12)', 80),
+        // ELEV8_PRODUCT_CARD_CONTEXTS_V1
+        displayPreset: ['pill','minimal','stars','score','outline'].includes(body.cardStyles?.displayPreset) ? body.cardStyles.displayPreset : 'pill',
+        collectionPreset: ['inherit','pill','minimal','stars','score','outline'].includes(body.cardStyles?.collectionPreset) ? body.cardStyles.collectionPreset : 'inherit',
+        searchPreset: ['inherit','pill','minimal','stars','score','outline'].includes(body.cardStyles?.searchPreset) ? body.cardStyles.searchPreset : 'inherit',
+        recommendationPreset: ['inherit','pill','minimal','stars','score','outline'].includes(body.cardStyles?.recommendationPreset) ? body.cardStyles.recommendationPreset : 'inherit',
       },
       carouselStyles: {
         layout: ['grid', 'infinite', 'masonry'].includes(body.carouselStyles?.layout) ? body.carouselStyles.layout : 'infinite',

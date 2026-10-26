@@ -1,5 +1,11 @@
 {% assign nectar_app_url = block.settings.app_url | default: 'https://nectar-reviews-api.onrender.com' %}
 {% assign nectar_shop_domain = shop.permanent_domain | default: shop.domain %}
+{% assign nectar_card_context = 'default' %}
+{% if request.page_type == 'collection' %}
+  {% assign nectar_card_context = 'collection' %}
+{% elsif request.page_type == 'search' %}
+  {% assign nectar_card_context = 'search' %}
+{% endif %}
 
 <span
   class="nectar-product-card-stars"
@@ -7,6 +13,8 @@
   data-product-id="{{ product.id }}"
   data-shop-domain="{{ nectar_shop_domain }}"
   data-api-base="{{ nectar_app_url }}/api"
+  data-card-context="{{ nectar_card_context }}"
+  data-page-type="{{ request.page_type }}"
   style="display:inline-flex;align-items:center;gap:4px;min-height:18px;font-size:{{ block.settings.font_size }}px;color:{{ block.settings.star_color }};"
 >
   {% if product.metafields.reviews.rating_count.value > 0 %}
@@ -16,48 +24,180 @@
 
 <script>
 (function(){
-  function ready(fn){ if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn); else fn(); }
-  function escapeHtml(value){ return String(value || '').replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]; }); }
+  var root = window;
+  root.__elev8CardConfigPromises = root.__elev8CardConfigPromises || {};
+
+  function ready(fn){
+    if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+    else fn();
+  }
+
+  function escapeHtml(value){
+    return String(value || '').replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c];
+    });
+  }
+
+  function configPromise(api, shopDomain){
+    var key = api + '|' + shopDomain;
+    if (!root.__elev8CardConfigPromises[key]) {
+      root.__elev8CardConfigPromises[key] = fetch(
+        api + '/widget/config?shopDomain=' + encodeURIComponent(shopDomain) + '&t=' + Date.now(),
+        { cache: 'no-store' }
+      ).then(function(res){ return res.ok ? res.json() : {}; }).catch(function(){ return {}; });
+    }
+    return root.__elev8CardConfigPromises[key];
+  }
+
+  function inferContext(el){
+    if (el.closest('product-recommendations,.product-recommendations,[data-product-recommendations],.related-products,.complementary-products,[data-related-products]')) {
+      return 'recommendations';
+    }
+    return el.dataset.cardContext || 'default';
+  }
+
+  function resolvePreset(card, context){
+    var base = card.displayPreset || 'pill';
+    var keys = {
+      collection: 'collectionPreset',
+      search: 'searchPreset',
+      recommendations: 'recommendationPreset'
+    };
+    var selected = keys[context] ? card[keys[context]] : '';
+    return selected && selected !== 'inherit' ? selected : base;
+  }
+
+  function formatLabel(template, rating, count){
+    var fallback = rating + ' (' + count + ')';
+    var raw = String(template || '').trim();
+    if (!raw || raw === '4.8 (12)') return fallback;
+    return raw
+      .replace(/\{rating\}/gi, rating)
+      .replace(/\{count\}/gi, String(count))
+      .replace('4.8', rating)
+      .replace('(12)', '(' + count + ')');
+  }
+
+  function starString(average){
+    var rounded = Math.max(0, Math.min(5, Math.round(Number(average || 0))));
+    return '★'.repeat(rounded) + '☆'.repeat(5 - rounded);
+  }
+
+  function resetPosition(el){
+    ['top','right','bottom','left'].forEach(function(prop){ el.style.removeProperty(prop); });
+    el.style.removeProperty('position');
+  }
+
+  function applyPosition(el, position){
+    resetPosition(el);
+    if (['image_top_left','image_top_right','image_bottom_left','image_bottom_right'].indexOf(position) < 0) return;
+
+    var host = el.closest('.card-wrapper,.card,.product-card,.grid__item,.product-grid-item') || el.parentElement;
+    if (host) host.style.position = host.style.position || 'relative';
+    el.style.setProperty('position', 'absolute', 'important');
+    el.style.setProperty(position.indexOf('top') >= 0 ? 'top' : 'bottom', '10px', 'important');
+    el.style.setProperty(position.indexOf('left') >= 0 ? 'left' : 'right', '10px', 'important');
+  }
+
+  function renderPreset(el, card, preset, json){
+    var rating = Number(json.average || 0).toFixed(1);
+    var count = Number(json.count || 0);
+    var showCount = card.showCount !== false;
+    var starColor = card.badgeStarColor || card.starColor || '{{ block.settings.star_color }}' || '#ffc700';
+    var bg = card.badgeBackground || '#111827';
+    var text = card.badgeTextColor || '#ffffff';
+    var radius = card.badgeRadius != null ? Number(card.badgeRadius) : 999;
+    var padding = card.badgePadding || '6px 12px';
+    var starSize = Number(card.starSize || {{ block.settings.font_size | default: 14 }});
+    var countHtml = showCount ? ' <span class="nectar-product-card-stars__count">(' + escapeHtml(count) + ')</span>' : '';
+
+    el.setAttribute('data-nectar-card-preset', preset);
+    el.style.setProperty('font-size', starSize + 'px', 'important');
+    el.style.setProperty('z-index', '4', 'important');
+    el.style.setProperty('border', '0', 'important');
+    el.style.setProperty('box-shadow', 'none', 'important');
+    el.style.setProperty('font-weight', '600', 'important');
+
+    if (preset === 'minimal') {
+      el.style.setProperty('background', 'transparent', 'important');
+      el.style.setProperty('color', 'inherit', 'important');
+      el.style.setProperty('padding', '0', 'important');
+      el.style.setProperty('border-radius', '0', 'important');
+      el.innerHTML = '<span aria-hidden="true" style="color:' + escapeHtml(starColor) + '!important;">★</span> ' + escapeHtml(rating) + countHtml;
+      return;
+    }
+
+    if (preset === 'stars') {
+      el.style.setProperty('background', 'transparent', 'important');
+      el.style.setProperty('color', 'inherit', 'important');
+      el.style.setProperty('padding', '0', 'important');
+      el.style.setProperty('border-radius', '0', 'important');
+      el.innerHTML = '<span aria-hidden="true" style="letter-spacing:1px;color:' + escapeHtml(starColor) + '!important;">' + starString(json.average) + '</span>' + countHtml;
+      return;
+    }
+
+    if (preset === 'score') {
+      el.style.setProperty('background', String(bg).toLowerCase() === 'none' ? 'transparent' : bg, 'important');
+      el.style.setProperty('color', text, 'important');
+      el.style.setProperty('padding', padding, 'important');
+      el.style.setProperty('border-radius', Math.min(radius, 10) + 'px', 'important');
+      el.innerHTML = '<strong>' + escapeHtml(rating) + '</strong> <span aria-hidden="true" style="color:' + escapeHtml(starColor) + '!important;">★</span>' + countHtml;
+      return;
+    }
+
+    if (preset === 'outline') {
+      el.style.setProperty('background', 'transparent', 'important');
+      el.style.setProperty('color', text, 'important');
+      el.style.setProperty('padding', padding, 'important');
+      el.style.setProperty('border-radius', radius + 'px', 'important');
+      el.style.setProperty('border', '1px solid currentColor', 'important');
+      el.innerHTML = '<span aria-hidden="true" style="color:' + escapeHtml(starColor) + '!important;">★</span> <strong>' + escapeHtml(formatLabel(card.badgeLabel, rating, count)) + '</strong>';
+      return;
+    }
+
+    el.style.setProperty('background', String(bg).toLowerCase() === 'none' ? 'transparent' : bg, 'important');
+    el.style.setProperty('color', text, 'important');
+    el.style.setProperty('padding', padding, 'important');
+    el.style.setProperty('border-radius', radius + 'px', 'important');
+    el.innerHTML = '<span aria-hidden="true" style="color:' + escapeHtml(starColor) + '!important;">★</span> <strong>' + escapeHtml(formatLabel(card.badgeLabel, rating, count)) + '</strong>';
+  }
+
   ready(function(){
     document.querySelectorAll('.nectar-product-card-stars[data-nectar-card-stars]').forEach(function(el){
       if (el.dataset.loaded === 'true') return;
       el.dataset.loaded = 'true';
+
       var api = (el.dataset.apiBase || 'https://nectar-reviews-api.onrender.com/api').replace(/\/$/, '');
       var shopDomain = el.dataset.shopDomain || (window.Shopify && window.Shopify.shop) || window.location.hostname;
       var productId = el.dataset.productId;
       if (!shopDomain || !productId) return;
+
       Promise.all([
-        fetch(api + '/reviews/summary?shopDomain=' + encodeURIComponent(shopDomain) + '&itemId=' + encodeURIComponent(productId) + '&t=' + Date.now(), { cache: 'no-store' }).then(function(res){ return res.ok ? res.json() : null; }).catch(function(){ return null; }),
-        fetch(api + '/widget/config?shopDomain=' + encodeURIComponent(shopDomain) + '&t=' + Date.now(), { cache: 'no-store' }).then(function(res){ return res.ok ? res.json() : null; }).catch(function(){ return null; })
+        fetch(
+          api + '/reviews/summary?shopDomain=' + encodeURIComponent(shopDomain) + '&itemId=' + encodeURIComponent(productId) + '&t=' + Date.now(),
+          { cache: 'no-store' }
+        ).then(function(res){ return res.ok ? res.json() : null; }).catch(function(){ return null; }),
+        configPromise(api, shopDomain)
       ]).then(function(results){
         var json = results[0] || {};
         var config = results[1] || {};
         var card = config.cardStyles || {};
-        var starColor = card.badgeStarColor || card.starColor || '{{ block.settings.star_color }}' || '#ffc700';
-        var bg = card.badgeBackground || 'transparent';
-        var text = card.badgeTextColor || 'inherit';
-        var radius = card.badgeRadius != null ? card.badgeRadius : 999;
-        var padding = card.badgePadding || '4px 8px';
-        var layout = card.badgeLayout || 'compact';
-        var position = card.badgePosition || 'below';
-        if (card.starSize) el.style.setProperty('font-size', Number(card.starSize || 14) + 'px', 'important');
-        el.setAttribute('data-nectar-badge-layout', layout);
-        el.setAttribute('data-nectar-badge-position', position);
-        el.style.setProperty('border-radius', Number(radius) + 'px', 'important');
-        el.style.setProperty('padding', padding, 'important');
-        el.style.setProperty('background', String(bg).toLowerCase() === 'none' ? 'transparent' : bg, 'important');
-        el.style.setProperty('color', text, 'important');
-        el.style.setProperty('z-index', '4', 'important');
-        if (['image_top_left','image_top_right','image_bottom_left','image_bottom_right'].indexOf(position) >= 0) {
-          var host = el.closest('.card-wrapper,.card,.product-card,.grid__item,.product-grid-item') || el.parentElement;
-          if (host) host.style.position = host.style.position || 'relative';
-          el.style.setProperty('position', 'absolute', 'important');
-          el.style.setProperty(position.indexOf('top') >= 0 ? 'top' : 'bottom', '10px', 'important');
-          el.style.setProperty(position.indexOf('left') >= 0 ? 'left' : 'right', '10px', 'important');
+        if (!json.count) {
+          el.innerHTML = '';
+          return;
         }
-        if (!json.count) return;
-        var label = card.badgeLabel || (Number(json.average || 0).toFixed(1) + ' (' + json.count + ')');
-        el.innerHTML = '<span aria-hidden="true" style="color:' + escapeHtml(starColor) + '!important;">★</span> <strong>' + escapeHtml(label).replace('4.8', Number(json.average || 0).toFixed(1)).replace('(12)', '(' + escapeHtml(json.count) + ')') + '</strong>';
+
+        var context = inferContext(el);
+        var preset = resolvePreset(card, context);
+        var position = card.badgePosition || 'below';
+
+        el.setAttribute('data-nectar-card-context', context);
+        el.setAttribute('data-nectar-badge-layout', card.badgeLayout || 'compact');
+        el.setAttribute('data-nectar-badge-position', position);
+
+        applyPosition(el, position);
+        renderPreset(el, card, preset, json);
+        el.setAttribute('aria-label', Number(json.average || 0).toFixed(1) + ' out of 5 from ' + Number(json.count || 0) + ' reviews');
       }).catch(function(){});
     });
   });
@@ -69,9 +209,9 @@
   "name": "ELEV8 Product Rating",
   "target": "section",
   "settings": [
-    { "type": "text", "id": "app_url", "label": "Nectar app URL" },
+    { "type": "text", "id": "app_url", "label": "ELEV8 app URL" },
     { "type": "color", "id": "star_color", "label": "Star colour", "default": "#ffc700" },
-    { "type": "range", "id": "font_size", "min": 10, "max": 22, "step": 1, "unit": "px", "label": "Font size", "default": 14 }
+    { "type": "range", "id": "font_size", "min": 10, "max": 22, "step": 1, "unit": "px", "label": "Fallback font size", "default": 14 }
   ]
 }
 {% endschema %}

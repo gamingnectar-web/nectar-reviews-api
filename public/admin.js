@@ -430,6 +430,10 @@ function hydrateSettings(config) {
     setValueIfExists('card-badge-position', config.cardStyles.badgePosition || 'below');
     setValueIfExists('card-badge-padding', config.cardStyles.badgePadding || '6px 12px');
     setValueIfExists('card-badge-label', config.cardStyles.badgeLabel || '4.8 (12)');
+    setValueIfExists('card-display-preset', config.cardStyles.displayPreset || 'pill');
+    setValueIfExists('card-collection-preset', config.cardStyles.collectionPreset || 'inherit');
+    setValueIfExists('card-search-preset', config.cardStyles.searchPreset || 'inherit');
+    setValueIfExists('card-recommendation-preset', config.cardStyles.recommendationPreset || 'inherit');
   }
   if (config.carouselStyles) {
     document.getElementById('car-layout').value = config.carouselStyles.layout || 'infinite';
@@ -807,6 +811,49 @@ window.removeAttribute = async function(index) {
   window.showToast('Attribute Removed');
 };
 
+
+const ELEV8_PRODUCT_CARD_CONTEXTS_V1 = true;
+const ELEV8_CARD_PRESETS = new Set(['pill','minimal','stars','score','outline']);
+
+function elev8CardPresetForContext(context) {
+  const fallback = ELEV8_CARD_PRESETS.has(getValue('card-display-preset', 'pill'))
+    ? getValue('card-display-preset', 'pill')
+    : 'pill';
+  const ids = {
+    collection: 'card-collection-preset',
+    search: 'card-search-preset',
+    recommendations: 'card-recommendation-preset',
+  };
+  const selected = ids[context] ? getValue(ids[context], 'inherit') : 'inherit';
+  return ELEV8_CARD_PRESETS.has(selected) ? selected : fallback;
+}
+
+function elev8CardPreviewMarkup(preset, options = {}) {
+  const rating = '4.8';
+  const count = options.showCount ? '<span style="opacity:.72;">(12)</span>' : '';
+  const star = escapeHtml(options.star || '#ffc700');
+  const bg = escapeHtml(options.background || '#111827');
+  const text = escapeHtml(options.text || '#ffffff');
+  const padding = escapeHtml(options.padding || '6px 12px');
+  const radius = escapeHtml(options.radius || '999px');
+  const size = escapeHtml(options.size || '14px');
+  const label = escapeHtml(options.label || '4.8 (12)');
+
+  if (preset === 'minimal') {
+    return `<span id="pre-card-badge" class="pre-card-badge" style="display:inline-flex;align-items:center;gap:5px;background:transparent;color:inherit;padding:0;font-weight:650;"><span style="font-size:${size};color:${star};">★</span><span>${rating}</span>${count}</span>`;
+  }
+  if (preset === 'stars') {
+    return `<span id="pre-card-badge" class="pre-card-badge" style="display:inline-flex;align-items:center;gap:6px;background:transparent;color:inherit;padding:0;"><span style="font-size:${size};letter-spacing:1px;color:${star};">★★★★★</span>${count}</span>`;
+  }
+  if (preset === 'score') {
+    return `<span id="pre-card-badge" class="pre-card-badge" style="display:inline-flex;align-items:center;gap:5px;background:${bg};color:${text};padding:${padding};border-radius:10px;font-weight:800;"><strong>${rating}</strong><span style="font-size:${size};color:${star};">★</span>${count}</span>`;
+  }
+  if (preset === 'outline') {
+    return `<span id="pre-card-badge" class="pre-card-badge" style="display:inline-flex;align-items:center;gap:6px;background:transparent;color:inherit;padding:${padding};border:1px solid currentColor;border-radius:${radius};font-weight:700;"><span style="font-size:${size};color:${star};">★</span><span>${label}</span></span>`;
+  }
+  return `<span id="pre-card-badge" class="pre-card-badge" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;min-width:76px;padding:${padding};border-radius:${radius};background:${bg};color:${text};font-weight:800;"><span style="font-size:${size};color:${star};">★</span><span>${label}</span></span>`;
+}
+
 window.updatePreviews = function() {
   const title = getValue('style-title', 'Customer Reviews');
   const primary = getValue('style-primary', '#000000');
@@ -834,6 +881,8 @@ window.updatePreviews = function() {
   const badgePosition = getValue('card-badge-position', 'below');
   const badgePadding = getValue('card-badge-padding', '6px 12px');
   const badgeLabel = getValue('card-badge-label', '4.8 (12)');
+  const cardPreviewContext = getValue('card-preview-context', 'collection');
+  const cardPreset = elev8CardPresetForContext(cardPreviewContext);
 
   const previewWrap = document.getElementById('preview-container-wrap');
   if (previewWrap && previewWrap.style.maxWidth !== '375px') previewWrap.style.maxWidth = maxWidth;
@@ -882,7 +931,16 @@ window.updatePreviews = function() {
   if (card) {
     const overlayPositions = ['image_top_left', 'image_top_right', 'image_bottom_left', 'image_bottom_right'];
     const isOverlay = overlayPositions.includes(badgePosition);
-    const badgeMarkup = `<span id="pre-card-badge" class="pre-card-badge" data-overlay="${isOverlay ? 'true' : 'false'}" data-position="${escapeHtml(badgePosition)}" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;min-width:76px;padding:${escapeHtml(badgePadding)};border-radius:${badgeRadius};background:${badgeBg};color:${badgeText};font-weight:800;"><span id="pre-card-icon" style="font-size:${cardStar};color:${badgeStar};">★</span> <span id="pre-card-count" style="display:${getChecked('card-count', true) ? 'inline' : 'none'}">${escapeHtml(badgeLabel)}</span></span>`;
+    const badgeMarkup = elev8CardPreviewMarkup(cardPreset, {
+      showCount: getChecked('card-count', true),
+      star: badgeStar,
+      background: badgeBg,
+      text: badgeText,
+      padding: badgePadding,
+      radius: badgeRadius,
+      size: cardStar,
+      label: badgeLabel,
+    });
     const titleMarkup = `<h4 class="pre-card-title">Sample Product</h4><p>$29.99</p>`;
     const content = badgePosition === 'below'
       ? `${titleMarkup}${badgeMarkup}`
@@ -955,6 +1013,10 @@ window.saveSettings = async function() {
       badgePosition: getValue('card-badge-position', 'below'),
       badgePadding: getValue('card-badge-padding', '6px 12px'),
       badgeLabel: getValue('card-badge-label', '4.8 (12)'),
+      displayPreset: getValue('card-display-preset', 'pill'),
+      collectionPreset: getValue('card-collection-preset', 'inherit'),
+      searchPreset: getValue('card-search-preset', 'inherit'),
+      recommendationPreset: getValue('card-recommendation-preset', 'inherit'),
     },
     carouselStyles: {
       layout: document.getElementById('car-layout').value,
