@@ -1,6 +1,6 @@
 (function SupplierSitesAdmin(){
   const API='/admin/product-creation-import';
-  const state={batches:[],activeBatch:null,activeItem:null,scanning:false,stop:false,reconciled:new Set(),reconciling:false,cataloguesConsolidated:false};
+  const state={batches:[],activeBatch:null,activeItem:null,scanning:false,stop:false,reconciled:new Set(),reconciling:false,cataloguesConsolidated:false,fieldAdvice:null};
   const $=id=>document.getElementById(id);
   const esc=(v='')=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
@@ -467,6 +467,149 @@
     return rows.map(x=>typeof x==='string'?x:x?.src).filter(Boolean);
   }
 
+
+  // ELEV8_IMPORT_FIELD_INTELLIGENCE_V1
+  const SOURCE_LABELS={
+    product_override:'Product override',
+    catalogue_default:'Catalogue default',
+    shop_recommendation:'Shop recommendation',
+    ai_suggestion:'AI suggestion',
+    supplier:'Supplier',
+    empty:'Empty'
+  };
+
+  const FIELD_INPUTS={
+    title:'spm-title',
+    descriptionHtml:'spm-description',
+    price:'spm-price',
+    compareAtPrice:'spm-compare',
+    sku:'spm-sku',
+    barcode:'spm-barcode',
+    vendor:'spm-vendor',
+    productType:'spm-type',
+    productCategory:'spm-category',
+    flavour:'spm-flavour',
+    formula:'spm-line',
+    'seo.title':'spm-seo-title',
+    'seo.description':'spm-seo-description',
+    handle:'spm-handle'
+  };
+
+  function installSourceBadges(){
+    Object.entries(FIELD_INPUTS).forEach(([field,id])=>{
+      const input=$(id); if(!input)return;
+      const row=input.closest('.supplier-field-map-row');
+      const label=row?.previousElementSibling || input.previousElementSibling;
+      if(!label || label.tagName!=='LABEL')return;
+      label.classList.add('supplier-provenance-label');
+      if(!label.querySelector('[data-field-source]')){
+        label.insertAdjacentHTML('beforeend',`<span class="supplier-source-chip empty" data-field-source="${esc(field)}">Empty</span>`);
+      }
+    });
+  }
+
+  function renderProvenance(provenance={}){
+    installSourceBadges();
+    Object.entries(FIELD_INPUTS).forEach(([field])=>{
+      const chip=document.querySelector(`[data-field-source="${CSS.escape(field)}"]`);
+      if(!chip)return;
+      const source=provenance[field]||{key:'empty',label:'Empty',detail:''};
+      chip.className=`supplier-source-chip ${esc(source.key||'empty')}`;
+      chip.textContent=source.label||SOURCE_LABELS[source.key]||'Unknown';
+      chip.title=source.detail||'';
+    });
+
+    const values=Object.values(provenance||{}).filter(x=>x?.key&&x.key!=='empty');
+    const counts=new Map();
+    values.forEach(x=>counts.set(x.key,(counts.get(x.key)||0)+1));
+    const summary=[...counts.entries()].map(([key,count])=>`${SOURCE_LABELS[key]||key}: ${count}`).join(' · ');
+    if($('spm-source-summary'))$('spm-source-summary').textContent=summary||'No populated field sources yet';
+  }
+
+  function recommendationTarget(field){
+    return FIELD_INPUTS[field]?$(FIELD_INPUTS[field]):null;
+  }
+
+  function applyFieldRecommendation(field,value,source='shop_recommendation'){
+    const input=recommendationTarget(field);
+    if(!input)return;
+    input.value=String(value??'');
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+    const chip=document.querySelector(`[data-field-source="${CSS.escape(field)}"]`);
+    if(chip){
+      chip.className='supplier-source-chip product_override';
+      chip.textContent='Product override';
+      chip.title=`Applied from ${SOURCE_LABELS[source]||'recommendation'}; saving will lock it as a product-level merchant choice.`;
+    }
+    const card=document.querySelector(`[data-advice-field="${CSS.escape(field)}"]`);
+    if(card)card.classList.add('applied');
+  }
+
+  function renderFieldAdvice(data={}){
+    state.fieldAdvice=data;
+    renderProvenance(data.provenance||{});
+
+    const list=$('spm-advice-list');
+    const summary=$('spm-advice-summary');
+    const examples=$('spm-advice-examples');
+    if(!list||!summary||!examples)return;
+
+    const rows=data.recommendations||[];
+    summary.textContent=`${Number(data.similarProductCount||0)} similar Shopify product(s) checked${data.ai?.requested?' · AI copy refinement requested':''}.`;
+
+    if(!rows.length){
+      list.innerHTML='<div class="supplier-advice-empty">No stronger shop-pattern recommendation was found. The current draft remains unchanged.</div>';
+    }else{
+      list.innerHTML=rows.map(row=>{
+        const confidence=Math.round(Number(row.confidence||0)*100);
+        const preview=String(row.value??'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+        return `<article class="supplier-advice-card" data-advice-field="${esc(row.field)}">
+          <div class="supplier-advice-card-head">
+            <div><strong>${esc(row.label||row.field)}</strong><span class="supplier-source-chip ${esc(row.source||'shop_recommendation')}">${esc(SOURCE_LABELS[row.source]||row.source||'Recommendation')}</span></div>
+            <span class="supplier-advice-confidence">${confidence}%</span>
+          </div>
+          <p class="supplier-advice-preview">${esc(preview)}</p>
+          <small>${esc(row.reason||'')}</small>
+          <button type="button" class="secondary-btn supplier-advice-apply" data-apply-advice="${esc(row.field)}">Apply</button>
+        </article>`;
+      }).join('');
+
+      list.querySelectorAll('[data-apply-advice]').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+          const row=rows.find(x=>x.field===btn.dataset.applyAdvice);
+          if(row)applyFieldRecommendation(row.field,row.value,row.source);
+        });
+      });
+    }
+
+    const sample=(data.examples||[]).slice(0,4);
+    examples.innerHTML=sample.length
+      ? `<details><summary>Examples used</summary><div>${sample.map(row=>`<p><strong>${esc(row.title||'')}</strong><span>${esc(row.productType||'')}${row.seoTitle?' · '+esc(row.seoTitle):''}</span></p>`).join('')}</div></details>`
+      : '';
+
+    if(data.ai?.error){
+      examples.insertAdjacentHTML('beforeend',`<p class="supplier-advice-error">AI refinement was unavailable: ${esc(data.ai.error)}</p>`);
+    }
+  }
+
+  async function loadFieldAdvice(useAi=false){
+    if(!state.activeBatch||!state.activeItem)return;
+    const btn=useAi?$('spm-advice-ai'):$('spm-shop-recommend');
+    if(btn)btn.disabled=true;
+    if($('spm-advice-summary'))$('spm-advice-summary').textContent=useAi?'Generating shop-aware copy suggestions…':'Comparing with similar Shopify products…';
+    try{
+      const data=await api(`/batches/${state.activeBatch._id}/items/${state.activeItem.itemId}/field-recommendations`,{
+        method:'POST',
+        body:JSON.stringify({useAi:useAi===true})
+      });
+      renderFieldAdvice(data);
+    }catch(error){
+      if($('spm-advice-list'))$('spm-advice-list').innerHTML=`<div class="supplier-advice-empty error">${esc(error.message||'Could not load shop recommendations.')}</div>`;
+    }finally{
+      if(btn)btn.disabled=false;
+    }
+  }
+
   function ensureProductModal(){
     if($('supplier-product-modal')) return;
     document.body.insertAdjacentHTML('beforeend',`
@@ -474,8 +617,9 @@
         <div class="supplier-modal-backdrop" data-supplier-close></div>
         <div class="supplier-modal-panel">
           <div class="supplier-modal-head">
-            <div><span class="pci-muted">SUPPLIER PRODUCT DRAFT</span><h3 id="spm-heading">Product</h3></div>
+            <div><span class="pci-muted">SUPPLIER PRODUCT DRAFT</span><h3 id="spm-heading">Product</h3><div id="spm-source-summary" class="supplier-source-summary"></div></div>
             <div class="supplier-modal-head-actions">
+              <button id="spm-shop-recommend" type="button" class="secondary-btn supplier-shop-recommend" title="Compare with similar Shopify products and generate reviewable suggestions">Shop suggestions</button>
               <button id="spm-ai-refresh" type="button" class="supplier-ai-refresh" title="AI refresh — one product, one AI call" aria-label="AI refresh this product">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.1A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35Z"></path></svg>
               </button>
@@ -485,6 +629,16 @@
           <div id="spm-status" class="pci-status" hidden></div>
           <div class="supplier-modal-grid">
             <main>
+              <!-- ELEV8_IMPORT_FIELD_INTELLIGENCE_V1 -->
+              <section id="spm-field-advice" class="pci-editor-card supplier-field-advice">
+                <div class="pci-editor-card-head">
+                  <div><h4>Shop-aware recommendations</h4><span id="spm-advice-summary" class="pci-muted">Comparing this draft with similar products already in Shopify…</span></div>
+                  <button id="spm-advice-ai" type="button" class="secondary-btn">AI refine copy</button>
+                </div>
+                <div id="spm-advice-list" class="supplier-advice-list"></div>
+                <div id="spm-advice-examples" class="supplier-advice-examples"></div>
+              </section>
+
               <section class="pci-editor-card">
                 <label class="pci-label">Title</label><input id="spm-title" class="pci-input">
                 <label class="pci-label">Description</label><textarea id="spm-description" class="pci-textarea supplier-desc"></textarea>
@@ -542,6 +696,9 @@
     $('spm-save').addEventListener('click',saveItemModal);
     $('spm-enrich').addEventListener('click',enrichItemModal);
     $('spm-ai-refresh').addEventListener('click',aiRefreshItemModal);
+    $('spm-shop-recommend').addEventListener('click',()=>loadFieldAdvice(true));
+    $('spm-advice-ai').addEventListener('click',()=>loadFieldAdvice(true));
+    installSourceBadges();
     $('spm-create').addEventListener('click',()=>createItemShopifyDraft(false));
     document.querySelectorAll('#supplier-product-modal [data-map-field]').forEach(btn=>{
       btn.addEventListener('click',()=>showFieldMapping(btn.dataset.mapField));
@@ -646,6 +803,7 @@
     if(existingMatch)showMatchWarning(existingMatch);
     $('supplier-product-modal').hidden=false;
     refreshMappingIndicators();
+    loadFieldAdvice(false);
     document.body.classList.add('supplier-modal-open');
   }
 

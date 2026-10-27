@@ -109,3 +109,32 @@ body.supplier-modal-open{overflow:hidden}
 .supplier-catalogue-settings-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(340px,.8fr);gap:14px}.supplier-catalogue-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.supplier-catalogue-form-grid .wide{grid-column:1/-1}.supplier-catalogue-metafields{min-height:180px;font-family:ui-monospace,monospace;font-size:12px}
 .supplier-catalogue-rec-head{display:flex;justify-content:space-between;gap:10px}.supplier-rec-badges{display:flex;gap:6px;margin:10px 0}.supplier-rec-badges span{background:#eef2ff;color:#3730a3;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:800}.supplier-rec-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.supplier-rec-grid p,.supplier-copy-patterns p{border:1px solid #e2e8f0;border-radius:10px;padding:9px;margin:0;background:#fff;font-size:12px}.supplier-copy-patterns{display:grid;gap:7px;margin:9px 0}
 @media(max-width:900px){.supplier-catalogue-settings-grid,.supplier-catalogue-form-grid{grid-template-columns:1fr}.supplier-catalogue-form-grid .wide{grid-column:auto}.supplier-rec-grid{grid-template-columns:1fr}}
+
+
+/* ELEV8_IMPORT_FIELD_INTELLIGENCE_V1 */
+.supplier-source-summary{font-size:11px;color:#64748b;margin-top:4px}
+.supplier-provenance-label{display:flex!important;align-items:center;justify-content:space-between;gap:8px}
+.supplier-source-chip{display:inline-flex;align-items:center;width:max-content;padding:2px 7px;border-radius:999px;font-size:9px!important;font-weight:800!important;line-height:1.45;text-transform:uppercase;letter-spacing:.03em;border:1px solid transparent}
+.supplier-source-chip.supplier{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
+.supplier-source-chip.catalogue_default{background:#f5f3ff;color:#6d28d9;border-color:#ddd6fe}
+.supplier-source-chip.shop_recommendation{background:#ecfdf5;color:#15803d;border-color:#bbf7d0}
+.supplier-source-chip.ai_suggestion{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
+.supplier-source-chip.product_override{background:#fef2f2;color:#b91c1c;border-color:#fecaca}
+.supplier-source-chip.empty{background:#f8fafc;color:#64748b;border-color:#e2e8f0}
+.supplier-shop-recommend{white-space:nowrap}
+.supplier-field-advice{border:1px solid #cbd5e1!important;background:linear-gradient(180deg,#fbfdff,#f8fafc)!important}
+.supplier-field-advice .pci-editor-card-head{align-items:flex-start}
+.supplier-advice-list{display:grid;gap:8px;margin-top:12px}
+.supplier-advice-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px 10px;padding:11px;border:1px solid #e2e8f0;border-radius:12px;background:#fff}
+.supplier-advice-card.applied{border-color:#86efac;background:#f0fdf4}
+.supplier-advice-card-head{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.supplier-advice-card-head>div{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.supplier-advice-confidence{font-size:10px;font-weight:800;color:#64748b}
+.supplier-advice-preview{margin:0!important;color:#0f172a!important;font-size:12px!important;line-height:1.45!important;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.supplier-advice-card small{grid-column:1;color:#64748b;line-height:1.35}
+.supplier-advice-apply{grid-column:2;grid-row:2/4;align-self:center}
+.supplier-advice-empty{padding:12px;border:1px dashed #cbd5e1;border-radius:10px;color:#64748b;font-size:12px;background:#fff}
+.supplier-advice-empty.error,.supplier-advice-error{color:#b91c1c}
+.supplier-advice-examples{margin-top:10px}.supplier-advice-examples summary{cursor:pointer;font-size:11px;font-weight:800;color:#475569}
+.supplier-advice-examples details>div{display:grid;gap:6px;margin-top:7px}.supplier-advice-examples p{display:grid;gap:2px;margin:0;padding:7px 9px;background:#fff;border-left:3px solid #cbd5e1;font-size:11px}.supplier-advice-examples p span{color:#64748b}
+@media(max-width:700px){.supplier-advice-card{grid-template-columns:1fr}.supplier-advice-apply{grid-column:1;grid-row:auto}.supplier-provenance-label{align-items:flex-start;flex-direction:column;gap:3px}}

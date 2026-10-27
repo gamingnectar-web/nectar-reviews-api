@@ -46,6 +46,8 @@ const {
 } = require('./catalogue-audit/catalogueAudit.service');
 
 const { auditShopifySeo, suggestSeoWithAi } = require('./services/productSeoAudit.service');
+const { buildProductFieldRecommendations } = require('./services/productFieldRecommendation.service');
+/* ELEV8_IMPORT_FIELD_INTELLIGENCE_V1 */
 const {consolidate:getSupplierCatalogueConsolidation,getSettings:getSupplierCatalogueSettings,saveSettings:saveSupplierCatalogueSettings,recommendations:getSupplierCatalogueRecommendations}=require('./services/supplierCatalogue.service');
 /* ELEV8_SUPPLIER_CATALOGUE_UNIFICATION_V1 */
 
@@ -242,6 +244,17 @@ router.get('/batches/:batchId/items/:itemId/field-mappings', asyncRoute(async (r
     batchId: req.params.batchId,
     itemId: req.params.itemId,
     field: req.query.field || '',
+  });
+  res.json(result);
+}));
+
+
+router.post('/batches/:batchId/items/:itemId/field-recommendations', asyncRoute(async (req, res) => {
+  const result = await buildProductFieldRecommendations({
+    shopDomain: shopDomainFromReq(req),
+    batchId: req.params.batchId,
+    itemId: req.params.itemId,
+    useAi: req.body?.useAi === true,
   });
   res.json(result);
 }));

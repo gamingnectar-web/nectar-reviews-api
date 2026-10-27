@@ -52,6 +52,7 @@ function restProductToCard(product = {}, extra = {}) {
     handle: product.handle || '',
     vendor: product.vendor || '',
     productType: product.product_type || '',
+    descriptionHtml: product.body_html || '',
     tags: Array.isArray(product.tags) ? product.tags : String(product.tags || '').split(',').map((x) => x.trim()).filter(Boolean),
     image: product.image?.src || product.images?.[0]?.src || '',
     images: (product.images || []).map((image) => image.src).filter(Boolean),
@@ -418,7 +419,8 @@ async function listShopifyCollections({ shopDomain, limit = 250 }) {
 }
 
 async function listProductSeoExamples({ shopDomain, limit = 80 }) {
-  const data = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products.json?limit=${Math.min(Number(limit) || 80, 250)}&fields=id,title,handle,vendor,product_type,tags,metafields_global_title_tag,metafields_global_description_tag`, { shopDomain });
+  // ELEV8_IMPORT_FIELD_INTELLIGENCE_V1: include body_html so shop-aware suggestions can learn description structure without treating old product facts as facts for the new product.
+  const data = await shopifyFetchOptional(`/admin/api/${env.shopifyApiVersion}/products.json?limit=${Math.min(Number(limit) || 80, 250)}&fields=id,title,handle,vendor,product_type,tags,body_html,metafields_global_title_tag,metafields_global_description_tag`, { shopDomain });
   return (data?.products || []).map((product) => ({
     id: productGid(product.id),
     title: product.title || '',
