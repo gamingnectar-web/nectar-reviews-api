@@ -59,7 +59,6 @@ const batchItemSchema = new mongoose.Schema({
 const batchDefaultsSchema = new mongoose.Schema({
   supplierName: { type: String, default: '' },
   supplierUrl: { type: String, default: '' },
-  catalogue:{type:supplierCatalogueSchema,default:()=>({})},
   brand: { type: String, default: '' },
   vendor: { type: String, default: '' },
   productType: { type: String, default: '' },
@@ -93,6 +92,7 @@ const productImportBatchSchema = new mongoose.Schema({
   name: { type: String, default: '' },
   supplierName: { type: String, default: '' },
   supplierUrl: { type: String, default: '' },
+  catalogue: { type: supplierCatalogueSchema, default: () => ({}) },
   status: { type: String, enum: ['draft', 'queued', 'analysing', 'needs_review', 'partial', 'approved', 'creating', 'created', 'failed'], default: 'draft', index: true },
   defaults: { type: batchDefaultsSchema, default: () => ({}) },
   items: { type: [batchItemSchema], default: [] },

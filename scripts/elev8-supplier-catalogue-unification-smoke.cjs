@@ -1,6 +1,8 @@
 'use strict';const fs=require('fs'),R=p=>fs.readFileSync(p,'utf8');function c(v,m){if(v)console.log('✓ '+m);else{console.error('✗ '+m);process.exitCode=1;}}
+require('../src/modules/product-creation-import/productImportBatch.model');
 const model=R('src/modules/product-creation-import/productImportBatch.model.js'),svc=R('src/modules/product-creation-import/services/supplierCatalogue.service.js'),batch=R('src/modules/product-creation-import/services/productImportBatch.service.js'),routes=R('src/modules/product-creation-import/productCreationImport.routes.js'),ui=R('public/supplier-sites-admin.js');
 c(model.includes('supplierCatalogueSchema'),'catalogue identity/settings schema exists');
+c(model.indexOf('const supplierCatalogueSchema') < model.indexOf('catalogue: { type: supplierCatalogueSchema'),'catalogue root field is initialised at runtime');
 c(svc.includes('findExisting')&&batch.includes('newItemIds'),'repeat supplier scans merge and report only new items');
 c(svc.includes('consolidate')&&svc.includes('mergedInto'),'legacy duplicate catalogues consolidate without deletion');
 c(svc.includes('applyPresets')&&svc.includes("source:'catalogue-preset'"),'catalogue presets are fallback-only');
