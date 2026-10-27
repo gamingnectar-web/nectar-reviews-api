@@ -104,8 +104,6 @@
             </div>
           </main>
         </div>
-      `;
-      root.appendChild(pane);
         <!-- ELEV8_SUPPLIER_CATALOGUE_UNIFICATION_V1 -->
         <div id="supplier-catalogue-modal" class="supplier-modal" hidden>
           <div class="supplier-modal-backdrop" data-catalogue-close></div>
@@ -126,6 +124,8 @@
             <div class="supplier-modal-actions"><button id="scs-save" class="primary-btn">Save catalogue defaults</button></div>
           </section>
         </div>
+      `;
+      root.appendChild(pane);
 
       wire();
     }
