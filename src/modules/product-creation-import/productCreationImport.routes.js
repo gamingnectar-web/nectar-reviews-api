@@ -52,6 +52,13 @@ const {consolidate:getSupplierCatalogueConsolidation,getSettings:getSupplierCata
 /* ELEV8_SUPPLIER_CATALOGUE_UNIFICATION_V1 */
 
 const router = express.Router();
+/* ELEV8_IMPORT_AI_COST_GUARD_V1 */
+// OPENAI_API_KEY alone must never enable high-volume supplier/batch AI.
+// Bulk AI requires this separate, explicit opt-in flag.
+function productImportBulkAiEnabled(){
+  return String(process.env.PRODUCT_IMPORT_BULK_AI_ENABLED||'').toLowerCase()==='true';
+}
+
 
 function shopDomainFromReq(req) {
   return req.shopDomain || req.query.shopDomain || req.body?.shopDomain || req.headers['x-shop-domain'] || req.headers['x-shopify-shop-domain'] || '';
@@ -127,7 +134,7 @@ router.post('/profile/suggest', asyncRoute(async (req, res) => {
 // but adds a parent batch that can contain any number of supplier/product URLs and shared defaults.
 router.post('/batches/site-import', asyncRoute(async (req, res) => {
   const body = req.body || {};
-  const result = await createSiteImportBatch({ shopDomain: shopDomainFromReq(req), rootUrl: body.rootUrl || body.url || body.supplierUrl || '', name: body.name || '', maxProducts: body.maxProducts || 500, useAi: body.useAi === true, autoApproveReady: body.autoApproveReady === true, autoCreateDrafts: Boolean(body.autoCreateDrafts), batchSize: body.batchSize || 1 });
+  const result = await createSiteImportBatch({ shopDomain: shopDomainFromReq(req), rootUrl: body.rootUrl || body.url || body.supplierUrl || '', name: body.name || '', maxProducts: body.maxProducts || 500, useAi: productImportBulkAiEnabled() && body.useAi === true, autoApproveReady: body.autoApproveReady === true, autoCreateDrafts: Boolean(body.autoCreateDrafts), batchSize: body.batchSize || 1 });
   res.json(result);
 }));
 
@@ -217,7 +224,7 @@ router.post('/batches/:batchId/scan', asyncRoute(async (req, res) => {
     itemIds: Array.isArray(body.itemIds) ? body.itemIds : [],
     limit: body.limit || 20,
     processAll: Boolean(body.processAll),
-    useAi: body.useAi === true,
+    useAi: productImportBulkAiEnabled() && body.useAi === true,
   });
   res.json(result);
 }));
@@ -228,7 +235,7 @@ router.post('/batches/:batchId/enrich', asyncRoute(async (req, res) => {
     shopDomain: shopDomainFromReq(req),
     batchId: req.params.batchId,
     itemIds: Array.isArray(body.itemIds) ? body.itemIds : [],
-    useAi: body.useAi === true,
+    useAi: productImportBulkAiEnabled() && body.useAi === true,
   });
   res.json(result);
 }));

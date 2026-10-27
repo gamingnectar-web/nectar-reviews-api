@@ -696,7 +696,7 @@
     $('spm-save').addEventListener('click',saveItemModal);
     $('spm-enrich').addEventListener('click',enrichItemModal);
     $('spm-ai-refresh').addEventListener('click',aiRefreshItemModal);
-    $('spm-shop-recommend').addEventListener('click',()=>loadFieldAdvice(true));
+    $('spm-shop-recommend').addEventListener('click',()=>loadFieldAdvice(false)); // ELEV8_IMPORT_AI_COST_GUARD_V1: deterministic Shopify comparison only
     $('spm-advice-ai').addEventListener('click',()=>loadFieldAdvice(true));
     installSourceBadges();
     $('spm-create').addEventListener('click',()=>createItemShopifyDraft(false));
