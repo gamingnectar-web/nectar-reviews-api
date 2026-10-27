@@ -59,6 +59,7 @@ const batchItemSchema = new mongoose.Schema({
 const batchDefaultsSchema = new mongoose.Schema({
   supplierName: { type: String, default: '' },
   supplierUrl: { type: String, default: '' },
+  catalogue:{type:supplierCatalogueSchema,default:()=>({})},
   brand: { type: String, default: '' },
   vendor: { type: String, default: '' },
   productType: { type: String, default: '' },
@@ -70,6 +71,22 @@ const batchDefaultsSchema = new mongoose.Schema({
   handleFormat: { type: String, default: '' },
   handleLocation: { type: String, default: '' },
 }, { _id: false });
+
+
+/* ELEV8_SUPPLIER_CATALOGUE_UNIFICATION_V1 */
+const supplierCatalogueSchema=new mongoose.Schema({
+  key:{type:String,default:'',index:true},
+  supplierHost:{type:String,default:'',index:true},
+  vendor:{type:String,default:''},
+  active:{type:Boolean,default:true,index:true},
+  mergedInto:{type:mongoose.Schema.Types.ObjectId,ref:'ProductImportBatch',default:null},
+  mergedFrom:{type:[mongoose.Schema.Types.ObjectId],default:[]},
+  sourceUrls:{type:[String],default:[]},
+  presets:{type:mongoose.Schema.Types.Mixed,default:{}},
+  recommendations:{type:mongoose.Schema.Types.Mixed,default:{}},
+  lastDiscoveredAt:{type:Date,default:null},
+  lastMergedAt:{type:Date,default:null},
+},{_id:false});
 
 const productImportBatchSchema = new mongoose.Schema({
   shopDomain: { type: String, required: true, index: true },
@@ -107,6 +124,7 @@ productImportBatchSchema.index({ shopDomain: 1, createdAt: -1 });
 productImportBatchSchema.index({ shopDomain: 1, status: 1, createdAt: -1 });
 productImportBatchSchema.index({ shopDomain: 1, 'items.sourceUrl': 1 });
 productImportBatchSchema.index({ shopDomain: 1, 'items.status': 1 });
+productImportBatchSchema.index({shopDomain:1,'catalogue.key':1,'catalogue.active':1});
 
 const ProductImportBatch = mongoose.models.ProductImportBatch || mongoose.model('ProductImportBatch', productImportBatchSchema);
 

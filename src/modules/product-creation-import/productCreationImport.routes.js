@@ -46,6 +46,8 @@ const {
 } = require('./catalogue-audit/catalogueAudit.service');
 
 const { auditShopifySeo, suggestSeoWithAi } = require('./services/productSeoAudit.service');
+const {consolidate:getSupplierCatalogueConsolidation,getSettings:getSupplierCatalogueSettings,saveSettings:saveSupplierCatalogueSettings,recommendations:getSupplierCatalogueRecommendations}=require('./services/supplierCatalogue.service');
+/* ELEV8_SUPPLIER_CATALOGUE_UNIFICATION_V1 */
 
 const router = express.Router();
 
@@ -139,6 +141,12 @@ router.get('/batches/site-imports', asyncRoute(async (req, res) => {
   });
   res.json(result);
 }));
+
+
+router.post('/batches/site-imports/consolidate',asyncRoute(async(req,res)=>res.json(await getSupplierCatalogueConsolidation({shopDomain:shopDomainFromReq(req)}))));
+router.get('/batches/:batchId/catalogue-settings',asyncRoute(async(req,res)=>res.json(await getSupplierCatalogueSettings({shopDomain:shopDomainFromReq(req),batchId:req.params.batchId}))));
+router.patch('/batches/:batchId/catalogue-settings',asyncRoute(async(req,res)=>res.json(await saveSupplierCatalogueSettings({shopDomain:shopDomainFromReq(req),batchId:req.params.batchId,presets:req.body?.presets||{}}))));
+router.post('/batches/:batchId/catalogue-recommendations',asyncRoute(async(req,res)=>res.json(await getSupplierCatalogueRecommendations({shopDomain:shopDomainFromReq(req),batchId:req.params.batchId}))));
 
 router.post('/batches', asyncRoute(async (req, res) => {
   const body = req.body || {};

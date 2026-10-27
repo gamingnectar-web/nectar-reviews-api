@@ -16,6 +16,8 @@ const { applyBrandDirectoryProfile } = require('./brandDirectoryProfile.service'
 const { mapSupplierFactsToExistingMetafields, applyOrganisationFieldMappings, organisationFieldMappingSummary } = require('./supplierFactMapper.service');
 const { discoverSiteProducts } = require('./siteCatalogDiscovery.service');
 const { searchShopifyProducts, listShopifyProductsForMatching } = require('./shopifyProduct.service');
+const {identity:supplierCatalogueIdentity,title:supplierCatalogueTitle,vendorFromDiscovery,applyPresets:applySupplierCataloguePresets,findExisting:findExistingSupplierCatalogue}=require('./supplierCatalogue.service');
+/* ELEV8_SUPPLIER_CATALOGUE_UNIFICATION_V1 */
 
 function asArray(value) {
   if (Array.isArray(value)) return value;
@@ -372,65 +374,41 @@ function siteShopifyDraft(product = {}, sourceUrl = '', defaults = {}) {
 }
 
 async function createSiteImportBatch({ shopDomain, rootUrl, name = '', maxProducts = 500, useAi = false, autoApproveReady = false, autoCreateDrafts = false, batchSize = 1 }) {
-  const discovery = await discoverSiteProducts({ rootUrl, maxProducts });
-  const defaults = { ...discovery.supplierDefaults, ...supplierDefaultsForUrl(rootUrl) };
-  const result = await createBatch({
-    shopDomain,
-    name: name || `${defaults.vendor || defaults.supplierName || 'Supplier'} full site import`,
-    defaults,
-    links: discovery.urls
-  });
+  const discovery=await discoverSiteProducts({rootUrl,maxProducts});
+  const defaults={...discovery.supplierDefaults,...supplierDefaultsForUrl(rootUrl)};
+  const vendor=vendorFromDiscovery(discovery,defaults,name);
+  const ident=supplierCatalogueIdentity({url:rootUrl,vendor});
+  let batch=await findExistingSupplierCatalogue({shopDomain,rootUrl,vendor}),merged=Boolean(batch),added=0,newItemIds=[];
 
-  if (Array.isArray(discovery.products) && discovery.products.length) {
-    const byHandle = new Map(discovery.products.map(product => [String(product.handle || '').toLowerCase(), product]));
-    for (const item of result.batch.items) {
-      let handle='';
-      try{ handle=new URL(item.sourceUrl).pathname.split('/products/')[1]?.split('/')[0]?.toLowerCase() || ''; }catch(_){}
-      const product=byHandle.get(handle);
-      if(!product) continue;
-
-      const draft=siteShopifyDraft(product,item.sourceUrl,defaults);
-      item.title=draft.title;
-      item.vendor=draft.vendor;
-      item.productType=draft.productType;
-      item.productCategory=draft.productCategory;
-      item.templateSuffix=draft.themeTemplate || '';
-      item.draft=draft;
-      item.extractedData={
-        source:'shopify-products-json',
-        sourceProductId:product.id || '',
-        handle:product.handle || '',
-        rawSupplierProduct:product,
-        sourceVariants:product.variants || [],
-        sourceOptions:product.options || [],
-        imageCount:draft.images?.length || 0
-      };
-      item.imageCandidates=draft.images || [];
-      item.selectedImages=draft.images || [];
-      item.metafieldPlan=draft.metafields || [];
-      item.confidence=0.99;
-      item.status='needs_review';
-      item.approvalStatus='pending';
-      item.error='';
-      item.updatedAt=new Date();
-    }
+  if(batch){
+    const before=new Set((batch.items||[]).map(x=>x.itemId));
+    const result=await addBatchItems({shopDomain,batchId:batch._id,links:discovery.urls});
+    batch=result.batch;added=Number(result.added||0);newItemIds=(batch.items||[]).filter(x=>!before.has(x.itemId)).map(x=>x.itemId);
+  }else{
+    const result=await createBatch({shopDomain,name:supplierCatalogueTitle(vendor,name||defaults.supplierName),defaults,links:discovery.urls});
+    batch=result.batch;added=batch.items?.length||0;newItemIds=(batch.items||[]).map(x=>x.itemId);
   }
 
-  result.batch.automation = {
-    siteImport:true,
-    supplierProfile:profileForUrl(rootUrl),
-    useAi:useAi === true,
-    backgroundEnabled:false,
-    backgroundAi:false,
-    autoApproveReady:autoApproveReady === true,
-    autoCreateDrafts:Boolean(autoCreateDrafts),
-    batchSize:Math.max(1,Math.min(Number(batchSize || 1),10)),
-    discoveryMethod:discovery.method,
-    discoveredCount:discovery.count
-  };
-  refreshBatchSummary(result.batch);
-  await result.batch.save();
-  return {...result,discovery:{method:discovery.method,count:discovery.count,rootUrl:discovery.rootUrl,structuredSeeded:Boolean(discovery.products?.length)}};
+  batch.name=supplierCatalogueTitle(vendor,name||defaults.supplierName);
+  batch.supplierName=vendor||defaults.supplierName||batch.supplierName;
+  batch.supplierUrl=cleanUrl(rootUrl)||batch.supplierUrl;
+  batch.catalogue=batch.catalogue||{};batch.catalogue.key=ident.key;batch.catalogue.supplierHost=ident.host;batch.catalogue.vendor=vendor;batch.catalogue.active=true;batch.catalogue.sourceUrls=Array.from(new Set([...(batch.catalogue.sourceUrls||[]),cleanUrl(rootUrl)].filter(Boolean)));batch.catalogue.lastDiscoveredAt=new Date();
+
+  if(Array.isArray(discovery.products)&&discovery.products.length){
+    const byHandle=new Map(discovery.products.map(p=>[String(p.handle||'').toLowerCase(),p]));
+    for(const item of batch.items||[]){
+      let handle='';try{handle=new URL(item.sourceUrl).pathname.split('/products/')[1]?.split('/')[0]?.toLowerCase()||'';}catch(_){}
+      const product=byHandle.get(handle);if(!product)continue;
+      if(item.extractedData?.sourceProductId&&String(item.extractedData.sourceProductId)===String(product.id||'')&&item.draft?.title)continue;
+      let draft=siteShopifyDraft(product,item.sourceUrl,defaults);draft=applySupplierCataloguePresets(draft,batch.catalogue?.presets||{});
+      item.title=draft.title;item.vendor=draft.vendor;item.productType=draft.productType;item.productCategory=draft.productCategory;item.templateSuffix=draft.themeTemplate||'';item.draft=draft;
+      item.extractedData={...(item.extractedData||{}),source:'shopify-products-json',sourceProductId:product.id||'',handle:product.handle||'',rawSupplierProduct:product,sourceVariants:product.variants||[],sourceOptions:product.options||[],imageCount:draft.images?.length||0};
+      item.imageCandidates=draft.images||[];item.selectedImages=draft.images||[];item.metafieldPlan=draft.metafields||[];item.confidence=.99;if(['queued','failed'].includes(item.status))item.status='needs_review';if(item.status!=='created')item.approvalStatus='pending';item.error='';item.updatedAt=new Date();
+    }
+  }
+  batch.automation={...(batch.automation?.toObject?.()||batch.automation||{}),siteImport:true,supplierProfile:profileForUrl(rootUrl),useAi:useAi===true,backgroundEnabled:false,backgroundAi:false,autoApproveReady:autoApproveReady===true,autoCreateDrafts:Boolean(autoCreateDrafts),batchSize:Math.max(1,Math.min(Number(batchSize||1),10)),discoveryMethod:discovery.method,discoveredCount:discovery.count};
+  refreshBatchSummary(batch);await batch.save();
+  return{batch,merged,added,newItemIds,discovery:{method:discovery.method,count:discovery.count,rootUrl:discovery.rootUrl,structuredSeeded:Boolean(discovery.products?.length)}};
 }
 
 async function listBatches({ shopDomain, limit = 30 }) {
@@ -443,6 +421,7 @@ async function listSiteImportBatches({ shopDomain, limit = 250 }) {
   const batches = await ProductImportBatch.find({
     shopDomain,
     'automation.siteImport': true,
+    'catalogue.active': { $ne: false },
   })
     .select({
       name: 1,
@@ -451,6 +430,8 @@ async function listSiteImportBatches({ shopDomain, limit = 250 }) {
       status: 1,
       summary: 1,
       automation: 1,
+      catalogue: 1,
+      'defaults.vendor': 1,
       'defaults.supplierUrl': 1,
       createdAt: 1,
       updatedAt: 1,
@@ -735,7 +716,7 @@ async function reconcileBatchShopifyMatches({shopDomain,batchId,maxProducts=2500
 }
 
 
-async function enrichItem({ shopDomain, item, defaults, useAi = false }) {
+async function enrichItem({ shopDomain, item, defaults, cataloguePresets = {}, useAi = false }) {
   item.status = 'scanning';
   item.error = '';
   item.updatedAt = new Date();
@@ -811,6 +792,8 @@ async function enrichItem({ shopDomain, item, defaults, useAi = false }) {
   draft.images = byPageImageOrder(imagePlan.selected).map((image) => ({ src: image.src, alt: image.alt || draft.title, role: image.role || '', reason: image.roleReason || image.reason || '', originalIndex: image.originalIndex ?? 0 }));
   draft = applyMerchantSeoPattern(applyLockedBatchDefaults(draft, defaults), defaults);
 
+  draft=applySupplierCataloguePresets(draft,cataloguePresets);
+
   const existingProduct = await detectExistingProduct({ shopDomain, draft });
   if (existingProduct) draft.suggestions = { ...(draft.suggestions || {}), existingProduct };
 
@@ -878,7 +861,7 @@ async function scanBatch({ shopDomain, batchId, itemIds = [], limit = 20, proces
   const results = [];
   for (const item of selected) {
     try {
-      await enrichItem({ shopDomain, item, defaults: batch.defaults || {}, useAi });
+      await enrichItem({ shopDomain, item, defaults: batch.defaults || {}, cataloguePresets: batch.catalogue?.presets || {}, useAi });
       results.push({ itemId: item.itemId, status: item.status });
     } catch (error) {
       item.status = 'failed';
@@ -1115,6 +1098,8 @@ async function createShopifyDraftsForBatch({ shopDomain, batchId, itemIds = [], 
     try {
       item.status = 'creating';
       item.updatedAt = new Date();
+      item.draft=applySupplierCataloguePresets(item.draft||{},batch.catalogue?.presets||{});
+      item.metafieldPlan=normaliseMetafields(item.draft.metafields||[]);
       const existing = forceCreate ? null : await detectExistingProduct({ shopDomain, draft: item.draft });
       if (existing) {
         item.status = 'skipped';

@@ -1,6 +1,6 @@
 (function SupplierSitesAdmin(){
   const API='/admin/product-creation-import';
-  const state={batches:[],activeBatch:null,activeItem:null,scanning:false,stop:false,reconciled:new Set(),reconciling:false};
+  const state={batches:[],activeBatch:null,activeItem:null,scanning:false,stop:false,reconciled:new Set(),reconciling:false,cataloguesConsolidated:false};
   const $=id=>document.getElementById(id);
   const esc=(v='')=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
@@ -53,8 +53,8 @@
             <input id="supplier-site-url" class="pci-input" value="https://x-zero.co.uk">
           </div>
           <div>
-            <label class="pci-label">Catalogue name</label>
-            <input id="supplier-site-name" class="pci-input" value="X-Zero catalogue">
+            <label class="pci-label">Brand / vendor hint <span class="pci-muted">(optional)</span></label>
+            <input id="supplier-site-name" class="pci-input" placeholder="Detected from supplier products" value="">
           </div>
           <div>
             <label class="pci-label">Maximum products</label>
@@ -96,7 +96,7 @@
                     <option value="created">Created</option>
                     <option value="failed">Failed</option>
                   </select>
-                  <button id="supplier-sites-check-shopify" class="secondary-btn" type="button">Check Shopify matches</button><button id="supplier-sites-rescan" class="secondary-btn" type="button">Run one pass</button><button id="supplier-sites-stop" class="secondary-btn" type="button" hidden>Stop</button>
+                  <button id="supplier-sites-catalogue-settings" class="supplier-catalogue-cog secondary-btn" type="button" title="Catalogue defaults">⚙</button><button id="supplier-sites-check-shopify" class="secondary-btn" type="button">Check Shopify matches</button><button id="supplier-sites-rescan" class="secondary-btn" type="button">Run one pass</button><button id="supplier-sites-stop" class="secondary-btn" type="button" hidden>Stop</button>
                   <button id="supplier-sites-open-batch" class="primary-btn" type="button">Open in Batch Import</button>
                 </div>
               </div>
@@ -106,6 +106,27 @@
         </div>
       `;
       root.appendChild(pane);
+        <!-- ELEV8_SUPPLIER_CATALOGUE_UNIFICATION_V1 -->
+        <div id="supplier-catalogue-modal" class="supplier-modal" hidden>
+          <div class="supplier-modal-backdrop" data-catalogue-close></div>
+          <section class="supplier-modal-panel supplier-catalogue-panel">
+            <div class="supplier-modal-head"><div><small class="pci-muted">CATALOGUE DEFAULTS</small><h3 id="scs-heading">Supplier catalogue</h3><p class="pci-muted">Defaults fill empty fields only. Product-level values always win.</p></div><button id="scs-close" class="secondary-btn">Close</button></div>
+            <div class="supplier-catalogue-settings-grid">
+              <main class="pci-editor-card"><div class="supplier-catalogue-form-grid">
+                <div><label class="pci-label">Vendor</label><input id="scs-vendor" class="pci-input"></div>
+                <div><label class="pci-label">Product type</label><input id="scs-type" class="pci-input"></div>
+                <div><label class="pci-label">Product category</label><input id="scs-category" class="pci-input"></div>
+                <div><label class="pci-label">Theme template</label><input id="scs-template" class="pci-input"></div>
+                <div class="wide"><label class="pci-label">Collections</label><input id="scs-collections" class="pci-input" placeholder="Comma separated"></div>
+                <div class="wide"><label class="pci-label">Metafield defaults</label><textarea id="scs-metafields" class="pci-input supplier-catalogue-metafields" placeholder="core.about_brand = ..."></textarea><small class="pci-muted">One per line: namespace.key = value</small></div>
+              </div></main>
+              <aside class="pci-editor-card"><div class="supplier-catalogue-rec-head"><div><h4>Shop recommendations</h4><p class="pci-muted">Based on similar products already in Shopify.</p></div><button id="scs-recommend" class="secondary-btn">Analyse shop</button></div><div id="scs-recs"><p class="pci-muted">Run analysis to see recommendations.</p></div></aside>
+            </div>
+            <div id="scs-status" class="pci-status" hidden></div>
+            <div class="supplier-modal-actions"><button id="scs-save" class="primary-btn">Save catalogue defaults</button></div>
+          </section>
+        </div>
+
       wire();
     }
     return true;
@@ -139,21 +160,27 @@
     ].filter(Boolean).join(' ').toLowerCase();
   }
 
+
+  // ELEV8_SUPPLIER_CATALOGUE_UNIFICATION_V1
+  const parseMf=v=>String(v||'').split(/\n/).map(x=>x.trim()).filter(Boolean).map(line=>{const eq=line.indexOf('='),dot=line.slice(0,eq).trim().indexOf('.');if(eq<0||dot<1)return null;const compound=line.slice(0,eq).trim(),d=compound.indexOf('.'),value=line.slice(eq+1).trim();return value?{namespace:compound.slice(0,d),key:compound.slice(d+1),value,type:'single_line_text_field'}:null;}).filter(Boolean);
+  const formatMf=rows=>(rows||[]).filter(x=>x?.namespace&&x?.key&&String(x.value??'').trim()).map(x=>x.namespace+'.'+x.key+' = '+x.value).join('\n');
+  function closeCatalogue(){if($('supplier-catalogue-modal'))$('supplier-catalogue-modal').hidden=true;document.body.classList.remove('supplier-modal-open');}
+  function recHtml(r){if(!r)return '<p class="pci-muted">Run analysis to see recommendations.</p>';const s=r.suggested||{},t=r.text||{};return `<div class="supplier-rec-badges"><span>${Number(r.sampleCount||0)} shop examples</span><span>${esc(r.generatedWith||'deterministic')}</span></div><div class="supplier-rec-grid"><p><b>Vendor</b><br>${esc(s.vendor||'—')}</p><p><b>Product type</b><br>${esc(s.productType||'—')}</p><p><b>Template</b><br>${esc(s.themeTemplate||'—')}</p></div><div class="supplier-copy-patterns"><p><b>Title pattern</b><br>${esc(t.titlePattern||'—')}</p><p><b>Description guidance</b><br>${esc(t.descriptionGuidance||'—')}</p><p><b>SEO title</b><br>${esc(t.seoTitlePattern||'—')}</p><p><b>SEO description</b><br>${esc(t.seoDescriptionPattern||'—')}</p></div><button id="scs-use-recs" class="secondary-btn">Use recommended blanks</button>`;}
+  async function openCatalogue(id){
+    id=id||state.activeBatch?._id;if(!id)return setStatus('Select a catalogue first.','err');
+    const [b,x]=await Promise.all([api('/batches/'+id),api('/batches/'+id+'/catalogue-settings')]);state.activeBatch=b.batch;const p=x.presets||{};
+    $('scs-heading').textContent=state.activeBatch.name||'Supplier catalogue';$('scs-vendor').value=p.vendor||state.activeBatch.catalogue?.vendor||'';$('scs-type').value=p.productType||'';$('scs-category').value=p.productCategory||'';$('scs-template').value=p.themeTemplate||'';$('scs-collections').value=(p.collections||[]).join(', ');$('scs-metafields').value=formatMf(p.metafields||[]);$('scs-recs').innerHTML=recHtml(x.recommendations);$('supplier-catalogue-modal').hidden=false;document.body.classList.add('supplier-modal-open');bindUseRecs(x.recommendations);
+  }
+  function bindUseRecs(r){$('scs-use-recs')?.addEventListener('click',()=>{const s=r?.suggested||{};if(!$('scs-vendor').value&&s.vendor)$('scs-vendor').value=s.vendor;if(!$('scs-type').value&&s.productType)$('scs-type').value=s.productType;if(!$('scs-category').value&&s.productCategory)$('scs-category').value=s.productCategory;if(!$('scs-template').value&&s.themeTemplate)$('scs-template').value=s.themeTemplate;if(!$('scs-metafields').value&&(s.metafields||[]).length)$('scs-metafields').value=formatMf(s.metafields);});}
+  async function saveCatalogue(){const id=state.activeBatch?._id;if(!id)return;const p={vendor:$('scs-vendor').value.trim(),productType:$('scs-type').value.trim(),productCategory:$('scs-category').value.trim(),themeTemplate:$('scs-template').value.trim(),collections:$('scs-collections').value.split(',').map(x=>x.trim()).filter(Boolean),metafields:parseMf($('scs-metafields').value)};const x=await api('/batches/'+id+'/catalogue-settings',{method:'PATCH',body:JSON.stringify({presets:p})});state.activeBatch=x.batch;$('scs-status').hidden=false;$('scs-status').textContent='Saved. Product-specific values were preserved.';await loadSites(false);renderProducts();}
+  async function recommendCatalogue(){const id=state.activeBatch?._id;if(!id)return;const btn=$('scs-recommend');if(btn)btn.disabled=true;try{const x=await api('/batches/'+id+'/catalogue-recommendations',{method:'POST',body:'{}'});$('scs-recs').innerHTML=recHtml(x.recommendations);bindUseRecs(x.recommendations);}finally{if(btn)btn.disabled=false;}}
+
   function renderSites(){
-    const el=$('supplier-sites-list');
-    if(!el) return;
-    if(!state.batches.length){
-      el.innerHTML='<div class="supplier-empty">No supplier sites yet.</div>';
-      return;
-    }
-    el.innerHTML=state.batches.map(b=>`
-      <button type="button" class="supplier-site-row ${state.activeBatch?._id===b._id?'active':''}" data-id="${esc(b._id)}">
-        <strong>${esc(b.name||b.supplierName||'Supplier catalogue')}</strong>
-        <small>${esc(b.supplierUrl||b.defaults?.supplierUrl||'')}</small>
-        <span>${b.summary?.total||b.items?.length||0} products · ${esc(b.status||'draft')}</span>
-      </button>
-    `).join('');
-    el.querySelectorAll('[data-id]').forEach(btn=>btn.onclick=()=>openBatch(btn.dataset.id));
+    const el=$('supplier-sites-list');if(!el)return;
+    if(!state.batches.length){el.innerHTML='<div class="supplier-empty">No supplier sites yet.</div>';return;}
+    el.innerHTML=state.batches.map(b=>`<div class="supplier-site-entry ${state.activeBatch?._id===b._id?'active':''}"><button type="button" class="supplier-site-row" data-open-catalogue="${esc(b._id)}"><strong>${esc(b.catalogue?.vendor?b.catalogue.vendor+' Catalogue':(b.name||b.supplierName||'Supplier catalogue'))}</strong><small>${esc(b.supplierUrl||b.defaults?.supplierUrl||'')}</small><span>${b.summary?.total||0} products · ${esc(b.status||'draft')}</span></button><button class="supplier-site-cog" data-cog-catalogue="${esc(b._id)}" title="Catalogue defaults">⚙</button></div>`).join('');
+    el.querySelectorAll('[data-open-catalogue]').forEach(btn=>btn.onclick=()=>openBatch(btn.dataset.openCatalogue));
+    el.querySelectorAll('[data-cog-catalogue]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openCatalogue(btn.dataset.cogCatalogue);});
   }
 
   function productStatusDot(item){
@@ -215,13 +242,10 @@
     bindProductCards();
   }
 
-  async function loadSites(){
-    if(!ensureUi()) return;
-    try{
-      const data=await api('/batches/site-imports?limit=250');
-      state.batches=data.batches||[];
-      renderSites();
-    }catch(e){ setStatus(`Could not load supplier catalogues: ${esc(e.message)}`,'err'); }
+  async function loadSites(consolidate=true){
+    if(!ensureUi())return;
+    try{if(consolidate&&!state.cataloguesConsolidated){await api('/batches/site-imports/consolidate',{method:'POST',body:'{}'}).catch(()=>null);state.cataloguesConsolidated=true;}const data=await api('/batches/site-imports?limit=250');state.batches=data.batches||[];renderSites();}
+    catch(e){setStatus('Could not load supplier catalogues: '+esc(e.message),'err');}
   }
 
   async function reconcileShopifyMatches(manual=false){
@@ -318,7 +342,8 @@
     }
   }
 
-  async function runInitialSitePass(batchId){
+  async function runInitialSitePass(batchId,itemIds=[]){
+    const onlyNew=new Set(Array.isArray(itemIds)?itemIds:[]);
     // A site scrape is one deliberate user command.
     // Every discovered product may be attempted once during this command.
     // Nothing retries automatically after this function finishes.
@@ -338,7 +363,8 @@
       const target=(state.activeBatch.items||[]).find(item =>
         ['queued','needs_review'].includes(item.status) &&
         !attempted.has(item.itemId) &&
-        item.status!=='created'
+        item.status!=='created' &&
+        (!onlyNew.size || onlyNew.has(item.itemId))
       );
 
       if(!target) break;
@@ -346,7 +372,8 @@
 
       const remaining=(state.activeBatch.items||[]).filter(item =>
         ['queued','needs_review'].includes(item.status) &&
-        !attempted.has(item.itemId)
+        !attempted.has(item.itemId) &&
+        (!onlyNew.size || onlyNew.has(item.itemId))
       ).length;
       const total=attempted.size+remaining;
 
@@ -417,7 +444,9 @@
       state.activeBatch=data.batch;
       await loadSites();
       await openBatch(data.batch._id);
-      await runInitialSitePass(data.batch._id);
+      const newIds=Array.isArray(data.newItemIds)?data.newItemIds:[];
+      if(data.merged&&!newIds.length)setStatus('Catalogue refreshed. No new supplier products were found; existing drafts were left untouched.','ok');
+      else await runInitialSitePass(data.batch._id,newIds);
     }catch(e){ setStatus(`Supplier scrape failed: ${esc(e.message)}`,'err'); }
     finally{ btn.disabled=false; }
   }
@@ -796,6 +825,11 @@
 
   function wire(){
     $('supplier-sites-refresh')?.addEventListener('click',loadSites);
+    $('supplier-sites-catalogue-settings')?.addEventListener('click',()=>openCatalogue());
+    $('scs-close')?.addEventListener('click',closeCatalogue);
+    document.querySelectorAll('[data-catalogue-close]').forEach(x=>x.addEventListener('click',closeCatalogue));
+    $('scs-save')?.addEventListener('click',saveCatalogue);
+    $('scs-recommend')?.addEventListener('click',recommendCatalogue);
     $('supplier-site-scrape')?.addEventListener('click',createSite);
     $('supplier-sites-check-shopify')?.addEventListener('click',()=>reconcileShopifyMatches(true));
     $('supplier-sites-rescan')?.addEventListener('click',repairCatalogue);
