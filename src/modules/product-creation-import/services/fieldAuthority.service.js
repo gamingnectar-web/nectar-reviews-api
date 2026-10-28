@@ -57,7 +57,7 @@ function preserveLockedFields(before = {}, after = {}) {
   const next = { ...after, fieldLocks: { ...(before.fieldLocks || {}), ...(after.fieldLocks || {}) } };
   const locks = before.fieldLocks || {};
   const copy = (name) => { if (locks[name]?.locked) next[name] = before[name]; };
-  ['title','handle','descriptionHtml','vendor','productType','productCategory','themeTemplate','collections','tags'].forEach(copy);
+  ['title','handle','descriptionHtml','vendor','productType','productCategory','themeTemplate','collections','tags','price','compareAtPrice','sku','barcode'].forEach(copy); // ELEV8_EXPLICIT_AI_SOURCE_RESCAN_V1
   next.seo = { ...(after.seo || {}) };
   if (locks['seo.title']?.locked) next.seo.title = before.seo?.title || '';
   if (locks['seo.description']?.locked) next.seo.description = before.seo?.description || '';

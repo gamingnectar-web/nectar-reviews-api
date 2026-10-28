@@ -216,6 +216,55 @@ router.post('/batches/:batchId/items', asyncRoute(async (req, res) => {
   res.json(result);
 }));
 
+
+/* ELEV8_EXPLICIT_AI_SOURCE_RESCAN_V1 */
+router.post('/batches/:batchId/ai-rescan', asyncRoute(async (req, res) => {
+  if (!process.env.OPENAI_API_KEY) {
+    return res.status(412).json({ error: 'OPENAI_API_KEY is not configured.' });
+  }
+
+  const supplied = Array.isArray(req.body?.itemIds) ? req.body.itemIds.map(String).filter(Boolean) : [];
+  const itemIds = Array.from(new Set(supplied));
+
+  if (!itemIds.length) {
+    return res.status(400).json({ error: 'Choose at least one product to AI rescan.' });
+  }
+
+  if (itemIds.length > 3) {
+    return res.status(400).json({
+      error: 'AI source rescan is capped at 3 products per request to protect API spend.',
+      maxProducts: 3,
+    });
+  }
+
+  const shopDomain = shopDomainFromReq(req);
+  const results = [];
+  let latestBatch = null;
+
+  for (const itemId of itemIds) {
+    const result = await scanBatch({
+      shopDomain,
+      batchId: req.params.batchId,
+      itemIds: [itemId],
+      limit: 1,
+      processAll: false,
+      useAi: true,
+    });
+    latestBatch = result.batch;
+    const row = (result.results || []).find((entry) => entry.itemId === itemId);
+    results.push(row || { itemId, status: 'skipped', error: 'Product could not be rescanned.' });
+  }
+
+  res.json({
+    batch: latestBatch,
+    results,
+    requested: itemIds.length,
+    estimatedMaxAiCalls: itemIds.length * 3,
+    automaticRetry: false,
+    mode: 'explicit_ai_source_rescan',
+  });
+}));
+
 router.post('/batches/:batchId/scan', asyncRoute(async (req, res) => {
   const body = req.body || {};
   const result = await scanBatch({

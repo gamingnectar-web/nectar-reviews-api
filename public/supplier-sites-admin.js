@@ -96,7 +96,7 @@
                     <option value="created">Created</option>
                     <option value="failed">Failed</option>
                   </select>
-                  <button id="supplier-sites-catalogue-settings" class="supplier-catalogue-cog secondary-btn" type="button" title="Catalogue defaults">⚙</button><button id="supplier-sites-check-shopify" class="secondary-btn" type="button">Check Shopify matches</button><button id="supplier-sites-rescan" class="secondary-btn" type="button">Run one pass</button><button id="supplier-sites-stop" class="secondary-btn" type="button" hidden>Stop</button>
+                  <button id="supplier-sites-catalogue-settings" class="supplier-catalogue-cog secondary-btn" type="button" title="Catalogue defaults">⚙</button><button id="supplier-sites-check-shopify" class="secondary-btn" type="button">Check Shopify matches</button><button id="supplier-sites-rescan" class="secondary-btn" type="button">Run one pass</button><button id="supplier-sites-ai-rescan" class="secondary-btn supplier-ai-source-btn" type="button" title="Re-read up to 3 unresolved source URLs with AI. No automatic retry.">AI rescan unresolved · max 3</button><button id="supplier-sites-stop" class="secondary-btn" type="button" hidden>Stop</button>
                   <button id="supplier-sites-open-batch" class="primary-btn" type="button">Open in Batch Import</button>
                 </div>
               </div>
@@ -267,6 +267,84 @@
     renderSites();
     renderProducts();
     if(!state.reconciled.has(String(id)))reconcileShopifyMatches(false);
+  }
+
+
+  // ELEV8_EXPLICIT_AI_SOURCE_RESCAN_V1
+  function unresolvedAiRescanItems(){
+    const items=(state.activeBatch?.items||[]).filter(item =>
+      item.sourceUrl &&
+      !['created','creating'].includes(item.status) &&
+      ['failed','needs_review','queued'].includes(item.status)
+    );
+    const rank={failed:0,needs_review:1,queued:2};
+    return items.sort((a,b)=>(rank[a.status]??9)-(rank[b.status]??9)).slice(0,3);
+  }
+
+  async function aiRescanItems(itemIds=[], context='catalogue'){
+    if(!state.activeBatch)return null;
+    const ids=Array.from(new Set(itemIds.filter(Boolean))).slice(0,3);
+
+    if(!ids.length){
+      setStatus('No unresolved supplier products with source URLs are available for AI rescan.','ok');
+      return null;
+    }
+
+    const toolbarBtn=$('supplier-sites-ai-rescan');
+    const modalBtn=$('spm-ai-source-rescan');
+    if(toolbarBtn)toolbarBtn.disabled=true;
+    if(modalBtn)modalBtn.disabled=true;
+
+    try{
+      const maxCalls=ids.length*3;
+      const message=ids.length===1
+        ? 'AI is re-reading this supplier URL once. Saved merchant overrides are protected; no automatic retry will run.'
+        : `AI is re-reading ${ids.length} unresolved supplier URLs. Maximum ~${maxCalls} AI stages for this click; no automatic retry.`;
+
+      if(context==='modal')modalStatus(message,'warn');
+      else setStatus(message,'warn');
+
+      const data=await api(`/batches/${state.activeBatch._id}/ai-rescan`,{
+        method:'POST',
+        body:JSON.stringify({itemIds:ids})
+      });
+
+      state.activeBatch=data.batch;
+      renderProducts();
+
+      const failed=(data.results||[]).filter(row=>row.status==='failed').length;
+      const done=(data.results||[]).length-failed;
+      const resultMessage=`AI source rescan finished: ${done} processed, ${failed} failed. No retries were queued. Maximum AI stages for this action: ${Number(data.estimatedMaxAiCalls||maxCalls)}.`;
+
+      if(context==='modal'){
+        const activeId=ids[0];
+        if(activeId)openItemModal(activeId);
+        modalStatus(resultMessage,failed?'warn':'ok');
+      }else{
+        setStatus(resultMessage,failed?'warn':'ok');
+      }
+
+      return data;
+    }catch(error){
+      const message=`AI source rescan failed: ${esc(error.message||'Unknown error')}. Nothing will retry automatically.`;
+      if(context==='modal')modalStatus(message,'err');
+      else setStatus(message,'err');
+      return null;
+    }finally{
+      if(toolbarBtn)toolbarBtn.disabled=false;
+      if(modalBtn)modalBtn.disabled=false;
+    }
+  }
+
+  async function aiRescanUnresolved(){
+    const items=unresolvedAiRescanItems();
+    return aiRescanItems(items.map(item=>item.itemId),'catalogue');
+  }
+
+  async function aiRescanItemModal(){
+    const id=state.activeItem?.itemId;
+    if(!id)return;
+    return aiRescanItems([id],'modal');
   }
 
   async function repairCatalogue(){
@@ -686,6 +764,7 @@
             </aside>
           </div>
           <div class="supplier-modal-actions">
+            <button id="spm-ai-source-rescan" type="button" class="secondary-btn supplier-ai-source-btn" title="Re-read this supplier URL and run the AI extraction stages once.">AI re-read source</button>
             <button id="spm-enrich" type="button" class="secondary-btn">Enrich this product</button>
             <button id="spm-save" type="button" class="secondary-btn">Save MongoDB draft</button>
             <button id="spm-create" type="button" class="primary-btn">Create Shopify Draft</button>
@@ -695,6 +774,7 @@
     document.querySelectorAll('[data-supplier-close]').forEach(el=>el.addEventListener('click',closeItemModal));
     $('spm-save').addEventListener('click',saveItemModal);
     $('spm-enrich').addEventListener('click',enrichItemModal);
+    $('spm-ai-source-rescan')?.addEventListener('click',aiRescanItemModal);
     $('spm-ai-refresh').addEventListener('click',aiRefreshItemModal);
     $('spm-shop-recommend').addEventListener('click',()=>loadFieldAdvice(false)); // ELEV8_IMPORT_AI_COST_GUARD_V1: deterministic Shopify comparison only
     $('spm-advice-ai').addEventListener('click',()=>loadFieldAdvice(true));
@@ -991,6 +1071,7 @@
     $('supplier-site-scrape')?.addEventListener('click',createSite);
     $('supplier-sites-check-shopify')?.addEventListener('click',()=>reconcileShopifyMatches(true));
     $('supplier-sites-rescan')?.addEventListener('click',repairCatalogue);
+    $('supplier-sites-ai-rescan')?.addEventListener('click',aiRescanUnresolved);
     $('supplier-sites-stop')?.addEventListener('click',()=>{state.stop=true;});
     $('supplier-sites-open-batch')?.addEventListener('click',openBatchImporter);
     $('supplier-products-search')?.addEventListener('input',renderProducts);

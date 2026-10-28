@@ -138,3 +138,19 @@ body.supplier-modal-open{overflow:hidden}
 .supplier-advice-examples{margin-top:10px}.supplier-advice-examples summary{cursor:pointer;font-size:11px;font-weight:800;color:#475569}
 .supplier-advice-examples details>div{display:grid;gap:6px;margin-top:7px}.supplier-advice-examples p{display:grid;gap:2px;margin:0;padding:7px 9px;background:#fff;border-left:3px solid #cbd5e1;font-size:11px}.supplier-advice-examples p span{color:#64748b}
 @media(max-width:700px){.supplier-advice-card{grid-template-columns:1fr}.supplier-advice-apply{grid-column:1;grid-row:auto}.supplier-provenance-label{align-items:flex-start;flex-direction:column;gap:3px}}
+
+
+/* ELEV8_EXPLICIT_AI_SOURCE_RESCAN_V1 */
+.supplier-ai-source-btn{
+  border-color:#c4b5fd!important;
+  background:#f5f3ff!important;
+  color:#5b21b6!important;
+}
+.supplier-ai-source-btn:hover{
+  border-color:#8b5cf6!important;
+  background:#ede9fe!important;
+}
+.supplier-ai-source-btn:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}

@@ -717,6 +717,9 @@ async function reconcileBatchShopifyMatches({shopDomain,batchId,maxProducts=2500
 
 
 async function enrichItem({ shopDomain, item, defaults, cataloguePresets = {}, useAi = false }) {
+  // ELEV8_EXPLICIT_AI_SOURCE_RESCAN_V1
+  const beforeDraft = item.draft && typeof item.draft === 'object' ? item.draft : {};
+
   item.status = 'scanning';
   item.error = '';
   item.updatedAt = new Date();
@@ -793,6 +796,10 @@ async function enrichItem({ shopDomain, item, defaults, cataloguePresets = {}, u
   draft = applyMerchantSeoPattern(applyLockedBatchDefaults(draft, defaults), defaults);
 
   draft=applySupplierCataloguePresets(draft,cataloguePresets);
+
+
+  // ELEV8_EXPLICIT_AI_SOURCE_RESCAN_V1: preserve saved merchant edits after supplier/AI re-extraction.
+  draft = normaliseDraftProduct(preserveLockedFields(beforeDraft, draft));
 
   const existingProduct = await detectExistingProduct({ shopDomain, draft });
   if (existingProduct) draft.suggestions = { ...(draft.suggestions || {}), existingProduct };
