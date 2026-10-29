@@ -214,7 +214,8 @@
     $('supplier-products-grid').innerHTML=items.map(item=>{
       const d=item.draft||{};
       const flavour=getMeta(item,'core.product_flavour')||item.nutrition?.flavour||getMeta(item,'core.flavour_profile')||'—';
-      const line=getMeta(item,'core.formula_version')||item.nutrition?.productLine||d.productType||'—';
+      const siteLine=siteProductLineFromTags(d.tags||[]);
+      const line=getMeta(item,'core.formula_version')||item.nutrition?.productLine||'—';
       const img=image(item);
       const ready=item.completeness?.ready===true||item.validation?.status==='ready';
       const statusDot=productStatusDot(item);
@@ -232,7 +233,8 @@
               <span><b>Barcode</b>${esc(d.barcode||'—')}</span>
               <span><b>Price</b>${esc(d.price?`£${d.price}`:'—')}</span>
               <span><b>Flavour</b>${esc(flavour)}</span>
-              <span><b>Product line</b>${esc(line)}</span>
+              <span><b>Site line</b>${esc(siteLine||'—')}</span>
+              <span><b>Formula</b>${esc(line)}</span>
               <span><b>Images</b>${(item.selectedImages||d.images||[]).length}</span>
             </div>
             <p>${esc(String(d.descriptionHtml||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,180)||'Description not yet extracted.')}</p>
@@ -688,6 +690,40 @@
     }
   }
 
+
+  // ELEV8_SITE_PRODUCT_LINE_TAGS_V1
+  const SITE_PRODUCT_LINES = {
+    ENERGY: { label:'ENERGY', tags:['ENERGY','Drink'] },
+    HYDRATION: { label:'HYDRATION', tags:['HYDRATION','Drink'] },
+    'PROTEIN DRINK': { label:'PROTEIN DRINK', tags:['PROTEIN DRINK','Drink'] },
+    SNACK: { label:'SNACK', tags:['SNACK'] }
+  };
+  const SITE_PRODUCT_LINE_MANAGED_TAGS = new Set(['energy','hydration','protein drink','snack','drink']);
+  function siteProductLineFromTags(tags=[]){
+    const rows=(Array.isArray(tags)?tags:String(tags||'').split(',')).map(tag=>String(tag||'').trim()).filter(Boolean);
+    const lower=new Set(rows.map(tag=>tag.toLowerCase()));
+    if(lower.has('energy'))return 'ENERGY';
+    if(lower.has('hydration'))return 'HYDRATION';
+    if(lower.has('protein drink'))return 'PROTEIN DRINK';
+    if(lower.has('snack'))return 'SNACK';
+    return '';
+  }
+  function applySiteProductLineTags(tags=[], line=''){
+    const existing=(Array.isArray(tags)?tags:String(tags||'').split(','))
+      .map(tag=>String(tag||'').trim()).filter(Boolean)
+      .filter(tag=>!SITE_PRODUCT_LINE_MANAGED_TAGS.has(tag.toLowerCase()));
+    const managed=SITE_PRODUCT_LINES[line]?.tags||[];
+    const seen=new Set();
+    return [...existing,...managed].filter(tag=>{const key=tag.toLowerCase();if(seen.has(key))return false;seen.add(key);return true;}).slice(0,40);
+  }
+  function renderSiteProductLinePreview(){
+    const select=$('spm-site-product-line');const preview=$('spm-site-product-line-tags');if(!select||!preview)return;
+    const tags=SITE_PRODUCT_LINES[select.value||'']?.tags||[];
+    preview.innerHTML=tags.length
+      ? '<span class="supplier-line-caption">Will add:</span>'+tags.map(tag=>'<span class="supplier-line-tag">'+esc(tag)+'</span>').join('')
+      : '<span class="pci-muted">No product-line tags will be managed.</span>';
+  }
+
   function ensureProductModal(){
     if($('supplier-product-modal')) return;
     document.body.insertAdjacentHTML('beforeend',`
@@ -745,9 +781,19 @@
                 <h4>Organisation</h4>
                 <label class="pci-label">Vendor</label><div class="supplier-field-map-row"><input id="spm-vendor" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="vendor" title="Show Shopify field mapping"><span class="supplier-map-state">?</span></button></div>
                 <label class="pci-label">Product type</label><div class="supplier-field-map-row"><input id="spm-type" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="productType" title="Show Shopify field mapping"><span class="supplier-map-state">?</span></button></div>
+                <label class="pci-label">Site product line <span class="supplier-line-rule-badge">controls tags</span></label>
+                <select id="spm-site-product-line" class="pci-input supplier-site-line-select">
+                  <option value="">Unassigned</option>
+                  <option value="ENERGY">ENERGY</option>
+                  <option value="HYDRATION">HYDRATION</option>
+                  <option value="PROTEIN DRINK">PROTEIN DRINK</option>
+                  <option value="SNACK">SNACK</option>
+                </select>
+                <div id="spm-site-product-line-tags" class="supplier-line-tag-preview"></div>
+                <small class="pci-muted supplier-line-help">ENERGY, HYDRATION and PROTEIN DRINK also add the <b>Drink</b> tag. SNACK adds only <b>SNACK</b>. Other product tags are left untouched.</small>
                 <label class="pci-label">Product category</label><div class="supplier-field-map-row"><input id="spm-category" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="productCategory" title="Show Shopify field mapping"><span class="supplier-map-state">?</span></button></div>
                 <label class="pci-label">Flavour</label><div class="supplier-field-map-row"><input id="spm-flavour" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="flavour" title="Show metafield matches"><span class="supplier-map-state">?</span></button></div>
-                <label class="pci-label">Product line / formula</label><div class="supplier-field-map-row"><input id="spm-line" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="formula" title="Show metafield matches"><span class="supplier-map-state">?</span></button></div>
+                <label class="pci-label">Formula / version</label><div class="supplier-field-map-row"><input id="spm-line" class="pci-input"><button type="button" class="supplier-map-btn" data-map-field="formula" title="Show metafield matches"><span class="supplier-map-state">?</span></button></div>
               </section>
               <section id="spm-map-panel" class="pci-editor-card supplier-map-panel" hidden>
                 <div class="pci-editor-card-head">
@@ -778,6 +824,7 @@
     $('spm-ai-refresh').addEventListener('click',aiRefreshItemModal);
     $('spm-shop-recommend').addEventListener('click',()=>loadFieldAdvice(false)); // ELEV8_IMPORT_AI_COST_GUARD_V1: deterministic Shopify comparison only
     $('spm-advice-ai').addEventListener('click',()=>loadFieldAdvice(true));
+    $('spm-site-product-line')?.addEventListener('change',renderSiteProductLinePreview);
     installSourceBadges();
     $('spm-create').addEventListener('click',()=>createItemShopifyDraft(false));
     document.querySelectorAll('#supplier-product-modal [data-map-field]').forEach(btn=>{
@@ -871,6 +918,8 @@
     $('spm-barcode').value=d.barcode||'';
     $('spm-vendor').value=d.vendor||item.vendor||'';
     $('spm-type').value=d.productType||item.productType||'';
+    $('spm-site-product-line').value=siteProductLineFromTags(d.tags||[]); // ELEV8_SITE_PRODUCT_LINE_TAGS_V1
+    renderSiteProductLinePreview();
     $('spm-category').value=d.productCategory||item.productCategory||'';
     $('spm-flavour').value=itemMetafield(item,'core.product_flavour')||'';
     $('spm-line').value=itemMetafield(item,'core.formula_version')||item.nutrition?.productLine||'';
@@ -921,6 +970,7 @@
       vendor:$('spm-vendor').value.trim(),
       productType:$('spm-type').value.trim(),
       productCategory:$('spm-category').value.trim(),
+      tags:applySiteProductLineTags(d.tags||[],$('spm-site-product-line').value), // ELEV8_SITE_PRODUCT_LINE_TAGS_V1
       handle:$('spm-handle').value.trim(),
       images,
       metafields,
