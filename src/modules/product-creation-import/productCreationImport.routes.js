@@ -32,6 +32,7 @@ const {
   enrichBatch,
   updateBatchItem,
   getBatchItemFieldMappings,
+  saveBatchItemFieldMapping,
   reconcileBatchShopifyMatches,
   aiRefreshBatchItem,
   setBatchItemApproval,
@@ -304,6 +305,13 @@ router.get('/batches/:batchId/items/:itemId/field-mappings', asyncRoute(async (r
   res.json(result);
 }));
 
+
+
+/* ELEV8_INLINE_METAFIELD_MAPPING_V1 */
+router.put('/batches/:batchId/items/:itemId/field-mappings', asyncRoute(async (req, res) => {
+  const result = await saveBatchItemFieldMapping({ shopDomain: shopDomainFromReq(req), batchId: req.params.batchId, itemId: req.params.itemId, field: req.body?.field || '', target: req.body?.target || '' });
+  res.json(result);
+}));
 
 router.post('/batches/:batchId/items/:itemId/field-recommendations', asyncRoute(async (req, res) => {
   const result = await buildProductFieldRecommendations({

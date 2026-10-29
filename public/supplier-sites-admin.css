@@ -154,3 +154,7 @@ body.supplier-modal-open{overflow:hidden}
   opacity:.55;
   cursor:not-allowed;
 }
+
+
+/* ELEV8_INLINE_METAFIELD_MAPPING_V1 */
+.supplier-inline-mapper{display:grid;gap:10px}.supplier-inline-map-current{display:flex;flex-direction:column;gap:3px;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;background:#fafafa}.supplier-inline-map-current small{color:#6b7280}.supplier-inline-map-current strong{font-size:15px;color:#111827}.supplier-map-select{min-height:210px;padding:4px}.supplier-map-select option{padding:7px 8px;white-space:normal}.supplier-map-select option:disabled{color:#9ca3af}.supplier-map-help{min-height:18px;font-size:12px}.supplier-inline-map-actions{display:flex;gap:8px;flex-wrap:wrap}.supplier-map-persist-note{margin:0;padding:9px 10px;border-radius:9px;background:#ecfdf5;color:#065f46;font-size:12px;font-weight:650}.supplier-map-suggestions{display:grid;gap:6px;margin-top:4px;padding-top:10px;border-top:1px solid #e5e7eb}.supplier-map-suggestion{display:grid;grid-template-columns:minmax(0,1fr);gap:2px;padding:8px 9px;border:1px solid #e5e7eb;border-radius:8px}.supplier-map-suggestion code{font-size:11px;overflow-wrap:anywhere}.supplier-map-suggestion small{color:#6b7280}.supplier-map-suggestion.unsupported{opacity:.58}

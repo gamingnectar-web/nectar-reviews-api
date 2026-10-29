@@ -194,6 +194,7 @@ const productCreationImportSettingsSchema = new mongoose.Schema({
   skuRules: { type: [skuRuleSchema], default: [] },
   conditionalRules: { type: [conditionalRuleSchema], default: [] },
   metafieldMappingRules: { type: [metafieldMappingRuleSchema], default: [] },
+  organisationFieldMappings: { type: mongoose.Schema.Types.Mixed, default: () => ({}) }, // ELEV8_INLINE_METAFIELD_MAPPING_V1
   defaultCurrency: { type: String, default: 'GBP' },
   vendorPresets: { type: [String], default: [] },
   imageRules: {

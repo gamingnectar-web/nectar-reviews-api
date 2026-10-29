@@ -42,6 +42,7 @@ const DEFAULT_SETTINGS = {
     },
   ],
   metafieldMappingRules: [],
+  organisationFieldMappings: {}, // ELEV8_INLINE_METAFIELD_MAPPING_V1
   conditionalRules: [
     {
       enabled: false,
@@ -87,6 +88,7 @@ function mergeDefaults(settings = {}) {
     skuRules: Array.isArray(settings.skuRules) ? settings.skuRules : DEFAULT_SETTINGS.skuRules,
     conditionalRules: Array.isArray(settings.conditionalRules) ? settings.conditionalRules : DEFAULT_SETTINGS.conditionalRules,
     metafieldMappingRules: Array.isArray(settings.metafieldMappingRules) ? settings.metafieldMappingRules : DEFAULT_SETTINGS.metafieldMappingRules,
+    organisationFieldMappings: settings.organisationFieldMappings && typeof settings.organisationFieldMappings === 'object' ? settings.organisationFieldMappings : {},
     vendorPresets: Array.isArray(settings.vendorPresets) ? settings.vendorPresets : [],
     defaultCurrency: settings.defaultCurrency || DEFAULT_SETTINGS.defaultCurrency,
   };
@@ -154,6 +156,25 @@ function cleanMetafieldMappingRules(list = []) {
   })).filter((rule) => rule.target || rule.mode === 'ai' || rule.value);
 }
 
+
+/* ELEV8_INLINE_METAFIELD_MAPPING_V1 */
+function cleanOrganisationFieldMappings(input = {}) {
+  const out = {};
+  const allowedFields = new Set(['flavour', 'formula']);
+  for (const [field, row] of Object.entries(input && typeof input === 'object' ? input : {})) {
+    if (!allowedFields.has(field)) continue;
+    const target = cleanText(row?.target || '', 180);
+    if (!target || !target.includes('.')) continue;
+    out[field] = {
+      target,
+      label: cleanText(row?.label || target, 160),
+      type: cleanText(row?.type || 'single_line_text_field', 120),
+      updatedAt: cleanText(row?.updatedAt || new Date().toISOString(), 80),
+    };
+  }
+  return out;
+}
+
 async function saveProductImportSettings({ shopDomain, settings = {} }) {
   const payload = mergeDefaults(settings);
   const clean = {
@@ -179,6 +200,7 @@ async function saveProductImportSettings({ shopDomain, settings = {} }) {
     skuRules: cleanRuleList(payload.skuRules),
     conditionalRules: cleanConditionalRules(payload.conditionalRules),
     metafieldMappingRules: cleanMetafieldMappingRules(payload.metafieldMappingRules),
+    organisationFieldMappings: cleanOrganisationFieldMappings(payload.organisationFieldMappings),
   };
   const doc = await ProductCreationImportSettings.findOneAndUpdate({ shopDomain }, { $set: clean }, { upsert: true, new: true, setDefaultsOnInsert: true }).lean();
   return mergeDefaults(doc);

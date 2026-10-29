@@ -794,49 +794,53 @@
         const field=btn.dataset.mapField;
         const data=await api(`/batches/${state.activeBatch._id}/items/${state.activeItem.itemId}/field-mappings?field=${encodeURIComponent(field)}`);
         const count=(data.matches||[]).length;
-        btn.classList.toggle('mapped',count>0);
-        btn.classList.toggle('unmapped',count===0);
+        const mapped=typeof data.mapped==='boolean'?data.mapped:count>0; // ELEV8_INLINE_METAFIELD_MAPPING_V1
+        btn.classList.toggle('mapped',mapped);
+        btn.classList.toggle('unmapped',!mapped);
         const stateEl=btn.querySelector('.supplier-map-state');
-        if(stateEl)stateEl.textContent=count>0?'✓':'×';
-        btn.title=count>0?`${count} destination${count===1?'':'s'} mapped`:'Not mapped — click to map';
+        if(stateEl)stateEl.textContent=mapped?'✓':'×';
+        btn.title=mapped?(data.savedMapping?.target?`Mapped to ${data.savedMapping.target}`:`${count} destination${count===1?'':'s'} mapped`):'Not mapped — click to choose a Shopify metafield';
       }catch(_){}
     }));
   }
 
   async function showFieldMapping(field){
     if(!state.activeBatch||!state.activeItem)return;
-    const panel=$('spm-map-panel');
-    const content=$('spm-map-content');
-    const title=$('spm-map-title');
+    const panel=$('spm-map-panel'),content=$('spm-map-content'),title=$('spm-map-title');
     if(!panel||!content||!title)return;
     const names={vendor:'Vendor',productType:'Product type',productCategory:'Product category',flavour:'Flavour',formula:'Product line / formula'};
-    panel.hidden=false;
-    title.textContent=`${names[field]||field} mapping`;
-    content.innerHTML='<div class="pci-muted">Checking Shopify definitions…</div>';
+    panel.hidden=false; title.textContent=`${names[field]||field} mapping`; content.innerHTML='<div class="pci-muted">Checking Shopify definitions…</div>';
     try{
       await saveItemModal();
       const data=await api(`/batches/${state.activeBatch._id}/items/${state.activeItem.itemId}/field-mappings?field=${encodeURIComponent(field)}`);
-      const matches=data.matches||[];
-      if(!matches.length){
-        content.innerHTML=`<div class="supplier-map-empty">No Shopify destination is currently matched for <strong>${esc(data.value||'this value')}</strong>.<div style="margin-top:10px"><button type="button" class="secondary-btn" id="spm-open-metafield-mapper">Map this field</button></div></div>`;
-        setTimeout(()=>$('spm-open-metafield-mapper')?.addEventListener('click',()=>{closeItemModal();window.pciTab?.('metafields');}),0);
+      if(!['flavour','formula'].includes(field)){
+        const matches=data.matches||[];
+        content.innerHTML=matches.length?matches.map(match=>`<div class="supplier-map-match"><div class="supplier-map-match-head"><strong>${esc(match.label||match.target)}</strong></div><code>${esc(match.target||'')}</code>${match.note?`<p>${esc(match.note)}</p>`:''}<div class="supplier-map-value">← ${esc(match.value??data.value??'')}</div></div>`).join(''):'<div class="supplier-map-empty">No destination information is available.</div>';
         return;
       }
-      content.innerHTML=matches.map(match=>`
-        <div class="supplier-map-match">
-          <div class="supplier-map-match-head">
-            <strong>${esc(match.label||match.target)}</strong>
-            ${match.canonical?'<span class="supplier-map-badge">Primary</span>':''}
-          </div>
-          <code>${esc(match.target||'')}</code>
-          ${match.type?`<small>${esc(match.type)}</small>`:''}
-          ${match.note?`<p>${esc(match.note)}</p>`:''}
-          <div class="supplier-map-value">← ${esc(match.value??data.value??'')}</div>
-        </div>
-      `).join('');
-    }catch(error){
-      content.innerHTML=`<div class="supplier-map-empty error">${esc(error.message||'Could not load mapping.')}</div>`;
-    }
+      const options=Array.isArray(data.options)?data.options:[];
+      const suggestions=Array.isArray(data.suggestions)?data.suggestions:[];
+      const suggestedTargets=new Set(suggestions.filter(x=>x.compatible).map(x=>x.compound||x.target));
+      const savedTarget=data.savedMapping?.target||'';
+      content.innerHTML=`<div class="supplier-inline-mapper">
+        <div class="supplier-inline-map-current"><small>Current product value</small><strong>${esc(data.value||'Empty')}</strong></div>
+        <label class="pci-label" for="spm-map-search">Find a Shopify metafield</label>
+        <input id="spm-map-search" class="pci-input" type="search" placeholder="Search name, namespace, key or type…">
+        <label class="pci-label" for="spm-map-target">Destination</label>
+        <select id="spm-map-target" class="pci-input supplier-map-select" size="8"></select>
+        <div id="spm-map-selection-help" class="pci-muted supplier-map-help"></div>
+        <div class="supplier-inline-map-actions"><button id="spm-map-save" type="button" class="primary-btn">Save mapping</button>${suggestions.some(x=>x.compatible)?'<button id="spm-map-use-suggested" type="button" class="secondary-btn">Use suggested</button>':''}${savedTarget?'<button id="spm-map-clear" type="button" class="secondary-btn">Clear mapping</button>':''}</div>
+        <p class="supplier-map-persist-note">This mapping is saved for the shop and reused automatically on future imports.</p>
+        ${suggestions.length?`<div class="supplier-map-suggestions"><strong>Suggested from your Shopify definitions</strong>${suggestions.slice(0,6).map(match=>`<div class="supplier-map-suggestion ${match.compatible?'':'unsupported'}"><span>${esc(match.label||match.name||match.compound)}</span><code>${esc(match.compound||match.target||'')}</code><small>${esc(match.type||'')}${match.compatible?'':' · unsupported for plain text'}</small></div>`).join('')}</div>`:''}
+      </div>`;
+      const search=$('spm-map-search'),select=$('spm-map-target'),help=$('spm-map-selection-help');
+      const updateHelp=()=>{const selected=options.find(option=>option.compound===select.value);help.textContent=selected?`${selected.name||selected.compound} · ${selected.type}${suggestedTargets.has(selected.compound)?' · suggested match':''}`:'Choose one text-compatible metafield. Complex reference types are shown but disabled.';};
+      const renderOptions=(query='')=>{const q=String(query||'').trim().toLowerCase();const rows=options.filter(option=>!q||[option.name,option.label,option.compound,option.type,option.description].filter(Boolean).join(' ').toLowerCase().includes(q));select.innerHTML=rows.map(option=>{const recommended=suggestedTargets.has(option.compound);const text=`${recommended?'★ ':''}${option.name||option.compound} — ${option.compound} · ${option.type}${option.compatible?'':' [unsupported]'}`;return `<option value="${esc(option.compound)}" ${option.compound===savedTarget?'selected':''} ${option.compatible?'':'disabled'}>${esc(text)}</option>`;}).join('');if(!select.value&&savedTarget&&rows.some(x=>x.compound===savedTarget))select.value=savedTarget;updateHelp();};
+      search?.addEventListener('input',()=>renderOptions(search.value)); select?.addEventListener('change',updateHelp); renderOptions('');
+      $('spm-map-use-suggested')?.addEventListener('click',()=>{const suggestion=suggestions.find(row=>row.compatible);if(!suggestion)return;search.value='';renderOptions('');select.value=suggestion.compound||suggestion.target||'';updateHelp();});
+      $('spm-map-save')?.addEventListener('click',async()=>{const target=select.value;if(!target)return modalStatus('Choose a Shopify metafield first.','warn');const result=await api(`/batches/${state.activeBatch._id}/items/${state.activeItem.itemId}/field-mappings`,{method:'PUT',body:JSON.stringify({field,target})});state.activeBatch=result.batch;state.activeItem=result.item;renderProducts();await refreshMappingIndicators();modalStatus(`${names[field]||field} mapping saved to ${result.mapping?.savedMapping?.target||target}. Future imports will reuse it.`,'ok');await showFieldMapping(field);});
+      $('spm-map-clear')?.addEventListener('click',async()=>{const result=await api(`/batches/${state.activeBatch._id}/items/${state.activeItem.itemId}/field-mappings`,{method:'PUT',body:JSON.stringify({field,target:''})});state.activeBatch=result.batch;state.activeItem=result.item;renderProducts();await refreshMappingIndicators();modalStatus(`${names[field]||field} mapping cleared. Future imports will remain unmapped until you choose a destination.`,'ok');await showFieldMapping(field);});
+    }catch(error){content.innerHTML=`<div class="supplier-map-empty error">${esc(error.message||'Could not load mapping.')}</div>`;}
   }
 
   function showMatchWarning(match){

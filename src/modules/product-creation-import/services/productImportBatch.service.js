@@ -11,6 +11,7 @@ const { extractNutritionAndProductProfile } = require('./nutritionProfileExtract
 const { applyProfileToDraft, profileToMetafields, mergeMetafields } = require('./metafieldSchemaRegistry.service');
 const { cleanText, cleanUrl, makeLineId, parseTags, normaliseMetafields, slugify } = require('../utils/safe');
 const { markMerchantEdits, preserveLockedFields } = require('./fieldAuthority.service');
+const { getProductImportSettings, saveProductImportSettings } = require('./productImportSettings.service'); // ELEV8_INLINE_METAFIELD_MAPPING_V1
 const { applySupplierProfile, supplierDefaultsForUrl, profileForUrl } = require('./supplierProfile.service');
 const { applyBrandDirectoryProfile } = require('./brandDirectoryProfile.service');
 const { mapSupplierFactsToExistingMetafields, applyOrganisationFieldMappings, organisationFieldMappingSummary } = require('./supplierFactMapper.service');
@@ -782,6 +783,7 @@ async function enrichItem({ shopDomain, item, defaults, cataloguePresets = {}, u
   draft = await enrichProductDraft({ shopDomain, draft, useAi });
   const metadata = await getProductImportMetadata({ shopDomain }).catch(() => ({}));
   draft = mapSupplierFactsToExistingMetafields(draft, metadata);
+  draft = applyOrganisationFieldMappings(draft, metadata); // ELEV8_INLINE_METAFIELD_MAPPING_V1
   const commercial = draft.suggestions || draft.enrichment?.suggestions || {};
   draft.fieldInference={...(draft.fieldInference||{})};
   if (!draft.price && commercial.price?.value) { draft.price = commercial.price.value; draft.fieldInference.price=true; }
@@ -1031,12 +1033,7 @@ async function aiRefreshBatchItem({ shopDomain, batchId, itemId }) {
 async function getBatchItemFieldMappings({ shopDomain, batchId, itemId, field = '' }) {
   const { batch } = await getBatch({ shopDomain, batchId });
   const item = batch.items.find((candidate) => candidate.itemId === itemId);
-  if (!item) {
-    const error = new Error('Batch item not found.');
-    error.status = 404;
-    throw error;
-  }
-
+  if (!item) { const error = new Error('Batch item not found.'); error.status = 404; throw error; }
   const metadata = await getProductImportMetadata({ shopDomain }).catch(() => ({}));
   const draft = item.draft || {};
   const direct = {
@@ -1044,27 +1041,39 @@ async function getBatchItemFieldMappings({ shopDomain, batchId, itemId, field = 
     productType: [{ kind:'shopify', label:'Shopify Product Type', target:'product.product_type', value:draft.productType||'' }],
     productCategory: [{ kind:'draft', label:'Draft Product Category', target:'draft.productCategory', value:draft.productCategory||'', note:'Stored in the import draft. Native Shopify taxonomy mapping is not currently written by createShopifyProductFromDraft.' }]
   };
-
-  if (direct[field]) return { field, value: direct[field][0].value, matches: direct[field] };
-  if (field === 'flavour' || field === 'formula') {
-    const summary = organisationFieldMappingSummary({ field, draft, metadata });
-    return {
-      field,
-      value: summary.value,
-      matches: summary.matches.map(match => ({
-        kind:'metafield',
-        label:match.name,
-        target:match.compound,
-        type:match.type,
-        canonical:match.canonical,
-        score:match.score,
-        value:summary.value
-      }))
-    };
-  }
-  return { field, value:'', matches:[] };
+  if (direct[field]) return { field,value:direct[field][0].value,mapped:true,savedMapping:direct[field][0],matches:direct[field],suggestions:[],options:[] };
+  if (field === 'flavour' || field === 'formula') return organisationFieldMappingSummary({ field, draft, metadata });
+  return { field,value:'',mapped:false,savedMapping:null,matches:[],suggestions:[],options:[] };
 }
 
+/* ELEV8_INLINE_METAFIELD_MAPPING_V1 */
+async function saveBatchItemFieldMapping({ shopDomain, batchId, itemId, field = '', target = '' }) {
+  if (!['flavour','formula'].includes(field)) { const error = new Error('Only Flavour and Product line / formula use metafield mappings here.'); error.status = 400; throw error; }
+  const { batch } = await getBatch({ shopDomain, batchId });
+  const item = batch.items.find((candidate) => candidate.itemId === itemId);
+  if (!item) { const error = new Error('Batch item not found.'); error.status = 404; throw error; }
+  const metadata = await getProductImportMetadata({ shopDomain }).catch(() => ({}));
+  const summary = organisationFieldMappingSummary({ field, draft: item.draft || {}, metadata });
+  const settings = await getProductImportSettings({ shopDomain });
+  const mappings = { ...(settings.organisationFieldMappings || {}) };
+  if (!target) {
+    delete mappings[field];
+  } else {
+    const option = (summary.options || []).find((row) => row.compound === target);
+    if (!option) { const error = new Error('That metafield definition was not found in Shopify.'); error.status = 400; throw error; }
+    if (!option.compatible) { const error = new Error(`"${option.name}" uses ${option.type}. Plain-text import values cannot safely be written to that metafield type yet.`); error.status = 400; throw error; }
+    mappings[field] = { target:option.compound,label:option.name,type:option.type,updatedAt:new Date().toISOString() };
+  }
+  const savedSettings = await saveProductImportSettings({ shopDomain, settings:{...settings,organisationFieldMappings:mappings} });
+  const refreshedMetadata = { ...metadata, settings:savedSettings };
+  item.draft = normaliseDraftProduct(applyOrganisationFieldMappings(item.draft || {}, refreshedMetadata));
+  item.metafieldPlan = normaliseMetafields(item.draft.metafields || []);
+  item.updatedAt = new Date();
+  refreshBatchSummary(batch);
+  await batch.save();
+  const mapping = organisationFieldMappingSummary({ field,draft:item.draft||{},metadata:refreshedMetadata });
+  return { batch,item,mapping };
+}
 
 async function setBatchItemApproval({ shopDomain, batchId, itemId, approvalStatus = 'approved' }) {
   const { batch } = await getBatch({ shopDomain, batchId });
@@ -1172,6 +1181,7 @@ module.exports = {
   enrichBatch,
   updateBatchItem,
   getBatchItemFieldMappings,
+  saveBatchItemFieldMapping,
   reconcileBatchShopifyMatches,
   aiRefreshBatchItem,
   setBatchItemApproval,

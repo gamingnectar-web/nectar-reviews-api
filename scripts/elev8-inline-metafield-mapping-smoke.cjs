@@ -1,0 +1,22 @@
+'use strict';
+const fs=require('fs');
+const read=p=>fs.readFileSync(p,'utf8');
+function check(ok,msg){if(ok)console.log('✓ '+msg);else{console.error('✗ '+msg);process.exitCode=1;}}
+const model=read('src/modules/product-creation-import/productCreationImport.model.js');
+const settings=read('src/modules/product-creation-import/services/productImportSettings.service.js');
+const mapper=read('src/modules/product-creation-import/services/supplierFactMapper.service.js');
+const batch=read('src/modules/product-creation-import/services/productImportBatch.service.js');
+const routes=read('src/modules/product-creation-import/productCreationImport.routes.js');
+const ui=read('public/supplier-sites-admin.js');
+check(model.includes('organisationFieldMappings'),'settings schema stores persistent organisation mappings');
+check(settings.includes('cleanOrganisationFieldMappings'),'mapping settings are cleaned and persisted');
+check(mapper.includes('savedOrganisationMapping')&&mapper.includes('organisation-field-mapper-explicit'),'mapper uses saved destinations');
+check(mapper.includes("['single_line_text_field','multi_line_text_field']"),'complex reference metafields are not plain-text-compatible');
+check(batch.includes('saveBatchItemFieldMapping')&&batch.includes('applyOrganisationFieldMappings(draft, metadata)'),'batch service saves and reuses mappings');
+check(routes.includes("router.put('/batches/:batchId/items/:itemId/field-mappings'"),'inline save endpoint exists');
+check(ui.includes('Find a Shopify metafield')&&ui.includes('Save mapping'),'mapping editor stays inside product modal');
+check(ui.includes('Future imports will reuse it'),'UI confirms persistent reuse');
+check(ui.includes("const mapped=typeof data.mapped==='boolean'?data.mapped"),'green tick reflects saved mapping');
+check(!ui.includes("window.pciTab?.('metafields')"),'no redirect to metafield screen remains');
+if(process.exitCode)process.exit(process.exitCode);
+console.log('ELEV8 inline metafield mapping smoke test passed.');
