@@ -1521,6 +1521,7 @@
             <p>Start with the workflow, not the tool. Build or review a brand catalogue when you want the whole range; use single or multiple import when you already know the products.</p>
             <div class="pci-import-launch-grid">
               <button type="button" class="pci-import-launch-card" onclick="window.pciTab('url')"><span class="pci-launch-number">01</span><strong>Import single product</strong><small>Paste one product URL, review the draft and create it in Shopify.</small><b>Start single import →</b></button>
+              <button type="button" class="pci-import-launch-card" onclick="window.pciTab('variations')"><span class="pci-launch-number">NEW</span><strong>Import variations</strong><small>Scan all flavour, size and format options with individual images and SKU/price mapping.</small><b>Open variation importer →</b></button>
               <button type="button" class="pci-import-launch-card" onclick="window.pciTab('batch')"><span class="pci-launch-number">02</span><strong>Import multiple products</strong><small>Bring in a known list of product URLs and review them together.</small><b>Open batch import →</b></button>
               <button type="button" class="pci-import-launch-card featured" onclick="window.openSupplierImportWorkspace?.('build')"><span class="pci-launch-number">03</span><strong>Build brand catalogue</strong><small>Give us a supplier or brand site once. Discover the range and identify what is genuinely new.</small><b>Build catalogue →</b></button>
               <button type="button" class="pci-import-launch-card" onclick="window.openSupplierImportWorkspace?.('catalogue')"><span class="pci-launch-number">04</span><strong>Brand product catalogue</strong><small>Open saved brand catalogues, cross-check Shopify and work only on missing products.</small><b>Review catalogues →</b></button>
@@ -1528,6 +1529,7 @@
             </div>
             <div class="pci-launch-tools"><span>More tools</span><div class="pci-tabs" role="tablist">
               <button type="button" class="pci-tab active" data-pci-tab="url" onclick="window.pciTab('url')">Single</button>
+              <button type="button" class="pci-tab" data-pci-tab="variations" onclick="window.pciTab('variations')">Variations</button>
               <button type="button" class="pci-tab" data-pci-tab="batch" onclick="window.pciTab('batch')">Multiple</button>
               <button type="button" class="pci-tab" data-pci-tab="invoice" onclick="window.pciTab('invoice')">Invoice</button>
               <button type="button" class="pci-tab" data-pci-tab="manual" onclick="window.pciTab('manual')">Manual</button>
@@ -1551,7 +1553,17 @@
           <div id="pci-seo-results" class="pci-seo-results"></div>
         </div>
 
-        <div class="pci-card pci-pane pci-full-product-pane" id="pci-pane-batch">
+        <!-- ELEV8_VARIATION_IMPORT_V1 -->
+<div class="pci-card pci-pane pci-full-product-pane" id="pci-pane-variations">
+  <div class="pci-pane-head"><div><h3>Import product variations</h3><p>Scan a supplier product once, review every actual variation and its image, then create one unpublished Shopify draft.</p></div></div>
+  <div class="pci-editor-card pci-var-scan-bar"><label class="pci-var-field"><span>Supplier product URL</span><input class="pci-input" id="pci-var-url" placeholder="https://per4mbetter.com/products/creatine-sherbet-stick-packs?variant=..."></label><button class="primary-btn" type="button" id="pci-var-scan">Scan all variations</button></div>
+  <div id="pci-var-status" class="pci-status">Paste a product URL to begin. Supplier availability will be displayed but not used as your stock quantity.</div>
+  <div id="pci-var-editor" class="pci-var-workspace" hidden>
+    <div class="pci-var-review"><div class="pci-product-main"><div id="pci-var-product"></div><div id="pci-var-options"></div><div id="pci-var-media"></div></div><aside class="pci-var-review-side pci-editor-card"><h4>Review actions</h4><p id="pci-var-count">0 variations</p><p class="pci-muted">All products are created as Shopify drafts. Pricing, SKU, barcode and image mapping can be edited below.</p><div id="pci-var-validation" class="pci-status"></div><div class="pci-actions"><button id="pci-var-create" class="primary-btn" type="button" disabled>Create Shopify draft</button></div><div id="pci-var-result"></div></aside></div>
+    <div class="pci-editor-card"><div class="pci-editor-card-head"><h4>Variations — editable</h4><div class="pci-actions compact"><button type="button" id="pci-var-select-all" class="secondary-btn">Include all</button><button type="button" id="pci-var-select-none" class="secondary-btn">Exclude all</button></div></div><div class="pci-var-table-wrap"><table class="pci-var-table"><thead><tr><th>Import</th><th>Image</th><th>Variation</th><th>SKU</th><th>Barcode</th><th>Price</th><th>Compare at</th><th>Cost</th><th>Weight</th><th>Image mapping</th><th>Supplier</th></tr></thead><tbody id="pci-var-rows"></tbody></table></div></div>
+  </div>
+</div>
+<div class="pci-card pci-pane pci-full-product-pane" id="pci-pane-batch">
           <div class="pci-pane-head">
             <div>
               <h3>Batch product import</h3>
@@ -1786,5 +1798,7 @@
 <script src="/product-seo-audit.js?v=seo-health-1"></script>
   <script src="/modules/customer-hub/admin.js?v=customer-hub-1" defer></script>
   <script src="/elev8-workflows-nav.js" defer></script>
+<link rel="stylesheet" href="/variation-import.css?v=1">
+<script src="/variation-import.js?v=1" defer></script>
 </body>
 </html>

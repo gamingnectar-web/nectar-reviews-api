@@ -69,6 +69,16 @@ function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 }
 
+/* ELEV8_VARIATION_IMPORT_V1 */
+const { scanVariations, createVariationDraft } = require('./services/variationImport.service');
+router.post('/variations/scan', asyncRoute(async (req, res) => {
+  const result = await scanVariations({ url: req.body?.url || '' });
+  res.json(result);
+}));
+router.post('/variations/create', asyncRoute(async (req, res) => {
+  const result = await createVariationDraft({ shopDomain: shopDomainFromReq(req), draft: req.body?.draft || {} });
+  res.json(result);
+}));
 router.get('/seo/audit', asyncRoute(async (req, res) => {
   const result = await auditShopifySeo({ shopDomain: shopDomainFromReq(req), maxProducts: req.query.limit || 2500 });
   res.json(result);

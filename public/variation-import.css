@@ -1,0 +1,22 @@
+#pci-pane-variations .pci-var-scan-bar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:end;margin-bottom:16px}
+#pci-pane-variations .pci-var-workspace{display:grid;gap:14px}
+#pci-pane-variations .pci-var-gallery{display:flex;gap:12px;overflow-x:auto;padding:6px 0}
+#pci-pane-variations .pci-var-gallery img{width:112px;height:112px;object-fit:contain;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;flex:none}
+#pci-pane-variations .pci-var-field{display:block;margin-top:12px;font-size:12px;font-weight:800;color:#344054}
+#pci-pane-variations .pci-var-field span{display:block;margin-bottom:6px}
+#pci-pane-variations .pci-var-table-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:14px;background:#fff}
+#pci-pane-variations .pci-var-table{width:100%;min-width:1480px;border-collapse:collapse}
+#pci-pane-variations .pci-var-table th,#pci-pane-variations .pci-var-table td{padding:10px;border-bottom:1px solid #edf1f5;text-align:left;vertical-align:middle}
+#pci-pane-variations .pci-var-table th{font-size:11px;letter-spacing:.05em;text-transform:uppercase;background:#f8fafc;color:#475467}
+#pci-pane-variations .pci-var-table td{font-size:12px}
+#pci-pane-variations .pci-var-table input:not([type=checkbox]){min-width:94px;max-width:135px;font-size:12px;padding:8px;min-height:36px}
+#pci-pane-variations .pci-var-table select{min-width:190px;font-size:12px;min-height:36px}
+#pci-pane-variations .pci-var-thumb{width:55px;height:55px;object-fit:contain;border-radius:9px;background:#f8fafc;border:1px solid #eee}
+#pci-pane-variations .pci-var-table small{display:block;color:#667085;margin-top:4px;max-width:180px;overflow-wrap:anywhere}
+#pci-pane-variations .pci-var-table .pci-var-warning{color:#b54708}
+#pci-pane-variations tr.pci-var-excluded{opacity:.45}
+#pci-pane-variations .pci-var-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between;margin-top:12px}
+#pci-pane-variations .pci-var-review{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:16px}
+#pci-pane-variations .pci-var-review-side{position:sticky;top:14px;align-self:start}
+@media(max-width:1050px){#pci-pane-variations .pci-var-review{grid-template-columns:1fr}#pci-pane-variations .pci-var-review-side{position:static}}
+@media(max-width:680px){#pci-pane-variations .pci-var-scan-bar{grid-template-columns:1fr}}
