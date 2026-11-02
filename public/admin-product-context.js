@@ -198,7 +198,27 @@
 
   function refreshActiveProduct(viewId) {
     const visibleView = viewId || document.querySelector('.view.active')?.id || 'v-dash';
-    if (['v-product-creation-import', 'v-loyalty', 'v-discounts', 'v-cart-rewards', 'v-referrals'].includes(visibleView)) {
+    const reviewViews = [
+      'v-dash',
+      'v-mgr',
+      'v-widget-library',
+      'v-migration',
+      'v-import',
+      'v-msg',
+      'v-style',
+      'v-review-launch',
+      'v-review-operations'
+    ];
+
+    if (reviewViews.includes(visibleView)) {
+      activeProduct = 'reviews';
+    } else if ([
+      'v-product-creation-import',
+      'v-loyalty',
+      'v-discounts',
+      'v-cart-rewards',
+      'v-referrals'
+    ].includes(visibleView)) {
       activeProduct = productForView(visibleView);
     }
     document.body.dataset.nectarProductContext = activeProduct;
