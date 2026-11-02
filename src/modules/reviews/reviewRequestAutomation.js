@@ -169,10 +169,23 @@ async function canonicalReviewContext(shopDomain, job = {}, settingsDoc = null) 
   const settings = settingsDoc || await Settings.findOne({ shopDomain }).lean();
   const order = await fetchShopifyOrderForReviewJob(shopDomain, job);
   const rawProducts = productsFromOrder(order);
-  if (!rawProducts.length) return { order, products:[], suppressedProducts:[], settings, reason:'Review request skipped: order has no reviewable products.' };
+  if (!rawProducts.length) {
+    // ELEV8_REVIEW_QUEUE_BUILD_HOTFIX_V1: retain the existing fail-closed customer/proof email contract.
+    const error = new Error('Shopify returned this order without any reviewable line items. Review email was not sent.');
+    error.code = 'REVIEW_ORDER_PRODUCTS_MISSING';
+    throw error;
+  }
 
   const enriched = await enrichReviewProducts(shopDomain, rawProducts, settings?.attributeProfiles || []);
   const usable = enriched.filter((product) => numericShopifyId(product.productId || product.id));
+  if (!usable.length) {
+    const error = new Error('Shopify order products could not be resolved to valid product IDs. Review email was not sent.');
+    error.code = 'REVIEW_PRODUCT_CONTEXT_MISSING';
+    throw error;
+  }
+
+  // Already-reviewed products are an eligibility decision, not a broken Shopify
+  // product-context error. Filter only after canonical product IDs are validated.
   const filtered = await filterAlreadyReviewedProducts(shopDomain, job.customerEmail || resolveOrderEmail(order), usable);
   return { order, products:filtered.products, suppressedProducts:filtered.suppressedProducts, settings, reason:'' };
 }
