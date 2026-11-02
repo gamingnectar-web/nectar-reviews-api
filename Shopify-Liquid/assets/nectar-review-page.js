@@ -130,7 +130,8 @@
     if (previewPayload) {
       ui.previewPill.style.display = 'inline-flex';
       return {
-        orderId: previewPayload.orderId || previewPayload.order?.number || params.get('order') || '1001',
+        orderId: previewPayload.orderId || previewPayload.order?.id || params.get('order') || '1001',
+        orderName: previewPayload.orderName || previewPayload.order?.name || previewPayload.order?.number || params.get('orderName') || params.get('order_name') || '',
         customerName: previewPayload.customerName || previewPayload.customer?.name || params.get('customer') || 'Preview Customer',
         customerEmail: previewPayload.customerEmail || previewPayload.customer?.email || params.get('email') || 'preview@example.com',
         orderDate: previewPayload.orderDate || previewPayload.order?.date || params.get('orderDate') || '',
@@ -150,6 +151,7 @@
       ui.previewPill.style.display = params.get('test') === '1' ? 'inline-flex' : 'none';
       return {
         orderId: params.get('orderId') || params.get('order_id') || params.get('order') || '1001',
+        orderName: params.get('orderName') || params.get('order_name') || '',
         customerName: params.get('customer') || params.get('name') || 'Customer',
         customerEmail: params.get('email') || '',
         orderDate: params.get('orderDate') || params.get('createdAt') || '',
@@ -182,6 +184,7 @@
         ui.previewPill.style.display = 'inline-flex';
         return {
           orderId: testPayload.orderId || params.get('order_id') || params.get('order') || 'TEST',
+          orderName: testPayload.orderName || params.get('orderName') || params.get('order_name') || '',
           customerName: testPayload.customerName || 'Test Customer',
           customerEmail: testPayload.email || params.get('email') || '',
           orderDate: testPayload.orderDate || '',
@@ -296,13 +299,40 @@
     return clean ? `${clean.charAt(0).toUpperCase()}***` : 'Customer';
   }
 
+  /* ELEV8_CUSTOMER_ORDER_DISPLAY_EMAIL_LOGO_FIX_V1 */
+  function customerOrderReference(data = {}) {
+    const orderName = String(data.orderName || '').trim();
+    if (orderName) return orderName;
+
+    const queryName = String(params.get('orderName') || params.get('order_name') || '').trim();
+    if (queryName) return queryName;
+
+    // Never expose Shopify's technical gid://shopify/Order/... value to customers.
+    return 'Recent order';
+  }
+
+  function formatCustomerOrderDate(value) {
+    if (!value) return '';
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value || '');
+    try {
+      return new Intl.DateTimeFormat('en-GB', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      }).format(date);
+    } catch (_) {
+      return date.toISOString().slice(0, 10);
+    }
+  }
+
   function buildSummary(data) {
     const publicName = CUSTOMER_LOGGED_IN ? (data.customerName || 'Customer') : maskName(data.customerName || 'Customer');
     const preview = document.getElementById('nectar-name-preview');
     if (preview) preview.textContent = maskName(data.customerName || 'Customer');
     ui.summary.innerHTML = `
       <div><span>Customer</span><strong>${escapeHtml(publicName)}</strong></div>
-      <div><span>Order</span><strong>#${escapeHtml(String(data.orderId || '—').replace(/^#/, ''))}</strong></div>
+      <div><span>Order</span><strong>${escapeHtml(customerOrderReference(data))}</strong></div>
       <div><span>Reviewing</span><strong>${products.length} item${products.length === 1 ? '' : 's'}</strong></div>`;
   }
 
@@ -530,9 +560,10 @@
   function renderSupportContext() {
     const box = document.getElementById('nectar-support-order-context');
     if (!box) return;
-    const orderDate = orderData?.orderDate ? `<br><strong>Order date:</strong> ${escapeHtml(orderData.orderDate)}` : '';
+    const formattedOrderDate = formatCustomerOrderDate(orderData?.orderDate);
+    const orderDate = formattedOrderDate ? `<br><strong>Order date:</strong> ${escapeHtml(formattedOrderDate)}` : '';
     const itemList = products.length ? `<br><strong>Items:</strong> ${products.map((p)=>escapeHtml(p.title || p.name || p.id)).join(', ')}` : '';
-    box.innerHTML = `<strong>Order ID:</strong> ${escapeHtml(orderData?.orderId || params.get('orderId') || params.get('order_id') || params.get('order') || 'Not supplied')}${orderDate}<br><strong>Customer:</strong> ${escapeHtml(orderData?.customerName || 'Customer')}<br><strong>Email:</strong> ${escapeHtml(orderData?.customerEmail || params.get('email') || 'Not supplied')}${itemList}`;
+    box.innerHTML = `<strong>Order:</strong> ${escapeHtml(customerOrderReference(orderData || {}))}${orderDate}<br><strong>Customer:</strong> ${escapeHtml(orderData?.customerName || 'Customer')}<br><strong>Email:</strong> ${escapeHtml(orderData?.customerEmail || params.get('email') || 'Not supplied')}${itemList}`;
   }
   function renderAffectedProducts() {
     const box = document.getElementById('nectar-support-affected-products');

@@ -824,7 +824,10 @@ function renderTemplateReviewEmail({ template, shopDomain, shopName, customerNam
   const sections = Array.isArray(template?.sections) ? template.sections : [];
   const beforeSections = sections.filter((s) => (s.position || 'after') === 'before').map((section) => sectionHtml(section, context)).join('');
   const afterSections = sections.filter((s) => (s.position || 'after') !== 'before').map((section) => sectionHtml(section, context)).join('');
-  const logoHtml = logo ? `<tr><td align="center" style="padding:0 0 18px 0;"><img src="${escapeEmailHtml(logo)}" alt="" style="max-width:160px;height:auto;display:block;"></td></tr>` : '';
+  // ELEV8_CUSTOMER_ORDER_DISPLAY_EMAIL_LOGO_FIX_V1: logoHtml is inserted inside an existing <td>. A bare <tr> here
+  // is invalid HTML and browsers/email clients can hoist it below later content.
+  // Use a nested presentation table so the saved template and real email agree.
+  const logoHtml = logo ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;"><tr><td align="center" style="padding:0 0 18px 0;"><img src="${escapeEmailHtml(logo)}" alt="" style="max-width:160px;height:auto;display:block;margin:0 auto;border:0;"></td></tr></table>` : '';
   const orderButton = `<tr><td align="center" style="padding:18px 0 14px 0;"><a href="${escapeEmailHtml(reviewUrl)}" style="display:inline-block;background:${escapeEmailHtml(accentColor)};color:#ffffff;text-decoration:none;font-size:16px;font-weight:bold;padding:14px 24px;border-radius:${buttonRadius}px;">${escapeEmailHtml(mainButtonText)}</a></td></tr>`;
   const starHtml = `<div style="margin:6px 0;color:${escapeEmailHtml(starColor)};font-size:18px;letter-spacing:2px;line-height:1;">★★★★★</div>`;
   const productRowHtml = (product = {}) => {
@@ -908,7 +911,7 @@ async function buildReviewRequestPreview({ shopDomain, sourceJob }) {
     customerName: sourceJob.customerName || 'Customer',
     orderId: sourceJob.orderId,
     orderName: sourceJob.orderName || '',
-    orderDate: sourceJob.fulfilledAt || sourceJob.createdAt || '',
+    orderDate: sourceJob.orderCreatedAt || sourceJob.createdAt || sourceJob.fulfilledAt || '',
     products,
     expiresDays:45,
     testMode:Boolean(sourceJob.testMode),
@@ -986,7 +989,7 @@ async function sendReviewRequestJob(job) {
     customerName: job.customerName || 'Customer',
     orderId: job.orderId,
     orderName: job.orderName || '',
-    orderDate: job.fulfilledAt || job.createdAt || '',
+    orderDate: job.orderCreatedAt || job.createdAt || job.fulfilledAt || '',
     products: job.products || [],
     expiresDays: 45,
     testMode: Boolean(job.testMode),

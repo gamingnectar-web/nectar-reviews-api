@@ -887,6 +887,9 @@ router.get('/magic-link/order', async (req, res, next) => {
     if (!products.length) return res.status(404).json({ error: 'No review products were included in this link.' });
     return res.json({
       orderId: cleanText(tokenPayload?.orderId || req.query.orderId || req.query.order_id || req.query.order || '1001', 120),
+      // ELEV8_CUSTOMER_ORDER_DISPLAY_EMAIL_LOGO_FIX_V1: keep Shopify's technical ID for verification, but expose the
+      // customer-facing order name separately for the storefront UI.
+      orderName: cleanText(tokenPayload?.orderName || req.query.orderName || req.query.order_name || '', 120),
       orderDate: cleanText(tokenPayload?.orderDate || req.query.orderDate || req.query.createdAt || '', 80),
       customerName: cleanText(tokenPayload?.customerName || req.query.customer || req.query.name || 'Customer', 120),
       customerEmail: cleanEmail(tokenPayload?.email || req.query.email),
