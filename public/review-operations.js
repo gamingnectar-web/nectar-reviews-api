@@ -1,6 +1,6 @@
 (function(){
   const esc=(value='')=>String(value??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#039;'}[c]));
-  let cache=null,activeTab='delivery',emailFilter='all'; // ELEV8_REVIEW_QUEUE_ELIGIBILITY_V1
+  let cache=null,activeTab='delivery',emailFilter='all',queueModalFilter='all',queueModalSearch='',queueModalSelected=''; // ELEV8_REVIEW_SEND_QUEUE_MODAL_V1 // ELEV8_REVIEW_QUEUE_ELIGIBILITY_V1
 
   function api(path,options={}){
     if(typeof window.api==='function')return window.api(path,options);
@@ -170,7 +170,269 @@
   window.skipReviewRequestJob=async function(jobId){
     const reason=window.prompt('Why should this customer review request be skipped?','Manually excluded from review request queue.');if(reason===null)return;
     if(!window.confirm('Skip this review request? It will not be emailed automatically.'))return;
-    try{await api(`/admin/review-automation/jobs/${encodeURIComponent(jobId)}/skip`,{method:'POST',body:JSON.stringify({reason})});await window.loadReviewOperations();}catch(error){alert(error.message||'Could not skip review request')}
+    try{await api(`/admin/review-automation/jobs/${encodeURIComponent(jobId)}/skip`,{method:'POST',body:JSON.stringify({reason})});await window.loadReviewOperations();await window.refreshReviewSendQueue?.();}catch(error){alert(error.message||'Could not skip review request')}
+  };
+
+
+  /* ELEV8_REVIEW_SEND_QUEUE_MODAL_V1 */
+  function queueModalSort(rows=[]){
+    const rank={ready:0,scheduled:1,waiting:2,failed:3,skipped:4,sent:5,all:6};
+    return [...rows].sort((a,b)=>{
+      const ar=rank[queueBucket(a)]??9, br=rank[queueBucket(b)]??9;
+      if(ar!==br)return ar-br;
+      const ad=new Date(a.scheduledAt||a.deliveredAt||a.createdAt||0).getTime();
+      const bd=new Date(b.scheduledAt||b.deliveredAt||b.createdAt||0).getTime();
+      return ad-bd;
+    });
+  }
+
+  function reviewJourneyStages(row={}){
+    const delayDays=Math.max(0,Number(row.delayDays??cache?.config?.delayDays??14));
+    const now=new Date();
+    const due=row.scheduledAt?new Date(row.scheduledAt):null;
+    const sent=Boolean(row.sentAt||row.status==='sent');
+    const skipped=['skipped','cancelled'].includes(row.status);
+    const delivered=Boolean(row.deliveredAt);
+    const dispatched=Boolean(row.fulfilledAt);
+    const ready=Boolean(row.status==='scheduled'&&due&&!Number.isNaN(due.getTime())&&due<=now);
+    return [
+      {key:'order',label:'Order',detail:row.orderCreatedAt?fmt(row.orderCreatedAt):'Order captured',state:'complete'},
+      {key:'dispatch',label:'Dispatched',detail:dispatched?fmt(row.fulfilledAt):'Waiting',state:dispatched?'complete':'pending'},
+      {key:'delivery',label:'Delivered',detail:delivered?fmt(row.deliveredAt):(row.deliveryStatus||'Waiting'),state:delivered?'complete':(row.status==='awaiting_delivery'?'active':'pending')},
+      {key:'delay',label:`${delayDays}-day wait`,detail:delivered?(ready||sent||skipped?'Completed':countdown(row).label):'Not started',state:delivered?(ready||sent||skipped?'complete':'active'):'pending'},
+      {key:'send',label:skipped?'Skipped':sent?'Sent':ready?'Ready':'Email',detail:skipped?(row.blockedReason||'Suppressed'):sent?fmt(row.sentAt):ready?'Ready to send':row.scheduledAt?fmt(row.scheduledAt):'Not scheduled',state:skipped?'failed':sent?'complete':ready?'active':'pending'},
+    ];
+  }
+
+  function ensureReviewSendQueueModal(){
+    let modal=document.getElementById('review-send-queue-modal');
+    if(modal)return modal;
+
+    modal=document.createElement('div');
+    modal.id='review-send-queue-modal';
+    modal.className='review-send-queue-modal';
+    modal.hidden=true;
+    modal.innerHTML=`
+      <div class="review-send-queue-backdrop" data-review-queue-close></div>
+      <section class="review-send-queue-dialog" role="dialog" aria-modal="true" aria-labelledby="review-send-queue-title">
+        <header class="review-send-queue-header">
+          <div>
+            <span class="review-order-kicker">Reviews automation</span>
+            <h2 id="review-send-queue-title">Review Send Queue</h2>
+            <p>See who will receive a review request, where each order is in the journey, and exactly what will be sent.</p>
+          </div>
+          <div class="review-send-queue-header-actions">
+            <button type="button" class="secondary-btn compact" onclick="window.refreshReviewSendQueue?.()">Refresh</button>
+            <button type="button" class="review-preview-close" data-review-queue-close aria-label="Close">×</button>
+          </div>
+        </header>
+
+        <div id="review-send-queue-summary" class="review-send-queue-summary"></div>
+
+        <div class="review-send-queue-body">
+          <aside class="review-send-queue-list-pane">
+            <div class="review-send-queue-search">
+              <input id="review-send-queue-search" class="premium-input" type="search" placeholder="Search order, customer or email…">
+            </div>
+            <div id="review-send-queue-filters" class="review-queue-filters"></div>
+            <div id="review-send-queue-list" class="review-send-queue-list"><p class="muted">Loading queue…</p></div>
+          </aside>
+
+          <main id="review-send-queue-detail" class="review-send-queue-detail">
+            <div class="review-send-queue-empty">
+              <strong>Select an order</strong>
+              <p>Choose someone from the queue to see the delivery stages and exact email that will be sent.</p>
+            </div>
+          </main>
+        </div>
+      </section>`;
+
+    document.body.appendChild(modal);
+    modal.querySelectorAll('[data-review-queue-close]').forEach(node=>node.addEventListener('click',()=>{modal.hidden=true}));
+    document.getElementById('review-send-queue-search')?.addEventListener('input',(event)=>{
+      queueModalSearch=String(event.target.value||'').trim().toLowerCase();
+      renderReviewSendQueueModal();
+    });
+    return modal;
+  }
+
+  function renderReviewSendQueueSummary(rows=[]){
+    const target=document.getElementById('review-send-queue-summary');
+    if(!target)return;
+    const real=rows.filter(row=>!row.testMode);
+    const counts={waiting:0,scheduled:0,ready:0,skipped:0,sent:0,failed:0};
+    real.forEach(row=>{const key=queueBucket(row);if(key in counts)counts[key]++});
+    const delayDays=Number(cache?.config?.delayDays??14);
+    target.innerHTML=`
+      <div><strong>${counts.waiting}</strong><span>Waiting delivery</span></div>
+      <div><strong>${counts.scheduled}</strong><span>Scheduled</span></div>
+      <div><strong>${counts.ready}</strong><span>Ready</span></div>
+      <div><strong>${counts.skipped}</strong><span>Skipped</span></div>
+      <div><strong>${counts.sent}</strong><span>Sent</span></div>
+      <div class="review-send-queue-config"><strong>${delayDays} days</strong><span>After delivery</span></div>`;
+  }
+
+  function renderReviewSendQueueFilters(rows=[]){
+    const target=document.getElementById('review-send-queue-filters');
+    if(!target)return;
+    const real=rows.filter(row=>!row.testMode);
+    const counts={all:real.length,waiting:0,scheduled:0,ready:0,skipped:0,sent:0,failed:0};
+    real.forEach(row=>{const key=queueBucket(row);if(key in counts)counts[key]++});
+    target.innerHTML=[['all','All'],['waiting','Waiting'],['scheduled','Scheduled'],['ready','Ready'],['skipped','Skipped'],['sent','Sent'],['failed','Failed']]
+      .map(([key,label])=>`<button type="button" class="review-queue-filter ${queueModalFilter===key?'active':''}" data-review-queue-filter="${key}">${label} <span>${counts[key]||0}</span></button>`).join('');
+    target.querySelectorAll('[data-review-queue-filter]').forEach(btn=>btn.addEventListener('click',()=>{
+      queueModalFilter=btn.dataset.reviewQueueFilter||'all';
+      renderReviewSendQueueModal();
+    }));
+  }
+
+  function renderReviewSendQueueList(rows=[]){
+    const target=document.getElementById('review-send-queue-list');
+    if(!target)return;
+
+    let list=rows.filter(row=>!row.testMode);
+    if(queueModalFilter!=='all')list=list.filter(row=>queueBucket(row)===queueModalFilter);
+    if(queueModalSearch){
+      list=list.filter(row=>[row.orderId,row.customer,row.email,(row.products||[]).map(p=>p.title).join(' '),row.blockedReason,row.deliveryStatus]
+        .filter(Boolean).join(' ').toLowerCase().includes(queueModalSearch));
+    }
+    list=queueModalSort(list);
+
+    target.innerHTML=list.length?list.map(row=>{
+      const bucket=queueBucket(row),timer=countdown(row),selected=queueModalSelected===row.id;
+      const stage=deliveryState(row);
+      const products=(row.products||[]).slice(0,2).map(p=>p.title).filter(Boolean).join(', ');
+      return `<button type="button" class="review-send-queue-person ${selected?'selected':''}" data-review-queue-job="${esc(row.id)}">
+        <div class="review-send-queue-person-top">
+          <strong>${esc(row.orderId||'Order')}</strong>
+          <span class="review-ops-status ${esc(bucket)}">${esc(bucket==='waiting'?'Waiting':bucket.charAt(0).toUpperCase()+bucket.slice(1))}</span>
+        </div>
+        <div class="review-send-queue-person-recipient">${esc(row.email||row.customer||'Customer')}</div>
+        <div class="review-send-queue-person-stage">${esc(stage.label)} · ${esc(timer.label)}</div>
+        <small>${esc(products||`${row.productCount||0} product(s)`)}</small>
+      </button>`;
+    }).join(''):'<div class="review-send-queue-empty"><strong>No matching review requests.</strong><p>Try another filter or search.</p></div>';
+
+    target.querySelectorAll('[data-review-queue-job]').forEach(btn=>btn.addEventListener('click',()=>window.selectReviewSendQueueJob?.(btn.dataset.reviewQueueJob)));
+  }
+
+  function renderReviewSendQueueModal(){
+    if(!cache)return;
+    const rows=cache.rows||[];
+    renderReviewSendQueueSummary(rows);
+    renderReviewSendQueueFilters(rows);
+    renderReviewSendQueueList(rows);
+  }
+
+  function reviewJourneyHtml(row={}){
+    return `<div class="review-send-journey">${reviewJourneyStages(row).map(stage=>`
+      <div class="review-send-stage ${stage.state}">
+        <span class="review-send-stage-dot">${stage.state==='complete'?'✓':stage.state==='failed'?'×':''}</span>
+        <strong>${esc(stage.label)}</strong>
+        <small>${esc(stage.detail||'')}</small>
+      </div>`).join('')}</div>`;
+  }
+
+  window.selectReviewSendQueueJob=async function(jobId){
+    queueModalSelected=jobId;
+    renderReviewSendQueueList(cache?.rows||[]);
+    const row=(cache?.rows||[]).find(item=>item.id===jobId);
+    const detail=document.getElementById('review-send-queue-detail');
+    if(!detail||!row)return;
+
+    detail.innerHTML=`
+      <div class="review-send-detail-loading">
+        <h3>${esc(row.orderId||'Order')}</h3>
+        ${reviewJourneyHtml(row)}
+        <p class="muted">Loading current Shopify order, eligibility and exact email…</p>
+      </div>`;
+
+    try{
+      const data=await api(`/admin/review-automation/jobs/${encodeURIComponent(jobId)}/preview`);
+      const canSkip=!row.testMode&&!['sent','skipped','cancelled'].includes(row.status);
+      detail.innerHTML=`
+        <div class="review-send-detail-header">
+          <div>
+            <span class="review-order-kicker">Review request</span>
+            <h3>${esc(data.orderId||row.orderId||'Order')}</h3>
+            <p>${esc(data.recipient||row.email||'')}</p>
+          </div>
+          <div class="review-send-detail-actions">
+            ${canSkip?`<button type="button" class="secondary-btn danger" onclick="window.skipReviewRequestJob?.('${esc(jobId)}')">Skip request</button>`:''}
+          </div>
+        </div>
+
+        ${reviewJourneyHtml(row)}
+
+        <div class="review-send-detail-grid">
+          <section class="review-send-detail-eligibility">
+            <div class="review-preview-decision ${data.eligibility?.eligible?'pass':'fail'}">
+              <strong>${data.eligibility?.eligible?'Eligible to send':'Will not send'}</strong>
+              <span>${esc(data.eligibility?.reason||'All current eligibility checks pass.')}</span>
+            </div>
+
+            <h4>Eligibility</h4>
+            <div class="review-send-check-list">
+              ${(data.eligibility?.checks||[]).map(check=>`<div class="review-preview-check ${check.pass?'pass':'fail'}"><span>${check.pass?'✓':'×'}</span><div><strong>${esc(check.label)}</strong><small>${esc(check.detail||'')}</small></div></div>`).join('')}
+            </div>
+
+            <h4>Products being requested</h4>
+            <div class="review-send-products">
+              ${(data.products||[]).map(product=>`<div class="review-preview-product">${product.image?`<img src="${esc(product.image)}" alt="">`:''}<span>${esc(product.title||'Product')}</span></div>`).join('')||'<p class="muted">No products will be requested.</p>'}
+            </div>
+
+            ${(data.excludedProducts||[]).length?`<h4>Excluded</h4>${data.excludedProducts.map(product=>`<div class="review-preview-excluded"><strong>${esc(product.title)}</strong><small>${esc(product.reason)}</small></div>`).join('')}`:''}
+          </section>
+
+          <section class="review-send-detail-email">
+            <div class="review-preview-meta">
+              <strong>${esc(data.subject||'')}</strong>
+              <span>Template: ${esc(data.templateName||'Default')}</span>
+              <span>From: ${esc(data.fromName||'')} &lt;${esc(data.fromEmail||'')}&gt;</span>
+              <span>To: ${esc(data.recipient||'')}</span>
+              <span>Scheduled: ${esc(fmt(data.scheduledAt,'Not scheduled'))}</span>
+              <span>Delay: ${esc(data.delayDays)} days after delivery</span>
+            </div>
+            <iframe class="review-send-email-frame" sandbox="" title="Exact review request email"></iframe>
+            <p class="review-preview-note">${esc(data.note||'')}</p>
+          </section>
+        </div>`;
+
+      const frame=detail.querySelector('.review-send-email-frame');
+      if(frame)frame.srcdoc=data.html||'<p>No email preview available.</p>';
+    }catch(error){
+      detail.innerHTML=`
+        <div class="review-send-detail-error">
+          <h3>${esc(row.orderId||'Order')}</h3>
+          ${reviewJourneyHtml(row)}
+          <div class="review-preview-decision fail"><strong>Could not build live email preview</strong><span>${esc(error.message||'Unknown error')}</span></div>
+        </div>`;
+    }
+  };
+
+  window.refreshReviewSendQueue=async function(){
+    try{
+      cache=await api('/admin/review-operations?limit=300');
+      renderReviewSendQueueModal();
+      if(queueModalSelected&&(cache.rows||[]).some(row=>row.id===queueModalSelected))window.selectReviewSendQueueJob(queueModalSelected);
+    }catch(error){
+      const list=document.getElementById('review-send-queue-list');
+      if(list)list.innerHTML=`<div class="review-send-queue-empty"><strong>Could not load queue.</strong><p>${esc(error.message||'Unknown error')}</p></div>`;
+    }
+  };
+
+  window.openReviewSendQueue=async function(){
+    const modal=ensureReviewSendQueueModal();
+    modal.hidden=false;
+    if(!cache){
+      await window.refreshReviewSendQueue();
+    }else{
+      renderReviewSendQueueModal();
+    }
+    if(!queueModalSelected){
+      const first=queueModalSort((cache?.rows||[]).filter(row=>!row.testMode))[0];
+      if(first)window.selectReviewSendQueueJob(first.id);
+    }
   };
 
   function render(){if(!cache)return;renderSummary(cache.summary||{});renderDelivery(cache.rows||[]);renderEmails(cache.rows||[])}

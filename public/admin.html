@@ -728,7 +728,7 @@
   <link rel="stylesheet" href="/modules/marketing-intelligence/marketing-intelligence.css?v=cost-creative-2">
   <link rel="stylesheet" href="/modules/settings-center/settings-center.css?v=settings-centre-1">
   <link rel="stylesheet" href="/review-experience-studio.css?v=journey-studio-1">
-  <link rel="stylesheet" href="/review-operations-countdown.css?v=shopify-countdown-1">
+  <link rel="stylesheet" href="/review-operations-countdown.css?v=review-send-queue-modal-1">
   <link rel="stylesheet" href="/modules/customer-hub/admin.css?v=customer-hub-1">
 </head>
 <body>
@@ -839,7 +839,17 @@
       </section>
 
       <section id="v-mgr" class="view">
-        <h2 class="page-title">Review Manager</h2>
+        <div class="dash-header">
+          <div>
+            <h2 class="page-title">Review Manager</h2>
+            <p class="dash-subtitle">Manage customer reviews and monitor upcoming review requests.</p>
+          </div>
+          <div class="dash-actions">
+            <button class="primary-btn" type="button" onclick="window.openReviewSendQueue?.()">
+              Review Send Queue
+            </button>
+          </div>
+        </div><!-- ELEV8_REVIEW_SEND_QUEUE_MODAL_V1 --><!-- ELEV8_REVIEW_SEND_QUEUE_MODAL_RECOVERY_V1 -->
         <div class="admin-sub-tabs" role="tablist">
           <button type="button" class="admin-sub-tab active" data-review-tab="reviews" onclick="window.reviewManagerTab('reviews')">Reviews</button>
           <button type="button" class="admin-sub-tab" data-review-tab="approval" onclick="window.reviewManagerTab('approval')">Approval rules</button>
@@ -1764,7 +1774,7 @@
   <script src="/admin-loyalty-foundation.js?v=secure-24"></script>
   <script src="/module-registry.js?v=route-fix-2" defer></script>
   <script src="/module-shell.js?v=route-fix-2" defer></script>
-  <script src="/review-operations.js?v=shopify-countdown-1"></script>
+  <script src="/review-operations.js?v=review-send-queue-modal-1"></script>
   <script src="/admin-widget-library-universal.js?v=uwm-20260827-1" defer></script>
   <script src="/product-catalogue-audit.js"></script>
   <script src="/elev8-context-nav.js?v=route-fix-2" defer></script>
