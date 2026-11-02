@@ -7,6 +7,7 @@ const { hashValue, decryptSecret } = require('../utils/crypto');
 const { shopifyFetchOptional } = require('../utils/shopify');
 const { verifyReviewToken, productMatchesToken, normaliseProduct } = require('../utils/reviewTokens');
 const { awardForReview } = require('../modules/loyalty/loyalty.service');
+const { getProductReviewIdentitySummary } = require('../modules/reviews/reviewIdentity.service'); // ELEV8_REVIEW_IDENTITY_WIDGET_V1
 const { queueReviewCompletionTracking } = require('../modules/reviews/reviewCompletion.service'); // ELEV8_REVIEW_COMPLETION_SIDECAR_V1
 
 const router = express.Router();
@@ -445,6 +446,22 @@ router.get('/widget/config', async (req, res, next) => {
     if (!shopDomain || !isValidShopDomain(shopDomain)) return res.status(400).json({ error: 'Valid shopDomain is required.' });
     const config = await getSettings(shopDomain);
     return res.json(publicSettings(config));
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+router.get('/review-identity-summary', async (req, res, next) => {
+  try {
+    const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop);
+    if (!shopDomain || !isValidShopDomain(shopDomain)) {
+      return res.status(400).json({ error: 'Valid shopDomain is required.' });
+    }
+
+    const summary = await getProductReviewIdentitySummary(shopDomain);
+    res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+    return res.json(summary);
   } catch (error) {
     next(error);
   }

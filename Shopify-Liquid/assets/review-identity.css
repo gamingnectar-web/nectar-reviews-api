@@ -1,0 +1,105 @@
+.elev8-review-identity {
+  color: var(--eri-text-color, #111827);
+  font-size: var(--eri-text-size, 14px);
+  line-height: 1.35;
+  width: 100%;
+}
+
+.elev8-review-identity[hidden] {
+  display: none !important;
+}
+
+.elev8-review-identity__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  color: inherit;
+  text-decoration: none;
+  background: var(--eri-background, transparent);
+  border: var(--eri-border-width, 0) solid var(--eri-border-color, transparent);
+  border-radius: var(--eri-radius, 12px);
+  padding: var(--eri-padding-y, 6px) var(--eri-padding-x, 0);
+}
+
+.elev8-review-identity--center {
+  text-align: center;
+}
+.elev8-review-identity--center .elev8-review-identity__link {
+  justify-content: center;
+}
+
+.elev8-review-identity--right {
+  text-align: right;
+}
+.elev8-review-identity--right .elev8-review-identity__link {
+  justify-content: flex-end;
+}
+
+.elev8-review-identity__stars {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  font-size: var(--eri-star-size, 18px);
+  line-height: 1;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.elev8-review-identity__stars-base {
+  color: color-mix(in srgb, var(--eri-star-color, #f5b301) 22%, transparent);
+}
+
+.elev8-review-identity__stars-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  overflow: hidden;
+  color: var(--eri-star-color, #f5b301);
+  white-space: nowrap;
+}
+
+.elev8-review-identity__copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.elev8-review-identity__copy strong {
+  color: var(--eri-text-color, #111827);
+  font-size: 1em;
+  font-weight: var(--eri-font-weight, 700);
+}
+
+.elev8-review-identity__copy small {
+  color: var(--eri-muted-color, #6b7280);
+  font-size: 0.82em;
+}
+
+.elev8-review-identity--pill .elev8-review-identity__link {
+  padding-left: max(var(--eri-padding-x, 0px), 14px);
+  padding-right: max(var(--eri-padding-x, 0px), 14px);
+  border-radius: 999px;
+}
+
+.elev8-review-identity--statement .elev8-review-identity__link {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.elev8-review-identity--statement .elev8-review-identity__copy strong {
+  font-size: 1.08em;
+}
+
+.elev8-review-identity--badge .elev8-review-identity__link {
+  padding-left: max(var(--eri-padding-x, 0px), 12px);
+  padding-right: max(var(--eri-padding-x, 0px), 12px);
+  border-width: max(var(--eri-border-width, 0px), 1px);
+}
+
+@media (max-width: 480px) {
+  .elev8-review-identity__link {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+}

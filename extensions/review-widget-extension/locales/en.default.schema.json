@@ -1,0 +1,99 @@
+{
+  "review_identity": {
+    "name": "Review identity",
+    "defaults": {
+      "text_template": "Rated {average}/5 from {count} product reviews",
+      "secondary_text": "Real feedback from customers across our range"
+    },
+    "settings": {
+      "layout": {
+        "label": "Layout",
+        "options": {
+          "minimal": "Minimal",
+          "pill": "Pill",
+          "statement": "Brand statement",
+          "badge": "Outlined badge"
+        }
+      },
+      "text_template": {
+        "label": "Main wording",
+        "info": "Use {count} for the live product-review count and {average} for the live average rating."
+      },
+      "secondary_text": {
+        "label": "Secondary wording"
+      },
+      "count_format": {
+        "label": "Review count format",
+        "options": {
+          "exact": "Exact, for example 1,284",
+          "compact": "Compact, for example 1.3K"
+        }
+      },
+      "show_stars": {
+        "label": "Show rating stars"
+      },
+      "show_zero": {
+        "label": "Show the block when there are no product reviews"
+      },
+      "alignment": {
+        "label": "Alignment",
+        "options": {
+          "left": "Left",
+          "center": "Centre",
+          "right": "Right"
+        }
+      },
+      "text_size": {
+        "label": "Text size"
+      },
+      "font_weight": {
+        "label": "Main text weight",
+        "options": {
+          "medium": "Medium",
+          "semibold": "Semibold",
+          "bold": "Bold"
+        }
+      },
+      "star_size": {
+        "label": "Star size"
+      },
+      "star_color": {
+        "label": "Star colour"
+      },
+      "text_color": {
+        "label": "Text colour"
+      },
+      "muted_color": {
+        "label": "Secondary text colour"
+      },
+      "background_color": {
+        "label": "Background colour"
+      },
+      "border_color": {
+        "label": "Border colour"
+      },
+      "border_width": {
+        "label": "Border width"
+      },
+      "radius": {
+        "label": "Corner radius"
+      },
+      "padding_x": {
+        "label": "Horizontal padding"
+      },
+      "padding_y": {
+        "label": "Vertical padding"
+      },
+      "link_url": {
+        "label": "Optional link"
+      },
+      "open_new_tab": {
+        "label": "Open link in a new tab"
+      },
+      "app_url": {
+        "label": "Advanced: ELEV8 API URL",
+        "info": "Leave blank to use the production ELEV8 Reviews API."
+      }
+    }
+  }
+}

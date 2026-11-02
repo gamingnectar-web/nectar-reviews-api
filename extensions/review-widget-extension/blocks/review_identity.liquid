@@ -1,0 +1,244 @@
+{% assign elev8_app_url = block.settings.app_url | default: 'https://nectar-reviews-api.onrender.com' %}
+{% assign elev8_shop_domain = shop.permanent_domain | default: shop.domain %}
+
+<div
+  class="elev8-review-identity elev8-review-identity--{{ block.settings.layout }} elev8-review-identity--{{ block.settings.alignment }}"
+  data-elev8-review-identity
+  data-api-base="{{ elev8_app_url | append: '/api' | escape }}"
+  data-shop-domain="{{ elev8_shop_domain | escape }}"
+  data-text-template="{{ block.settings.text_template | escape }}"
+  data-secondary-text="{{ block.settings.secondary_text | escape }}"
+  data-count-format="{{ block.settings.count_format | escape }}"
+  data-show-stars="{{ block.settings.show_stars }}"
+  data-show-zero="{{ block.settings.show_zero }}"
+  style="
+    --eri-text-color: {{ block.settings.text_color }};
+    --eri-muted-color: {{ block.settings.muted_color }};
+    --eri-star-color: {{ block.settings.star_color }};
+    --eri-background: {{ block.settings.background_color }};
+    --eri-border-color: {{ block.settings.border_color }};
+    --eri-border-width: {{ block.settings.border_width }}px;
+    --eri-radius: {{ block.settings.radius }}px;
+    --eri-padding-x: {{ block.settings.padding_x }}px;
+    --eri-padding-y: {{ block.settings.padding_y }}px;
+    --eri-text-size: {{ block.settings.text_size }}px;
+    --eri-star-size: {{ block.settings.star_size }}px;
+    --eri-font-weight: {{ block.settings.font_weight }};
+  "
+  hidden
+>
+  {% if block.settings.link_url != blank %}
+    <a
+      class="elev8-review-identity__link"
+      href="{{ block.settings.link_url }}"
+      {% if block.settings.open_new_tab %}target="_blank" rel="noopener noreferrer"{% endif %}
+    >
+  {% else %}
+    <div class="elev8-review-identity__link">
+  {% endif %}
+
+    <span class="elev8-review-identity__stars" data-elev8-review-stars aria-hidden="true">
+      <span class="elev8-review-identity__stars-base">★★★★★</span>
+      <span class="elev8-review-identity__stars-fill" data-elev8-review-stars-fill>★★★★★</span>
+    </span>
+
+    <span class="elev8-review-identity__copy">
+      <strong data-elev8-review-copy></strong>
+      <small data-elev8-review-secondary></small>
+    </span>
+
+  {% if block.settings.link_url != blank %}
+    </a>
+  {% else %}
+    </div>
+  {% endif %}
+</div>
+
+{% schema %}
+{
+  "name": "t:review_identity.name",
+  "target": "content",
+  "javascript": "review-identity.js",
+  "stylesheet": "review-identity.css",
+  "tag": "div",
+  "class": "elev8-review-identity-app-block",
+  "settings": [
+    {
+      "type": "select",
+      "id": "layout",
+      "label": "t:review_identity.settings.layout.label",
+      "default": "minimal",
+      "options": [
+        { "value": "minimal", "label": "t:review_identity.settings.layout.options.minimal" },
+        { "value": "pill", "label": "t:review_identity.settings.layout.options.pill" },
+        { "value": "statement", "label": "t:review_identity.settings.layout.options.statement" },
+        { "value": "badge", "label": "t:review_identity.settings.layout.options.badge" }
+      ]
+    },
+    {
+      "type": "text",
+      "id": "text_template",
+      "label": "t:review_identity.settings.text_template.label",
+      "info": "t:review_identity.settings.text_template.info",
+      "default": "t:review_identity.defaults.text_template"
+    },
+    {
+      "type": "text",
+      "id": "secondary_text",
+      "label": "t:review_identity.settings.secondary_text.label",
+      "default": "t:review_identity.defaults.secondary_text"
+    },
+    {
+      "type": "select",
+      "id": "count_format",
+      "label": "t:review_identity.settings.count_format.label",
+      "default": "exact",
+      "options": [
+        { "value": "exact", "label": "t:review_identity.settings.count_format.options.exact" },
+        { "value": "compact", "label": "t:review_identity.settings.count_format.options.compact" }
+      ]
+    },
+    {
+      "type": "checkbox",
+      "id": "show_stars",
+      "label": "t:review_identity.settings.show_stars.label",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_zero",
+      "label": "t:review_identity.settings.show_zero.label",
+      "default": false
+    },
+    {
+      "type": "select",
+      "id": "alignment",
+      "label": "t:review_identity.settings.alignment.label",
+      "default": "left",
+      "options": [
+        { "value": "left", "label": "t:review_identity.settings.alignment.options.left" },
+        { "value": "center", "label": "t:review_identity.settings.alignment.options.center" },
+        { "value": "right", "label": "t:review_identity.settings.alignment.options.right" }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "text_size",
+      "min": 11,
+      "max": 24,
+      "step": 1,
+      "unit": "px",
+      "label": "t:review_identity.settings.text_size.label",
+      "default": 14
+    },
+    {
+      "type": "select",
+      "id": "font_weight",
+      "label": "t:review_identity.settings.font_weight.label",
+      "default": "700",
+      "options": [
+        { "value": "500", "label": "t:review_identity.settings.font_weight.options.medium" },
+        { "value": "600", "label": "t:review_identity.settings.font_weight.options.semibold" },
+        { "value": "700", "label": "t:review_identity.settings.font_weight.options.bold" }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "star_size",
+      "min": 12,
+      "max": 30,
+      "step": 1,
+      "unit": "px",
+      "label": "t:review_identity.settings.star_size.label",
+      "default": 18
+    },
+    {
+      "type": "color",
+      "id": "star_color",
+      "label": "t:review_identity.settings.star_color.label",
+      "default": "#f5b301"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "t:review_identity.settings.text_color.label",
+      "default": "#111827"
+    },
+    {
+      "type": "color",
+      "id": "muted_color",
+      "label": "t:review_identity.settings.muted_color.label",
+      "default": "#6b7280"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "t:review_identity.settings.background_color.label",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "border_color",
+      "label": "t:review_identity.settings.border_color.label",
+      "default": "#e5e7eb"
+    },
+    {
+      "type": "range",
+      "id": "border_width",
+      "min": 0,
+      "max": 3,
+      "step": 1,
+      "unit": "px",
+      "label": "t:review_identity.settings.border_width.label",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "radius",
+      "min": 0,
+      "max": 32,
+      "step": 2,
+      "unit": "px",
+      "label": "t:review_identity.settings.radius.label",
+      "default": 12
+    },
+    {
+      "type": "range",
+      "id": "padding_x",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "unit": "px",
+      "label": "t:review_identity.settings.padding_x.label",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "padding_y",
+      "min": 0,
+      "max": 30,
+      "step": 2,
+      "unit": "px",
+      "label": "t:review_identity.settings.padding_y.label",
+      "default": 6
+    },
+    {
+      "type": "url",
+      "id": "link_url",
+      "label": "t:review_identity.settings.link_url.label"
+    },
+    {
+      "type": "checkbox",
+      "id": "open_new_tab",
+      "label": "t:review_identity.settings.open_new_tab.label",
+      "default": false
+    },
+    {
+      "type": "text",
+      "id": "app_url",
+      "label": "t:review_identity.settings.app_url.label",
+      "info": "t:review_identity.settings.app_url.info"
+    }
+  ]
+}
+{% endschema %}
