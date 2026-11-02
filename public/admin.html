@@ -1098,7 +1098,7 @@
   <div class="dash-header">
     <div>
       <h2 class="page-title">Delivery &amp; Sending</h2>
-      <p class="dash-subtitle">A Shopify-style journey for each review request: order → dispatch → delivered → 7-day review countdown → email sent.</p>
+      <p class="dash-subtitle">A Shopify-style journey for each review request: order → dispatch → delivered → configured review countdown → email sent. <!-- ELEV8_REVIEW_QUEUE_ELIGIBILITY_V1 --></p>
     </div>
     <div class="dash-actions">
       <button class="secondary-btn" type="button" onclick="window.loadReviewOperations?.()">Refresh</button>
@@ -1133,14 +1133,14 @@
                 <label class="loyalty-field">Fake customer name<input id="e2e-customer" class="premium-input" value="Nectar Test Customer"></label>
                 <label class="loyalty-field">Fake order ID<input id="e2e-order" class="premium-input" value="NECTAR-TEST-1001"></label>
               </div>
-              <label class="e2e-flow-toggle"><input id="e2e-flow-confirmed" type="checkbox" onchange="window.saveE2EFlowStatus?.()"><span><strong>Optional Shopify Flow fallback is installed</strong><small>Nectar native mode is recommended for development and launch: Shopify sends the fulfilled-order webhook, ELEV8 waits for Shopify to confirm delivery, then counts down 7 days before sending the review email. Tick this only if you also created a Flow fallback.</small></span></label>
+              <label class="e2e-flow-toggle"><input id="e2e-flow-confirmed" type="checkbox" onchange="window.saveE2EFlowStatus?.()"><span><strong>Optional Shopify Flow fallback is installed</strong><small>Nectar native mode is recommended for development and launch: Shopify sends the fulfilled-order webhook, ELEV8 waits for Shopify to confirm delivery, then uses the configured review delay before sending the review email. Tick this only if you also created a Flow fallback.</small></span></label>
               <details class="e2e-flow-setup" open>
                 <summary>Recommended live setup: Nectar native scheduler</summary>
                 <ol>
                   <li>Install/connect the app through Shopify OAuth.</li>
                   <li>Nectar registers an <strong>orders/fulfilled</strong> webhook for the shop.</li>
                   <li>When a real order is fulfilled, Nectar creates a private review-request job.</li>
-                  <li>The job waits for Shopify to confirm <strong>Delivered</strong>. From that delivery timestamp, ELEV8 counts down <strong>7 days</strong>, then sends the review request from the saved Reviews email provider.</li>
+                  <li>The job waits for Shopify to confirm <strong>Delivered</strong>. From that delivery timestamp, ELEV8 uses the <strong>configured review delay</strong>, then sends the review request from the saved Reviews email provider.</li>
                   <li>The email contains a signed order-review link. When the customer submits, the review returns to Review Manager as verified by signed link.</li>
                   <li>Use <strong>Start fake-order journey</strong> here in development. It does not need Shopify Flow.</li>
                 </ol>

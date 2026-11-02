@@ -10,7 +10,7 @@ const { encryptSecret, decryptSecret } = require('../utils/crypto');
 const { publicEmailSettings } = require('../utils/emailSettings');
 const { shopifyFetch, shopifyFetchOptional, getAccessTokenForShop, buildInstallUrl } = require('../utils/shopify');
 const { createReviewToken } = require('../utils/reviewTokens');
-const { scheduleReviewRequestFromOrder, sendDueReviewRequests, enrichReviewProducts, refreshReviewJobProductsFromShopify, reconcileAwaitingDeliveryJobs, automationReadiness, registerReviewWebhookSubscriptions, inspectReviewWebhookSubscriptions, expectedReviewWebhookSubscriptions } = require('../modules/reviews/reviewRequestAutomation');
+const { scheduleReviewRequestFromOrder, sendDueReviewRequests, enrichReviewProducts, refreshReviewJobProductsFromShopify, buildReviewRequestPreview, reconcileAwaitingDeliveryJobs, automationReadiness, registerReviewWebhookSubscriptions, inspectReviewWebhookSubscriptions, expectedReviewWebhookSubscriptions } = require('../modules/reviews/reviewRequestAutomation'); // ELEV8_REVIEW_QUEUE_ELIGIBILITY_V1
 const { awardForReview, getOrCreateLoyaltyProgram, normaliseCustomerRef, customerHintFromHash, createLedgerEntry } = require('../modules/loyalty/loyalty.service');
 const { getOrCreateDiscountProgram, issueDiscountCode } = require('../modules/discounts/discounts.service');
 
@@ -2570,7 +2570,11 @@ router.get('/review-operations', async (req, res, next) => {
   try {
     const shopDomain = shopDomainFromReq(req);
     const limit = clampNumber(req.query?.limit, 10, 500, 200);
-    const jobs = await ReviewRequestJob.find({ shopDomain }).sort({ createdAt: -1 }).limit(limit).lean();
+    const [jobs, settingsDoc] = await Promise.all([
+      ReviewRequestJob.find({ shopDomain }).sort({ createdAt: -1 }).limit(limit).lean(),
+      Settings.findOne({ shopDomain }).lean(),
+    ]);
+    const reviewCfg = settingsDoc?.reviewAutomation || {};
     const safeEmail = (value = '') => {
       const email = String(value || '');
       const [local, domain] = email.split('@');
@@ -2586,6 +2590,8 @@ router.get('/review-operations', async (req, res, next) => {
       testMode: Boolean(job.testMode),
       source: job.source || '',
       productCount: Array.isArray(job.products) ? job.products.length : 0,
+      products: (Array.isArray(job.products) ? job.products : []).slice(0,8).map((product)=>({ productId:product.productId || product.id || '', title:product.title || 'Purchased product' })),
+      delayDays: Number(job.delayDays ?? reviewCfg.delayDays ?? 14),
       orderCreatedAt: job.orderCreatedAt || null,
       fulfilledAt: job.fulfilledAt || null,
       deliveredAt: job.deliveredAt || null,
@@ -2614,10 +2620,43 @@ router.get('/review-operations', async (req, res, next) => {
       skipped: live.filter((row) => row.status === 'skipped').length,
       tests: rows.filter((row) => row.testMode).length,
     };
-    return res.json({ ok: true, summary, rows });
+    return res.json({
+      ok:true,
+      config:{ delayDays:Number(reviewCfg.delayDays ?? 14), maxOrderAgeDays:Number(reviewCfg.maxOrderAgeDays ?? 0), deliveryTag:reviewCfg.deliveryTag || 'delivered' },
+      summary,
+      rows,
+    });
   } catch (error) {
     next(error);
   }
+});
+
+
+/* ELEV8_REVIEW_QUEUE_ELIGIBILITY_V1 */
+router.get('/review-automation/jobs/:jobId/preview', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const sourceJob = await ReviewRequestJob.findOne({ _id:req.params.jobId, shopDomain }).lean();
+    if (!sourceJob) return res.status(404).json({ error:'Review request job not found for this shop.' });
+    return res.json(await buildReviewRequestPreview({ shopDomain, sourceJob }));
+  } catch (error) { next(error); }
+});
+
+router.post('/review-automation/jobs/:jobId/skip', async (req, res, next) => {
+  try {
+    const shopDomain = shopDomainFromReq(req);
+    const job = await ReviewRequestJob.findOne({ _id:req.params.jobId, shopDomain });
+    if (!job) return res.status(404).json({ error:'Review request job not found for this shop.' });
+    if (job.testMode) return res.status(400).json({ error:'Test jobs do not need customer-send suppression.' });
+    if (job.status === 'sent') return res.status(409).json({ error:'This review request has already been sent and cannot be skipped.' });
+    const reason = cleanText(req.body?.reason || 'Manually skipped in Review Request Queue.', 400);
+    job.status = 'skipped';
+    job.scheduledAt = null;
+    job.blockedReason = `Manual skip: ${reason}`;
+    job.errorMessage = '';
+    await job.save();
+    return res.json({ ok:true, id:String(job._id), status:job.status, blockedReason:job.blockedReason });
+  } catch (error) { next(error); }
 });
 
 router.post('/review-automation/jobs/:jobId/manual-send', async (req, res, next) => {

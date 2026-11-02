@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const { env } = require('../../config/env');
-const { ReviewRequestJob, CampaignEvent, EmailProviderSettings, Settings, Shop, EmailTemplate } = require('../../models');
+const { Review, ReviewRequestJob, CampaignEvent, EmailProviderSettings, Settings, Shop, EmailTemplate } = require('../../models'); // ELEV8_REVIEW_QUEUE_ELIGIBILITY_V1
 const { cleanText, cleanEmail, clampNumber } = require('../../utils/validation');
 const { decryptSecret, hashValue } = require('../../utils/crypto');
 const { createReviewToken } = require('../../utils/reviewTokens');
@@ -96,7 +96,7 @@ async function fetchShopifyOrderForReviewJob(shopDomain, job = {}) {
     error.code = 'REVIEW_ORDER_ID_MISSING';
     throw error;
   }
-  const fields = ['id','admin_graphql_api_id','name','email','contact_email','created_at','processed_at','updated_at','customer','billing_address','shipping_address','line_items','tags'].join(',');
+  const fields = ['id','admin_graphql_api_id','name','email','contact_email','created_at','processed_at','updated_at','cancelled_at','cancel_reason','financial_status','customer','billing_address','shipping_address','line_items','refunds','tags'].join(',');
   const payload = await shopifyFetch(`/admin/api/${env.shopifyApiVersion}/orders/${orderId}.json?fields=${encodeURIComponent(fields)}`, { shopDomain });
   const order = payload?.order;
   if (!order) {
@@ -107,32 +107,129 @@ async function fetchShopifyOrderForReviewJob(shopDomain, job = {}) {
   return order;
 }
 
-async function refreshReviewJobProductsFromShopify(shopDomain, job, settingsDoc = null) {
+/* ELEV8_REVIEW_QUEUE_ELIGIBILITY_V1 */
+function productIdCandidates(product = {}) {
+  const raw = cleanText(product.productId || product.id || product.itemId || '', 180);
+  const numeric = numericShopifyId(raw);
+  return Array.from(new Set([raw,numeric,numeric ? `gid://shopify/Product/${numeric}` : ''].filter(Boolean)));
+}
+
+async function filterAlreadyReviewedProducts(shopDomain, email, products = []) {
+  const cleanCustomerEmail = cleanEmail(email || '');
+  const list = Array.isArray(products) ? products : [];
+  if (!cleanCustomerEmail || !list.length) return { products:list, suppressedProducts:[], reviewedIds:[] };
+  const ids = Array.from(new Set(list.flatMap(productIdCandidates)));
+  if (!ids.length) return { products:list, suppressedProducts:[], reviewedIds:[] };
+
+  const reviews = await Review.find({
+    shopDomain,
+    email: cleanCustomerEmail,
+    reviewScope: 'product',
+    itemId: { $in: ids },
+    isDeleted: { $ne: true },
+    isTestReview: { $ne: true },
+    testMode: { $ne: true },
+  }).select('itemId productTitle status createdAt').lean().catch(() => []);
+
+  const reviewed = new Set(reviews.flatMap((review) => {
+    const numeric = numericShopifyId(review.itemId || '');
+    return [String(review.itemId || ''),numeric,numeric ? `gid://shopify/Product/${numeric}` : ''].filter(Boolean);
+  }));
+
+  const suppressedProducts = [];
+  const remaining = [];
+  for (const product of list) {
+    if (productIdCandidates(product).some((id) => reviewed.has(id))) suppressedProducts.push(product);
+    else remaining.push(product);
+  }
+  return { products:remaining, suppressedProducts, reviewedIds:Array.from(reviewed) };
+}
+
+function orderSuppressionReason(order = {}) {
+  if (order.cancelled_at || order.cancelledAt) return 'Review request skipped: Shopify order was cancelled.';
+  const financial = String(order.financial_status || order.displayFinancialStatus || '').trim().toUpperCase();
+  if (financial === 'REFUNDED') return 'Review request skipped: Shopify order was fully refunded.';
+  if (financial === 'VOIDED') return 'Review request skipped: Shopify order payment was voided.';
+  return '';
+}
+
+function reviewQueueState(job = {}, cfg = {}, now = new Date()) {
+  const delayDays = Number(job.delayDays ?? cfg.delayDays ?? DEFAULT_DELAY_DAYS);
+  if (job.status === 'sent') return { key:'sent', label:'Sent', eligible:false };
+  if (job.status === 'skipped' || job.status === 'cancelled') return { key:'skipped', label:'Skipped', eligible:false };
+  if (job.status === 'failed') return { key:'failed', label:'Failed', eligible:false };
+  if (job.status === 'blocked') return { key:'blocked', label:'Blocked', eligible:false };
+  if (job.status === 'awaiting_delivery' || !job.deliveredAt) return { key:'waiting_delivery', label:'Waiting for delivery', eligible:true };
+  const due = job.scheduledAt ? new Date(job.scheduledAt) : addDays(new Date(job.deliveredAt), delayDays);
+  if (due && !Number.isNaN(due.getTime()) && due <= now) return { key:'ready', label:'Ready to send', eligible:true };
+  return { key:'scheduled', label:'Scheduled', eligible:true };
+}
+
+async function canonicalReviewContext(shopDomain, job = {}, settingsDoc = null) {
   const settings = settingsDoc || await Settings.findOne({ shopDomain }).lean();
   const order = await fetchShopifyOrderForReviewJob(shopDomain, job);
   const rawProducts = productsFromOrder(order);
-  if (!rawProducts.length) {
-    const error = new Error('Shopify returned this order without any reviewable line items. Review email was not sent.');
-    error.code = 'REVIEW_ORDER_PRODUCTS_MISSING';
-    throw error;
-  }
-  const products = await enrichReviewProducts(shopDomain, rawProducts, settings?.attributeProfiles || []);
-  const usable = products.filter((product) => numericShopifyId(product.productId || product.id));
-  if (!usable.length) {
-    const error = new Error('Shopify order products could not be resolved to valid product IDs. Review email was not sent.');
-    error.code = 'REVIEW_PRODUCT_CONTEXT_MISSING';
-    throw error;
-  }
+  if (!rawProducts.length) return { order, products:[], suppressedProducts:[], settings, reason:'Review request skipped: order has no reviewable products.' };
+
+  const enriched = await enrichReviewProducts(shopDomain, rawProducts, settings?.attributeProfiles || []);
+  const usable = enriched.filter((product) => numericShopifyId(product.productId || product.id));
+  const filtered = await filterAlreadyReviewedProducts(shopDomain, job.customerEmail || resolveOrderEmail(order), usable);
+  return { order, products:filtered.products, suppressedProducts:filtered.suppressedProducts, settings, reason:'' };
+}
+
+function eligibilityChecks({ job = {}, order = {}, products = [], suppressedProducts = [], cfg = {}, now = new Date() }) {
+  const orderCreatedAt = resolveOrderCreatedAt(order, job.orderCreatedAt || job.fulfilledAt || job.createdAt || null);
+  const age = reviewRequestEligibility(orderCreatedAt, cfg, now);
+  const suppression = orderSuppressionReason(order);
+  const email = cleanEmail(job.customerEmail || resolveOrderEmail(order));
+  const checks = [
+    { key:'order_age', label:'Within order age limit', pass:age.eligible, detail:age.eligible ? 'Order is within the configured age limit.' : age.reason },
+    { key:'cancelled', label:'Order not cancelled', pass:!Boolean(order.cancelled_at || order.cancelledAt), detail:suppression && /cancel/i.test(suppression) ? suppression : 'Order is not cancelled.' },
+    { key:'refunded', label:'Order not fully refunded / voided', pass:!Boolean(suppression && !/cancel/i.test(suppression)), detail:suppression && !/cancel/i.test(suppression) ? suppression : 'Order remains financially eligible.' },
+    { key:'email', label:'Customer email available', pass:Boolean(email), detail:email ? 'A valid customer email is available.' : 'No customer email is available.' },
+    { key:'products', label:'Reviewable products remain', pass:products.length > 0, detail:products.length ? `${products.length} product(s) remain eligible.` : (suppressedProducts.length ? 'All products have already been reviewed by this customer.' : 'No reviewable products remain.') },
+    { key:'prior_reviews', label:'Previously reviewed products excluded', pass:true, detail:suppressedProducts.length ? `${suppressedProducts.length} already-reviewed product(s) will be excluded.` : 'No previously reviewed products were found.' },
+  ];
+
+  let reason = '';
+  if (!age.eligible) reason = age.reason;
+  else if (suppression) reason = suppression;
+  else if (!email) reason = 'Review request skipped: order has no customer email.';
+  else if (!products.length && suppressedProducts.length) reason = 'Review request skipped: customer has already reviewed every reviewable product in this order.';
+  else if (!products.length) reason = 'Review request skipped: order has no reviewable products.';
+
+  return { eligible:!reason, reason, checks, orderCreatedAt, email };
+}
+
+async function markReviewJobSkipped(job, reason) {
+  job.status = 'skipped';
+  job.scheduledAt = null;
+  job.blockedReason = cleanText(reason || 'Review request skipped by eligibility rules.', 500);
+  job.errorMessage = '';
+  job.lastAttemptAt = new Date();
+  await job.save();
+  return job;
+}
+
+async function refreshReviewJobProductsFromShopify(shopDomain, job, settingsDoc = null) {
+  const context = await canonicalReviewContext(shopDomain, job, settingsDoc);
   if (job && typeof job.set === 'function') {
-    job.set('products', usable);
-    if (order.name) job.set('orderName', cleanText(order.name, 120));
-    const createdAt = resolveOrderCreatedAt(order, job.orderCreatedAt || job.fulfilledAt || null);
+    job.set('products', context.products);
+    if (context.order.name) job.set('orderName', cleanText(context.order.name, 120));
+    const createdAt = resolveOrderCreatedAt(context.order, job.orderCreatedAt || job.fulfilledAt || null);
     if (createdAt) job.set('orderCreatedAt', createdAt);
     await job.save();
   } else if (job && job._id) {
-    await ReviewRequestJob.updateOne({ _id: job._id, shopDomain }, { $set: { products: usable, orderName: cleanText(order.name || job.orderName || '', 120), orderCreatedAt: resolveOrderCreatedAt(order, job.orderCreatedAt || job.fulfilledAt || null) } });
+    await ReviewRequestJob.updateOne(
+      { _id: job._id, shopDomain },
+      { $set: {
+        products: context.products,
+        orderName: cleanText(context.order.name || job.orderName || '', 120),
+        orderCreatedAt: resolveOrderCreatedAt(context.order, job.orderCreatedAt || job.fulfilledAt || null),
+      } }
+    );
   }
-  return { order, products: usable };
+  return context;
 }
 
 async function enrichReviewProducts(shopDomain, products = [], attributeProfiles = []) {
@@ -412,6 +509,29 @@ async function reconcileAwaitingDeliveryJobs({ limit = 25, jobId = '' } = {}) {
 
   for (const job of jobs) {
     try {
+      const cfg = await getAutomationConfig(job.shopDomain);
+      const eligibilityDate = job.orderCreatedAt || job.fulfilledAt || job.createdAt || null;
+      const preflightEligibility = reviewRequestEligibility(eligibilityDate, cfg);
+      if (!preflightEligibility.eligible) {
+        job.status = 'skipped';
+        job.scheduledAt = null;
+        job.blockedReason = preflightEligibility.reason;
+        job.errorMessage = '';
+        job.lastDeliveryCheckAt = new Date();
+        await job.save();
+        results.push({ id:String(job._id), delivered:false, status:'skipped', reason:preflightEligibility.reason });
+        continue;
+      }
+      if (!cleanEmail(job.customerEmail || '')) {
+        job.status = 'skipped';
+        job.scheduledAt = null;
+        job.blockedReason = 'Review request skipped: order has no customer email.';
+        job.errorMessage = '';
+        job.lastDeliveryCheckAt = new Date();
+        await job.save();
+        results.push({ id:String(job._id), delivered:false, status:'skipped', reason:job.blockedReason });
+        continue;
+      }
       const delivery = await fetchShopifyDeliveryStatus(job.shopDomain, job);
       job.lastDeliveryCheckAt = new Date();
       job.deliveryStatus = cleanText(delivery.currentStatus || '', 80);
@@ -477,7 +597,10 @@ async function scheduleReviewRequestFromOrder({ shopDomain, order = {}, source =
   const delivered = !cfg.deliveryTagRequired || hasRequiredDeliveryTag(order, cfg.deliveryTag) || Boolean(testMode && order.delivered !== false);
   const deliveredAt = delivered ? new Date(order.delivered_at || order.updated_at || order.fulfilled_at || new Date()) : null;
   const anchorDate = cfg.deliveryAnchor === 'delivered_tag' && deliveredAt ? deliveredAt : fulfilledAt;
-  const products = await enrichReviewProducts(cleanShop, productsFromOrder(order), settingsDoc?.attributeProfiles || []);
+  let products = await enrichReviewProducts(cleanShop, productsFromOrder(order), settingsDoc?.attributeProfiles || []);
+  const reviewedFilter = testMode ? { products, suppressedProducts: [] } : await filterAlreadyReviewedProducts(cleanShop, email, products);
+  products = reviewedFilter.products;
+  const orderSuppression = testMode ? '' : orderSuppressionReason(order);
   const scheduledAt = delivered ? addDays(anchorDate, effectiveDelay) : null;
   let status = email && products.length && cfg.enabled && cfg.nativeEnabled ? 'scheduled' : 'blocked';
   let blockedReason = '';
@@ -485,9 +608,21 @@ async function scheduleReviewRequestFromOrder({ shopDomain, order = {}, source =
     status = 'skipped';
     blockedReason = eligibility.reason;
   }
+  else if (!testMode && orderSuppression) {
+    status = 'skipped';
+    blockedReason = orderSuppression;
+  }
   else if (!cfg.enabled || !cfg.nativeEnabled) blockedReason = 'Native review request automation is disabled.';
-  else if (!email) blockedReason = 'Order has no customer email.';
-  else if (!products.length) blockedReason = 'Order has no reviewable products.';
+  else if (!email) {
+    status = testMode ? 'blocked' : 'skipped';
+    blockedReason = 'Review request skipped: order has no customer email.';
+  }
+  else if (!products.length) {
+    status = testMode ? 'blocked' : 'skipped';
+    blockedReason = reviewedFilter.suppressedProducts?.length
+      ? 'Review request skipped: customer has already reviewed every reviewable product in this order.'
+      : 'Review request skipped: order has no reviewable products.';
+  }
   else if (!delivered) {
     status = 'awaiting_delivery';
     blockedReason = `Waiting for Shopify delivery confirmation before starting the ${effectiveDelay}-day review timer. The "${cfg.deliveryTag}" order tag is used only as a fallback.`;
@@ -732,30 +867,100 @@ function renderTemplateReviewEmail({ template, shopDomain, shopName, customerNam
   return `<div style="font-family:${escapeEmailHtml(headingFont)};line-height:1.55;color:#111827;background:${escapeEmailHtml(bgColor)};padding:28px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:640px;background:${escapeEmailHtml(cardColor)};border:1px solid #e5e7eb;border-radius:18px;padding:28px;text-align:center;"><tr><td>${logoHtml}<h1 style="margin:0 0 12px;font-size:28px;line-height:1.15;text-align:${escapeEmailHtml(headingAlign)};font-weight:${escapeEmailHtml(headingWeight)};font-family:${escapeEmailHtml(headingFont)};">${escapeEmailHtml(heading)}</h1><p style="margin:0 0 10px;color:#4b5563;text-align:${escapeEmailHtml(introAlign)};">${escapeEmailHtml(intro)}</p><p style="margin:0 0 16px;color:#4b5563;text-align:${escapeEmailHtml(bodyAlign)};">${escapeEmailHtml(body)}</p><p style="margin:0 0 14px;color:#667085;font-size:13px;">Order: <strong>${escapeEmailHtml(orderId || 'recent order')}</strong></p><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">${beforeSections}${links}${afterSections}</table><p style="margin:22px 0 0;color:#667085;font-size:13px;">${escapeEmailHtml(signoff)}</p><p style="margin:18px 0 0;color:#98a2b3;font-size:12px;">Sent by ${escapeEmailHtml(shopName || friendlyShopDisplayName(shopDomain))}. This review link is unique to your order.</p></td></tr></table></td></tr></table></div>`;
 }
 
+
+async function buildReviewRequestPreview({ shopDomain, sourceJob }) {
+  if (!sourceJob) {
+    const error = new Error('Review request job not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const [settingsDoc, emailSettings] = await Promise.all([
+    Settings.findOne({ shopDomain }).lean(),
+    EmailProviderSettings.findOne({ shopDomain }).lean(),
+  ]);
+  const cfg = reviewAutomationConfig(settingsDoc || {});
+  const context = sourceJob.testMode
+    ? { order:{}, products:Array.isArray(sourceJob.products)?sourceJob.products:[], suppressedProducts:[] }
+    : await canonicalReviewContext(shopDomain, sourceJob, settingsDoc);
+
+  const decision = sourceJob.testMode
+    ? { eligible:true, reason:'', checks:[], orderCreatedAt:sourceJob.orderCreatedAt || null, email:sourceJob.customerEmail || '' }
+    : eligibilityChecks({ job:sourceJob, order:context.order, products:context.products, suppressedProducts:context.suppressedProducts, cfg });
+
+  const products = context.products || [];
+  const token = createReviewToken({
+    shopDomain,
+    email: sourceJob.customerEmail,
+    customerName: sourceJob.customerName || 'Customer',
+    orderId: sourceJob.orderId,
+    orderName: sourceJob.orderName || '',
+    orderDate: sourceJob.fulfilledAt || sourceJob.createdAt || '',
+    products,
+    expiresDays:45,
+    testMode:Boolean(sourceJob.testMode),
+  });
+  const reviewUrl = token
+    ? `https://${shopDomain}/pages/leave-review?shopDomain=${encodeURIComponent(shopDomain)}&mode=order&order_id=${encodeURIComponent(sourceJob.orderId)}&email=${encodeURIComponent(sourceJob.customerEmail)}&token=${encodeURIComponent(token)}${sourceJob.testMode ? '&test=1' : ''}`
+    : '#preview-review-link';
+
+  const template = await findPrimaryReviewTemplate(shopDomain);
+  const subject = template?.subject || cfg.subject || 'How was your recent order?';
+  const html = template
+    ? renderTemplateReviewEmail({ template, shopDomain, shopName:emailSettings?.fromName || friendlyShopDisplayName(shopDomain), customerName:sourceJob.customerName, orderId:sourceJob.orderName || sourceJob.orderId, reviewUrl, products })
+    : reviewRequestHtml({ shopDomain, customerName:sourceJob.customerName, orderId:sourceJob.orderName || sourceJob.orderId, reviewUrl, products });
+
+  return {
+    ok:true,
+    jobId:String(sourceJob._id || ''),
+    orderId:sourceJob.orderName || sourceJob.orderId || '',
+    recipient:sourceJob.customerEmail || '',
+    customerName:sourceJob.customerName || '',
+    subject,
+    fromName:emailSettings?.fromName || 'Store Reviews',
+    fromEmail:emailSettings?.fromEmail || emailSettings?.smtpUser || '',
+    html,
+    templateName:template?.name || 'Default review request',
+    delayDays:Number(sourceJob.delayDays ?? cfg.delayDays ?? DEFAULT_DELAY_DAYS),
+    deliveredAt:sourceJob.deliveredAt || null,
+    scheduledAt:sourceJob.scheduledAt || null,
+    state:reviewQueueState(sourceJob,cfg),
+    eligibility:{ eligible:decision.eligible, reason:decision.reason || '', checks:decision.checks || [] },
+    products:products.map((product)=>({ productId:product.productId || product.id || '', title:product.title || 'Purchased product', image:product.image || '' })),
+    excludedProducts:(context.suppressedProducts || []).map((product)=>({ productId:product.productId || product.id || '', title:product.title || 'Purchased product', reason:'Already reviewed by this customer' })),
+    note:'This preview uses the current primary template and current Shopify order data. The same eligibility checks run again immediately before SMTP send.',
+  };
+}
+
 async function sendReviewRequestJob(job) {
   const shopDomain = job.shopDomain;
   const settingsDoc = await Settings.findOne({ shopDomain }).lean();
   const cfg = reviewAutomationConfig(settingsDoc || {});
+  let canonical = null;
+
   if (!job.testMode) {
-    // A live customer send is always rebuilt from the canonical Shopify order.
-    // This prevents stale/partial webhook payloads or persisted subdocuments from
-    // producing a review link with missing products, images, tags or sliders.
-    await refreshReviewJobProductsFromShopify(shopDomain, job, settingsDoc);
+    canonical = await refreshReviewJobProductsFromShopify(shopDomain, job, settingsDoc);
+    const decision = eligibilityChecks({
+      job,
+      order: canonical.order,
+      products: canonical.products,
+      suppressedProducts: canonical.suppressedProducts,
+      cfg,
+    });
+    if (!decision.eligible) {
+      if (decision.orderCreatedAt) job.orderCreatedAt = decision.orderCreatedAt;
+      return markReviewJobSkipped(job, decision.reason);
+    }
   } else {
     const enrichedProducts = await enrichReviewProducts(shopDomain, job.products || [], settingsDoc?.attributeProfiles || []);
     if (enrichedProducts.length) { job.set('products', enrichedProducts); await job.save(); }
   }
-  const orderCreatedAt = resolveOrderCreatedAt({}, job.orderCreatedAt || job.fulfilledAt || job.createdAt || null);
+
+  const orderCreatedAt = resolveOrderCreatedAt(canonical?.order || {}, job.orderCreatedAt || job.fulfilledAt || job.createdAt || null);
   const eligibility = reviewRequestEligibility(orderCreatedAt, cfg);
   if (!job.testMode && !eligibility.eligible) {
-    job.status = 'skipped';
-    job.scheduledAt = null;
-    job.blockedReason = eligibility.reason;
-    job.errorMessage = '';
-    job.lastAttemptAt = new Date();
     if (orderCreatedAt) job.orderCreatedAt = orderCreatedAt;
-    await job.save();
-    return job;
+    return markReviewJobSkipped(job, eligibility.reason);
   }
   const settings = await EmailProviderSettings.findOne({ shopDomain });
   if (!settings || !settings.enabled || !settings.smtpPassEncrypted) {
@@ -1049,6 +1254,9 @@ module.exports = {
   plainReviewProduct,
   fetchShopifyOrderForReviewJob,
   refreshReviewJobProductsFromShopify,
+  buildReviewRequestPreview,
+  filterAlreadyReviewedProducts,
+  orderSuppressionReason,
   resolveOrderCreatedAt,
   getAutomationConfig,
   scheduleReviewRequestFromOrder,

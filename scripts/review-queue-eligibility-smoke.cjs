@@ -1,0 +1,24 @@
+'use strict';
+const fs=require('fs');
+const auto=fs.readFileSync('src/modules/reviews/reviewRequestAutomation.js','utf8');
+const admin=fs.readFileSync('src/routes/admin.js','utf8');
+const ui=fs.readFileSync('public/review-operations.js','utf8');
+const html=fs.readFileSync('public/admin.html','utf8');
+function check(ok,msg){if(ok)console.log('✓ '+msg);else{console.error('✗ '+msg);process.exitCode=1;}}
+check(auto.includes('ELEV8_REVIEW_QUEUE_ELIGIBILITY_V1'),'eligibility patch marker exists');
+check(auto.includes('orderSuppressionReason')&&auto.includes('fully refunded'),'cancelled/refunded suppression exists');
+check(auto.includes('filterAlreadyReviewedProducts'),'already-reviewed products are filtered');
+check(auto.includes('canonicalReviewContext'),'send and preview share canonical Shopify context');
+check(auto.includes('preflightEligibility'),'age gate runs before delivery API lookup');
+check(auto.includes('buildReviewRequestPreview'),'exact send preview builder exists');
+check(auto.includes('return markReviewJobSkipped(job, decision.reason)'),'SMTP send re-checks eligibility');
+check(admin.includes("'/review-automation/jobs/:jobId/preview'"),'exact-preview endpoint exists');
+check(admin.includes("'/review-automation/jobs/:jobId/skip'"),'manual skip endpoint exists');
+check(admin.includes('delayDays: Number(job.delayDays'),'queue API exposes actual delay');
+check(ui.includes("emailFilter='all'"),'queue filters exist');
+check(ui.includes('Preview email')&&ui.includes('previewReviewRequestJob'),'per-job preview exists');
+check(ui.includes('skipReviewRequestJob'),'manual skip action exists');
+check(ui.includes("cache?.config?.delayDays??14"),'countdown reads configured delay');
+check(!html.includes('delivered → 7-day review countdown'),'old hard-coded 7-day label removed');
+if(process.exitCode)process.exit(process.exitCode);
+console.log('ELEV8 Review Queue & Eligibility smoke test passed.');
