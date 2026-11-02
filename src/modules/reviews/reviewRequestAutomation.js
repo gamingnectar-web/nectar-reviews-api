@@ -289,19 +289,24 @@ function deliveryStatusLabel(status = '') {
   return String(status || '').trim().toLowerCase().replace(/_/g, ' ');
 }
 
+/* ELEV8_REVIEW_DELIVERY_RECONCILIATION_FIX_V1 */
 function fulfillmentDelivered(fulfillment = {}) {
   if (fulfillment.deliveredAt) return true;
-  if (String(fulfillment.displayStatus || '').toUpperCase() === 'DELIVERED') return true;
+  const displayStatus = String(fulfillment.displayStatus || '').toUpperCase();
+  if (['DELIVERED', 'PICKED_UP'].includes(displayStatus)) return true;
   const events = Array.isArray(fulfillment.events?.nodes) ? fulfillment.events.nodes : [];
-  return events.some((event) => String(event?.status || '').toUpperCase() === 'DELIVERED');
+  return events.some((event) => ['DELIVERED', 'PICKED_UP'].includes(String(event?.status || '').toUpperCase()));
 }
 
 function fulfillmentDeliveredAt(fulfillment = {}) {
+  const displayStatus = String(fulfillment.displayStatus || '').toUpperCase();
+  const events = Array.isArray(fulfillment.events?.nodes) ? fulfillment.events.nodes : [];
   const candidates = [
     fulfillment.deliveredAt,
-    ...(Array.isArray(fulfillment.events?.nodes) ? fulfillment.events.nodes
-      .filter((event) => String(event?.status || '').toUpperCase() === 'DELIVERED')
-      .map((event) => event.happenedAt || event.createdAt) : []),
+    ...events
+      .filter((event) => ['DELIVERED', 'PICKED_UP'].includes(String(event?.status || '').toUpperCase()))
+      .map((event) => event.happenedAt || event.createdAt),
+    ...(displayStatus === 'PICKED_UP' && fulfillment.updatedAt ? [fulfillment.updatedAt] : []),
   ].filter(Boolean).map((value) => new Date(value)).filter((date) => !Number.isNaN(date.getTime()));
   return candidates.sort((a, b) => b.getTime() - a.getTime())[0] || null;
 }
@@ -321,18 +326,17 @@ async function fetchShopifyDeliveryStatus(shopDomain, job = {}) {
       tags
       createdAt
       processedAt
+      updatedAt
       displayFulfillmentStatus
       fulfillments(first: 50) {
-        nodes {
-          id
-          status
-          displayStatus
-          deliveredAt
-          inTransitAt
-          updatedAt
-          trackingInfo(first: 5) { company number url }
-          events(first: 20, reverse: true) { nodes { status happenedAt createdAt } }
-        }
+        id
+        status
+        displayStatus
+        deliveredAt
+        inTransitAt
+        updatedAt
+        trackingInfo(first: 5) { company number url }
+        events(first: 20, reverse: true) { nodes { status happenedAt createdAt } }
       }
     }
   }`;
@@ -353,7 +357,8 @@ async function fetchShopifyDeliveryStatus(shopDomain, job = {}) {
     throw error;
   }
 
-  const fulfillments = Array.isArray(order.fulfillments?.nodes) ? order.fulfillments.nodes : [];
+  // ELEV8_REVIEW_DELIVERY_RECONCILIATION_FIX_V1: Order.fulfillments is a list, not a connection.
+  const fulfillments = Array.isArray(order.fulfillments) ? order.fulfillments : [];
   const active = fulfillments.filter((fulfillment) => !['CANCELLED', 'CANCELED', 'FAILURE', 'ERROR'].includes(String(fulfillment.status || '').toUpperCase()));
   const deliveredFulfillments = active.filter(fulfillmentDelivered);
   const tagDelivered = hasRequiredDeliveryTag({ tags: order.tags }, job.requiredDeliveryTag || 'delivered');
@@ -362,8 +367,9 @@ async function fetchShopifyDeliveryStatus(shopDomain, job = {}) {
   const deliveredDates = deliveredFulfillments.map(fulfillmentDeliveredAt).filter(Boolean);
   const finalDeliveredAt = deliveredDates.sort((a, b) => b.getTime() - a.getTime())[0] || null;
   const displayStatuses = active.map((fulfillment) => String(fulfillment.displayStatus || fulfillment.status || '')).filter(Boolean);
+  const allPickedUp = active.length > 0 && active.every((fulfillment) => String(fulfillment.displayStatus || '').toUpperCase() === 'PICKED_UP');
   const currentStatus = allCarrierDelivered
-    ? 'DELIVERED'
+    ? (allPickedUp ? 'PICKED_UP' : 'DELIVERED')
     : (displayStatuses.find((status) => String(status).toUpperCase() === 'OUT_FOR_DELIVERY')
       || displayStatuses.find((status) => String(status).toUpperCase() === 'IN_TRANSIT')
       || displayStatuses[0]
@@ -371,7 +377,9 @@ async function fetchShopifyDeliveryStatus(shopDomain, job = {}) {
 
   return {
     delivered,
-    deliveredAt: finalDeliveredAt || (tagDelivered ? new Date() : null),
+    deliveredAt: finalDeliveredAt || (tagDelivered
+      ? new Date(order.updatedAt || order.processedAt || order.createdAt || new Date())
+      : null),
     source: allCarrierDelivered ? 'shopify_fulfillment_delivery' : (tagDelivered ? 'shopify_order_tag' : 'shopify_fulfillment_monitor'),
     currentStatus,
     orderName: order.name || job.orderName || '',
@@ -417,11 +425,23 @@ async function reconcileAwaitingDeliveryJobs({ limit = 25, jobId = '' } = {}) {
       job.errorMessage = '';
 
       if (delivery.delivered) {
-        const deliveredAt = delivery.deliveredAt || new Date();
-        job.status = 'scheduled';
-        job.deliveredAt = deliveredAt;
-        job.scheduledAt = addDays(deliveredAt, Number(job.delayDays || DEFAULT_DELAY_DAYS));
-        job.blockedReason = '';
+        // ELEV8_REVIEW_DELIVERY_RECONCILIATION_FIX_V1: enforce the old-order safety gate before backlog jobs become sendable.
+        const cfg = await getAutomationConfig(job.shopDomain);
+        const eligibilityDate = delivery.orderCreatedAt || job.orderCreatedAt || job.fulfilledAt || job.createdAt || null;
+        const eligibility = reviewRequestEligibility(eligibilityDate, cfg);
+
+        if (!eligibility.eligible) {
+          job.status = 'skipped';
+          job.scheduledAt = null;
+          job.blockedReason = eligibility.reason;
+          job.errorMessage = '';
+        } else {
+          const deliveredAt = delivery.deliveredAt || new Date();
+          job.status = 'scheduled';
+          job.deliveredAt = deliveredAt;
+          job.scheduledAt = addDays(deliveredAt, Number(job.delayDays || DEFAULT_DELAY_DAYS));
+          job.blockedReason = '';
+        }
       } else {
         const statusLabel = deliveryStatusLabel(delivery.currentStatus || 'awaiting carrier update');
         job.blockedReason = `Waiting for Shopify delivery confirmation${statusLabel ? ` · current status: ${statusLabel}` : ''}.`;
