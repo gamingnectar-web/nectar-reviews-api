@@ -1,0 +1,118 @@
+{% assign elev8_app_url = block.settings.app_url | default: 'https://nectar-reviews-api.onrender.com' %}
+{% assign elev8_shop_domain = shop.permanent_domain | default: shop.domain %}
+
+<button
+  type="button"
+  class="elev8-product-review-summary elev8-product-review-summary--{{ block.settings.alignment }}"
+  data-elev8-product-review-summary
+  data-api-base="{{ elev8_app_url | append: '/api' | escape }}"
+  data-shop-domain="{{ elev8_shop_domain | escape }}"
+  data-product-id="{{ product.id }}"
+  data-target-id="elev8-reviews-{{ product.id }}"
+  data-text-template="{{ block.settings.text_template | escape }}"
+  data-show-average="{{ block.settings.show_average }}"
+  data-show-zero="{{ block.settings.show_zero }}"
+  style="
+    --eprs-star-color: {{ block.settings.star_color }};
+    --eprs-text-color: {{ block.settings.text_color }};
+    --eprs-font-size: {{ block.settings.font_size }}px;
+    --eprs-star-size: {{ block.settings.star_size }}px;
+    --eprs-gap: {{ block.settings.gap }}px;
+  "
+  aria-hidden="true"
+>
+  <span class="elev8-product-review-summary__stars" aria-hidden="true">
+    <span class="elev8-product-review-summary__stars-base">★★★★★</span>
+    <span class="elev8-product-review-summary__stars-fill" data-elev8-product-review-stars>★★★★★</span>
+  </span>
+  <span class="elev8-product-review-summary__copy" data-elev8-product-review-copy></span>
+</button>
+
+{% schema %}
+{
+  "name": "t:product_review_summary.name",
+  "target": "section",
+  "javascript": "product-review-summary.js",
+  "stylesheet": "product-review-summary.css",
+  "settings": [
+    {
+      "type": "text",
+      "id": "text_template",
+      "label": "t:product_review_summary.settings.text_template.label",
+      "info": "t:product_review_summary.settings.text_template.info",
+      "default": "t:product_review_summary.defaults.text_template"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_average",
+      "label": "t:product_review_summary.settings.show_average.label",
+      "default": false
+    },
+    {
+      "type": "checkbox",
+      "id": "show_zero",
+      "label": "t:product_review_summary.settings.show_zero.label",
+      "default": true
+    },
+    {
+      "type": "select",
+      "id": "alignment",
+      "label": "t:product_review_summary.settings.alignment.label",
+      "default": "left",
+      "options": [
+        { "value": "left", "label": "t:product_review_summary.settings.alignment.options.left" },
+        { "value": "center", "label": "t:product_review_summary.settings.alignment.options.center" },
+        { "value": "right", "label": "t:product_review_summary.settings.alignment.options.right" }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "font_size",
+      "min": 10,
+      "max": 22,
+      "step": 1,
+      "unit": "px",
+      "label": "t:product_review_summary.settings.font_size.label",
+      "default": 13
+    },
+    {
+      "type": "range",
+      "id": "star_size",
+      "min": 12,
+      "max": 28,
+      "step": 1,
+      "unit": "px",
+      "label": "t:product_review_summary.settings.star_size.label",
+      "default": 18
+    },
+    {
+      "type": "range",
+      "id": "gap",
+      "min": 2,
+      "max": 16,
+      "step": 1,
+      "unit": "px",
+      "label": "t:product_review_summary.settings.gap.label",
+      "default": 7
+    },
+    {
+      "type": "color",
+      "id": "star_color",
+      "label": "t:product_review_summary.settings.star_color.label",
+      "default": "#f5b301"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "t:product_review_summary.settings.text_color.label",
+      "default": "#111827"
+    },
+    {
+      "type": "text",
+      "id": "app_url",
+      "label": "t:product_review_summary.settings.app_url.label",
+      "info": "t:product_review_summary.settings.app_url.info"
+    }
+  ]
+}
+{% endschema %}

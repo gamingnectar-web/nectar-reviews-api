@@ -1,0 +1,67 @@
+.elev8-product-review-summary {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--eprs-text-color, #111827);
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--eprs-gap, 7px);
+  min-height: 24px;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-size: var(--eprs-font-size, 13px);
+  font-weight: 800;
+  line-height: 1.1;
+  cursor: pointer;
+  text-align: left;
+}
+
+.elev8-product-review-summary[hidden],
+.elev8-product-review-summary[aria-hidden="true"] {
+  visibility: hidden;
+}
+
+.elev8-product-review-summary--center { justify-content: center; }
+.elev8-product-review-summary--right { justify-content: flex-end; }
+
+.elev8-product-review-summary__stars {
+  position: relative;
+  display: inline-block;
+  color: #d1d5db;
+  font-size: var(--eprs-star-size, 18px);
+  letter-spacing: 0.04em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.elev8-product-review-summary__stars-base {
+  display: block;
+}
+
+.elev8-product-review-summary__stars-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  overflow: hidden;
+  color: var(--eprs-star-color, #f5b301);
+  white-space: nowrap;
+}
+
+.elev8-product-review-summary__copy {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.elev8-product-review-summary:hover .elev8-product-review-summary__copy,
+.elev8-product-review-summary:focus-visible .elev8-product-review-summary__copy {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.elev8-product-review-summary:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 4px;
+  border-radius: 2px;
+}

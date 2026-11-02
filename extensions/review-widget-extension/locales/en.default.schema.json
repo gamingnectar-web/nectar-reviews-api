@@ -95,5 +95,50 @@
         "info": "Leave blank to use the production ELEV8 Reviews API."
       }
     }
+  },
+  "product_review_summary": {
+    "name": "Product review summary",
+    "defaults": {
+      "text_template": "{count} reviews"
+    },
+    "settings": {
+      "text_template": {
+        "label": "Review wording",
+        "info": "Use {count} for the live review count and {average} for the live average rating."
+      },
+      "show_average": {
+        "label": "Show average rating in the wording"
+      },
+      "show_zero": {
+        "label": "Show 0 reviews before the first review"
+      },
+      "alignment": {
+        "label": "Alignment",
+        "options": {
+          "left": "Left",
+          "center": "Centre",
+          "right": "Right"
+        }
+      },
+      "font_size": {
+        "label": "Text size"
+      },
+      "star_size": {
+        "label": "Star size"
+      },
+      "gap": {
+        "label": "Gap between stars and text"
+      },
+      "star_color": {
+        "label": "Star colour"
+      },
+      "text_color": {
+        "label": "Text colour"
+      },
+      "app_url": {
+        "label": "Advanced: ELEV8 API URL",
+        "info": "Leave blank to use the production ELEV8 Reviews API."
+      }
+    }
   }
 }

@@ -8,6 +8,7 @@ const { shopifyFetchOptional } = require('../utils/shopify');
 const { verifyReviewToken, productMatchesToken, normaliseProduct } = require('../utils/reviewTokens');
 const { awardForReview } = require('../modules/loyalty/loyalty.service');
 const { getProductReviewIdentitySummary } = require('../modules/reviews/reviewIdentity.service'); // ELEV8_REVIEW_IDENTITY_WIDGET_V1
+const { getProductCardReviewSummaries } = require('../modules/reviews/reviewCardSummary.service'); // ELEV8_PRODUCT_RATING_SURFACES_V1
 const { queueReviewCompletionTracking } = require('../modules/reviews/reviewCompletion.service'); // ELEV8_REVIEW_COMPLETION_SIDECAR_V1
 
 const router = express.Router();
@@ -637,6 +638,32 @@ router.post('/reviews', async (req, res, next) => {
     await awardForReview({ shopDomain, review: saved, trigger: 'review_submitted' }).catch((error) => console.warn('Loyalty submit award skipped:', error.message));
     queueReviewCompletionTracking(saved);
     return res.status(201).json({ ok: true, review: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+router.get('/reviews/card-summaries', async (req, res, next) => {
+  try {
+    const shopDomain = cleanShopDomain(req.query.shopDomain || req.query.shop);
+    if (!shopDomain || !isValidShopDomain(shopDomain)) {
+      return res.status(400).json({ error: 'Valid shopDomain is required.' });
+    }
+
+    const productIds = String(req.query.productIds || '')
+      .split(',')
+      .map((value) => cleanText(value, 200))
+      .filter(Boolean)
+      .slice(0, 50);
+
+    if (!productIds.length) {
+      return res.status(400).json({ error: 'At least one product ID is required.' });
+    }
+
+    const summaries = await getProductCardReviewSummaries(shopDomain, productIds);
+    res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+    return res.json({ summaries });
   } catch (error) {
     next(error);
   }
