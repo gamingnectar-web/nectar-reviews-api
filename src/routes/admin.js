@@ -13,6 +13,7 @@ const { createReviewToken } = require('../utils/reviewTokens');
 const { scheduleReviewRequestFromOrder, sendDueReviewRequests, enrichReviewProducts, refreshReviewJobProductsFromShopify, buildReviewRequestPreview, reconcileAwaitingDeliveryJobs, automationReadiness, registerReviewWebhookSubscriptions, inspectReviewWebhookSubscriptions, expectedReviewWebhookSubscriptions } = require('../modules/reviews/reviewRequestAutomation'); // ELEV8_REVIEW_QUEUE_ELIGIBILITY_V1
 const { awardForReview, getOrCreateLoyaltyProgram, normaliseCustomerRef, customerHintFromHash, createLedgerEntry } = require('../modules/loyalty/loyalty.service');
 const { getOrCreateDiscountProgram, issueDiscountCode } = require('../modules/discounts/discounts.service');
+const { getCompletionStateMap } = require('../modules/reviews/reviewCompletion.service'); // ELEV8_REVIEW_COMPLETION_SIDECAR_V1
 
 const router = express.Router();
 
@@ -2575,6 +2576,10 @@ router.get('/review-operations', async (req, res, next) => {
       Settings.findOne({ shopDomain }).lean(),
     ]);
     const reviewCfg = settingsDoc?.reviewAutomation || {};
+    const completionMap = await getCompletionStateMap(shopDomain, jobs).catch((error) => {
+      console.warn('Review completion sidecar read skipped:', error.message);
+      return new Map();
+    });
     const safeEmail = (value = '') => {
       const email = String(value || '');
       const [local, domain] = email.split('@');
@@ -2591,6 +2596,28 @@ router.get('/review-operations', async (req, res, next) => {
       source: job.source || '',
       productCount: Array.isArray(job.products) ? job.products.length : 0,
       products: (Array.isArray(job.products) ? job.products : []).slice(0,8).map((product)=>({ productId:product.productId || product.id || '', title:product.title || 'Purchased product' })),
+      completion: (() => {
+        const state = completionMap.get(String(job._id || ''));
+        return state ? {
+          status: state.completionStatus || 'none',
+          requestedCount: Number(state.requestedCount || 0),
+          reviewedCount: Number(state.reviewedCount || 0),
+          reviewedProductIds: Array.isArray(state.reviewedProductIds) ? state.reviewedProductIds : [],
+          firstReviewedAt: state.firstReviewedAt || null,
+          lastReviewedAt: state.lastReviewedAt || null,
+          completedAt: state.completedAt || null,
+          postReviewActionStatus: state.postReviewActionStatus || 'not_configured',
+        } : {
+          status: 'none',
+          requestedCount: Array.isArray(job.products) ? job.products.length : 0,
+          reviewedCount: 0,
+          reviewedProductIds: [],
+          firstReviewedAt: null,
+          lastReviewedAt: null,
+          completedAt: null,
+          postReviewActionStatus: 'not_configured',
+        };
+      })(),
       delayDays: Number(job.delayDays ?? reviewCfg.delayDays ?? 14),
       orderCreatedAt: job.orderCreatedAt || null,
       fulfilledAt: job.fulfilledAt || null,

@@ -195,12 +195,22 @@
     const delivered=Boolean(row.deliveredAt);
     const dispatched=Boolean(row.fulfilledAt);
     const ready=Boolean(row.status==='scheduled'&&due&&!Number.isNaN(due.getTime())&&due<=now);
+    const completion=row.completion||{};
+    const completionStatus=completion.status||'none';
+    const requestedCount=Number(completion.requestedCount||row.productCount||0);
+    const reviewedCount=Number(completion.reviewedCount||0);
+    const reviewStage=completionStatus==='complete'
+      ? {key:'review',label:'Review complete',detail:completion.completedAt?fmt(completion.completedAt):`${reviewedCount} of ${requestedCount} products reviewed`,state:'complete'}
+      : completionStatus==='partial'
+        ? {key:'review',label:`Review ${reviewedCount}/${requestedCount}`,detail:`${reviewedCount} of ${requestedCount} products reviewed`,state:'active'}
+        : {key:'review',label:'Review',detail:sent?'Waiting for customer':'Not started',state:'pending'};
     return [
       {key:'order',label:'Order',detail:row.orderCreatedAt?fmt(row.orderCreatedAt):'Order captured',state:'complete'},
       {key:'dispatch',label:'Dispatched',detail:dispatched?fmt(row.fulfilledAt):'Waiting',state:dispatched?'complete':'pending'},
       {key:'delivery',label:'Delivered',detail:delivered?fmt(row.deliveredAt):(row.deliveryStatus||'Waiting'),state:delivered?'complete':(row.status==='awaiting_delivery'?'active':'pending')},
       {key:'delay',label:`${delayDays}-day wait`,detail:delivered?(ready||sent||skipped?'Completed':countdown(row).label):'Not started',state:delivered?(ready||sent||skipped?'complete':'active'):'pending'},
       {key:'send',label:skipped?'Skipped':sent?'Sent':ready?'Ready':'Email',detail:skipped?(row.blockedReason||'Suppressed'):sent?fmt(row.sentAt):ready?'Ready to send':row.scheduledAt?fmt(row.scheduledAt):'Not scheduled',state:skipped?'failed':sent?'complete':ready?'active':'pending'},
+      reviewStage,
     ];
   }
 
@@ -309,7 +319,7 @@
         </div>
         <div class="review-send-queue-person-recipient">${esc(row.email||row.customer||'Customer')}</div>
         <div class="review-send-queue-person-stage">${esc(stage.label)} · ${esc(timer.label)}</div>
-        <small>${esc(products||`${row.productCount||0} product(s)`)}</small>
+        <small>${esc(products||`${row.productCount||0} product(s)`)}${row.completion?.status==='complete'?' · Review complete':row.completion?.status==='partial'?` · ${row.completion.reviewedCount}/${row.completion.requestedCount} reviewed`:''}</small>
       </button>`;
     }).join(''):'<div class="review-send-queue-empty"><strong>No matching review requests.</strong><p>Try another filter or search.</p></div>';
 

@@ -55,7 +55,7 @@
 .review-send-detail-header h3{font-size:22px;margin:3px 0 2px}
 .review-send-detail-header p{margin:0;color:#607381}
 .review-send-detail-actions{display:flex;gap:8px}
-.review-send-journey{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:14px 0 20px}
+.review-send-journey{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:14px 0 20px}
 .review-send-stage{position:relative;display:grid;gap:4px;padding:12px;border:1px solid #e1e7eb;border-radius:12px;background:#fafbfc}
 .review-send-stage:after{content:"";position:absolute;top:20px;left:calc(100% + 1px);width:10px;height:2px;background:#d9e2e7}
 .review-send-stage:last-child:after{display:none}

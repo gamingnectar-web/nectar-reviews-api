@@ -7,6 +7,7 @@ const { hashValue, decryptSecret } = require('../utils/crypto');
 const { shopifyFetchOptional } = require('../utils/shopify');
 const { verifyReviewToken, productMatchesToken, normaliseProduct } = require('../utils/reviewTokens');
 const { awardForReview } = require('../modules/loyalty/loyalty.service');
+const { queueReviewCompletionTracking } = require('../modules/reviews/reviewCompletion.service'); // ELEV8_REVIEW_COMPLETION_SIDECAR_V1
 
 const router = express.Router();
 
@@ -617,6 +618,7 @@ router.post('/reviews', async (req, res, next) => {
 
     const saved = await Review.create(payload);
     await awardForReview({ shopDomain, review: saved, trigger: 'review_submitted' }).catch((error) => console.warn('Loyalty submit award skipped:', error.message));
+    queueReviewCompletionTracking(saved);
     return res.status(201).json({ ok: true, review: saved });
   } catch (error) {
     next(error);
@@ -858,6 +860,7 @@ router.post('/reviews/bulk', async (req, res, next) => {
     for (const review of saved) {
       await awardForReview({ shopDomain, review, trigger: 'review_submitted' }).catch((error) => console.warn('Loyalty bulk submit award skipped:', error.message));
     }
+    queueReviewCompletionTracking(saved);
     return res.status(201).json({ ok: true, reviews: saved.map(normaliseReviewForPublic), count: saved.length, alreadyReviewedItemIds: reviewedProductIds });
   } catch (error) {
     next(error);
