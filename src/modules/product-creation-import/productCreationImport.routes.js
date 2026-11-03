@@ -69,6 +69,8 @@ function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 }
 
+/* ELEV8_NATIVE_PACK_BREAKDOWN_V1 */
+const {specRows,checkBundleAccess,configureNativePackBreakdown} = require('./services/packBreakdown.service');
 /* ELEV8_VARIATION_IMPORT_V1 */
 const { scanVariations, createVariationDraft } = require('./services/variationImport.service');
 router.post('/variations/scan', asyncRoute(async (req, res) => {
@@ -76,7 +78,16 @@ router.post('/variations/scan', asyncRoute(async (req, res) => {
   res.json(result);
 }));
 router.post('/variations/create', asyncRoute(async (req, res) => {
-  const result = await createVariationDraft({ shopDomain: shopDomainFromReq(req), draft: req.body?.draft || {} });
+  const shopDomain = shopDomainFromReq(req);
+  const draft = req.body?.draft || {};
+  const requested = Array.isArray(draft.variants) && draft.variants.some(v => v.included !== false && v.packBreakdown?.enabled);
+  // Check eligibility BEFORE creating the parent product; no silent inventory updates.
+  if (requested) { specRows(draft); await checkBundleAccess({ shopDomain }); }
+  const result = await createVariationDraft({ shopDomain, draft });
+  if (requested) {
+    try { result.packBreakdown = await configureNativePackBreakdown({ shopDomain, draft, parentProductId: result.product.id }); }
+    catch (error) { error.message = 'Parent Shopify draft ' + result.product.id + ' was created but bundle setup is incomplete. Do not retry or publish until reconciled. ' + error.message; throw error; }
+  }
   res.json(result);
 }));
 router.get('/seo/audit', asyncRoute(async (req, res) => {
