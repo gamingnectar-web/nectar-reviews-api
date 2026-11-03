@@ -49,7 +49,7 @@ function sourceToVariant(source, names, imageLookup, sourceUrl, minorUnits = tru
     imageUrl: absolute(img, sourceUrl), imageMapping: img ? 'supplier' : 'missing'
   };
 }
-function normalizeFromShopifyJson(product, sourceUrl) {
+function normalizeFromShopifyJson(product, sourceUrl, minorUnits = true) {
   const names = optionNames(product.options || []);
   const gallery = (product.images || []).map((img) => ({
     id: String(img?.id || ''), src: absolute(img, sourceUrl), alt: String(img?.alt || '')
@@ -59,7 +59,7 @@ function normalizeFromShopifyJson(product, sourceUrl) {
     if (src && !gallery.find(x => x.src === src)) gallery.unshift({ id: '', src, alt: '' });
   }
   const lookup = new Map(gallery.filter(x => x.id).map(x => [x.id, x.src]));
-  const variants = (product.variants || []).map(v => sourceToVariant(v, names, lookup, sourceUrl));
+  const variants = (product.variants || []).map(v => sourceToVariant(v, names, lookup, sourceUrl, minorUnits));
   const imageByVariant = new Map();
   for (const photo of (product.images || [])) {
     if (!photo || typeof photo !== 'object' || !photo.variant_ids) continue;
@@ -79,31 +79,54 @@ function normalizeFromShopifyJson(product, sourceUrl) {
 async function scanVariations({ url }) {
   const input = cleanUrl(url);
   if (!input) reject('Enter a valid product URL.');
-  const parsed = await validatePublicUrl(input);
+  let parsed;
+  try { parsed = await validatePublicUrl(input); }
+  catch (error) { reject(`Supplier address validation failed: ${error.message}`, 400); }
   const canonical = new URL(parsed.href);
   canonical.search = ''; canonical.hash = '';
   const handle = canonical.pathname.match(/^\/products\/([^/]+)/i)?.[1];
-  if (handle) {
-    const endpoint = new URL(`/products/${encodeURIComponent(decodeURIComponent(handle))}.js`, canonical.origin);
+  if (!handle) reject('This importer needs a direct supplier product URL containing /products/ and its handle.');
+  const slug = encodeURIComponent(decodeURIComponent(handle));
+  const candidates = [
+    { url: new URL(`/products/${slug}.js`, canonical.origin), cents: true, label: 'Shopify public product JS' },
+    { url: new URL(`/products/${slug}.json`, canonical.origin), cents: false, label: 'Shopify public product JSON' }
+  ];
+  const diagnostics = [];
+  for (const candidate of candidates) {
     try {
-      const res = await fetch(endpoint, { signal: AbortSignal.timeout(14000), headers: { Accept: 'application/json' }, redirect: 'error' });
-      if (res.ok && /json/i.test(res.headers.get('content-type') || '')) {
-        const body = await res.text();
-        if (body.length > 5_000_000) reject('Supplier product response is too large.');
-        const product = JSON.parse(body);
-        if (product?.title && Array.isArray(product.variants) && product.variants.length) {
-          const draft = normalizeFromShopifyJson(product, canonical.href);
-          return { draft, count: draft.variants.length, source: draft.source };
-        }
+      // Deliberately reject redirects to avoid accepting an unchecked private destination.
+      const response = await fetch(candidate.url, {
+        signal: AbortSignal.timeout(17000),
+        redirect: 'error',
+        headers: { Accept: 'application/json,text/javascript;q=0.9,*/*;q=0.5', 'User-Agent': 'Mozilla/5.0 ELEV8VariationImporter/1.1' }
+      });
+      if (!response.ok) { diagnostics.push(`${candidate.label}: HTTP ${response.status}`); continue; }
+      const raw = await response.text();
+      if (raw.length > 5_000_000) { diagnostics.push(`${candidate.label}: supplier response too large`); continue; }
+      let payload;
+      try { payload = JSON.parse(raw); }
+      catch { diagnostics.push(`${candidate.label}: response was not JSON`); continue; }
+      const product = payload?.product || payload;
+      if (!product?.title || !Array.isArray(product.variants) || !product.variants.length) {
+        diagnostics.push(`${candidate.label}: no complete variants found`);
+        continue;
       }
-    } catch (error) { if (error.status === 400) throw error; }
+      const draft = normalizeFromShopifyJson(product, canonical.href, candidate.cents);
+      return { draft, count: draft.variants.length, source: candidate.label, diagnostics };
+    } catch (error) {
+      diagnostics.push(`${candidate.label}: ${error?.cause?.code || error?.code || error?.message || 'fetch failed'}`);
+    }
   }
-  const fallback = await extractProductFromUrl(canonical.href);
-  if (!Array.isArray(fallback.sourceVariants) || !fallback.sourceVariants.length) reject('This supplier page did not expose a complete variation list. No guessed variants were created.');
-  const product = fallback.rawSupplierProduct || fallback.rawExtract?.rawSupplierProduct;
-  if (!product || !Array.isArray(product.variants)) reject('Variant options were detected but their full source data could not be verified.');
-  const draft = normalizeFromShopifyJson(product, canonical.href);
-  return { draft, count: draft.variants.length, source: draft.source };
+  // Preserve the existing cross-source fallback, but never silently invent variants.
+  try {
+    const fallback = await extractProductFromUrl(canonical.href);
+    const product = fallback.rawSupplierProduct || fallback.rawExtract?.rawSupplierProduct;
+    if (product && Array.isArray(product.variants) && product.variants.length) {
+      const draft = normalizeFromShopifyJson(product, canonical.href, fallback.source === 'shopify-public-json');
+      return { draft, count: draft.variants.length, source: 'supplier extractor', diagnostics };
+    }
+  } catch (error) { diagnostics.push(`Supplier page fallback: ${error?.cause?.code || error?.code || error?.message || 'failed'}`); }
+  reject(`Could not retrieve verifiable variants from this supplier. ${diagnostics.join(' | ').slice(0, 750)}`, 422);
 }
 function validateVariationDraft(draft) {
   const errors = [], warnings = [];

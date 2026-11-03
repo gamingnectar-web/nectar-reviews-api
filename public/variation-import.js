@@ -12,7 +12,7 @@
     // Reuse host admin authentication and session handling rather than bare unauthenticated requests.
     const response = window.adminFetch ? await window.adminFetch(`/admin/product-creation-import/variations${path}`, { method:'POST', body:JSON.stringify(body) }) : await fetch(API+path, {method:'POST', credentials:'same-origin', headers, body:JSON.stringify(body)});
     const result = typeof response.json === 'function' ? await response.json() : response;
-    if ((response.ok === false) || result?.error) throw new Error(result?.error || `Request failed (${response.status})`);
+    if ((response.ok === false) || result?.error) throw new Error(result?.error || result?.message || `Request failed (${response.status || 'unknown'})`);
     return result;
   }
   const input = (label, value, key, type='text') => `<label class="pci-var-field"><span>${esc(label)}</span><input class="pci-input" type="${type}" data-product-field="${esc(key)}" value="${esc(value)}"></label>`;
