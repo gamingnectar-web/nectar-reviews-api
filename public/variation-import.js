@@ -1,6 +1,7 @@
 (() => {
   'use strict';
   let draft = null;
+  window.ELEV8VariationImportState = () => draft;
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g,c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const API = '/api/admin/product-creation-import/variations';

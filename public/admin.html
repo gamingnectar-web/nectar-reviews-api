@@ -1608,6 +1608,14 @@
     <div class="pci-var-review"><div class="pci-product-main"><div id="pci-var-product"></div><div id="pci-var-options"></div><div id="pci-var-media"></div></div><aside class="pci-var-review-side pci-editor-card"><h4>Review actions</h4><p id="pci-var-count">0 variations</p><p class="pci-muted">All products are created as Shopify drafts. Pricing, SKU, barcode and image mapping can be edited below.</p><div id="pci-var-validation" class="pci-status"></div><div class="pci-actions"><button id="pci-var-create" class="primary-btn" type="button" disabled>Create Shopify draft</button></div><div id="pci-var-result"></div></aside></div>
     <div class="pci-editor-card"><div class="pci-editor-card-head"><h4>Variations — editable</h4><p class="pci-muted">Optional: tick Sell individually on any box variation to build a Shopify-native fixed bundle sharing stock with an individual-unit product. Set opening inventory in Shopify after draft creation.</p><div class="pci-actions compact"><button type="button" id="pci-var-select-all" class="secondary-btn">Include all</button><button type="button" id="pci-var-select-none" class="secondary-btn">Exclude all</button></div></div><div class="pci-var-table-wrap"><table class="pci-var-table"><thead><tr><th>Import</th><th>Image</th><th>Variation</th><th>SKU</th><th>Barcode</th><th>Price</th><th>Compare at</th><th>Cost</th><th>Weight</th><th>Image mapping</th><th>Supplier</th></tr></thead><tbody id="pci-var-rows"></tbody></table></div></div>
   </div>
+<div id="elev8-pack-recovery" class="pci-editor-card" style="margin:14px 0;border:2px solid #111;border-radius:12px;max-width:100%">
+  <h3>Repair / Resume existing Shopify pack inventory</h3>
+  <p>For a Shopify draft already created by ELEV8. Rescans the supplier options already loaded above, creates or reuses the individual-stock product and links native bundle components. Does not recreate the box product or set stock.</p>
+  <label for="elev8-pack-parent-id" style="display:block;font-weight:800">Existing Shopify box product ID</label>
+  <input id="elev8-pack-parent-id" class="pci-input" style="max-width:380px;margin:8px 0" placeholder="Shopify product numeric ID" />
+  <button id="elev8-pack-recovery-submit" class="secondary-btn" type="button">Repair existing draft and verify bundle links</button>
+  <div id="elev8-pack-recovery-result" class="pci-status" role="status" aria-live="polite">Scan the supplier URL and select the pack breakdown options first.</div>
+</div>
 </div>
 <div class="pci-card pci-pane pci-full-product-pane" id="pci-pane-batch">
           <div class="pci-pane-head">
@@ -1846,5 +1854,6 @@
   <script src="/elev8-workflows-nav.js" defer></script>
 <link rel="stylesheet" href="/variation-import.css?v=2"><link rel="stylesheet" href="/pack-breakdown.css?v=1">
 <script src="/variation-import.js?v=3" defer></script>
+<script src="/pack-breakdown-recovery.js?v=2" defer></script>
 </body>
 </html>

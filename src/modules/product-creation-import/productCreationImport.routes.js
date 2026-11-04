@@ -73,6 +73,12 @@ function asyncRoute(handler) {
 const {specRows,checkBundleAccess,configureNativePackBreakdown} = require('./services/packBreakdown.service');
 /* ELEV8_VARIATION_IMPORT_V1 */
 const { scanVariations, createVariationDraft } = require('./services/variationImport.service');
+/* ELEV8_RESUMABLE_PACK_RECOVERY_V2 */
+const { recoverPackBreakdown } = require('./services/packBreakdownRecovery.service');
+router.post('/variations/recover-pack', asyncRoute(async (req,res)=>{
+  const result=await recoverPackBreakdown({shopDomain:shopDomainFromReq(req),parentProductId:req.body?.parentProductId,draft:req.body?.draft||{}});
+  res.json(result);
+}));
 router.post('/variations/scan', asyncRoute(async (req, res) => {
   const result = await scanVariations({ url: req.body?.url || '' });
   res.json(result);
