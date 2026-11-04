@@ -1252,6 +1252,33 @@
                 <div><label>Product recommendations</label><select id="card-recommendation-preset" class="filter-select" onchange="window.updatePreviews()"><option value="inherit">Use default</option><option value="pill">Pill badge</option><option value="minimal">Minimal rating</option><option value="stars">Five-star row</option><option value="score">Score chip</option><option value="outline">Outline badge</option></select></div>
                 <div><label>Preview context</label><select id="card-preview-context" class="filter-select" onchange="window.updatePreviews()"><option value="collection">Collection page</option><option value="search">Search results</option><option value="recommendations">Product recommendations</option><option value="default">Default / other</option></select></div>
               </div>
+              <!-- ELEV8_PRODUCT_CARD_LAYOUTS_V1 -->
+              <div style="margin:18px 0;padding:16px;border:1px solid var(--border,#e5e7eb);border-radius:14px;background:#fafafa;">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+                  <div>
+                    <strong style="display:block;margin-bottom:4px;">Product card format</strong>
+                    <span class="muted">Set the store-wide default, then override individual Featured Collection sections when required.</span>
+                  </div>
+                  <div style="min-width:220px;">
+                    <label>Standard card format</label>
+                    <select id="card-layout-default" class="filter-select" onchange="window.updatePreviews()">
+                      <option value="standard">Standard — current theme</option>
+                      <option value="editorial">Editorial — title + rating split</option>
+                      <option value="brand_first">Brand First — centred premium</option>
+                      <option value="compact">Compact — reduced vertical space</option>
+                      <option value="commerce">Commerce — price / rating led</option>
+                    </select>
+                  </div>
+                </div>
+                <div style="margin-top:16px;">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                    <label style="margin:0;">Featured Collection overrides</label>
+                    <button type="button" class="secondary-btn" onclick="window.addFeaturedCollectionLayoutOverride()">+ Add override</button>
+                  </div>
+                  <div id="card-layout-overrides" style="display:grid;gap:8px;margin-top:8px;"></div>
+                  <p class="style-help" style="margin-bottom:0;">Use the Shopify section ID. ELEV8 reads the nearest <code>shopify-section-*</code> wrapper and changes only that Featured Collection.</p>
+                </div>
+              </div>
               <p><label><input id="card-count" type="checkbox" checked onchange="window.updatePreviews()" /> Show Count</label></p>
               <p class="style-help">Choose a product-card rating treatment per storefront context. “Use default” inherits the default version. ELEV8 automatically recognises collection pages, search results and recommendation/related-product sections.</p>
               <div class="style-actions"><button class="primary-btn" onclick="window.saveSettings()">Publish Styles</button></div>

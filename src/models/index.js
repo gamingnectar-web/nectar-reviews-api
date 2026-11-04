@@ -106,6 +106,9 @@ const settingsSchema = new mongoose.Schema({
     collectionPreset: { type: String, enum: ['inherit','pill','minimal','stars','score','outline'], default: 'inherit' },
     searchPreset: { type: String, enum: ['inherit','pill','minimal','stars','score','outline'], default: 'inherit' },
     recommendationPreset: { type: String, enum: ['inherit','pill','minimal','stars','score','outline'], default: 'inherit' },
+    // ELEV8_PRODUCT_CARD_LAYOUTS_V1
+    cardLayoutDefault: { type: String, enum: ['standard','editorial','brand_first','compact','commerce'], default: 'standard' },
+    featuredCollectionLayouts: { type: [mongoose.Schema.Types.Mixed], default: [] },
   },
   carouselStyles: {
     layout: { type: String, enum: ['grid', 'infinite', 'masonry'], default: 'infinite' },

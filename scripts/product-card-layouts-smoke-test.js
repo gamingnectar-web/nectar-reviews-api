@@ -1,0 +1,21 @@
+'use strict';
+const fs=require('fs');
+const read=(p)=>fs.readFileSync(p,'utf8');
+function c(ok,msg){if(!ok){console.error('✗ '+msg);process.exitCode=1}else console.log('✓ '+msg)}
+const models=read('src/models/index.js');
+const admin=read('src/routes/admin.js');
+const html=read('public/admin.html');
+const js=read('public/admin.js');
+const block=read('extensions/review-widget-extension/blocks/product_card_layouts.liquid');
+const asset=read('extensions/review-widget-extension/assets/product-card-layouts.js');
+const css=read('extensions/review-widget-extension/assets/product-card-layouts.css');
+c(models.includes('cardLayoutDefault')&&models.includes('featuredCollectionLayouts'),'settings persist card layouts');
+c(admin.includes('featuredCollectionLayouts')&&admin.includes("'brand_first'"),'admin validates layouts');
+c(html.includes('card-layout-default')&&html.includes('card-layout-overrides'),'customiser exposes default and section overrides');
+c(js.includes('addFeaturedCollectionLayoutOverride')&&js.includes('featuredCollectionLayouts: elev8FeaturedCollectionLayouts'),'admin edits and saves overrides');
+c(block.includes('"target": "body"')&&block.includes('product-card-layouts.js'),'theme app embed exists');
+c(asset.includes('[id^="shopify-section-"]')&&asset.includes('/reviews/card-summaries'),'storefront resolves sections and batch ratings');
+c(asset.includes("layout==='brand_first'")&&asset.includes("'editorial'"),'storefront supports new layouts');
+c(css.includes('elev8-card-layout--editorial')&&css.includes('elev8-card-layout--commerce'),'layout CSS exists');
+if(process.exitCode)process.exit(process.exitCode);
+console.log('ELEV8 product-card layouts smoke test passed.');

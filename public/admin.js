@@ -434,6 +434,11 @@ function hydrateSettings(config) {
     setValueIfExists('card-collection-preset', config.cardStyles.collectionPreset || 'inherit');
     setValueIfExists('card-search-preset', config.cardStyles.searchPreset || 'inherit');
     setValueIfExists('card-recommendation-preset', config.cardStyles.recommendationPreset || 'inherit');
+    setValueIfExists('card-layout-default', config.cardStyles.cardLayoutDefault || 'standard');
+    elev8FeaturedCollectionLayouts = Array.isArray(config.cardStyles.featuredCollectionLayouts)
+      ? config.cardStyles.featuredCollectionLayouts.map((item) => ({ ...item }))
+      : [];
+    window.renderFeaturedCollectionLayoutOverrides?.();
   }
   if (config.carouselStyles) {
     document.getElementById('car-layout').value = config.carouselStyles.layout || 'infinite';
@@ -814,6 +819,47 @@ window.removeAttribute = async function(index) {
 
 const ELEV8_PRODUCT_CARD_CONTEXTS_V1 = true;
 const ELEV8_CARD_PRESETS = new Set(['pill','minimal','stars','score','outline']);
+const ELEV8_CARD_LAYOUTS = new Set(['standard','editorial','brand_first','compact','commerce']);
+let elev8FeaturedCollectionLayouts = [];
+
+function elev8LayoutLabel(value) {
+  return ({standard:'Standard',editorial:'Editorial',brand_first:'Brand First',compact:'Compact',commerce:'Commerce'})[value] || 'Standard';
+}
+
+window.renderFeaturedCollectionLayoutOverrides = function() {
+  const host = document.getElementById('card-layout-overrides');
+  if (!host) return;
+  if (!elev8FeaturedCollectionLayouts.length) {
+    host.innerHTML = '<div class="muted" style="padding:10px 0;">No section overrides — all Featured Collections inherit the standard card format.</div>';
+    return;
+  }
+  host.innerHTML = elev8FeaturedCollectionLayouts.map((item,index) => `
+    <div style="display:grid;grid-template-columns:minmax(180px,1fr) minmax(150px,220px) auto;gap:8px;align-items:end;padding:10px;background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:10px;">
+      <div>
+        <label>Featured Collection section ID</label>
+        <input class="premium-input" value="${escapeHtml(item.sectionId || '')}" placeholder="template--…__featured_collection_…" oninput="window.updateFeaturedCollectionLayoutOverride(${index},'sectionId',this.value)" />
+      </div>
+      <div>
+        <label>Card format</label>
+        <select class="filter-select" onchange="window.updateFeaturedCollectionLayoutOverride(${index},'layout',this.value)">
+          ${['standard','editorial','brand_first','compact','commerce'].map((layout) => `<option value="${layout}" ${item.layout===layout?'selected':''}>${elev8LayoutLabel(layout)}</option>`).join('')}
+        </select>
+      </div>
+      <button type="button" class="secondary-btn" onclick="window.removeFeaturedCollectionLayoutOverride(${index})">Remove</button>
+    </div>`).join('');
+};
+
+window.addFeaturedCollectionLayoutOverride = function() {
+  elev8FeaturedCollectionLayouts.push({sectionId:'',label:'',layout:getValue('card-layout-default','standard')});
+  window.renderFeaturedCollectionLayoutOverrides();
+};
+window.updateFeaturedCollectionLayoutOverride = function(index,key,value) {
+  if(elev8FeaturedCollectionLayouts[index]) elev8FeaturedCollectionLayouts[index][key]=value;
+};
+window.removeFeaturedCollectionLayoutOverride = function(index) {
+  elev8FeaturedCollectionLayouts.splice(index,1);
+  window.renderFeaturedCollectionLayoutOverrides();
+};
 
 function elev8CardPresetForContext(context) {
   const fallback = ELEV8_CARD_PRESETS.has(getValue('card-display-preset', 'pill'))
@@ -883,6 +929,7 @@ window.updatePreviews = function() {
   const badgeLabel = getValue('card-badge-label', '4.8 (12)');
   const cardPreviewContext = getValue('card-preview-context', 'collection');
   const cardPreset = elev8CardPresetForContext(cardPreviewContext);
+  const cardFormat = getValue('card-layout-default', 'standard');
 
   const previewWrap = document.getElementById('preview-container-wrap');
   if (previewWrap && previewWrap.style.maxWidth !== '375px') previewWrap.style.maxWidth = maxWidth;
@@ -1017,6 +1064,8 @@ window.saveSettings = async function() {
       collectionPreset: getValue('card-collection-preset', 'inherit'),
       searchPreset: getValue('card-search-preset', 'inherit'),
       recommendationPreset: getValue('card-recommendation-preset', 'inherit'),
+      cardLayoutDefault: getValue('card-layout-default', 'standard'),
+      featuredCollectionLayouts: elev8FeaturedCollectionLayouts,
     },
     carouselStyles: {
       layout: document.getElementById('car-layout').value,

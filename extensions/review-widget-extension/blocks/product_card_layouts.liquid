@@ -1,0 +1,13 @@
+{% assign elev8_app_url = block.settings.app_url | default: 'https://nectar-reviews-api.onrender.com' %}
+<div data-elev8-product-card-layouts-root data-shop-domain="{{ shop.permanent_domain | default: shop.domain }}" data-api-base="{{ elev8_app_url }}/api" hidden></div>
+{% schema %}
+{
+  "name": "ELEV8 Product Card Layouts",
+  "target": "body",
+  "javascript": "product-card-layouts.js",
+  "stylesheet": "product-card-layouts.css",
+  "settings": [
+    { "type": "text", "id": "app_url", "label": "ELEV8 app URL" }
+  ]
+}
+{% endschema %}

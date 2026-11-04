@@ -1,0 +1,23 @@
+/* ELEV8_PRODUCT_CARD_LAYOUTS_V1 */
+.elev8-card-rating{display:inline-flex;align-items:center;gap:4px;font-size:12px;line-height:1;font-weight:700;white-space:nowrap;color:inherit;margin-top:5px}
+.elev8-card-rating__star{color:#111!important}
+.elev8-card-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;width:100%}
+.elev8-card-title-row>.elev8-card-rating{margin-top:2px;flex:0 0 auto}
+.elev8-card-layout--standard .elev8-card-rating{margin-bottom:5px}
+.elev8-card-layout--editorial .elev8-card-title-row{margin-top:4px}
+.elev8-card-layout--editorial .custom-modern-title,.elev8-card-layout--editorial .card__heading{margin-top:0!important;margin-bottom:4px!important}
+.elev8-card-layout--editorial .custom-modern-price,.elev8-card-layout--editorial .price{margin-top:8px!important}
+.elev8-card-layout--brand_first .custom-modern-card-body,.elev8-card-layout--brand_first .card__information{text-align:center}
+.elev8-card-layout--brand_first .brand-badge,.elev8-card-layout--brand_first [class*="brand-badge"],.elev8-card-layout--brand_first [class*="vendor"]{margin-left:auto!important;margin-right:auto!important;justify-content:center}
+.elev8-card-layout--brand_first .custom-modern-title,.elev8-card-layout--brand_first .card__heading{text-align:center!important;margin:5px 0!important}
+.elev8-card-layout--brand_first .custom-modern-price,.elev8-card-layout--brand_first .price{justify-content:center!important;text-align:center!important}
+.elev8-card-layout--brand_first .elev8-card-rating{justify-content:center;margin:5px auto!important}
+.elev8-card-layout--compact .custom-modern-card-body,.elev8-card-layout--compact .card__information{padding-top:8px!important;padding-bottom:8px!important}
+.elev8-card-layout--compact .custom-modern-title,.elev8-card-layout--compact .card__heading{margin:0!important}
+.elev8-card-layout--compact .custom-modern-price,.elev8-card-layout--compact .price{margin-top:4px!important}
+.elev8-card-layout--compact .elev8-card-rating{font-size:11px}
+.elev8-card-layout--commerce .custom-modern-price,.elev8-card-layout--commerce .price{font-size:1.12em!important;font-weight:850!important;margin-top:8px!important}
+.elev8-card-layout--commerce .custom-modern-sale-price,.elev8-card-layout--commerce .price-item--sale{font-weight:900!important}
+.elev8-card-layout--commerce .elev8-card-title-row{align-items:center}
+.elev8-card-layout--commerce .elev8-card-rating{font-weight:800}
+@media(max-width:749px){.elev8-card-title-row{gap:6px}.elev8-card-rating{font-size:11px}}

@@ -1016,6 +1016,16 @@ router.patch('/settings', async (req, res, next) => {
         collectionPreset: ['inherit','pill','minimal','stars','score','outline'].includes(body.cardStyles?.collectionPreset) ? body.cardStyles.collectionPreset : 'inherit',
         searchPreset: ['inherit','pill','minimal','stars','score','outline'].includes(body.cardStyles?.searchPreset) ? body.cardStyles.searchPreset : 'inherit',
         recommendationPreset: ['inherit','pill','minimal','stars','score','outline'].includes(body.cardStyles?.recommendationPreset) ? body.cardStyles.recommendationPreset : 'inherit',
+        // ELEV8_PRODUCT_CARD_LAYOUTS_V1
+        cardLayoutDefault: ['standard','editorial','brand_first','compact','commerce'].includes(body.cardStyles?.cardLayoutDefault) ? body.cardStyles.cardLayoutDefault : 'standard',
+        featuredCollectionLayouts: (Array.isArray(body.cardStyles?.featuredCollectionLayouts) ? body.cardStyles.featuredCollectionLayouts : [])
+          .slice(0, 50)
+          .map((item) => ({
+            sectionId: cleanText(item?.sectionId || '', 180),
+            label: cleanText(item?.label || '', 120),
+            layout: ['standard','editorial','brand_first','compact','commerce'].includes(item?.layout) ? item.layout : 'standard',
+          }))
+          .filter((item) => item.sectionId && item.layout),
       },
       carouselStyles: {
         layout: ['grid', 'infinite', 'masonry'].includes(body.carouselStyles?.layout) ? body.carouselStyles.layout : 'infinite',
