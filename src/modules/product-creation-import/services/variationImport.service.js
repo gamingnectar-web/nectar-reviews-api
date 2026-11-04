@@ -46,7 +46,7 @@ function sourceToVariant(source, names, imageLookup, sourceUrl, minorUnits = tru
     cost: '', weight: source.grams ? String(source.grams) : (source.weight != null ? String(source.weight) : ''),
     weightUnit: source.grams ? 'g' : String(source.weight_unit || 'g'),
     sourceAvailable: source.available !== false,
-    imageUrl: absolute(img, sourceUrl), imageMapping: img ? 'supplier' : 'missing'
+    imageUrl: absolute(img, sourceUrl), imageUrls: absolute(img, sourceUrl) ? [absolute(img, sourceUrl)] : [], imageMapping: img ? 'supplier' : 'missing'
   };
 }
 function normalizeFromShopifyJson(product, sourceUrl, minorUnits = true) {
@@ -65,7 +65,34 @@ function normalizeFromShopifyJson(product, sourceUrl, minorUnits = true) {
     if (!photo || typeof photo !== 'object' || !photo.variant_ids) continue;
     for (const id of photo.variant_ids) imageByVariant.set(String(id), absolute(photo, sourceUrl));
   }
-  variants.forEach(v => { if (!v.imageUrl && imageByVariant.has(v.sourceVariantId)) { v.imageUrl = imageByVariant.get(v.sourceVariantId); v.imageMapping = 'supplier'; } });
+  /* ELEV8_VARIANT_MULTI_IMAGE_V2: keep all supplier-linked photos and exact flavour filename matches. */
+  const photoKey = x => String(x||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const isFlavorOption = o => /flavou?r|taste|scent|colour|color|style/i.test(String(o.name||''));
+  variants.forEach(v => {
+    const exact = imageByVariant.get(v.sourceVariantId);
+    if(exact && !v.imageUrl) { v.imageUrl=exact; v.imageMapping='supplier'; }
+    const selected=[v.imageUrl].filter(Boolean);
+    for(const original of product.images || []) {
+      if(original && typeof original==='object' && (original.variant_ids||[]).map(String).includes(v.sourceVariantId)) {
+        const linked=absolute(original,sourceUrl);
+        if(linked && !selected.includes(linked)) selected.push(linked);
+      }
+    }
+    const specific=v.options.filter(isFlavorOption).map(o=>photoKey(o.value)).filter(x=>x.length>=4);
+    if(specific.length) {
+      for(const image of gallery) {
+        const filename=photoKey(new URL(image.src).pathname.split('/').pop());
+        if(specific.some(key=>filename.includes(key)) && !selected.includes(image.src)) selected.push(image.src);
+      }
+    }
+    v.imageUrls=selected.slice(0,30);
+    v.imageUrl=v.imageUrls[0] || '';
+    if(v.imageUrls.length && v.imageMapping==='missing') v.imageMapping='filename-match';
+  });
+  // Include images referenced directly by a variant even when omitted from the supplier gallery.
+  for(const variant of variants) for(const src of variant.imageUrls) {
+    if(!gallery.some(photo=>photo.src===src)) gallery.push({id:'',src,alt:variant.options.map(o=>o.value).join(' / ')});
+  }
   return {
     source: 'shopify-public-json', sourceUrl, title: cleanText(product.title, 220),
     descriptionHtml: String(product.description || product.body_html || ''),
@@ -147,7 +174,10 @@ function validateVariationDraft(draft) {
     if (barcode && barcodes.has(barcode)) errors.push(`${label}: duplicate barcode ${v.barcode}.`); if (barcode) barcodes.add(barcode);
     if (!/^\d+(\.\d{1,2})?$/.test(String(v.price || ''))) errors.push(`${label}: valid selling price is required.`);
     if (v.compareAtPrice && (!/^\d+(\.\d{1,2})?$/.test(String(v.compareAtPrice)) || Number(v.compareAtPrice) <= Number(v.price))) errors.push(`${label}: compare-at price must exceed price.`);
-    if (!v.imageUrl) warnings.push(`${label}: missing image; product image will be used if available.`);
+    const assigned=Array.isArray(v.imageUrls)?v.imageUrls:(v.imageUrl?[v.imageUrl]:[]);
+    if(assigned.length>30) errors.push(`${label}: limit 30 images per variation.`);
+    if(assigned.some(url=>!/^https?:\/\//i.test(String(url)))) errors.push(`${label}: media URLs must be HTTPS or HTTP.`);
+    if(!assigned.length) warnings.push(`${label}: no selected images; default product image will be used if available.`);
   });
   return { valid: errors.length === 0, errors, warnings, included: variants.length };
 }
@@ -157,7 +187,11 @@ async function createVariationDraft({ shopDomain, draft }) {
   const check = validateVariationDraft(draft);
   if (!check.valid) reject(check.errors.join(' '));
   const variants = draft.variants.filter(x => x.included !== false);
-  const uniqueMedia = [...new Set([...(draft.images || []).map(x => x.src || x), ...variants.map(v => v.imageUrl)].filter(Boolean))].slice(0, 100);
+  const selectedMedia=variants.flatMap(v=>Array.isArray(v.imageUrls)?v.imageUrls:(v.imageUrl?[v.imageUrl]:[]));
+  // Always include *all* selected flavour media first; do not silently drop one due to the 100-media limit.
+  const uniqueMedia=[...new Set([...selectedMedia, ...(draft.images||[]).map(x=>x.src||x)].filter(Boolean))];
+  if(new Set(selectedMedia).size>100) reject('Selected variation images exceed the 100-media limit for this import. Remove some selections before creating the draft.');
+  uniqueMedia.length=Math.min(uniqueMedia.length,100);
   const productInput = {
     title: cleanText(draft.title, 220), descriptionHtml: String(draft.descriptionHtml || ''),
     vendor: cleanText(draft.vendor || '', 120), productType: cleanText(draft.productType || '', 120),
@@ -176,7 +210,7 @@ async function createVariationDraft({ shopDomain, draft }) {
     ...(v.barcode ? { barcode: String(v.barcode) } : {}),
     optionValues: v.options.map(o => ({ optionName: o.name, name: o.value })),
     inventoryItem: { tracked: true, ...(v.sku ? { sku: String(v.sku) } : {}), ...(v.cost ? { cost: String(v.cost) } : {}) },
-    ...(v.imageUrl ? { mediaSrc: [v.imageUrl] } : {})
+    ...((Array.isArray(v.imageUrls)?v.imageUrls:(v.imageUrl?[v.imageUrl]:[])).length ? { mediaSrc: [...new Set(Array.isArray(v.imageUrls)?v.imageUrls:(v.imageUrl?[v.imageUrl]:[]))] } : {})
   }));
   const results = [];
   try {

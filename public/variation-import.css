@@ -20,3 +20,27 @@
 #pci-pane-variations .pci-var-review-side{position:sticky;top:14px;align-self:start}
 @media(max-width:1050px){#pci-pane-variations .pci-var-review{grid-template-columns:1fr}#pci-pane-variations .pci-var-review-side{position:static}}
 @media(max-width:680px){#pci-pane-variations .pci-var-scan-bar{grid-template-columns:1fr}}
+
+/* ELEV8_VARIANT_MULTI_IMAGE_V2 — selectable ordered flavour galleries */
+#pci-pane-variations .pci-vim{min-width:260px;max-width:390px}
+#pci-pane-variations .pci-vim-preview{display:flex;gap:5px;flex-wrap:wrap;align-items:center;min-height:49px}
+#pci-pane-variations .pci-vim-chosen{position:relative;display:block;width:46px;height:46px}
+#pci-pane-variations .pci-vim-chosen img{width:46px;height:46px;object-fit:contain;background:#fafafa;border:1px solid #e2e8f0;border-radius:8px}
+#pci-pane-variations .pci-vim-chosen b{position:absolute;right:-3px;top:-4px;font-size:10px;border-radius:20px;padding:2px 5px;background:#111827;color:white}
+#pci-pane-variations .pci-vim-empty{font-size:12px;color:#b54708}
+#pci-pane-variations .pci-vim-toolbar{display:flex;gap:8px;align-items:center;margin-top:7px}
+#pci-pane-variations .pci-vim-toolbar small{margin:0;max-width:none}
+#pci-pane-variations .pci-vim-editor{margin-top:9px;border:1px solid #cbd5e1;border-radius:12px;background:#f8fafc;padding:10px;max-width:390px}
+#pci-pane-variations .pci-vim-editor p{margin:0 0 8px;font-size:11px;line-height:1.5;color:#475569}
+#pci-pane-variations .pci-vim-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;max-height:300px;overflow-y:auto}
+#pci-pane-variations .pci-vim-tile{position:relative;aspect-ratio:1;background:white;border:2px solid #dbe2ea;border-radius:10px;padding:3px;cursor:pointer}
+#pci-pane-variations .pci-vim-tile img{width:100%;height:100%;object-fit:contain}
+#pci-pane-variations .pci-vim-tile span{position:absolute;right:2px;top:2px;border-radius:9px;background:#e2e8f0;color:#334155;font-size:10px;font-weight:900;padding:2px 4px}
+#pci-pane-variations .pci-vim-tile.is-selected{border-color:#16a34a;background:#ecfdf5}
+#pci-pane-variations .pci-vim-tile.is-selected span{background:#16a34a;color:white}
+#pci-pane-variations .pci-vim-order{margin-top:9px;display:grid;gap:5px}
+#pci-pane-variations .pci-vim-order-row{display:flex;align-items:center;gap:6px;padding:4px 6px;background:white;border:1px solid #e2e8f0;border-radius:8px}
+#pci-pane-variations .pci-vim-order-row img{width:30px;height:30px;object-fit:contain}
+#pci-pane-variations .pci-vim-order-row span{flex:1;font-size:11px;font-weight:800}
+#pci-pane-variations .pci-vim-order-row button{width:25px;height:25px;border:1px solid #d1d5db;border-radius:6px;background:white;cursor:pointer}
+#pci-pane-variations .pci-vim-order-row button:disabled{opacity:.35;cursor:default}
