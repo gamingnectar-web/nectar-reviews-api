@@ -1303,6 +1303,78 @@
               <div class="style-actions" style="margin-top:18px;"><button class="primary-btn" onclick="window.saveSettings()">Publish Product Cards</button></div>
             </div>
 
+            <!-- ELEV8_PRODUCT_CARD_COMPONENT_STYLES_V1 -->
+            <div id="e8pcb-component-modal" class="e8pcb-modal-backdrop" aria-hidden="true">
+              <div class="e8pcb-modal" role="dialog" aria-modal="true" aria-labelledby="e8pcb-component-title">
+                <div class="e8pcb-modal-head">
+                  <div><small class="muted">Product Card component</small><h3 id="e8pcb-component-title" style="margin:2px 0 0;">Component style</h3></div>
+                  <button type="button" class="secondary-btn" onclick="window.e8pcbCloseComponentEditor()">Close</button>
+                </div>
+
+                <label class="e8pcb-toggle" style="margin:12px 0 4px;"><input id="e8pcb-style-enabled" type="checkbox" onchange="window.e8pcbStyleField('enabled',this.checked)"> Override theme styling for this component</label>
+                <p class="style-help" style="margin-top:4px;">Blank or 0 means keep that property from your existing Shopify theme CSS.</p>
+
+                <div class="e8pcb-style-group e8pcb-text-controls">
+                  <h4>Typography</h4>
+                  <div class="style-control-grid full">
+                    <div><label>Font family</label><input id="e8pcb-font-family" class="premium-input" placeholder="Theme default" oninput="window.e8pcbStyleField('fontFamily',this.value)"></div>
+                    <div><label>Font size (px)</label><input id="e8pcb-font-size" class="premium-input" type="number" min="0" max="64" placeholder="Theme" oninput="window.e8pcbStyleField('fontSize',this.value)"></div>
+                    <div><label>Font weight</label><select id="e8pcb-font-weight" class="filter-select" onchange="window.e8pcbStyleField('fontWeight',this.value)"><option value="">Theme default</option><option value="400">400 Regular</option><option value="500">500 Medium</option><option value="600">600 Semi-bold</option><option value="700">700 Bold</option><option value="800">800 Extra-bold</option><option value="900">900 Black</option></select></div>
+                    <div><label>Font style</label><select id="e8pcb-font-style" class="filter-select" onchange="window.e8pcbStyleField('fontStyle',this.value)"><option value="">Theme default</option><option value="normal">Normal</option><option value="italic">Italic</option></select></div>
+                    <div><label>Text alignment</label><select id="e8pcb-text-align" class="filter-select" onchange="window.e8pcbStyleField('textAlign',this.value)"><option value="">Zone / theme default</option><option value="left">Left</option><option value="center">Centre</option><option value="right">Right</option></select></div>
+                    <div><label>Text transform</label><select id="e8pcb-text-transform" class="filter-select" onchange="window.e8pcbStyleField('textTransform',this.value)"><option value="">Theme default</option><option value="none">None</option><option value="uppercase">UPPERCASE</option><option value="lowercase">lowercase</option><option value="capitalize">Capitalise</option></select></div>
+                    <div><label>Letter spacing (px)</label><input id="e8pcb-letter-spacing" class="premium-input" type="number" min="-3" max="12" step="0.1" placeholder="Theme" oninput="window.e8pcbStyleField('letterSpacing',this.value)"></div>
+                    <div><label>Line height</label><input id="e8pcb-line-height" class="premium-input" type="number" min="0" max="3" step="0.05" placeholder="Theme" oninput="window.e8pcbStyleField('lineHeight',this.value)"></div>
+                  </div>
+                </div>
+
+                <div class="e8pcb-style-group">
+                  <h4>Appearance</h4>
+                  <div class="style-control-grid full">
+                    <div><label>Text / icon colour</label><input id="e8pcb-color" class="premium-input" placeholder="Theme default" oninput="window.e8pcbStyleField('color',this.value)"></div>
+                    <div><label>Background</label><input id="e8pcb-background" class="premium-input" placeholder="Theme default" oninput="window.e8pcbStyleField('background',this.value)"></div>
+                    <div><label>Border colour</label><input id="e8pcb-border-color" class="premium-input" placeholder="Theme default" oninput="window.e8pcbStyleField('borderColor',this.value)"></div>
+                    <div><label>Border width (px)</label><input id="e8pcb-border-width" class="premium-input" type="number" min="0" max="6" placeholder="Theme" oninput="window.e8pcbStyleField('borderWidth',this.value)"></div>
+                    <div><label>Border radius (px)</label><input id="e8pcb-border-radius" class="premium-input" type="number" min="0" max="999" placeholder="Theme" oninput="window.e8pcbStyleField('borderRadius',this.value)"></div>
+                    <div><label>Shadow</label><select id="e8pcb-shadow" class="filter-select" onchange="window.e8pcbStyleField('shadow',this.value)"><option value="">Theme default</option><option value="none">None</option><option value="soft">Soft</option><option value="medium">Medium</option></select></div>
+                    <div><label>Horizontal padding (px)</label><input id="e8pcb-padding-x" class="premium-input" type="number" min="0" max="48" placeholder="Theme" oninput="window.e8pcbStyleField('paddingX',this.value)"></div>
+                    <div><label>Vertical padding (px)</label><input id="e8pcb-padding-y" class="premium-input" type="number" min="0" max="32" placeholder="Theme" oninput="window.e8pcbStyleField('paddingY',this.value)"></div>
+                  </div>
+                </div>
+
+                <div class="e8pcb-style-group e8pcb-icon-controls">
+                  <h4>Button / icon</h4>
+                  <div class="style-control-grid full">
+                    <div><label>Button size (px)</label><input id="e8pcb-control-size" class="premium-input" type="number" min="0" max="100" placeholder="Theme" oninput="window.e8pcbStyleField('controlSize',this.value)"></div>
+                    <div><label>Icon size (px)</label><input id="e8pcb-icon-size" class="premium-input" type="number" min="0" max="80" placeholder="Theme" oninput="window.e8pcbStyleField('iconSize',this.value)"></div>
+                  </div>
+                </div>
+
+                <div class="e8pcb-style-group e8pcb-rating-controls">
+                  <h4>Rating</h4>
+                  <div class="style-control-grid full">
+                    <div><label>Star colour</label><input id="e8pcb-star-color" class="premium-input" placeholder="Rating default" oninput="window.e8pcbStyleField('starColor',this.value)"></div>
+                  </div>
+                </div>
+
+                <div class="e8pcb-modal-actions">
+                  <button type="button" class="secondary-btn" onclick="window.e8pcbResetComponentStyle()">Reset to theme CSS</button>
+                  <button type="button" class="primary-btn" onclick="window.e8pcbCloseComponentEditor()">Done</button>
+                </div>
+              </div>
+            </div>
+
+            <style>
+              .e8pcb-modal-backdrop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.48);z-index:10050}
+              .e8pcb-modal-backdrop.open{display:flex}
+              .e8pcb-modal{width:min(760px,96vw);max-height:90vh;overflow:auto;background:#fff;border-radius:18px;padding:20px;box-shadow:0 24px 80px rgba(15,23,42,.25)}
+              .e8pcb-modal-head,.e8pcb-modal-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}
+              .e8pcb-modal-actions{margin-top:18px;padding-top:14px;border-top:1px solid #e5e7eb}
+              .e8pcb-style-group{padding:14px 0;border-top:1px solid #e5e7eb}.e8pcb-style-group h4{margin:0 0 10px}
+              .e8pcb-style-group.hidden{display:none}
+              [data-e8pcb-component]{position:relative}.e8pcb-chip-edit{margin-left:6px;border:0;background:#eef2ff;border-radius:999px;padding:2px 6px;font-size:10px;font-weight:800;cursor:pointer}
+            </style>
+
             <div id="style-carousel" class="sub-view">
               <div class="style-control-grid full">
                 <div><label>Global display layout</label><select id="car-layout" class="filter-select" onchange="window.updatePreviews()"><option value="infinite">Horizontal auto-scroll</option><option value="grid">Static grid</option><option value="masonry">Masonry cards</option></select></div>

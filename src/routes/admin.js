@@ -960,12 +960,40 @@ function sanitiseProductCardBuilder(raw = {}) {
         gap: clampNumber(style.gap, 0, 40, 6),
       };
     });
+    const componentStyles = {};
+    ELEV8_PC_COMPONENTS.forEach((component) => {
+      const style = layout?.componentStyles?.[component] || {};
+      componentStyles[component] = {
+        enabled: Boolean(style.enabled),
+        fontFamily: cleanText(style.fontFamily || '', 120),
+        fontSize: clampNumber(style.fontSize, 0, 64, 0),
+        fontWeight: ['','400','500','600','700','800','900'].includes(String(style.fontWeight || '')) ? String(style.fontWeight || '') : '',
+        fontStyle: ['','normal','italic'].includes(style.fontStyle || '') ? (style.fontStyle || '') : '',
+        textAlign: ['','left','center','right'].includes(style.textAlign || '') ? (style.textAlign || '') : '',
+        textTransform: ['','none','uppercase','lowercase','capitalize'].includes(style.textTransform || '') ? (style.textTransform || '') : '',
+        letterSpacing: clampNumber(style.letterSpacing, -3, 12, 0),
+        lineHeight: clampNumber(style.lineHeight, 0, 3, 0),
+        color: cleanText(style.color || '', 30),
+        background: cleanText(style.background || '', 30),
+        borderColor: cleanText(style.borderColor || '', 30),
+        borderWidth: clampNumber(style.borderWidth, 0, 6, 0),
+        borderRadius: clampNumber(style.borderRadius, 0, 999, 0),
+        paddingX: clampNumber(style.paddingX, 0, 48, 0),
+        paddingY: clampNumber(style.paddingY, 0, 32, 0),
+        iconSize: clampNumber(style.iconSize, 0, 80, 0),
+        controlSize: clampNumber(style.controlSize, 0, 100, 0),
+        starColor: cleanText(style.starColor || '', 30),
+        shadow: ['','none','soft','medium'].includes(style.shadow || '') ? (style.shadow || '') : '',
+      };
+    });
+
     return {
       id,
       name: cleanText(layout?.name || `Layout ${index + 1}`, 100),
       mode: layout?.mode === 'builder' ? 'builder' : 'theme',
       zones,
       zoneStyles,
+      componentStyles,
       updatedAt: new Date(),
     };
   }).filter((layout) => layout.id);

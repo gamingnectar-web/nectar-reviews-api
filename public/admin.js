@@ -836,6 +836,7 @@ const E8PCB_ZONE_LABELS = {
 const E8PCB_ZONES = Object.keys(E8PCB_ZONE_LABELS);
 let e8pcbState = null;
 let e8pcbActiveLayoutId = 'default';
+let e8pcbActiveComponent = '';
 
 function e8pcbBaseZones(){
   return {
@@ -866,13 +867,23 @@ function e8pcbSeed(){
     assignments:[]
   };
 }
+function e8pcbEmptyComponentStyle(){
+  return {
+    enabled:false,fontFamily:'',fontSize:0,fontWeight:'',fontStyle:'',textAlign:'',textTransform:'',
+    letterSpacing:0,lineHeight:0,color:'',background:'',borderColor:'',borderWidth:0,borderRadius:0,
+    paddingX:0,paddingY:0,iconSize:0,controlSize:0,starColor:'',shadow:''
+  };
+}
+function e8pcbComponentStyles(raw={}){
+  return Object.fromEntries(Object.keys(E8PCB_COMPONENTS).map((key)=>[key,{...e8pcbEmptyComponentStyle(),...(raw?.[key]||{})}]));
+}
 function e8pcbNormalise(raw){
   const seed=e8pcbSeed();
   const layouts=Array.isArray(raw?.layouts)&&raw.layouts.length?raw.layouts:seed.layouts;
   return {
     enabled:Boolean(raw?.enabled),
     defaultLayoutId:raw?.defaultLayoutId||layouts[0]?.id||'default',
-    layouts:layouts.map((l)=>({...l,zones:{...e8pcbBaseZones(),...(l.zones||{})},zoneStyles:{...e8pcbBaseStyles(),...(l.zoneStyles||{})}})),
+    layouts:layouts.map((l)=>({...l,zones:{...e8pcbBaseZones(),...(l.zones||{})},zoneStyles:{...e8pcbBaseStyles(),...(l.zoneStyles||{})},componentStyles:e8pcbComponentStyles(l.componentStyles)})),
     assignments:Array.isArray(raw?.assignments)?raw.assignments:[]
   };
 }
@@ -932,6 +943,94 @@ window.e8pcbRenderAssignments=()=>{
       <button class="secondary-btn" type="button" onclick="window.e8pcbRemoveAssignment(${i})">Remove</button>
     </div>`).join(''):'<div class="muted" style="padding:12px 0;">No overrides. Every card uses the default layout.</div>';
 };
+function e8pcbStyle(layout,component){
+  layout.componentStyles=layout.componentStyles||e8pcbComponentStyles();
+  layout.componentStyles[component]={...e8pcbEmptyComponentStyle(),...(layout.componentStyles[component]||{})};
+  return layout.componentStyles[component];
+}
+function e8pcbStyleValue(id,value=''){ const el=document.getElementById(id); if(el) el.value=value ?? ''; }
+function e8pcbSetComponentEditorVisibility(component){
+  document.querySelector('.e8pcb-icon-controls')?.classList.toggle('hidden',!['wishlist','nutrition','quick_add'].includes(component));
+  document.querySelector('.e8pcb-text-controls')?.classList.toggle('hidden',!['brand','flavour','title','price','promo','status','rating'].includes(component));
+  document.querySelector('.e8pcb-rating-controls')?.classList.toggle('hidden',component!=='rating');
+}
+window.e8pcbOpenComponentEditor=(component)=>{
+  const layout=e8pcbLayout(); if(!layout||!E8PCB_COMPONENTS[component])return;
+  e8pcbActiveComponent=component;
+  const style=e8pcbStyle(layout,component);
+  const title=document.getElementById('e8pcb-component-title'); if(title) title.textContent=E8PCB_COMPONENTS[component];
+  setCheckedIfExists('e8pcb-style-enabled',style.enabled);
+  e8pcbStyleValue('e8pcb-font-family',style.fontFamily);
+  e8pcbStyleValue('e8pcb-font-size',style.fontSize||'');
+  e8pcbStyleValue('e8pcb-font-weight',style.fontWeight);
+  e8pcbStyleValue('e8pcb-font-style',style.fontStyle);
+  e8pcbStyleValue('e8pcb-text-align',style.textAlign);
+  e8pcbStyleValue('e8pcb-text-transform',style.textTransform);
+  e8pcbStyleValue('e8pcb-letter-spacing',style.letterSpacing||'');
+  e8pcbStyleValue('e8pcb-line-height',style.lineHeight||'');
+  e8pcbStyleValue('e8pcb-color',style.color);
+  e8pcbStyleValue('e8pcb-background',style.background);
+  e8pcbStyleValue('e8pcb-border-color',style.borderColor);
+  e8pcbStyleValue('e8pcb-border-width',style.borderWidth||'');
+  e8pcbStyleValue('e8pcb-border-radius',style.borderRadius||'');
+  e8pcbStyleValue('e8pcb-padding-x',style.paddingX||'');
+  e8pcbStyleValue('e8pcb-padding-y',style.paddingY||'');
+  e8pcbStyleValue('e8pcb-control-size',style.controlSize||'');
+  e8pcbStyleValue('e8pcb-icon-size',style.iconSize||'');
+  e8pcbStyleValue('e8pcb-star-color',style.starColor);
+  e8pcbStyleValue('e8pcb-shadow',style.shadow);
+  e8pcbSetComponentEditorVisibility(component);
+  const modal=document.getElementById('e8pcb-component-modal');
+  if(modal){modal.classList.add('open');modal.setAttribute('aria-hidden','false');}
+};
+window.e8pcbCloseComponentEditor=()=>{
+  const modal=document.getElementById('e8pcb-component-modal');
+  if(modal){modal.classList.remove('open');modal.setAttribute('aria-hidden','true');}
+  e8pcbActiveComponent='';
+};
+window.e8pcbStyleField=(field,value)=>{
+  const layout=e8pcbLayout(); if(!layout||!e8pcbActiveComponent)return;
+  const style=e8pcbStyle(layout,e8pcbActiveComponent);
+  if(['fontSize','letterSpacing','lineHeight','borderWidth','borderRadius','paddingX','paddingY','controlSize','iconSize'].includes(field)){
+    value=value===''?0:Number(value);
+  }
+  style[field]=value;
+  if(field!=='enabled') style.enabled=true;
+  layout.mode='builder';
+  window.e8pcbRenderPreview?.();
+};
+window.e8pcbResetComponentStyle=()=>{
+  const layout=e8pcbLayout(); if(!layout||!e8pcbActiveComponent)return;
+  layout.componentStyles=layout.componentStyles||{};
+  layout.componentStyles[e8pcbActiveComponent]=e8pcbEmptyComponentStyle();
+  window.e8pcbOpenComponentEditor(e8pcbActiveComponent);
+  window.e8pcbRenderPreview?.();
+};
+function e8pcbPreviewStyle(component){
+  const layout=e8pcbLayout(); const st=layout?e8pcbStyle(layout,component):e8pcbEmptyComponentStyle();
+  if(!st.enabled)return '';
+  const css=[];
+  if(st.fontFamily)css.push('font-family:'+st.fontFamily);
+  if(st.fontSize)css.push('font-size:'+st.fontSize+'px');
+  if(st.fontWeight)css.push('font-weight:'+st.fontWeight);
+  if(st.fontStyle)css.push('font-style:'+st.fontStyle);
+  if(st.textAlign)css.push('text-align:'+st.textAlign);
+  if(st.textTransform)css.push('text-transform:'+st.textTransform);
+  if(st.letterSpacing)css.push('letter-spacing:'+st.letterSpacing+'px');
+  if(st.lineHeight)css.push('line-height:'+st.lineHeight);
+  if(st.color)css.push('color:'+st.color);
+  if(st.background)css.push('background:'+st.background);
+  if(st.borderColor)css.push('border-color:'+st.borderColor);
+  if(st.borderWidth)css.push('border-width:'+st.borderWidth+'px','border-style:solid');
+  if(st.borderRadius)css.push('border-radius:'+st.borderRadius+'px');
+  if(st.paddingX||st.paddingY)css.push('padding:'+(st.paddingY||0)+'px '+(st.paddingX||0)+'px');
+  if(st.controlSize)css.push('width:'+st.controlSize+'px','height:'+st.controlSize+'px');
+  if(st.shadow==='soft')css.push('box-shadow:0 4px 12px rgba(15,23,42,.12)');
+  if(st.shadow==='medium')css.push('box-shadow:0 8px 20px rgba(15,23,42,.20)');
+  if(st.shadow==='none')css.push('box-shadow:none');
+  return css.join(';');
+}
+
 function e8pcbMove(component,toZone){
   const l=e8pcbLayout(); if(!l)return;
   E8PCB_ZONES.forEach((zone)=>{ l.zones[zone]=(l.zones[zone]||[]).filter((x)=>x!==component); });
@@ -945,7 +1044,7 @@ window.e8pcbRenderPreview=()=>{
     host.innerHTML='<div style="padding:18px;border:1px dashed #94a3b8;border-radius:14px;background:#f8fafc;"><strong>Default currently preserves your live Shopify card exactly.</strong><p class="muted" style="margin-bottom:0;">Duplicate this layout or drag a component after switching it to builder mode to start rearranging elements.</p></div>';
     return;
   }
-  const chip=(component)=>`<div draggable="true" data-e8pcb-component="${component}" style="padding:5px 8px;border:1px solid #cbd5e1;background:#fff;border-radius:7px;font-size:11px;font-weight:700;cursor:grab;">${escapeHtml(E8PCB_COMPONENTS[component]||component)}</div>`;
+  const chip=(component)=>`<div draggable="true" data-e8pcb-component="${component}" style="padding:5px 8px;border:1px solid #cbd5e1;background:#fff;border-radius:7px;font-size:11px;font-weight:700;cursor:grab;${e8pcbPreviewStyle(component)}">${escapeHtml(E8PCB_COMPONENTS[component]||component)}<button type="button" class="e8pcb-chip-edit" data-e8pcb-edit="${component}" title="Edit style">✎</button></div>`;
   const zone=(name,overlay=false)=>{
     const st=l.zoneStyles?.[name]||{};
     const pos={image_top_left:'top:10px;left:10px;',image_top_right:'top:10px;right:10px;',image_bottom_left:'bottom:10px;left:10px;',image_bottom_right:'bottom:10px;right:10px;'}[name]||'';
@@ -961,6 +1060,8 @@ window.e8pcbRenderPreview=()=>{
     <div style="margin-top:10px;">${zone('hidden')}</div>
   </div>`;
   host.querySelectorAll('[data-e8pcb-component]').forEach((el)=>el.addEventListener('dragstart',(e)=>{e.dataTransfer.setData('text/plain',el.dataset.e8pcbComponent);}));
+  host.querySelectorAll('[data-e8pcb-edit]').forEach((btn)=>btn.addEventListener('click',(e)=>{e.preventDefault();e.stopPropagation();window.e8pcbOpenComponentEditor(btn.dataset.e8pcbEdit);}));
+  host.querySelectorAll('[data-e8pcb-component]').forEach((el)=>el.addEventListener('dblclick',(e)=>{e.preventDefault();window.e8pcbOpenComponentEditor(el.dataset.e8pcbComponent);}));
   host.querySelectorAll('[data-e8pcb-zone]').forEach((el)=>{
     el.addEventListener('dragover',(e)=>{e.preventDefault();});
     el.addEventListener('drop',(e)=>{e.preventDefault();const c=e.dataTransfer.getData('text/plain');if(c)e8pcbMove(c,el.dataset.e8pcbZone);});
