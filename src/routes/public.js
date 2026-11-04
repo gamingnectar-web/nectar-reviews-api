@@ -70,6 +70,7 @@ function publicSettings(config) {
     widgetStyles,
     styles: widgetStyles,
     cardStyles: config?.cardStyles || {},
+    productCardBuilder: config?.productCardBuilder || { enabled: false, defaultLayoutId: 'default', layouts: [], assignments: [] },
     carouselStyles: config?.carouselStyles || {},
     attributeProfiles: config?.attributeProfiles || [],
     profiles: config?.attributeProfiles || [],

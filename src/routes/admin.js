@@ -934,6 +934,61 @@ router.patch('/migration', async (req, res, next) => {
   }
 });
 
+// ELEV8_PRODUCT_CARD_BUILDER_V1
+const ELEV8_PC_COMPONENTS = new Set(['status','wishlist','nutrition','quick_add','brand','flavour','title','rating','price','promo']);
+const ELEV8_PC_ZONES = ['image_top_left','image_top_right','image_bottom_left','image_bottom_right','body_top','body_main','body_bottom','hidden'];
+const ELEV8_PC_SCOPES = new Set(['featured_section','collection']);
+
+function sanitiseProductCardBuilder(raw = {}) {
+  const layouts = (Array.isArray(raw.layouts) ? raw.layouts : []).slice(0, 30).map((layout, index) => {
+    const id = cleanText(layout?.id || `layout-${index + 1}`, 80).replace(/[^a-zA-Z0-9_-]/g, '-');
+    const zones = {};
+    ELEV8_PC_ZONES.forEach((zone) => {
+      const seen = new Set();
+      zones[zone] = (Array.isArray(layout?.zones?.[zone]) ? layout.zones[zone] : [])
+        .map((item) => cleanText(item, 40))
+        .filter((item) => ELEV8_PC_COMPONENTS.has(item) && !seen.has(item) && seen.add(item));
+    });
+    const zoneStyles = {};
+    ELEV8_PC_ZONES.forEach((zone) => {
+      const style = layout?.zoneStyles?.[zone] || {};
+      zoneStyles[zone] = {
+        direction: ['row','column'].includes(style.direction) ? style.direction : 'column',
+        justify: ['flex-start','center','flex-end','space-between'].includes(style.justify) ? style.justify : 'flex-start',
+        align: ['flex-start','center','flex-end','stretch'].includes(style.align) ? style.align : 'stretch',
+        textAlign: ['left','center','right'].includes(style.textAlign) ? style.textAlign : 'left',
+        gap: clampNumber(style.gap, 0, 40, 6),
+      };
+    });
+    return {
+      id,
+      name: cleanText(layout?.name || `Layout ${index + 1}`, 100),
+      mode: layout?.mode === 'builder' ? 'builder' : 'theme',
+      zones,
+      zoneStyles,
+      updatedAt: new Date(),
+    };
+  }).filter((layout) => layout.id);
+
+  const ids = new Set(layouts.map((layout) => layout.id));
+  const fallback = ids.has(raw.defaultLayoutId) ? raw.defaultLayoutId : (layouts[0]?.id || 'default');
+  const assignments = (Array.isArray(raw.assignments) ? raw.assignments : []).slice(0, 100)
+    .map((item) => ({
+      scope: ELEV8_PC_SCOPES.has(item?.scope) ? item.scope : 'collection',
+      key: cleanText(item?.key || '', 180).replace(/^shopify-section-/, ''),
+      layoutId: cleanText(item?.layoutId || '', 80),
+      label: cleanText(item?.label || '', 120),
+    }))
+    .filter((item) => item.key && ids.has(item.layoutId));
+
+  return {
+    enabled: Boolean(raw.enabled),
+    defaultLayoutId: fallback,
+    layouts,
+    assignments,
+  };
+}
+
 router.get('/settings', async (req, res, next) => {
   try {
     const shopDomain = shopDomainFromReq(req);
@@ -1027,6 +1082,7 @@ router.patch('/settings', async (req, res, next) => {
           }))
           .filter((item) => item.sectionId && item.layout),
       },
+      productCardBuilder: sanitiseProductCardBuilder(body.productCardBuilder || {}),
       carouselStyles: {
         layout: ['grid', 'infinite', 'masonry'].includes(body.carouselStyles?.layout) ? body.carouselStyles.layout : 'infinite',
         autoplay: body.carouselStyles?.autoplay !== false,

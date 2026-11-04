@@ -110,6 +110,13 @@ const settingsSchema = new mongoose.Schema({
     cardLayoutDefault: { type: String, enum: ['standard','editorial','brand_first','compact','commerce'], default: 'standard' },
     featuredCollectionLayouts: { type: [mongoose.Schema.Types.Mixed], default: [] },
   },
+  // ELEV8_PRODUCT_CARD_BUILDER_V1
+  productCardBuilder: {
+    enabled: { type: Boolean, default: false },
+    defaultLayoutId: { type: String, default: 'default' },
+    layouts: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    assignments: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  },
   carouselStyles: {
     layout: { type: String, enum: ['grid', 'infinite', 'masonry'], default: 'infinite' },
     autoplay: { type: Boolean, default: true },

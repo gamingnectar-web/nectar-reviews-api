@@ -434,6 +434,9 @@ function hydrateSettings(config) {
     setValueIfExists('card-collection-preset', config.cardStyles.collectionPreset || 'inherit');
     setValueIfExists('card-search-preset', config.cardStyles.searchPreset || 'inherit');
     setValueIfExists('card-recommendation-preset', config.cardStyles.recommendationPreset || 'inherit');
+    e8pcbState = e8pcbNormalise(config.productCardBuilder || {});
+    e8pcbActiveLayoutId = e8pcbState.defaultLayoutId || e8pcbState.layouts[0]?.id || 'default';
+    setTimeout(e8pcbRefreshControls, 0);
     setValueIfExists('card-layout-default', config.cardStyles.cardLayoutDefault || 'standard');
     elev8FeaturedCollectionLayouts = Array.isArray(config.cardStyles.featuredCollectionLayouts)
       ? config.cardStyles.featuredCollectionLayouts.map((item) => ({ ...item }))
@@ -818,6 +821,151 @@ window.removeAttribute = async function(index) {
 
 
 const ELEV8_PRODUCT_CARD_CONTEXTS_V1 = true;
+
+// ELEV8_PRODUCT_CARD_BUILDER_V1
+const E8PCB_COMPONENTS = {
+  status:'Status badge', wishlist:'Wishlist', nutrition:'Nutrition', quick_add:'Cart / Notify',
+  brand:'Brand', flavour:'Flavour / subtitle', title:'Product title', rating:'Review rating',
+  price:'Price', promo:'Promo message'
+};
+const E8PCB_ZONE_LABELS = {
+  image_top_left:'Image · top left', image_top_right:'Image · top right',
+  image_bottom_left:'Image · bottom left', image_bottom_right:'Image · bottom right',
+  body_top:'Body · top', body_main:'Body · main', body_bottom:'Body · bottom', hidden:'Hidden'
+};
+const E8PCB_ZONES = Object.keys(E8PCB_ZONE_LABELS);
+let e8pcbState = null;
+let e8pcbActiveLayoutId = 'default';
+
+function e8pcbBaseZones(){
+  return {
+    image_top_left:['status'], image_top_right:['wishlist'],
+    image_bottom_left:['nutrition'], image_bottom_right:['quick_add'],
+    body_top:['brand','flavour'], body_main:['title','rating'], body_bottom:['price','promo'], hidden:[]
+  };
+}
+function e8pcbBaseStyles(){
+  return Object.fromEntries(E8PCB_ZONES.map((z)=>[z,{direction:'column',justify:'flex-start',align:'stretch',textAlign:'left',gap:6}]));
+}
+function e8pcbSeed(){
+  const make=(id,name,mutate,styles)=>{ const zones=e8pcbBaseZones(); if(mutate) mutate(zones); return {id,name,mode:id==='default'?'theme':'builder',zones,zoneStyles:{...e8pcbBaseStyles(),...(styles||{})}}; };
+  return {
+    enabled:false,
+    defaultLayoutId:'default',
+    layouts:[
+      make('default','Default — current theme'),
+      make('editorial','Editorial',z=>{ z.body_top=['brand']; z.body_main=['title','rating']; z.body_bottom=['flavour','price','promo']; },{body_main:{direction:'row',justify:'space-between',align:'center',textAlign:'left',gap:10}}),
+      make('brand_first','Brand First',z=>{},{
+        body_top:{direction:'column',justify:'center',align:'center',textAlign:'center',gap:4},
+        body_main:{direction:'column',justify:'center',align:'center',textAlign:'center',gap:5},
+        body_bottom:{direction:'column',justify:'center',align:'center',textAlign:'center',gap:5}
+      }),
+      make('compact','Compact',z=>{ z.body_top=['brand']; z.body_main=['title','rating']; z.body_bottom=['price']; z.hidden=['flavour','promo']; },{body_main:{direction:'row',justify:'space-between',align:'center',textAlign:'left',gap:8}}),
+      make('commerce','Commerce',z=>{ z.body_top=['brand','flavour']; z.body_main=['title','rating']; z.body_bottom=['price','promo']; },{body_main:{direction:'row',justify:'space-between',align:'center',textAlign:'left',gap:8}})
+    ],
+    assignments:[]
+  };
+}
+function e8pcbNormalise(raw){
+  const seed=e8pcbSeed();
+  const layouts=Array.isArray(raw?.layouts)&&raw.layouts.length?raw.layouts:seed.layouts;
+  return {
+    enabled:Boolean(raw?.enabled),
+    defaultLayoutId:raw?.defaultLayoutId||layouts[0]?.id||'default',
+    layouts:layouts.map((l)=>({...l,zones:{...e8pcbBaseZones(),...(l.zones||{})},zoneStyles:{...e8pcbBaseStyles(),...(l.zoneStyles||{})}})),
+    assignments:Array.isArray(raw?.assignments)?raw.assignments:[]
+  };
+}
+function e8pcbLayout(){ return e8pcbState?.layouts?.find((l)=>l.id===e8pcbActiveLayoutId) || e8pcbState?.layouts?.[0]; }
+function e8pcbUniqueId(base='layout'){
+  const used=new Set((e8pcbState?.layouts||[]).map((l)=>l.id));
+  let n=1,id=base; while(used.has(id)) id=`${base}-${++n}`; return id;
+}
+function e8pcbRefreshControls(){
+  if(!e8pcbState) e8pcbState=e8pcbSeed();
+  const select=document.getElementById('e8pcb-layout-select');
+  if(select){
+    select.innerHTML=e8pcbState.layouts.map((l)=>`<option value="${escapeHtml(l.id)}" ${l.id===e8pcbActiveLayoutId?'selected':''}>${escapeHtml(l.name)}${l.id===e8pcbState.defaultLayoutId?' · Default':''}</option>`).join('');
+  }
+  const layout=e8pcbLayout();
+  setValueIfExists('e8pcb-layout-name',layout?.name||'');
+  setCheckedIfExists('e8pcb-enabled',e8pcbState.enabled);
+  const pill=document.getElementById('e8pcb-mode-pill');
+  if(pill) pill.textContent=layout?.mode==='theme'?'Using current theme structure — safe/no movement':'Builder mode — saved zones control the live card';
+  window.e8pcbRenderAssignments?.();
+  window.e8pcbRenderPreview?.();
+}
+window.e8pcbSelectLayout=(id)=>{ e8pcbActiveLayoutId=id; e8pcbRefreshControls(); };
+window.e8pcbRenameLayout=(name)=>{ const l=e8pcbLayout(); if(l){l.name=name||'Untitled layout';e8pcbRefreshControls();} };
+window.e8pcbSetEnabled=(enabled)=>{ if(!e8pcbState)e8pcbState=e8pcbSeed(); e8pcbState.enabled=Boolean(enabled); };
+window.e8pcbSetDefault=()=>{ const l=e8pcbLayout(); if(l){e8pcbState.defaultLayoutId=l.id;e8pcbRefreshControls();window.showToast?.('Default product-card layout updated.');} };
+window.e8pcbUseThemeMode=()=>{ const l=e8pcbLayout(); if(l){l.mode='theme';e8pcbRefreshControls();} };
+window.e8pcbDuplicateLayout=()=>{
+  const l=e8pcbLayout(); if(!l)return;
+  const id=e8pcbUniqueId((l.id||'layout')+'-copy');
+  const copy=JSON.parse(JSON.stringify(l)); copy.id=id; copy.name=(l.name||'Layout')+' Copy'; copy.mode='builder';
+  e8pcbState.layouts.push(copy); e8pcbActiveLayoutId=id; e8pcbRefreshControls();
+};
+window.e8pcbDeleteLayout=()=>{
+  const l=e8pcbLayout(); if(!l||e8pcbState.layouts.length<=1)return window.showToast?.('At least one layout is required.');
+  if(l.id===e8pcbState.defaultLayoutId)return window.showToast?.('Set another default before deleting this layout.');
+  e8pcbState.layouts=e8pcbState.layouts.filter((x)=>x.id!==l.id);
+  e8pcbState.assignments=e8pcbState.assignments.filter((x)=>x.layoutId!==l.id);
+  e8pcbActiveLayoutId=e8pcbState.layouts[0].id; e8pcbRefreshControls();
+};
+window.e8pcbTab=(name)=>{
+  ['builder','assignments','rating'].forEach((key)=>{
+    document.getElementById('e8pcb-view-'+key)?.classList.toggle('active',key===name);
+    document.getElementById('e8pcb-tab-'+key)?.classList.toggle('active',key===name);
+  });
+};
+window.e8pcbAddAssignment=()=>{ e8pcbState.assignments.push({scope:'featured_section',key:'',layoutId:e8pcbState.defaultLayoutId,label:''}); window.e8pcbRenderAssignments(); };
+window.e8pcbUpdateAssignment=(i,key,value)=>{ if(e8pcbState.assignments[i]) e8pcbState.assignments[i][key]=value; };
+window.e8pcbRemoveAssignment=(i)=>{ e8pcbState.assignments.splice(i,1);window.e8pcbRenderAssignments(); };
+window.e8pcbRenderAssignments=()=>{
+  const host=document.getElementById('e8pcb-assignments'); if(!host||!e8pcbState)return;
+  host.innerHTML=e8pcbState.assignments.length?e8pcbState.assignments.map((a,i)=>`
+    <div class="e8pcb-assignment">
+      <div><label>Scope</label><select class="filter-select" onchange="window.e8pcbUpdateAssignment(${i},'scope',this.value)"><option value="featured_section" ${a.scope==='featured_section'?'selected':''}>Featured Collection</option><option value="collection" ${a.scope==='collection'?'selected':''}>Collection</option></select></div>
+      <div><label>${a.scope==='collection'?'Collection handle':'Shopify section ID'}</label><input class="premium-input" value="${escapeHtml(a.key||'')}" oninput="window.e8pcbUpdateAssignment(${i},'key',this.value)" placeholder="${a.scope==='collection'?'shakers':'template--…__featured_collection_…'}"></div>
+      <div><label>Layout</label><select class="filter-select" onchange="window.e8pcbUpdateAssignment(${i},'layoutId',this.value)">${e8pcbState.layouts.map((l)=>`<option value="${escapeHtml(l.id)}" ${l.id===a.layoutId?'selected':''}>${escapeHtml(l.name)}</option>`).join('')}</select></div>
+      <button class="secondary-btn" type="button" onclick="window.e8pcbRemoveAssignment(${i})">Remove</button>
+    </div>`).join(''):'<div class="muted" style="padding:12px 0;">No overrides. Every card uses the default layout.</div>';
+};
+function e8pcbMove(component,toZone){
+  const l=e8pcbLayout(); if(!l)return;
+  E8PCB_ZONES.forEach((zone)=>{ l.zones[zone]=(l.zones[zone]||[]).filter((x)=>x!==component); });
+  l.zones[toZone]=(l.zones[toZone]||[]).concat(component);
+  l.mode='builder';
+  e8pcbRefreshControls();
+}
+window.e8pcbRenderPreview=()=>{
+  const host=document.getElementById('preview-card'); const l=e8pcbLayout(); if(!host||!l)return;
+  if(l.mode==='theme'){
+    host.innerHTML='<div style="padding:18px;border:1px dashed #94a3b8;border-radius:14px;background:#f8fafc;"><strong>Default currently preserves your live Shopify card exactly.</strong><p class="muted" style="margin-bottom:0;">Duplicate this layout or drag a component after switching it to builder mode to start rearranging elements.</p></div>';
+    return;
+  }
+  const chip=(component)=>`<div draggable="true" data-e8pcb-component="${component}" style="padding:5px 8px;border:1px solid #cbd5e1;background:#fff;border-radius:7px;font-size:11px;font-weight:700;cursor:grab;">${escapeHtml(E8PCB_COMPONENTS[component]||component)}</div>`;
+  const zone=(name,overlay=false)=>{
+    const st=l.zoneStyles?.[name]||{};
+    const pos={image_top_left:'top:10px;left:10px;',image_top_right:'top:10px;right:10px;',image_bottom_left:'bottom:10px;left:10px;',image_bottom_right:'bottom:10px;right:10px;'}[name]||'';
+    const style=overlay?`position:absolute;${pos}`:`display:flex;flex-direction:${st.direction||'column'};justify-content:${st.justify||'flex-start'};align-items:${st.align||'stretch'};gap:${st.gap||6}px;text-align:${st.textAlign||'left'};min-height:42px;`;
+    return `<div data-e8pcb-zone="${name}" style="${style}padding:6px;border:1px dashed #94a3b8;border-radius:8px;z-index:3;"><small style="display:block;color:#64748b;margin-bottom:4px;">${escapeHtml(E8PCB_ZONE_LABELS[name])}</small>${(l.zones[name]||[]).map(chip).join('')}</div>`;
+  };
+  host.innerHTML=`<div style="max-width:430px;margin:auto;">
+    <div style="position:relative;aspect-ratio:1/1;background:linear-gradient(135deg,#eef2ff,#f5d0fe);border-radius:14px 14px 0 0;">
+      ${zone('image_top_left',true)}${zone('image_top_right',true)}${zone('image_bottom_left',true)}${zone('image_bottom_right',true)}
+      <div style="position:absolute;inset:25%;display:grid;place-items:center;color:#64748b;font-weight:800;">PRODUCT IMAGE</div>
+    </div>
+    <div style="padding:12px;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 14px 14px;background:#fff;">${zone('body_top')}${zone('body_main')}${zone('body_bottom')}</div>
+    <div style="margin-top:10px;">${zone('hidden')}</div>
+  </div>`;
+  host.querySelectorAll('[data-e8pcb-component]').forEach((el)=>el.addEventListener('dragstart',(e)=>{e.dataTransfer.setData('text/plain',el.dataset.e8pcbComponent);}));
+  host.querySelectorAll('[data-e8pcb-zone]').forEach((el)=>{
+    el.addEventListener('dragover',(e)=>{e.preventDefault();});
+    el.addEventListener('drop',(e)=>{e.preventDefault();const c=e.dataTransfer.getData('text/plain');if(c)e8pcbMove(c,el.dataset.e8pcbZone);});
+  });
+};
 const ELEV8_CARD_PRESETS = new Set(['pill','minimal','stars','score','outline']);
 const ELEV8_CARD_LAYOUTS = new Set(['standard','editorial','brand_first','compact','commerce']);
 let elev8FeaturedCollectionLayouts = [];
@@ -1001,6 +1149,10 @@ window.updatePreviews = function() {
     card.innerHTML = `<div class="nr-admin-preview-card-demo" data-layout="${escapeHtml(badgeLayout)}" data-position="${escapeHtml(badgePosition)}"><div class="nr-card-image-demo">${isOverlay ? badgeMarkup : ''}</div><div class="nr-card-copy-demo">${content}</div></div>`;
   }
 
+  if (document.getElementById('style-card')?.classList.contains('active')) {
+    setTimeout(() => window.e8pcbRenderPreview?.(), 0);
+  }
+
   const carousel = document.getElementById('preview-carousel');
   if (carousel) {
     const carLayout = getValue('car-layout', 'infinite');
@@ -1067,6 +1219,7 @@ window.saveSettings = async function() {
       cardLayoutDefault: getValue('card-layout-default', 'standard'),
       featuredCollectionLayouts: elev8FeaturedCollectionLayouts,
     },
+    productCardBuilder: e8pcbNormalise(e8pcbState || e8pcbSeed()),
     carouselStyles: {
       layout: document.getElementById('car-layout').value,
       autoplay: document.getElementById('car-autoplay').checked,
