@@ -202,6 +202,10 @@ window.tab = function(id) {
   if (id === 'v-test-centre') window.loadE2ETestCentre?.();
   if (['v-migration','v-widget-library'].includes(id)) window.loadMigrationHub?.();
   if (id === 'v-import') window.renderReviewMigrationImporter?.();
+  if (id === 'v-product-cards') {
+    window.e8pcPromoteStudio?.();
+    window.e8pcbTab?.('builder');
+  }
   window.NectarAdminProductContext?.refreshStatuses?.();
   refreshResponsiveNavGroups();
 };
@@ -256,6 +260,49 @@ window.subTab = function(controlId, previewId) {
     document.getElementById(previewId)?.classList.add('active');
   }
 };
+
+// ELEV8_PRODUCT_CARD_STUDIO_V2
+window.e8pcPromoteStudio = function() {
+  const contextMount=document.getElementById('e8pc-context-mount');
+  const previewMount=document.getElementById('e8pc-preview-mount');
+  const styleCard=document.getElementById('style-card');
+  const preview=document.getElementById('preview-card');
+
+  if(contextMount&&styleCard&&styleCard.parentElement!==contextMount){
+    styleCard.classList.remove('sub-view');
+    styleCard.classList.add('active');
+    contextMount.appendChild(styleCard);
+  }
+
+  if(previewMount&&preview&&preview.parentElement!==previewMount){
+    preview.classList.remove('sub-preview');
+    preview.classList.add('active');
+    previewMount.appendChild(preview);
+  }
+
+  window.e8pcbRefreshControls?.();
+};
+
+window.e8pcViewport = function(mode) {
+  document.getElementById('e8pc-desktop')?.classList.toggle('active',mode==='desktop');
+  document.getElementById('e8pc-mobile')?.classList.toggle('active',mode==='mobile');
+  document.getElementById('e8pc-preview-stage')?.classList.toggle('mobile',mode==='mobile');
+};
+
+function e8pcEditorHeading(tab) {
+  const map={
+    builder:['Layout Editor','Drag card components between image and body zones.'],
+    buttons:['Button Designs','Edit the shared visual design for real storefront controls.'],
+    info:['Product Info Rules','Preview conditional nutrition/specification content.'],
+    assignments:['Assignments','Choose which saved layout applies in each storefront context.'],
+    rating:['Rating','Configure the review-rating treatment used inside product cards.']
+  };
+  const values=map[tab]||map.builder;
+  const title=document.getElementById('e8pc-editor-title');
+  const subtitle=document.getElementById('e8pc-editor-subtitle');
+  if(title)title.textContent=values[0];
+  if(subtitle)subtitle.textContent=values[1];
+}
 
 window.setPreviewMode = function(mode) {
   document.getElementById('btn-desk-prev')?.classList.toggle('active', mode === 'desktop');
@@ -333,6 +380,7 @@ window.load = async function() {
     window.loadLoyaltyConfig?.();
     window.generateFlowCode();
     window.pollReviewAlerts?.();
+    window.e8pcPromoteStudio?.();
   } catch (error) {
     console.error('Init error:', error);
     window.showToast(error.message || 'Could not load admin data');
@@ -837,6 +885,7 @@ const E8PCB_ZONES = Object.keys(E8PCB_ZONE_LABELS);
 let e8pcbState = null;
 let e8pcbActiveLayoutId = 'default';
 let e8pcbActiveComponent = '';
+let e8pcbActiveButtonRole = 'wishlist';
 
 function e8pcbBaseZones(){
   return {
@@ -867,6 +916,43 @@ function e8pcbSeed(){
     assignments:[]
   };
 }
+const E8PCB_BUTTON_BASELINES = {
+  wishlist:{enabled:true,fontFamily:'inherit',fontSize:0,fontWeight:'700',color:'#111827',background:'#ffffff',borderColor:'#e5e7eb',borderWidth:1,borderRadius:999,controlSize:44,iconSize:22,paddingX:0,paddingY:0,shadow:'soft'},
+  quick_add:{enabled:true,fontFamily:'inherit',fontSize:0,fontWeight:'700',color:'#111827',background:'#ffffff',borderColor:'#e5e7eb',borderWidth:1,borderRadius:999,controlSize:44,iconSize:20,paddingX:0,paddingY:0,shadow:'soft'},
+  notify:{enabled:true,fontFamily:'inherit',fontSize:0,fontWeight:'700',color:'#111827',background:'#ffffff',borderColor:'#e5e7eb',borderWidth:1,borderRadius:999,controlSize:44,iconSize:22,paddingX:0,paddingY:0,shadow:'soft'},
+  nutrition:{enabled:true,fontFamily:'inherit',fontSize:12,fontWeight:'700',color:'#111827',background:'#ffffff',borderColor:'#e5e7eb',borderWidth:1,borderRadius:999,controlSize:44,iconSize:22,paddingX:12,paddingY:8,shadow:'soft'},
+  status_new:{enabled:true,fontFamily:'inherit',fontSize:11,fontWeight:'800',color:'#111827',background:'#f3f4f6',borderColor:'#e5e7eb',borderWidth:1,borderRadius:4,controlSize:0,iconSize:0,paddingX:8,paddingY:6,shadow:''},
+  status_restocked:{enabled:true,fontFamily:'inherit',fontSize:11,fontWeight:'800',color:'#ffffff',background:'#2563eb',borderColor:'#2563eb',borderWidth:1,borderRadius:4,controlSize:0,iconSize:0,paddingX:8,paddingY:6,shadow:''},
+  status_soldout:{enabled:true,fontFamily:'inherit',fontSize:11,fontWeight:'800',color:'#ffffff',background:'#111827',borderColor:'#111827',borderWidth:1,borderRadius:4,controlSize:0,iconSize:0,paddingX:8,paddingY:6,shadow:''},
+  status_clearance:{enabled:true,fontFamily:'inherit',fontSize:11,fontWeight:'800',color:'#ffffff',background:'#dc2626',borderColor:'#dc2626',borderWidth:1,borderRadius:4,controlSize:0,iconSize:0,paddingX:8,paddingY:6,shadow:''}
+};
+
+function e8pcbButtonDesigns(raw={}){
+  return Object.fromEntries(Object.entries(E8PCB_BUTTON_BASELINES).map(([role,base])=>[role,{...base,...(raw?.[role]||{})}]));
+}
+
+function e8pcbSeedInfoRules(){
+  return [
+    {
+      id:'energy-nutrition',name:'Energy drink nutrition',enabled:false,priority:10,mode:'nutrition',
+      conditions:[{field:'product_type',operator:'contains',value:'Energy'}],
+      items:[
+        {field:'caffeine',label:'Caffeine',display:'auto',matchValue:'',imageUrl:'',suffix:''},
+        {field:'sugar_content',label:'Sugar',display:'auto',matchValue:'',imageUrl:'',suffix:''},
+        {field:'servings',label:'Servings',display:'auto',matchValue:'',imageUrl:'',suffix:''}
+      ]
+    },
+    {
+      id:'shaker-specs',name:'Shaker specifications',enabled:false,priority:20,mode:'specs',
+      conditions:[{field:'product_type',operator:'contains',value:'Shaker'}],
+      items:[
+        {field:'capacity',label:'Capacity',display:'text',matchValue:'',imageUrl:'',suffix:' ml'},
+        {field:'material',label:'Material',display:'text',matchValue:'',imageUrl:'',suffix:''}
+      ]
+    }
+  ];
+}
+
 function e8pcbEmptyComponentStyle(){
   return {
     enabled:false,fontFamily:'',fontSize:0,fontWeight:'',fontStyle:'',textAlign:'',textTransform:'',
@@ -884,7 +970,9 @@ function e8pcbNormalise(raw){
     enabled:Boolean(raw?.enabled),
     defaultLayoutId:raw?.defaultLayoutId||layouts[0]?.id||'default',
     layouts:layouts.map((l)=>({...l,zones:{...e8pcbBaseZones(),...(l.zones||{})},zoneStyles:{...e8pcbBaseStyles(),...(l.zoneStyles||{})},componentStyles:e8pcbComponentStyles(l.componentStyles)})),
-    assignments:Array.isArray(raw?.assignments)?raw.assignments:[]
+    assignments:Array.isArray(raw?.assignments)?raw.assignments:[],
+    buttonDesigns:e8pcbButtonDesigns(raw?.buttonDesigns||{}),
+    infoRules:Array.isArray(raw?.infoRules)&&raw.infoRules.length?raw.infoRules.map((rule)=>({...rule,conditions:Array.isArray(rule.conditions)?rule.conditions:[],items:Array.isArray(rule.items)?rule.items:[]})):e8pcbSeedInfoRules()
   };
 }
 function e8pcbLayout(){ return e8pcbState?.layouts?.find((l)=>l.id===e8pcbActiveLayoutId) || e8pcbState?.layouts?.[0]; }
@@ -905,6 +993,8 @@ function e8pcbRefreshControls(){
   if(pill) pill.textContent=layout?.mode==='theme'?'Using current theme structure — safe/no movement':'Builder mode — saved zones control the live card';
   window.e8pcbRenderAssignments?.();
   window.e8pcbRenderPreview?.();
+  if(document.getElementById('e8pcb-view-buttons')?.classList.contains('active')) window.e8pcbSelectButtonDesign?.(e8pcbActiveButtonRole);
+  if(document.getElementById('e8pcb-view-info')?.classList.contains('active')) window.e8pcbRenderInfoRules?.();
 }
 window.e8pcbSelectLayout=(id)=>{ e8pcbActiveLayoutId=id; e8pcbRefreshControls(); };
 window.e8pcbRenameLayout=(name)=>{ const l=e8pcbLayout(); if(l){l.name=name||'Untitled layout';e8pcbRefreshControls();} };
@@ -925,11 +1015,129 @@ window.e8pcbDeleteLayout=()=>{
   e8pcbActiveLayoutId=e8pcbState.layouts[0].id; e8pcbRefreshControls();
 };
 window.e8pcbTab=(name)=>{
-  ['builder','assignments','rating'].forEach((key)=>{
+  ['builder','buttons','info','assignments','rating'].forEach((key)=>{
     document.getElementById('e8pcb-view-'+key)?.classList.toggle('active',key===name);
     document.getElementById('e8pcb-tab-'+key)?.classList.toggle('active',key===name);
   });
+  e8pcEditorHeading(name);
+  if(name==='buttons') window.e8pcbSelectButtonDesign?.(e8pcbActiveButtonRole||'wishlist');
+  else if(name==='info') window.e8pcbRenderInfoRules?.();
+  else window.e8pcbRenderPreview?.();
 };
+function e8pcbButtonDesign(role){
+  if(!e8pcbState)e8pcbState=e8pcbSeed();
+  e8pcbState.buttonDesigns=e8pcbButtonDesigns(e8pcbState.buttonDesigns||{});
+  return e8pcbState.buttonDesigns[role] || e8pcbState.buttonDesigns.wishlist;
+}
+function e8pcbSetValue(id,value=''){const el=document.getElementById(id);if(el)el.value=value??'';}
+window.e8pcbSelectButtonDesign=(role)=>{
+  e8pcbActiveButtonRole=role||'wishlist';
+  const d=e8pcbButtonDesign(e8pcbActiveButtonRole);
+  e8pcbSetValue('e8pcb-button-role',e8pcbActiveButtonRole);
+  e8pcbSetValue('e8pcb-btn-size',d.controlSize||0);
+  e8pcbSetValue('e8pcb-btn-icon',d.iconSize||0);
+  e8pcbSetValue('e8pcb-btn-font',d.fontFamily||'inherit');
+  e8pcbSetValue('e8pcb-btn-font-size',d.fontSize||0);
+  e8pcbSetValue('e8pcb-btn-weight',d.fontWeight||'');
+  e8pcbSetValue('e8pcb-btn-color',d.color||'');
+  e8pcbSetValue('e8pcb-btn-bg',d.background||'');
+  e8pcbSetValue('e8pcb-btn-border',d.borderColor||'');
+  e8pcbSetValue('e8pcb-btn-border-width',d.borderWidth||0);
+  e8pcbSetValue('e8pcb-btn-radius',d.borderRadius||0);
+  e8pcbSetValue('e8pcb-btn-pad-x',d.paddingX||0);
+  e8pcbSetValue('e8pcb-btn-pad-y',d.paddingY||0);
+  e8pcbSetValue('e8pcb-btn-shadow',d.shadow||'');
+  window.e8pcbRenderButtonPreview?.();
+};
+window.e8pcbButtonField=(field,value)=>{
+  const d=e8pcbButtonDesign(e8pcbActiveButtonRole);
+  if(['controlSize','iconSize','fontSize','borderWidth','borderRadius','paddingX','paddingY'].includes(field))value=Number(value||0);
+  d[field]=value;
+  window.e8pcbRenderButtonPreview?.();
+};
+window.e8pcbResetButtonDesign=()=>{
+  e8pcbState.buttonDesigns[e8pcbActiveButtonRole]={...E8PCB_BUTTON_BASELINES[e8pcbActiveButtonRole]};
+  window.e8pcbSelectButtonDesign(e8pcbActiveButtonRole);
+};
+function e8pcbButtonCss(d){
+  const css=[];
+  if(d.controlSize)css.push('width:'+d.controlSize+'px','height:'+d.controlSize+'px','min-width:'+d.controlSize+'px');
+  if(d.fontFamily&&d.fontFamily!=='inherit')css.push('font-family:'+d.fontFamily);
+  if(d.fontSize)css.push('font-size:'+d.fontSize+'px');
+  if(d.fontWeight)css.push('font-weight:'+d.fontWeight);
+  if(d.color)css.push('color:'+d.color);
+  if(d.background)css.push('background:'+d.background);
+  if(d.borderColor)css.push('border-color:'+d.borderColor);
+  if(d.borderWidth)css.push('border-width:'+d.borderWidth+'px','border-style:solid');
+  if(d.borderRadius||d.borderRadius===0)css.push('border-radius:'+d.borderRadius+'px');
+  if(d.paddingX||d.paddingY)css.push('padding:'+(d.paddingY||0)+'px '+(d.paddingX||0)+'px');
+  if(d.shadow==='soft')css.push('box-shadow:0 4px 12px rgba(15,23,42,.12)');
+  if(d.shadow==='medium')css.push('box-shadow:0 8px 20px rgba(15,23,42,.20)');
+  if(d.shadow==='none')css.push('box-shadow:none');
+  return css.join(';');
+}
+window.e8pcbRenderButtonPreview=()=>{
+  const host=document.getElementById('preview-card');if(!host)return;
+  const role=e8pcbActiveButtonRole||'wishlist',d=e8pcbButtonDesign(role);
+  const label={wishlist:'Wishlist',quick_add:'Add to Cart',notify:'Notify Me',nutrition:'Product Info / Nutrition',status_new:'NEW',status_restocked:'RESTOCKED',status_soldout:'SOLD OUT',status_clearance:'CLEARANCE'}[role]||role;
+  const icon={wishlist:'♡',quick_add:'🛒',notify:'♢',nutrition:'◉'}[role]||'';
+  host.innerHTML=`<div style="min-height:560px;display:grid;place-items:center;"><div style="text-align:center;"><p class="muted" style="margin-bottom:20px;">Current ELEV8 design for <strong>${escapeHtml(label)}</strong></p><button type="button" style="${e8pcbButtonCss(d)};display:inline-flex;align-items:center;justify-content:center;gap:8px;">${icon?'<span style="font-size:'+(d.iconSize||20)+'px">'+icon+'</span>':''}<span>${escapeHtml(label)}</span></button><p class="muted" style="max-width:440px;margin:22px auto 0;">The live storefront keeps the real Shopify action. ELEV8 only overrides its visual CSS.</p></div></div>`;
+};
+
+function e8pcbRuleId(){return 'rule-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,6);}
+window.e8pcbAddInfoRule=()=>{
+  if(!e8pcbState)e8pcbState=e8pcbSeed();
+  e8pcbState.infoRules=e8pcbState.infoRules||[];
+  e8pcbState.infoRules.push({id:e8pcbRuleId(),name:'New product info rule',enabled:true,priority:(e8pcbState.infoRules.length+1)*10,mode:'specs',conditions:[{field:'product_type',operator:'contains',value:''}],items:[]});
+  window.e8pcbRenderInfoRules();
+};
+window.e8pcbRemoveInfoRule=(i)=>{e8pcbState.infoRules.splice(i,1);window.e8pcbRenderInfoRules();};
+window.e8pcbRuleField=(i,key,value)=>{if(e8pcbState.infoRules[i])e8pcbState.infoRules[i][key]=key==='priority'?Number(value||0):value;window.e8pcbRenderInfoPreview?.(i);};
+window.e8pcbAddCondition=(i)=>{e8pcbState.infoRules[i]?.conditions?.push({field:'product_type',operator:'equals',value:''});window.e8pcbRenderInfoRules();};
+window.e8pcbConditionField=(ri,ci,key,value)=>{const c=e8pcbState.infoRules?.[ri]?.conditions?.[ci];if(c)c[key]=value;window.e8pcbRenderInfoPreview?.(ri);};
+window.e8pcbRemoveCondition=(ri,ci)=>{e8pcbState.infoRules?.[ri]?.conditions?.splice(ci,1);window.e8pcbRenderInfoRules();};
+window.e8pcbAddInfoItem=(i)=>{e8pcbState.infoRules[i]?.items?.push({field:'',label:'',display:'auto',matchValue:'',imageUrl:'',suffix:''});window.e8pcbRenderInfoRules();};
+window.e8pcbInfoItemField=(ri,ii,key,value)=>{const item=e8pcbState.infoRules?.[ri]?.items?.[ii];if(item)item[key]=value;window.e8pcbRenderInfoPreview?.(ri);};
+window.e8pcbRemoveInfoItem=(ri,ii)=>{e8pcbState.infoRules?.[ri]?.items?.splice(ii,1);window.e8pcbRenderInfoRules();};
+
+window.e8pcbRenderInfoRules=()=>{
+  const host=document.getElementById('e8pcb-info-rules');if(!host||!e8pcbState)return;
+  const fieldOptions=['product_type','vendor','tag','caffeine','sugar_content','servings','capacity','material','title'];
+  host.innerHTML=(e8pcbState.infoRules||[]).map((rule,ri)=>`
+    <div style="margin-top:12px;border:1px solid #e5e7eb;border-radius:14px;padding:14px;background:#fff;">
+      <div style="display:grid;grid-template-columns:auto minmax(160px,1fr) 90px 150px auto;gap:8px;align-items:end;">
+        <label><span>On</span><input type="checkbox" ${rule.enabled!==false?'checked':''} onchange="window.e8pcbRuleField(${ri},'enabled',this.checked)"></label>
+        <label>Name<input class="premium-input" value="${escapeHtml(rule.name||'')}" oninput="window.e8pcbRuleField(${ri},'name',this.value)"></label>
+        <label>Priority<input class="premium-input" type="number" value="${Number(rule.priority||0)}" oninput="window.e8pcbRuleField(${ri},'priority',this.value)"></label>
+        <label>Mode<select class="filter-select" onchange="window.e8pcbRuleField(${ri},'mode',this.value)"><option value="inherit" ${rule.mode==='inherit'?'selected':''}>Keep current</option><option value="nutrition" ${rule.mode==='nutrition'?'selected':''}>Nutrition</option><option value="specs" ${rule.mode==='specs'?'selected':''}>Specifications</option><option value="hidden" ${rule.mode==='hidden'?'selected':''}>Hide</option></select></label>
+        <button type="button" class="secondary-btn" onclick="window.e8pcbRemoveInfoRule(${ri})">Delete</button>
+      </div>
+      <div style="margin-top:12px;"><strong style="font-size:12px;">Conditions · all must match</strong>
+        ${(rule.conditions||[]).map((c,ci)=>`<div style="display:grid;grid-template-columns:160px 140px minmax(160px,1fr) auto;gap:8px;margin-top:7px;"><select class="filter-select" onchange="window.e8pcbConditionField(${ri},${ci},'field',this.value)">${fieldOptions.map((f)=>'<option value="'+f+'" '+(c.field===f?'selected':'')+'>'+f+'</option>').join('')}</select><select class="filter-select" onchange="window.e8pcbConditionField(${ri},${ci},'operator',this.value)"><option value="equals" ${c.operator==='equals'?'selected':''}>Equals</option><option value="not_equals" ${c.operator==='not_equals'?'selected':''}>Does not equal</option><option value="contains" ${c.operator==='contains'?'selected':''}>Contains</option><option value="exists" ${c.operator==='exists'?'selected':''}>Exists</option><option value="not_exists" ${c.operator==='not_exists'?'selected':''}>Does not exist</option></select><input class="premium-input" value="${escapeHtml(c.value||'')}" placeholder="Value" oninput="window.e8pcbConditionField(${ri},${ci},'value',this.value)"><button class="secondary-btn" type="button" onclick="window.e8pcbRemoveCondition(${ri},${ci})">×</button></div>`).join('')}
+        <button type="button" class="secondary-btn" style="margin-top:7px;" onclick="window.e8pcbAddCondition(${ri})">+ Condition</button>
+      </div>
+      <div style="margin-top:12px;"><strong style="font-size:12px;">Displayed items</strong>
+        ${(rule.items||[]).map((item,ii)=>`<div style="display:grid;grid-template-columns:130px 120px 105px 130px minmax(160px,1fr) 90px auto;gap:6px;margin-top:7px;"><input class="premium-input" value="${escapeHtml(item.field||'')}" placeholder="field" oninput="window.e8pcbInfoItemField(${ri},${ii},'field',this.value)"><input class="premium-input" value="${escapeHtml(item.label||'')}" placeholder="Label" oninput="window.e8pcbInfoItemField(${ri},${ii},'label',this.value)"><select class="filter-select" onchange="window.e8pcbInfoItemField(${ri},${ii},'display',this.value)"><option value="auto" ${item.display==='auto'?'selected':''}>Auto</option><option value="text" ${item.display==='text'?'selected':''}>Text</option><option value="image" ${item.display==='image'?'selected':''}>Image</option></select><input class="premium-input" value="${escapeHtml(item.matchValue||'')}" placeholder="Match value" oninput="window.e8pcbInfoItemField(${ri},${ii},'matchValue',this.value)"><input class="premium-input" value="${escapeHtml(item.imageUrl||'')}" placeholder="Image URL for match" oninput="window.e8pcbInfoItemField(${ri},${ii},'imageUrl',this.value)"><input class="premium-input" value="${escapeHtml(item.suffix||'')}" placeholder="suffix" oninput="window.e8pcbInfoItemField(${ri},${ii},'suffix',this.value)"><button class="secondary-btn" type="button" onclick="window.e8pcbRemoveInfoItem(${ri},${ii})">×</button></div>`).join('')}
+        <button type="button" class="secondary-btn" style="margin-top:7px;" onclick="window.e8pcbAddInfoItem(${ri})">+ Display item</button>
+      </div>
+      <div style="margin-top:10px;"><button type="button" class="secondary-btn" onclick="window.e8pcbRenderInfoPreview(${ri})">Preview this rule</button></div>
+    </div>`).join('') || '<p class="muted">No rules yet.</p>';
+  window.e8pcbRenderInfoPreview?.(0);
+};
+
+window.e8pcbRenderInfoPreview=(index=0)=>{
+  const host=document.getElementById('preview-card');if(!host)return;
+  const rule=e8pcbState?.infoRules?.[index];
+  if(!rule){host.innerHTML='<div class="muted" style="padding:30px;">Add a product-info rule to preview it.</div>';return;}
+  const sample={product_type:'Energy',vendor:'GFUEL',tag:'DRINK',caffeine:'140mg caffeine',sugar_content:'Zero Sugar',servings:'40 Servings',capacity:'700',material:'Plastic',title:'Sample Product'};
+  const items=(rule.items||[]).map((item)=>{
+    const value=sample[item.field]||item.matchValue||'Example';
+    if(item.display==='image'&&item.imageUrl)return '<img src="'+escapeHtml(item.imageUrl)+'" alt="" style="width:42px;height:42px;object-fit:contain;">';
+    return '<span style="padding:7px 9px;border:1px solid #e5e7eb;border-radius:999px;background:#fff;font-size:12px;font-weight:800;">'+escapeHtml(item.label?item.label+': ':'')+escapeHtml(String(value)+(item.suffix||''))+'</span>';
+  }).join('');
+  host.innerHTML=`<div style="min-height:560px;display:grid;place-items:center;"><div style="max-width:440px;text-align:center;"><p class="muted">Rule preview · ${escapeHtml(rule.name||'')}</p><button type="button" style="${e8pcbButtonCss(e8pcbButtonDesign('nutrition'))};display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;width:auto;height:auto;min-height:44px;"><span>◉</span>${items||'<span>Product info</span>'}</button><p class="muted" style="margin-top:18px;">Live values come from the product metadata hook in <code>card-product.liquid</code>.</p></div></div>`;
+};
+
 window.e8pcbAddAssignment=()=>{ e8pcbState.assignments.push({scope:'featured_section',key:'',layoutId:e8pcbState.defaultLayoutId,label:''}); window.e8pcbRenderAssignments(); };
 window.e8pcbUpdateAssignment=(i,key,value)=>{ if(e8pcbState.assignments[i]) e8pcbState.assignments[i][key]=value; };
 window.e8pcbRemoveAssignment=(i)=>{ e8pcbState.assignments.splice(i,1);window.e8pcbRenderAssignments(); };

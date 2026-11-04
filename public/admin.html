@@ -768,6 +768,7 @@
         </div>
         <div class="nav-group">
           <p class="nav-title">Storefront</p>
+          <button class="tab-btn" onclick="window.tab('v-product-cards')"><span>Product Cards <span class="pill">Studio</span></span></button>
           <button class="tab-btn" onclick="window.tab('v-customer-hub')"><span>Customer Hub <span class="pill">Beta</span></span></button>
         </div>
         <div class="nav-group">
@@ -1202,7 +1203,6 @@
           <div class="panel">
             <div class="sub-tabs">
               <button class="sub-tab-btn active" onclick="window.subTab('style-widget','preview-widget')">Customer Reviews Widget</button>
-              <button class="sub-tab-btn" onclick="window.subTab('style-card','preview-card')">Product Cards</button>
               <button class="sub-tab-btn" onclick="window.subTab('style-carousel','preview-carousel')">Global Carousel</button>
             </div>
 
@@ -1258,7 +1258,9 @@
               </div>
 
               <div class="e8pcb-tabs">
-                <button id="e8pcb-tab-builder" class="secondary-btn active" type="button" onclick="window.e8pcbTab('builder')">Builder</button>
+                <button id="e8pcb-tab-builder" class="secondary-btn active" type="button" onclick="window.e8pcbTab('builder')">Layout Builder</button>
+                <button id="e8pcb-tab-buttons" class="secondary-btn" type="button" onclick="window.e8pcbTab('buttons')">Button Designs</button>
+                <button id="e8pcb-tab-info" class="secondary-btn" type="button" onclick="window.e8pcbTab('info')">Product Info Rules</button>
                 <button id="e8pcb-tab-assignments" class="secondary-btn" type="button" onclick="window.e8pcbTab('assignments')">Assignments</button>
                 <button id="e8pcb-tab-rating" class="secondary-btn" type="button" onclick="window.e8pcbTab('rating')">Rating</button>
               </div>
@@ -1272,6 +1274,53 @@
                   <button class="secondary-btn" type="button" onclick="window.e8pcbUseThemeMode()">Reset to current theme structure</button>
                   <span id="e8pcb-mode-pill" class="muted"></span>
                 </div>
+              </div>
+
+              <div id="e8pcb-view-buttons" class="e8pcb-view">
+                <div class="e8pcb-help">
+                  <strong>Button Designs</strong>
+                  <div class="muted" style="margin-top:4px;">These values represent the current Gaming Nectar card design family. ELEV8 writes overrides above the theme CSS, so you can change the design without replacing the underlying cart, wishlist or notify logic.</div>
+                </div>
+
+                <div class="style-control-grid full">
+                  <div><label>Function</label><select id="e8pcb-button-role" class="filter-select" onchange="window.e8pcbSelectButtonDesign(this.value)">
+                    <option value="wishlist">Wishlist</option>
+                    <option value="quick_add">Add to Cart</option>
+                    <option value="notify">Notify Me</option>
+                    <option value="nutrition">Product Info / Nutrition</option>
+                    <option value="status_new">Status · NEW</option>
+                    <option value="status_restocked">Status · Restocked</option>
+                    <option value="status_soldout">Status · Sold out</option>
+                    <option value="status_clearance">Status · Clearance</option>
+                  </select></div>
+                  <div><label>Control size (px)</label><input id="e8pcb-btn-size" class="premium-input" type="number" min="0" max="100" oninput="window.e8pcbButtonField('controlSize',this.value)"></div>
+                  <div><label>Icon size (px)</label><input id="e8pcb-btn-icon" class="premium-input" type="number" min="0" max="80" oninput="window.e8pcbButtonField('iconSize',this.value)"></div>
+                  <div><label>Font family</label><input id="e8pcb-btn-font" class="premium-input" oninput="window.e8pcbButtonField('fontFamily',this.value)"></div>
+                  <div><label>Font size (px)</label><input id="e8pcb-btn-font-size" class="premium-input" type="number" min="0" max="40" oninput="window.e8pcbButtonField('fontSize',this.value)"></div>
+                  <div><label>Font weight</label><select id="e8pcb-btn-weight" class="filter-select" onchange="window.e8pcbButtonField('fontWeight',this.value)"><option value="">Theme</option><option value="400">400</option><option value="500">500</option><option value="600">600</option><option value="700">700</option><option value="800">800</option><option value="900">900</option></select></div>
+                  <div><label>Text / icon colour</label><input id="e8pcb-btn-color" class="premium-input" oninput="window.e8pcbButtonField('color',this.value)"></div>
+                  <div><label>Background</label><input id="e8pcb-btn-bg" class="premium-input" oninput="window.e8pcbButtonField('background',this.value)"></div>
+                  <div><label>Border colour</label><input id="e8pcb-btn-border" class="premium-input" oninput="window.e8pcbButtonField('borderColor',this.value)"></div>
+                  <div><label>Border width (px)</label><input id="e8pcb-btn-border-width" class="premium-input" type="number" min="0" max="6" oninput="window.e8pcbButtonField('borderWidth',this.value)"></div>
+                  <div><label>Radius (px)</label><input id="e8pcb-btn-radius" class="premium-input" type="number" min="0" max="999" oninput="window.e8pcbButtonField('borderRadius',this.value)"></div>
+                  <div><label>Horizontal padding</label><input id="e8pcb-btn-pad-x" class="premium-input" type="number" min="0" max="48" oninput="window.e8pcbButtonField('paddingX',this.value)"></div>
+                  <div><label>Vertical padding</label><input id="e8pcb-btn-pad-y" class="premium-input" type="number" min="0" max="32" oninput="window.e8pcbButtonField('paddingY',this.value)"></div>
+                  <div><label>Shadow</label><select id="e8pcb-btn-shadow" class="filter-select" onchange="window.e8pcbButtonField('shadow',this.value)"><option value="">Theme</option><option value="none">None</option><option value="soft">Soft</option><option value="medium">Medium</option></select></div>
+                </div>
+
+                <div style="display:flex;justify-content:flex-end;margin-top:12px;"><button type="button" class="secondary-btn" onclick="window.e8pcbResetButtonDesign()">Reset to seeded theme baseline</button></div>
+              </div>
+
+              <div id="e8pcb-view-info" class="e8pcb-view">
+                <div class="e8pcb-help">
+                  <strong>Conditional Product Info</strong>
+                  <div class="muted" style="margin-top:4px;">Create as many rules as needed. Each rule can have multiple AND conditions, then render nutrition or product specifications from Shopify product metadata.</div>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+                  <strong>Rules</strong>
+                  <button type="button" class="secondary-btn" onclick="window.e8pcbAddInfoRule()">+ Add rule</button>
+                </div>
+                <div id="e8pcb-info-rules"></div>
               </div>
 
               <div id="e8pcb-view-assignments" class="e8pcb-view">
@@ -1394,6 +1443,41 @@
               <div id="preview-card" class="sub-preview preview-card"></div>
               <div id="preview-carousel" class="sub-preview preview-card"></div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="v-product-cards" class="view">
+        <div class="dash-header">
+          <div>
+            <h2 class="page-title">Product Cards</h2>
+            <p class="dash-subtitle">Build reusable storefront card layouts, button designs and conditional product information, then assign them globally, by collection or by Featured Collection.</p>
+          </div>
+          <button class="primary-btn" type="button" onclick="window.saveSettings()">Publish Product Cards</button>
+        </div>
+
+        <style>
+          .e8pc-studio-shell{display:grid;grid-template-columns:minmax(360px,460px) minmax(520px,1fr);gap:18px;align-items:start}
+          .e8pc-context-panel{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto}
+          .e8pc-editor-panel{min-height:720px}
+          .e8pc-editor-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+          .e8pc-preview-stage{padding:16px;border:1px solid var(--border);border-radius:16px;background:#fbfdff;min-height:620px}
+          .e8pc-preview-stage.mobile{max-width:390px;margin:0 auto}
+          #v-product-cards #style-card{display:block!important}
+          #v-product-cards #preview-card{display:block!important}
+          @media(max-width:1100px){.e8pc-studio-shell{grid-template-columns:1fr}.e8pc-context-panel{position:static;max-height:none}.e8pc-editor-panel{min-height:0}}
+        </style>
+
+        <div class="e8pc-studio-shell">
+          <div class="panel e8pc-context-panel">
+            <div id="e8pc-context-mount"></div>
+          </div>
+          <div class="panel e8pc-editor-panel">
+            <div class="e8pc-editor-toolbar">
+              <div><strong id="e8pc-editor-title">Layout Editor</strong><div class="muted" id="e8pc-editor-subtitle">Drag components to reposition them.</div></div>
+              <div class="filter-row" style="margin:0;"><button type="button" id="e8pc-desktop" class="secondary-btn active" onclick="window.e8pcViewport('desktop')">Desktop</button><button type="button" id="e8pc-mobile" class="secondary-btn" onclick="window.e8pcViewport('mobile')">Mobile</button></div>
+            </div>
+            <div id="e8pc-preview-stage" class="e8pc-preview-stage"><div id="e8pc-preview-mount"></div></div>
           </div>
         </div>
       </section>

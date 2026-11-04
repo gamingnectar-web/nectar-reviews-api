@@ -116,6 +116,9 @@ const settingsSchema = new mongoose.Schema({
     defaultLayoutId: { type: String, default: 'default' },
     layouts: { type: [mongoose.Schema.Types.Mixed], default: [] },
     assignments: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    // ELEV8_PRODUCT_CARD_STUDIO_V2
+    buttonDesigns: { type: mongoose.Schema.Types.Mixed, default: {} },
+    infoRules: { type: [mongoose.Schema.Types.Mixed], default: [] },
   },
   carouselStyles: {
     layout: { type: String, enum: ['grid', 'infinite', 'masonry'], default: 'infinite' },

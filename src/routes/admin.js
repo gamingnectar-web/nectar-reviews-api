@@ -938,6 +938,9 @@ router.patch('/migration', async (req, res, next) => {
 const ELEV8_PC_COMPONENTS = new Set(['status','wishlist','nutrition','quick_add','brand','flavour','title','rating','price','promo']);
 const ELEV8_PC_ZONES = ['image_top_left','image_top_right','image_bottom_left','image_bottom_right','body_top','body_main','body_bottom','hidden'];
 const ELEV8_PC_SCOPES = new Set(['featured_section','collection']);
+const ELEV8_PC_BUTTON_ROLES = new Set(['wishlist','quick_add','notify','nutrition','status_new','status_restocked','status_soldout','status_clearance']);
+const ELEV8_PC_RULE_OPERATORS = new Set(['equals','not_equals','contains','exists','not_exists']);
+const ELEV8_PC_INFO_MODES = new Set(['inherit','nutrition','specs','hidden']);
 
 function sanitiseProductCardBuilder(raw = {}) {
   const layouts = (Array.isArray(raw.layouts) ? raw.layouts : []).slice(0, 30).map((layout, index) => {
@@ -1009,11 +1012,55 @@ function sanitiseProductCardBuilder(raw = {}) {
     }))
     .filter((item) => item.key && ids.has(item.layoutId));
 
+  const buttonDesigns = {};
+  Object.entries(raw.buttonDesigns && typeof raw.buttonDesigns === 'object' ? raw.buttonDesigns : {}).forEach(([role, design]) => {
+    if (!ELEV8_PC_BUTTON_ROLES.has(role)) return;
+    buttonDesigns[role] = {
+      enabled: design?.enabled !== false,
+      fontFamily: cleanText(design?.fontFamily || '', 120),
+      fontSize: clampNumber(design?.fontSize, 0, 40, 0),
+      fontWeight: ['400','500','600','700','800','900'].includes(String(design?.fontWeight || '')) ? String(design.fontWeight) : '',
+      color: cleanText(design?.color || '', 30),
+      background: cleanText(design?.background || '', 30),
+      borderColor: cleanText(design?.borderColor || '', 30),
+      borderWidth: clampNumber(design?.borderWidth, 0, 6, 0),
+      borderRadius: clampNumber(design?.borderRadius, 0, 999, 0),
+      controlSize: clampNumber(design?.controlSize, 0, 100, 0),
+      iconSize: clampNumber(design?.iconSize, 0, 80, 0),
+      paddingX: clampNumber(design?.paddingX, 0, 48, 0),
+      paddingY: clampNumber(design?.paddingY, 0, 32, 0),
+      shadow: ['','none','soft','medium'].includes(design?.shadow || '') ? (design.shadow || '') : '',
+    };
+  });
+
+  const infoRules = (Array.isArray(raw.infoRules) ? raw.infoRules : []).slice(0, 60).map((rule, ruleIndex) => ({
+    id: cleanText(rule?.id || `rule-${ruleIndex + 1}`, 80).replace(/[^a-zA-Z0-9_-]/g, '-'),
+    name: cleanText(rule?.name || `Rule ${ruleIndex + 1}`, 120),
+    enabled: rule?.enabled !== false,
+    priority: clampNumber(rule?.priority, 0, 9999, ruleIndex + 1),
+    mode: ELEV8_PC_INFO_MODES.has(rule?.mode) ? rule.mode : 'inherit',
+    conditions: (Array.isArray(rule?.conditions) ? rule.conditions : []).slice(0, 20).map((condition) => ({
+      field: cleanText(condition?.field || '', 80),
+      operator: ELEV8_PC_RULE_OPERATORS.has(condition?.operator) ? condition.operator : 'equals',
+      value: cleanText(condition?.value || '', 240),
+    })).filter((condition) => condition.field),
+    items: (Array.isArray(rule?.items) ? rule.items : []).slice(0, 20).map((item) => ({
+      field: cleanText(item?.field || '', 80),
+      label: cleanText(item?.label || '', 80),
+      display: ['text','image','auto'].includes(item?.display) ? item.display : 'auto',
+      matchValue: cleanText(item?.matchValue || '', 240),
+      imageUrl: cleanText(item?.imageUrl || '', 1000),
+      suffix: cleanText(item?.suffix || '', 40),
+    })).filter((item) => item.field),
+  })).filter((rule) => rule.id);
+
   return {
     enabled: Boolean(raw.enabled),
     defaultLayoutId: fallback,
     layouts,
     assignments,
+    buttonDesigns,
+    infoRules,
   };
 }
 
