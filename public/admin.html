@@ -730,6 +730,7 @@
   <link rel="stylesheet" href="/review-experience-studio.css?v=journey-studio-1">
   <link rel="stylesheet" href="/review-operations-countdown.css?v=review-send-queue-modal-1">
   <link rel="stylesheet" href="/modules/customer-hub/admin.css?v=customer-hub-1">
+  <link rel="stylesheet" href="/product-card-studio-v2-1.css?v=2.1">
 </head>
 <body>
   <div id="custom-toast"></div>
@@ -1448,37 +1449,22 @@
       </section>
 
       <section id="v-product-cards" class="view">
-        <div class="dash-header">
-          <div>
-            <h2 class="page-title">Product Cards</h2>
-            <p class="dash-subtitle">Build reusable storefront card layouts, button designs and conditional product information, then assign them globally, by collection or by Featured Collection.</p>
-          </div>
-          <button class="primary-btn" type="button" onclick="window.saveSettings()">Publish Product Cards</button>
+        <div class="dash-header e8pc-page-head">
+          <div><h2 class="page-title">Product Cards</h2><p class="dash-subtitle">Design the real storefront card, its controls and conditional product information.</p></div>
+          <div class="dash-actions"><label class="e8pc-builder-switch"><input id="e8pc-builder-toggle-proxy" type="checkbox" onchange="window.e8pcToggleBuilder(this.checked)"> Builder live</label><button class="primary-btn" type="button" onclick="window.saveSettings()">Publish Product Cards</button></div>
         </div>
-
-        <style>
-          .e8pc-studio-shell{display:grid;grid-template-columns:minmax(360px,460px) minmax(520px,1fr);gap:18px;align-items:start}
-          .e8pc-context-panel{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto}
-          .e8pc-editor-panel{min-height:720px}
-          .e8pc-editor-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
-          .e8pc-preview-stage{padding:16px;border:1px solid var(--border);border-radius:16px;background:#fbfdff;min-height:620px}
-          .e8pc-preview-stage.mobile{max-width:390px;margin:0 auto}
-          #v-product-cards #style-card{display:block!important}
-          #v-product-cards #preview-card{display:block!important}
-          @media(max-width:1100px){.e8pc-studio-shell{grid-template-columns:1fr}.e8pc-context-panel{position:static;max-height:none}.e8pc-editor-panel{min-height:0}}
-        </style>
-
+        <div class="e8pc-page-tabs" role="tablist">
+          <button id="e8pc-tab-layout" class="e8pc-page-tab active" type="button" onclick="window.e8pcStudioTab('layout')">Card Product Layout</button>
+          <button id="e8pc-tab-buttons" class="e8pc-page-tab" type="button" onclick="window.e8pcStudioTab('buttons')">Card Product Buttons</button>
+          <button id="e8pc-tab-conditions" class="e8pc-page-tab" type="button" onclick="window.e8pcStudioTab('conditions')">Conditions</button>
+        </div>
         <div class="e8pc-studio-shell">
           <div class="panel e8pc-context-panel">
-            <div id="e8pc-context-mount"></div>
+            <div id="e8pc-layout-context" class="e8pc-context-view active"><div id="e8pc-layout-controls"></div><details class="e8pc-advanced"><summary>Layout assignments</summary><div id="e8pc-assignments-mount"></div></details><details class="e8pc-advanced"><summary>Advanced rating defaults</summary><div id="e8pc-rating-mount"></div></details></div>
+            <div id="e8pc-buttons-context" class="e8pc-context-view"><div id="e8pc-buttons-mount"></div></div>
+            <div id="e8pc-conditions-context" class="e8pc-context-view"><div class="e8pc-import-box"><div><strong>Import current Nutrition Pill</strong><p>Loads the caffeine, sugar and servings mappings already used by your live card-product Liquid.</p></div><button class="secondary-btn" type="button" onclick="window.e8pcImportCurrentNutritionLogic()">Import</button></div><div id="e8pc-info-mount"></div></div>
           </div>
-          <div class="panel e8pc-editor-panel">
-            <div class="e8pc-editor-toolbar">
-              <div><strong id="e8pc-editor-title">Layout Editor</strong><div class="muted" id="e8pc-editor-subtitle">Drag components to reposition them.</div></div>
-              <div class="filter-row" style="margin:0;"><button type="button" id="e8pc-desktop" class="secondary-btn active" onclick="window.e8pcViewport('desktop')">Desktop</button><button type="button" id="e8pc-mobile" class="secondary-btn" onclick="window.e8pcViewport('mobile')">Mobile</button></div>
-            </div>
-            <div id="e8pc-preview-stage" class="e8pc-preview-stage"><div id="e8pc-preview-mount"></div></div>
-          </div>
+          <div class="panel e8pc-editor-panel"><div class="e8pc-editor-toolbar"><div><strong id="e8pc-editor-title">Card Product Layout</strong><div class="muted" id="e8pc-editor-subtitle">Drag the real card elements into a new position. Double-click an element to style it.</div></div><div class="filter-row" style="margin:0"><button id="e8pc-desktop" class="secondary-btn active" type="button" onclick="window.e8pcViewport('desktop')">Desktop</button><button id="e8pc-mobile" class="secondary-btn" type="button" onclick="window.e8pcViewport('mobile')">Mobile</button></div></div><div id="e8pc-preview-stage" class="e8pc-preview-stage"><div id="e8pc-preview-mount" style="width:100%;"></div></div></div>
         </div>
       </section>
 
@@ -1981,6 +1967,7 @@
   <link rel="stylesheet" href="/product-creation-import.css?v=pci-v43">
   <link rel="stylesheet" href="/supplier-sites-admin.css?v=supplier-sites-12">
   <script src="/admin.js?v=secure-6"></script>
+  <script src="/product-card-studio-v2-1.js?v=2.1" defer></script>
   <script src="/admin-review-manager-enhancements.js?v=secure-6"></script>
   <script src="/nectar-score-notch-fix.js?v=secure-6"></script>
   <script src="/admin-dashboard-analytics.js?v=secure-6"></script>

@@ -1048,6 +1048,7 @@ function sanitiseProductCardBuilder(raw = {}) {
       field: cleanText(item?.field || '', 80),
       label: cleanText(item?.label || '', 80),
       display: ['text','image','auto'].includes(item?.display) ? item.display : 'auto',
+      matchMode: ['always','equals','contains','numeric_gt','numeric_gte'].includes(item?.matchMode) ? item.matchMode : 'equals',
       matchValue: cleanText(item?.matchValue || '', 240),
       imageUrl: cleanText(item?.imageUrl || '', 1000),
       suffix: cleanText(item?.suffix || '', 40),
